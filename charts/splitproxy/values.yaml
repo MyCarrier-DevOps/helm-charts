@@ -1,0 +1,83 @@
+# Default values for split-proxy.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+image:
+  repository: splitsoftware/split-proxy
+  pullPolicy: IfNotPresent
+  tag: ""
+
+labels:
+  app: "splitproxy"
+  version: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  ports:
+  - name: http-proxy
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  - name: http-admin
+    port: 3010
+    protocol: TCP
+    targetPort: 3010
+
+secretProvider:
+  enabled: false
+  name: azure-kv
+  keyVaultName: inf-preprod-vault
+  tenantId: 033c43bf-e5b3-42d4-93d2-e7e0fd5e2d3d
+  managedIdentity: ba42be94-2283-48d2-aca5-ccce9e29bb88
+  dashboardUser: dadmin-dev
+  secrets:
+    - objectName: SplitIoApiKey-dev
+      objectAlias: SplitIoApiKey
+    - objectName: SplitIoProxyApiKey-dev
+      objectAlias: SplitIoProxyApiKey
+    - objectName: SplitDashboardPassword-dev
+      objectAlias: SplitDashboardPassword
+
+ingressProxy:
+  enabled: false
+
+ingressAdmin:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 786Mi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 8
+  targetMemoryUtilizationPercentage: 60
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

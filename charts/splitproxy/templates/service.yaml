@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "splitproxy.fullname" . }}
+  labels:
+    {{- include "splitproxy.labels" . | nindent 4 }}
+spec:
+  ports: 
+    {{- range .Values.service.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol }}
+      name: {{ .name }}
+    {{- end }}
+  selector:
+    {{- include "splitproxy.selectorLabels" . | nindent 4 }}

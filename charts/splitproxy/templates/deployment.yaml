@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "splitproxy.fullname" . }}
+  labels:
+    {{- include "splitproxy.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "splitproxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.labels }}
+      labels:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "splitproxy.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "splitproxy.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            {{- range .Values.service.ports }}
+            - containerPort: {{ .port }}
+              protocol: {{ .protocol }}
+              name: {{ .name }}
+            {{- end }}
+          startupProbe:
+            exec:
+              command:
+              - /bin/bash
+              - -c
+              - exit $(wget -O - localhost:3010/health/application 2>/dev/null | grep -E "\"healthy\":\s*false,{0,1}" -o | wc -w;)
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          livenessProbe:
+            exec:
+              command:
+              - /bin/bash
+              - -c
+              - exit $(wget -O - localhost:3010/health/application 2>/dev/null | grep -E "\"healthy\":\s*false,{0,1}" -o | wc -w;)
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+          env:
+          - name: SPLIT_PROXY_LOG_LEVEL
+            value: error
+          - name: SPLIT_PROXY_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: splitproxy
+                key: SplitIoApiKey
+          - name: SPLIT_PROXY_CLIENT_APIKEYS
+            valueFrom:
+              secretKeyRef:
+                name: splitproxy
+                key: SplitIoProxyApiKey
+          - name: SPLIT_PROXY_ADMIN_USERNAME
+            value: {{ .Values.secretProvider.dashboardUser }}
+          - name: SPLIT_PROXY_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: splitproxy
+                key: SplitDashboardPassword
+          {{- if .Values.secretProvider.enabled }}    
+          volumeMounts:
+            - name:  secret-store
+              mountPath:  "/mnt/secrets-store"
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.secretProvider.enabled }}
+      volumes:
+        - name: secret-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ $.Values.secretProvider.name }}
+      {{- end }}  
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,20 @@
+{{- range $host := .Values.ingressProxy.hosts }}
+{{- range .paths }}
+Proxy Listener Host: http{{ if $.Values.ingressProxy.tls }}s{{ end }}://{{ $host.host }}{{ .path }}/api
+{{- end }}
+{{- end }}
+
+{{- range $host := .Values.ingressAdmin.hosts }}
+{{- range .paths }}
+Admin Dashboard Host: http{{ if $.Values.ingressAdmin.tls }}s{{ end }}://{{ $host.host }}{{ .path }}/admin/dashboard
+{{- end }}
+{{- end }}
+
+If you are running the services locally:
+
+export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "splitproxy.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:3000 & \
+kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8081:3010 &
+echo "Visit http://127.0.0.1:8080 to reach the proxy listener"
+echo "Visit http://127.0.0.1:8081 to reach the admin dashboard"

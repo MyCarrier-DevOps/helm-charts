@@ -1,0 +1,7 @@
+apiVersion: v2
+name: splitproxy
+description: A Helm chart for splitproxy server and admin-dashboard
+type: application
+icon: https://www.split.io/wp-content/uploads/2017/11/split-logo-light-background-transparent.png
+version: 0.3.3
+
