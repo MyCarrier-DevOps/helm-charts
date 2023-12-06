@@ -1,0 +1,153 @@
+name: Helm-Release
+
+on:
+  push:
+    branches: 
+      - 'main'
+    paths:
+      - charts/**
+  pull_request:
+    types:
+      - closed
+    branches:    
+      - 'main'
+
+jobs:
+  prep:
+    runs-on: self-hosted
+    outputs: 
+        matrix: ${{ steps.set-matrix.outputs.matrix }}
+        changes: ${{ steps.changed-files-specific.outputs.any_modified }}
+
+    steps:
+      - name: Checkout source code 
+        uses: 'actions/checkout@v2'
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Get specific changed files   
+        id: changed-files-specific
+        uses: tj-actions/changed-files@v22.2
+        with:
+          files: ./charts/*
+      
+      - name: generate file list
+        if: steps.changed-files-specific.outputs.any_modified == 'true'
+        id: file-list
+        uses: tj-actions/changed-files@v22.2
+        with:
+          path: charts
+
+      - name: List all changed files
+        run: |
+          echo "files were changed:${{ steps.changed-files-specific.outputs.any_modified }}"
+          for file in ${{ steps.file-list.all_changed_and_modified_files }}; do
+            echo "$file was changed"
+          done
+
+      - name: set up matrix
+        id: set-matrix
+        if: steps.changed-files-specific.outputs.any_modified == 'true'
+        run: | 
+          declare -g var
+          first_loop=1
+          dir=$(pwd)
+          charts=$(find $dir/charts -type f -name Chart.yaml | xargs dirname | while read i; do basename $i; done)
+          for chart in $charts; do
+              for file in ${{ steps.file-list.outputs.all_changed_and_modified_files }}; do
+              if ( echo $file | grep $chart ); then
+                  [[ $first_loop ]] && var=$chart || var="$var\n$chart"
+                  unset first_loop
+                  break
+              fi
+              done
+          done
+          echo "::set-output name=matrix::$(printf "%s" "$var" | jq -Rrsc 'split("\\n") | unique')"
+
+        ## Make sure the heredoc is indented with tabs. NOT SPACES.
+      - name: get all charts & create package.json if it does not exist
+        id: packages
+        run: |
+            charts=$(find . -type f -name Chart.yaml)
+            for chart in $(find -type f -name Chart.yaml); do
+            charthome=$(dirname $chart)
+            package="${charthome}/package.json"
+            if [ ! -f "${charthome}/package.json" ] || [ ! -s "${charthome}/package.json" ]; then 
+            echo "${charthome}/package.json does not exist or is empty"
+            echo "::set-output name=commitpackages::true"
+            cat <<- EOF > ${charthome}/package.json 
+            {
+                "name": "$(basename $charthome)",
+                "version": "0.0.1",
+                "repository": {
+                    "type": "git",
+                    "url": "${{ github.repositoryUrl }}"
+                },
+                "homepage": "${{ github.server_url }}/${{ github.repository }}"
+            }
+            EOF
+            fi
+            done
+
+      - name: commit the new package.json
+        if: steps.packages.outputs.commitpackages == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Automated Change-- Generated package.json for charts that were missing it.
+  release:
+    needs: prep
+    runs-on: self-hosted
+    if: ${{ needs.prep.outputs.matrix != '[]' && needs.prep.outputs.matrix != '' && needs.prep.outputs.changes == 'true' }}
+    strategy:
+      matrix:
+        manifest: ${{ fromJson(needs.prep.outputs.matrix) }}
+    steps:
+      - name: Checkout source code
+        uses: 'actions/checkout@v2'
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+      - run: echo "${{ matrix.manifest }}"
+      - name: 'cat package.json'
+        run: cat ./charts/${{ matrix.manifest }}/package.json
+
+      - name: Run read-yaml action
+        id: yaml-data
+        uses: KJ002/read-yaml@main
+        with:
+          file: './charts/${{ matrix.manifest }}/Chart.yaml'
+          key-path: '["appVersion"]'
+
+      - run: echo "${{ steps.yaml-data.outputs.data }}"
+      - name: Bump Chart & App version
+        uses: ./.github/actions/chart-version-bumper
+        id: version-bump
+        with:
+          chart_name: ${{ matrix.manifest }}
+          chart_version: ""
+          app_version: ${{ steps.yaml-data.outputs.data }}
+      
+      - name: commit the new Charts
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Automated Change
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.8.1
+      - run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add mycarrier https://charts.mycarrier.tech
+          helm repo update
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.4.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
