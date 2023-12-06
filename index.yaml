@@ -1,5 +1,23 @@
 apiVersion: v1
 entries:
+  backstage:
+  - apiVersion: v2
+    appVersion: v0.1.1-alpha.23
+    created: "2023-12-06T16:30:47.617554139Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: 11.6.10
+    description: A Helm chart for Backstage
+    digest: b6be0df712070b44b5f7059666b62cb7290f5097fd0490b1a7b690f48ecfafef
+    name: backstage
+    sources:
+    - https://github.com/spotify/lighthouse-audit-service
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/backstage-0.1.50/backstage-0.1.50.tgz
+    version: 0.1.50
   splitproxy:
   - apiVersion: v2
     created: "2023-12-06T16:29:07.613393293Z"
@@ -11,4 +29,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/splitproxy-0.3.6/splitproxy-0.3.6.tgz
     version: 0.3.6
-generated: "2023-12-06T16:29:07.613403282Z"
+generated: "2023-12-06T16:30:47.617563686Z"
