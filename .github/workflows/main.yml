@@ -14,7 +14,7 @@ on:
 
 jobs:
   prep:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     outputs: 
         matrix: ${{ steps.set-matrix.outputs.matrix }}
         changes: ${{ steps.changed-files-specific.outputs.any_modified }}
@@ -97,7 +97,7 @@ jobs:
           commit_message: Automated Change-- Generated package.json for charts that were missing it.
   release:
     needs: prep
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     if: ${{ needs.prep.outputs.matrix != '[]' && needs.prep.outputs.matrix != '' && needs.prep.outputs.changes == 'true' }}
     strategy:
       matrix:
