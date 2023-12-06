@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "backstage.fullname" . }}-app-config
+  labels:
+    app: backstage
+data:
+{{ include "backstage.appConfigFilename" . | indent 2 }}: |
+{{ .Values.appConfig | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "backstage.fullname" . }}-app-env
+  labels:
+    app: backstage
+data:
+  APP_CONFIG_app_baseUrl: {{ .Values.config.app.baseUrl | quote | quote }}
+  APP_CONFIG_app_title: {{ .Values.config.app.title | quote | quote }}
+  APP_CONFIG_app_googleAnalyticsTrackingId: {{ .Values.config.app.googleAnalyticsTrackingId | quote | quote }}
+  APP_CONFIG_backend_baseUrl: {{ .Values.config.backend.baseUrl | quote | quote }}
+  APP_CONFIG_backend_cors_origin: {{ .Values.config.backend.cors.origin | quote | quote }}
+  APP_CONFIG_techdocs_storageUrl: {{ .Values.config.techdocs.storageUrl | quote | quote }}
+  APP_CONFIG_techdocs_requestUrl: {{ .Values.config.techdocs.requestUrl | quote | quote }}
+  APP_CONFIG_backend_database_connection_ssl_rejectUnauthorized: "false"
+  APP_CONFIG_auth_providers_microsoft_development_appOrigin: {{ .Values.config.auth.providers.microsoft.development.appOrigin | quote | quote }}
+  APP_CONFIG_auth_providers_microsoft_production_appOrigin: {{ .Values.config.auth.providers.microsoft.production.appOrigin | quote | quote }}
+  APP_CONFIG_auth_providers_gitlab_development_appOrigin: {{ .Values.config.auth.providers.gitlab.development.appOrigin | quote | quote }}

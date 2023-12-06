@@ -1,0 +1,191 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "backstage.fullname" . }}-backend
+  labels:
+    app: backstage
+
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: backstage
+      component: backend
+
+  template:
+    metadata:
+      annotations:
+        ad.datadoghq.com/backstage.logs: '[{"source":"backstage","service":"backend"}]'
+      labels:
+        app: backstage
+        component: backend
+
+    spec:
+      {{ include "helm.podSecurityContext " . | indent 6 | trim }}
+      {{- if .Values.dockerRegistrySecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.dockerRegistrySecretName }}
+      {{- end}}
+      containers:
+        - name: {{ .Chart.Name }}-backend
+          command: ["node"]
+          args:
+            - "packages/backend"
+            - "--config"
+            - "app-config.yaml"
+            - "--config"
+            - {{ printf "/usr/src/app/%s" (include "backstage.appConfigFilename" .) | quote }}
+          image: {{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.backend.containerPort }}
+          resources:
+          {{- toYaml .Values.backend.resources | nindent 12 }}
+          {{ include "helm.containerSecurityContext " . | indent 10 | trim }}
+          envFrom:
+            - secretRef:
+                name: {{ include "backstage.fullname" . }}-backend
+            - secretRef:
+                name: {{ .Values.auth.microsoft.clientSecret }}
+            - secretRef:
+                name: {{ .Values.auth.gitlabTokenSecret }}
+            - configMapRef:
+                name: {{ include "backstage.fullname" . }}-app-env
+            - configMapRef:
+                name: {{ include "backstage.fullname" . }}-auth
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.backend.nodeEnv | default "development" }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.postgresql.host | default "localhost" }}
+            - name: POSTGRES_PORT
+              value: "{{ .Values.postgresql.port | default 5432 | toString }}"
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.user| default "pguser" }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "backend.postgresql.passwordSecret" .}}
+                  key: postgresql-password
+            - name: APP_CONFIG_backend_database_connection_password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "backend.postgresql.passwordSecret" .}}
+                  key: postgresql-password
+            - name: grafana-api-token
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-api-token
+                  key: grafana-api-token
+            - name: backstage-postgresql-westus-password
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-postgresql-westus-password
+                  key: backstage-postgresql-westus-password
+            - name: argoapi
+              valueFrom:
+                secretKeyRef:
+                  name: argoapi
+                  key: argoapi
+            - name: argoapi-dev
+              valueFrom:
+                secretKeyRef:
+                  name: argoapi-dev
+                  key: argoapi-dev
+            - name: argoapi-demo
+              valueFrom:
+                secretKeyRef:
+                  name: argoapi-demo
+                  key: argoapi-demo
+            - name: argoapi-prod
+              valueFrom:
+                secretKeyRef:
+                  name: argoapi-prod
+                  key: argoapi-prod
+            - name: sonarqube-api
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-api
+                  key: sonarqube-api
+            - name: opsgenie-api
+              valueFrom:
+                secretKeyRef:
+                  name: opsgenie-api
+                  key: opsgenie-api
+            - name: github-client-id
+              valueFrom:
+                secretKeyRef:
+                  name: github-client-id
+                  key: github-client-id
+            - name: github-client-secret
+              valueFrom:
+                secretKeyRef:
+                  name: github-client-secret
+                  key: github-client-secret
+            - name: backstage-vault-token
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-vault-token
+                  key: backstage-vault-token
+            - name: gitlab-client-id
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-client-id
+                  key: gitlab-client-id
+            - name: gitlab-client-secret
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-client-secret
+                  key: gitlab-client-secret
+          volumeMounts:
+            {{- if .Values.backend.postgresCertMountEnabled }}
+            - name: postgres-ca
+              mountPath: {{ include "backstage.backend.postgresCaDir" . }}
+            {{- end }}
+            - name: app-config
+              mountPath: {{ printf "/usr/src/app/%s" (include "backstage.appConfigFilename" .) }}
+              subPath: {{ include "backstage.appConfigFilename" . }}
+            - name: node-cache
+              mountPath: /home/node/.cache
+            - name: usr
+              mountPath: /usr/src/app/packages/app/dist
+
+      volumes:
+        {{- if .Values.backend.postgresCertMountEnabled }}
+        - name: postgres-ca
+          configMap:
+            name: {{ include "backstage.fullname" . }}-postgres-ca
+        {{- end }}
+        - name: app-config
+          configMap:
+            name: {{ include "backstage.fullname" . }}-app-config
+        - name: node-cache
+          emptyDir: {}
+        - name: usr
+          emptyDir: {}
+
+      {{- if .Values.global.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.global.nodeSelector | nindent 8 }}
+      {{- end }}
+
+{{- if .Values.backend.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "backend.serviceName" . }}
+  labels:
+    app: backstage
+
+spec:
+  ports:
+    - port: 80
+      targetPort: {{ .Values.backend.containerPort }}
+
+  selector:
+    app: backstage
+    component: backend
+
+  type: {{ .Values.backend.serviceType }}
+{{- end }}

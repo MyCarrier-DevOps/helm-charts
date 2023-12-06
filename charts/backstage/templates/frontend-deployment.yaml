@@ -1,0 +1,73 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "backstage.fullname" . }}-frontend
+  labels:
+    app: backstage
+
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: backstage
+      component: frontend
+
+  template:
+    metadata:
+      annotations:
+        ad.datadoghq.com/backstage.logs: '[{"source":"backstage","service":"frontend"}]'
+      labels:
+        app: backstage
+        component: frontend
+      
+
+    spec:
+      {{ include "helm.podSecurityContext " . | indent 6 | trim }}
+      {{- if .Values.dockerRegistrySecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.dockerRegistrySecretName }}
+      {{- end}}
+      containers:
+        - name: {{ .Chart.Name }}-frontend
+          image: {{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.frontend.containerPort }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "backstage.fullname" . }}-app-env
+          volumeMounts:
+            - name: app-config
+              mountPath: {{ printf "/usr/share/nginx/html/static/%s" (include "backstage.appConfigFilename" .) }}
+              subPath: {{ include "backstage.appConfigFilename" . }}
+          {{ include "helm.containerSecurityContext " . | indent 10 | trim }}
+      volumes:
+        - name: app-config
+          configMap:
+            name: {{ include "backstage.fullname" . }}-app-config
+      {{- if .Values.global.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.global.nodeSelector | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "frontend.serviceName" . }}
+  labels:
+    app: backstage
+
+spec:
+  ports:
+    - port: 80
+      targetPort: {{ .Values.frontend.containerPort }}
+
+  selector:
+    app: backstage
+    component: frontend
+
+  type: {{ .Values.frontend.serviceType }}
+{{- end }}
