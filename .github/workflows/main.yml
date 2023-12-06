@@ -144,7 +144,7 @@ jobs:
           version: v3.8.1
       - run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo add mycarrier https://charts.mycarrier.tech
+          helm repo add mycarrier https://charts.mycarrier.tech || true
           helm repo update
 
       - name: Run chart-releaser
