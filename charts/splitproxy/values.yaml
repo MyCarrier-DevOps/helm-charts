@@ -43,18 +43,18 @@ service:
 
 secretProvider:
   enabled: false
-  name: azure-kv
-  keyVaultName: inf-preprod-vault
-  tenantId: 033c43bf-e5b3-42d4-93d2-e7e0fd5e2d3d
-  managedIdentity: ba42be94-2283-48d2-aca5-ccce9e29bb88
-  dashboardUser: dadmin-dev
-  secrets:
-    - objectName: SplitIoApiKey-dev
-      objectAlias: SplitIoApiKey
-    - objectName: SplitIoProxyApiKey-dev
-      objectAlias: SplitIoProxyApiKey
-    - objectName: SplitDashboardPassword-dev
-      objectAlias: SplitDashboardPassword
+  name: ""
+  keyVaultName: ""
+  tenantId: "" 
+  managedIdentity: ""
+  dashboardUser: ""
+  secrets: []
+    # - objectName: SplitIoApiKey-dev
+    #   objectAlias: SplitIoApiKey
+    # - objectName: SplitIoProxyApiKey-dev
+    #   objectAlias: SplitIoProxyApiKey
+    # - objectName: SplitDashboardPassword-dev
+    #   objectAlias: SplitDashboardPassword
 
 ingressProxy:
   enabled: false
