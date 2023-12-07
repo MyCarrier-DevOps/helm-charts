@@ -41,13 +41,14 @@ service:
     protocol: TCP
     targetPort: 3010
 
+dashboardUser: ""
+
 secretProvider:
   enabled: false
   name: ""
   keyVaultName: ""
   tenantId: "" 
   managedIdentity: ""
-  dashboardUser: ""
   secrets: []
     # - objectName: SplitIoApiKey-dev
     #   objectAlias: SplitIoApiKey
@@ -55,6 +56,7 @@ secretProvider:
     #   objectAlias: SplitIoProxyApiKey
     # - objectName: SplitDashboardPassword-dev
     #   objectAlias: SplitDashboardPassword
+
 
 ingressProxy:
   enabled: false
