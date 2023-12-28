@@ -20,6 +20,16 @@ entries:
     version: 0.1.50
   splitproxy:
   - apiVersion: v2
+    created: "2023-12-28T21:02:50.560133944Z"
+    description: A Helm chart for splitproxy server and admin-dashboard
+    digest: 67905f3540d8b902fc57a90ca25ff8829de90c30a69dfff0047cede1c5efe436
+    icon: https://www.split.io/wp-content/uploads/2017/11/split-logo-light-background-transparent.png
+    name: splitproxy
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/splitproxy-0.3.10/splitproxy-0.3.10.tgz
+    version: 0.3.10
+  - apiVersion: v2
     created: "2023-12-07T22:45:28.433051001Z"
     description: A Helm chart for splitproxy server and admin-dashboard
     digest: 7ea4e6212d91ca90a47cc8e52b2223e3f348e5b4027da4f1bde4fe02f81a935b
@@ -59,4 +69,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/splitproxy-0.3.6/splitproxy-0.3.6.tgz
     version: 0.3.6
-generated: "2023-12-07T22:45:28.433073664Z"
+generated: "2023-12-28T21:02:50.560159412Z"
