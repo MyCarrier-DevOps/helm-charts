@@ -59,6 +59,23 @@ spec:
             initialDelaySeconds: 5
             timeoutSeconds: 10
           env:
+          {{- if .Values.environment }}
+          {{- range $key, $value := .Values.environment }}
+          - name: {{ $key }}
+            {{- if kindIs "map" $value }}
+            {{ toYaml $value | indent 12 | trim}}
+            {{- else }}
+            value: "{{ tpl (toString $value) $ }}"
+            {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- range $key, $value := .Values.extraEnvs }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+          {{- end }}
+          - name: SPLIT_PROXY_ADMIN_USERNAME
+            value: {{ .Values.dashboardUser }}
+          {{- if .Values.secretProvider.enabled }}   
           - name: SPLIT_PROXY_LOG_LEVEL
             value: error
           - name: SPLIT_PROXY_APIKEY
@@ -71,14 +88,11 @@ spec:
               secretKeyRef:
                 name: splitproxy
                 key: SplitIoProxyApiKey
-          - name: SPLIT_PROXY_ADMIN_USERNAME
-            value: {{ .Values.dashboardUser }}
           - name: SPLIT_PROXY_ADMIN_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: splitproxy
-                key: SplitDashboardPassword
-          {{- if .Values.secretProvider.enabled }}    
+                key: SplitDashboardPassword 
           volumeMounts:
             - name:  secret-store
               mountPath:  "/mnt/secrets-store"

@@ -60,3 +60,14 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "app.secrets" -}}
+  {{- printf "|" }}
+array:
+  {{- range .Values.secretProvider.secrets }}
+  {{ printf "- |" | indent 2 }}
+  {{ printf "objectName: %s" .objectName | indent 4 }}
+  {{ printf "objectType: secret" | indent 4 }}
+  {{ printf "objectAlias: %s" .objectAlias | indent 4 }}
+  {{- end }}
+{{- end -}}

@@ -57,6 +57,23 @@ secretProvider:
     # - objectName: SplitDashboardPassword-dev
     #   objectAlias: SplitDashboardPassword
 
+environment: {}
+  # SPLIT_PROXY_APIKEY:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: splitproxy
+  #       key: SplitIoApiKey
+  # SPLIT_PROXY_CLIENT_APIKEYS:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: splitproxy
+  #       key: SplitIoProxyApiKey
+  # SPLIT_PROXY_ADMIN_PASSWORD:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: splitproxy
+  #       key: SplitDashboardPassword 
+extraEnvs:
 
 ingressProxy:
   enabled: false
