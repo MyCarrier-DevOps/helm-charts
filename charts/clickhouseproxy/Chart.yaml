@@ -1,0 +1,6 @@
+apiVersion: v2
+name: clickhouseproxy
+description: A Helm Chart for chproxy deployment to enable caching/proxying clickhouse
+type: application
+icon: https://www.chproxy.org/_astro/logo-white.1121eedc.svg
+version: 1.0.0
