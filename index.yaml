@@ -18,6 +18,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/backstage-0.1.50/backstage-0.1.50.tgz
     version: 0.1.50
+  clickhouseproxy:
+  - apiVersion: v2
+    created: "2024-02-07T20:29:40.11080113Z"
+    description: A Helm Chart for chproxy deployment to enable caching/proxying clickhouse
+    digest: 6801e76cc857b206a2fdc22fbfae553affbb8d4771ce0003d54a4c1941331ec6
+    icon: https://www.chproxy.org/_astro/logo-white.1121eedc.svg
+    name: clickhouseproxy
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/clickhouseproxy-1.0.1/clickhouseproxy-1.0.1.tgz
+    version: 1.0.1
   splitproxy:
   - apiVersion: v2
     created: "2023-12-28T21:02:50.560133944Z"
@@ -69,4 +80,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/splitproxy-0.3.6/splitproxy-0.3.6.tgz
     version: 0.3.6
-generated: "2023-12-28T21:02:50.560159412Z"
+generated: "2024-02-07T20:29:40.110824754Z"
