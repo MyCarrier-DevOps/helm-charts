@@ -1,0 +1,80 @@
+# Default Values
+
+replicaCount: 1
+
+image:
+  repository: contentsquareplatform/chproxy
+  pullPolicy: IfNotPresent
+  tag: "v1.26.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  ports: 
+    - port: 80
+      targetPort: http
+      name: http
+
+livenessProbePort: 80
+readinessProbePort: 80
+
+resources: 
+  limits:
+    cpu: 400m
+    memory: 1024Mi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+config: |
+  server:
+    http:
+      listen_addr: ":80"
+  users:
+    - name: "default"
+      to_user: "default"
+      to_cluster: "default"
+  clusters:
+    - name: "default"
+      scheme: "http"
+      nodes: [ "clickhouse:8123"]
+      users:
+        - name: "default"

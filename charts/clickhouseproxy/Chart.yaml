@@ -1,0 +1,5 @@
+apiVersion: v2
+name: clickhouseproxy
+description: A Helm Chart for chproxy deployment to enable caching/proxying clickhouse
+type: application
+version: 0.0.1
