@@ -39,6 +39,8 @@ spec:
               protocol: TCP
               name: {{ .name }}
             {{- end }}
+          env:
+            {{- toYaml .Values.uptrace.env | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /metrics
