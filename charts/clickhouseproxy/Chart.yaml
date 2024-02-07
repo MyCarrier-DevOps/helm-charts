@@ -4,3 +4,8 @@ description: A Helm Chart for chproxy deployment to enable caching/proxying clic
 type: application
 icon: https://www.chproxy.org/_astro/logo-white.1121eedc.svg
 version: 1.0.1
+
+dependencies:
+  - name: redis
+    version: 18.12.0
+    repository: https://charts.bitnami.com/bitnami

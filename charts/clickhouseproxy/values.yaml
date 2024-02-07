@@ -78,3 +78,7 @@ config: |
       nodes: [ "clickhouse:8123"]
       users:
         - name: "default"
+
+redis:
+  auth:
+    password: default_password
