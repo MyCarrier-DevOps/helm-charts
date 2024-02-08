@@ -64,6 +64,8 @@ tolerations: []
 
 affinity: {}
 
+env: {}
+
 config: |
   server:
     http:
@@ -80,5 +82,8 @@ config: |
         - name: "default"
 
 redis:
+  master:
+  persistence:
+    size: "100Gi"
   auth:
     password: default_password
