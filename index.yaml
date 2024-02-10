@@ -20,6 +20,20 @@ entries:
     version: 0.1.50
   clickhouseproxy:
   - apiVersion: v2
+    created: "2024-02-10T21:28:31.603412032Z"
+    dependencies:
+    - name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: 18.12.0
+    description: A Helm Chart for chproxy deployment to enable caching/proxying clickhouse
+    digest: 5970797f07783a82443c2b5c2d24f860c6ee58005c3ef9723277967f23811c15
+    icon: https://www.chproxy.org/_astro/logo-white.1121eedc.svg
+    name: clickhouseproxy
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/clickhouseproxy-1.0.6/clickhouseproxy-1.0.6.tgz
+    version: 1.0.6
+  - apiVersion: v2
     created: "2024-02-08T04:59:50.060743653Z"
     dependencies:
     - name: redis
@@ -136,4 +150,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/splitproxy-0.3.6/splitproxy-0.3.6.tgz
     version: 0.3.6
-generated: "2024-02-08T04:59:50.060767628Z"
+generated: "2024-02-10T21:28:31.603452538Z"
