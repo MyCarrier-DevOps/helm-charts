@@ -82,6 +82,7 @@ config: |
         - name: "default"
 
 redis:
+  enabled: false
   master:
   persistence:
     size: "100Gi"
