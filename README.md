@@ -2,7 +2,7 @@
 ## TL;DR
 
 ```bash
-$ helm repo add mycarrier https://charts.mycarrier.tech
+$ helm repo add mycarrier https://charts.mycarrier.dev
 $ helm install my-release mycarrier/my-chart
 ```
 
