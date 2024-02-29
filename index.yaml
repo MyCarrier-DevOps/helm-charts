@@ -168,6 +168,30 @@ entries:
   trino:
   - apiVersion: v2
     appVersion: "432"
+    created: "2024-02-29T21:27:25.092005524Z"
+    dependencies:
+    - name: common
+      repository: https://charts.bitnami.com/bitnami
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: Fast distributed SQL query engine for big data analytics that helps
+      you explore your data universe
+    digest: 553891c0d91a374b3d8b6b773d5f547871d056d63663208c0a29e02363263253
+    home: https://trino.io/
+    icon: https://trino.io/assets/trino.png
+    maintainers:
+    - name: Trino community
+    name: trino
+    sources:
+    - https://github.com/trinodb/charts
+    - https://github.com/trinodb/trino/tree/master/core/docker
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.4/trino-0.18.4.tgz
+    version: 0.18.4
+  - apiVersion: v2
+    appVersion: "432"
     created: "2024-02-20T22:45:59.055050322Z"
     dependencies:
     - name: common
@@ -238,4 +262,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-02-20T22:45:59.055086519Z"
+generated: "2024-02-29T21:27:25.09205145Z"
