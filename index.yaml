@@ -114,6 +114,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/clickhouseproxy-1.0.1/clickhouseproxy-1.0.1.tgz
     version: 1.0.1
+  qryn-aio:
+  - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2024-05-14T14:14:58.039689168Z"
+    description: A Helm chart for Kubernetes
+    digest: 57d4ed895e77a08a86bd2cc342014ae65baf872fd62e6cb60a0290647bbeabb4
+    name: qryn-aio
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/qryn-aio-0.2.1/qryn-aio-0.2.1.tgz
+    version: 0.2.1
   splitproxy:
   - apiVersion: v2
     created: "2023-12-28T21:02:50.560133944Z"
@@ -262,4 +273,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-02-29T21:27:25.09205145Z"
+generated: "2024-05-14T14:14:58.039733831Z"
