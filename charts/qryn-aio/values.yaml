@@ -1,0 +1,98 @@
+kubernetesClusterDomain: cluster.local
+
+nameOverride: qryn
+
+qryn:
+  podAnnotations: []
+  data:
+    QRYN_LOG_SETTINGS_LEVEL: debug
+    QRYN_LOG_SETTINGS_STDOUT: "true"
+    QRYN_LOG_SETTINGS_SYSLOG: "true"
+    QRYN_MULTITENANCE_SETTINGS_ENABLED: "true"
+    QRYN_SYSTEM_SETTINGS_DB_TIMER: "1"
+    QRYN_SYSTEM_SETTINGS_DYNAMIC_DATABASES: "false"
+    QRYN_SYSTEM_SETTINGS_NO_FORCE_ROTATION: "true"
+    QRYN_SYSTEM_SETTINGS_QUERY_STATS: "true"
+    QRYNCLOUD_LICENSE: XXXX
+    QRYN_DATABASE_DATA_0_NODE: "clickhouse1"
+    QRYN_DATABASE_DATA_0_USER: "default"
+    QRYN_DATABASE_DATA_0_PASS: ""
+    QRYN_DATABASE_DATA_0_HOST: "localhost"
+    QRYN_DATABASE_DATA_0_NAME: "qryn"
+    QRYN_DATABASE_DATA_0_PORT: "9000"
+    QRYN_DATABASE_DATA_0_SECURE: "false"
+
+reader:
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  ingress:
+    enabled: false
+    hosts:
+      - qryn-reader.local.qryn
+  labels: []
+  enabled: true
+  env:
+    qrynHttpSettingsPort: 3200
+  image:
+    repository: qxip/qryn-go-cloud
+    tag: 1.2.91-beta.55
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 100m
+  replicas: 1
+  revisionHistoryLimit: 10
+  type: ClusterIP
+  podAnnotations: []
+
+writer:
+  labels: []
+  enabled: true
+  ingress:
+    enabled: false
+    hosts:
+      - qryn-writer.local.qryn
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  env:
+    qrynHttpSettingsPort: 3100
+  image:
+    repository: qxip/qryn-writer-cloud
+    tag: 1.9.95-beta.13
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 100m
+  replicas: 1
+  revisionHistoryLimit: 10
+  type: ClusterIP
+  podAnnotations: []
+
+
+ctrl:
+  labels: []
+  podAnnotations: []
+  enabled: true
+  image:
+    repository: qxip/qryn-ctrl
+    tag: 0.1.13
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  revisionHistoryLimit: 10
+  type: ClusterIP

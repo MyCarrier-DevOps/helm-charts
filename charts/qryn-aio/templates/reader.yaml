@@ -1,0 +1,112 @@
+{{ if .Values.reader.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-reader
+  labels:
+    io.metrico.service: qryn-reader
+  {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.reader.type }}
+  selector:
+    io.metrico.service: qryn-reader
+  {{- include "qryn-all-in-one.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{.Values.reader.env.qrynHttpSettingsPort }}
+      targetPort: {{.Values.reader.env.qrynHttpSettingsPort }}
+      protocol: TCP
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-reader
+  labels:
+    io.metrico.service: qryn-reader
+    {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.reader.replicas }}
+  revisionHistoryLimit: {{ .Values.reader.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      io.metrico.service: qryn-reader
+      {{- include "qryn-all-in-one.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        io.metrico.service: qryn-reader
+        {{- include "qryn-all-in-one.selectorLabels" . | nindent 8 }}
+      {{- with .Values.reader.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - env:
+            - name: QRYN_HTTP_SETTINGS_PORT
+              value: {{ quote .Values.reader.env.qrynHttpSettingsPort }}
+            - name: KUBERNETES_CLUSTER_DOMAIN
+              value: {{ quote .Values.kubernetesClusterDomain }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "qryn-all-in-one.fullname" . }}-qryn
+          image: {{ .Values.reader.image.repository }}:{{ .Values.reader.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.reader.imagePullPolicy }}
+          name: qryn-reader
+          ports:
+            - containerPort: {{ .Values.reader.env.qrynHttpSettingsPort }}
+              protocol: TCP
+          resources: {{- toYaml .Values.reader.resources | nindent 12 }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          livenessProbe:
+            httpGet:
+              path: "/ready"
+              port: http
+            initialDelaySeconds: 10 #Default 0
+            periodSeconds: 10 #Default 10
+            timeoutSeconds: 1 #Default 1
+            successThreshold: 1 #Default 1
+            failureThreshold: 3 #Default 3
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: qryn-dckr
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+{{- if .Values.reader.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-reader
+  labels:
+    io.metrico.service: qryn-reader
+    {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "qryn-all-in-one.fullname" . }}-reader
+  minReplicas: {{ .Values.reader.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.reader.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.reader.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.reader.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.reader.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.reader.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+{{ end }}

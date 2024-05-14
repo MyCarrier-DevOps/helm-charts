@@ -1,0 +1,70 @@
+{{ if .Values.ctrl.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-ctrl
+  labels:
+    io.metrico.service: qryn-ctrl
+  {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.ctrl.type }}
+  selector:
+    io.metrico.service: qryn-ctrl
+  {{- include "qryn-all-in-one.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-ctrl
+  labels:
+    io.metrico.service: qryn-ctrl
+  {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ctrl.replicas }}
+  revisionHistoryLimit: {{ .Values.ctrl.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      io.metrico.service: qryn-ctrl
+    {{- include "qryn-all-in-one.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        io.metrico.service: qryn-ctrl
+      {{- include "qryn-all-in-one.selectorLabels" . | nindent 8 }}
+      {{- with .Values.ctrl.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - command:
+            - ./qryn-ctrl
+            - -web
+          env:
+            - name: KUBERNETES_CLUSTER_DOMAIN
+              value: {{ quote .Values.kubernetesClusterDomain }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "qryn-all-in-one.fullname" . }}-qryn
+          image: {{ .Values.ctrl.image.repository }}:{{ .Values.ctrl.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.ctrl.imagePullPolicy }}
+          name: qryn-ctrl
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: qryn-dckr
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+{{ end }}

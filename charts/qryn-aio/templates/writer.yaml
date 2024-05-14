@@ -1,0 +1,113 @@
+{{ if .Values.writer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-writer
+  labels:
+    io.metrico.service: qryn-writer
+  {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.writer.type }}
+  selector:
+    io.metrico.service: qryn-writer
+  {{- include "qryn-all-in-one.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{.Values.writer.env.qrynHttpSettingsPort }}
+      targetPort: {{.Values.writer.env.qrynHttpSettingsPort }}
+      protocol: TCP
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-writer
+  labels:
+    io.metrico.service: qryn-writer
+  {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.writer.replicas }}
+  revisionHistoryLimit: {{ .Values.writer.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      io.metrico.service: qryn-writer
+    {{- include "qryn-all-in-one.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        io.metrico.service: qryn-writer
+      {{- include "qryn-all-in-one.selectorLabels" . | nindent 8 }}
+      {{- with .Values.writer.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - command:
+            - sh
+            - -c
+            - ./cloki-writer
+          env:
+            - name: QRYN_HTTP_SETTINGS_PORT
+              value: {{ quote .Values.writer.env.qrynHttpSettingsPort }}
+            - name: KUBERNETES_CLUSTER_DOMAIN
+              value: {{ quote .Values.kubernetesClusterDomain }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "qryn-all-in-one.fullname" . }}-qryn
+          image: {{ .Values.writer.image.repository }}:{{ .Values.writer.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.writer.imagePullPolicy }}
+          name: qryn-writer
+          ports:
+            {{ range .Values.writer.ports }}
+            - containerPort: {{ .targetPort }}
+              protocol: {{ .protocol }}
+            {{ end }}
+          resources: {{- toYaml .Values.writer.resources | nindent 12 }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          livenessProbe:
+            httpGet:
+              path: "/ready"
+              port: http
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: qryn-dckr
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+{{- if .Values.writer.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-writer
+  labels:
+    io.metrico.service: qryn-reader
+    {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "qryn-all-in-one.fullname" . }}-writer
+  minReplicas: {{ .Values.writer.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.writer.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.writer.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.writer.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.writer.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.writer.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+{{ end }}
