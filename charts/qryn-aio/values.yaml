@@ -3,7 +3,7 @@ kubernetesClusterDomain: cluster.local
 nameOverride: qryn
 
 qryn:
-  podAnnotations: []
+  annotations: []
   data:
     QRYN_LOG_SETTINGS_LEVEL: debug
     QRYN_LOG_SETTINGS_STDOUT: "true"

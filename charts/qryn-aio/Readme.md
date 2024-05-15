@@ -164,7 +164,7 @@ The required options are marked **bold**
 |------------------------------------------------------|--------------------------------------------------------------------|----------------------------|
 | kubernetesClusterDomain                              | The domain to use for Kubernetes cluster.                          | cluster.local              |
 | nameOverride                                         | A string to partially replace the name of the qryn deployment.     | qryn                       |
-| qryn.podAnnotations                                  | Additional pod annotations for the configmap.                      | []                         |
+| qryn.annotations                                     | Additional annotations for the configmap.                          | []                         |
 | qryn.data.QRYN_LOG_SETTINGS_LEVEL                    | The log level for qryn.                                            | debug                      |
 | qryn.data.QRYN_LOG_SETTINGS_STDOUT                   | Whether to log to stdout.                                          | true                       |
 | qryn.data.QRYN_LOG_SETTINGS_SYSLOG                   | Whether to log to syslog.                                          | true                       |

@@ -4,7 +4,7 @@ metadata:
   name: {{ include "qryn-all-in-one.fullname" . }}-qryn
   labels:
   {{- include "qryn-all-in-one.labels" . | nindent 4 }}
-  {{- with .Values.qryn.podAnnotations }}
+  {{- with .Values.qryn.annotations }}
   annotations:
     {{- toYaml . | nindent 8 }}
   {{- end }}
