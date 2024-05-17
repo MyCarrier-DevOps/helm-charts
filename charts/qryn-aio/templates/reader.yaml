@@ -63,9 +63,9 @@ spec:
             httpGet:
               path: "/ready"
               port: http
-            initialDelaySeconds: 10 #Default 0
-            periodSeconds: 10 #Default 10
-            timeoutSeconds: 1 #Default 1
+            initialDelaySeconds: 15 #Default 0
+            periodSeconds: 15 #Default 10
+            timeoutSeconds: 3 #Default 1
             successThreshold: 1 #Default 1
             failureThreshold: 3 #Default 3
       dnsPolicy: ClusterFirst

@@ -170,6 +170,7 @@ The required options are marked **bold**
 | qryn.data.QRYN_LOG_SETTINGS_SYSLOG                   | Whether to log to syslog.                                          | true                       |
 | qryn.data.QRYN_MULTITENANCE_SETTINGS_ENABLED         | Whether to enable multi-tenancy.                                   | true                       |
 | qryn.data.QRYN_SYSTEM_SETTINGS_DB_TIMER              | The timeout between two subsequent inserts into the database (sec) | 1                          |
+| qryn.QRYN_SYSTEM_SETTINGS_LICENSE_AUTO_SHUTDOWN      | Whether to deactivate license on sigkill                           | true                       |
 | qryn.data.QRYN_SYSTEM_SETTINGS_DYNAMIC_DATABASES     | Whether to enable X-CH-DSN header controlled databases.            | false                      |
 | qryn.data.QRYN_SYSTEM_SETTINGS_NO_FORCE_ROTATION     | Whether to disable forced rotation (not used).                     | true                       |
 | qryn.data.QRYN_SYSTEM_SETTINGS_QUERY_STATS           | Whether to enable query statistics.                                | true                       |
