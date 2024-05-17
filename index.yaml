@@ -117,6 +117,16 @@ entries:
   qryn-aio:
   - apiVersion: v2
     appVersion: 0.2.0
+    created: "2024-05-17T17:21:41.010950059Z"
+    description: A Helm chart for Kubernetes
+    digest: 39b9161d5275efdef5bd117b6070e24739c79f246c597a915a68d5e4b69c7b77
+    name: qryn-aio
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/qryn-aio-0.2.7/qryn-aio-0.2.7.tgz
+    version: 0.2.7
+  - apiVersion: v2
+    appVersion: 0.2.0
     created: "2024-05-17T17:19:03.725139442Z"
     description: A Helm chart for Kubernetes
     digest: 6738c260b982f9c1a42b8b07af295d7806ecc3375ff591b72fd663bb3c246eda
@@ -323,4 +333,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-05-17T17:19:03.725199094Z"
+generated: "2024-05-17T17:21:41.011120902Z"
