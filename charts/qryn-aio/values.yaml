@@ -52,6 +52,18 @@ reader:
   revisionHistoryLimit: 10
   type: ClusterIP
   podAnnotations: []
+  livenessProbe: {}
+    # initialDelaySeconds: 20
+    # periodSeconds: 10
+    # timeoutSeconds: 5
+    # failureThreshold: 6
+    # successThreshold: 1
+  readinessProbe: {}
+    # initialDelaySeconds: 20
+    # periodSeconds: 10
+    # timeoutSeconds: 5
+    # failureThreshold: 6
+    # successThreshold: 1
 
 writer:
   labels: []
@@ -83,6 +95,18 @@ writer:
   revisionHistoryLimit: 10
   type: ClusterIP
   podAnnotations: []
+  livenessProbe: {}
+    # initialDelaySeconds: 20
+    # periodSeconds: 10
+    # timeoutSeconds: 5
+    # failureThreshold: 6
+    # successThreshold: 1
+  readinessProbe: {}
+    # initialDelaySeconds: 20
+    # periodSeconds: 10
+    # timeoutSeconds: 5
+    # failureThreshold: 6
+    # successThreshold: 1
 
 
 ctrl:
