@@ -54,30 +54,30 @@ spec:
           imagePullPolicy: {{ .Values.reader.imagePullPolicy }}
           name: qryn-reader
           ports:
-            - containerPort: {{ .Values.reader.env.qrynHttpSettingsPort }}
-              protocol: TCP
+            - name: http
+              containerPort: {{.Values.reader.env.qrynHttpSettingsPort }}
+              protocol: HTTP
           resources: {{- toYaml .Values.reader.resources | nindent 12 }}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           livenessProbe:
             httpGet:
-              path: "/ready"
+              path: /ready
               port: http
-            initialDelaySeconds: 15 #Default 0
-            periodSeconds: 15 #Default 10
-            timeoutSeconds: 3 #Default 1
-            successThreshold: 1 #Default 1
-            failureThreshold: 3 #Default 3
+            initialDelaySeconds: {{ .Values.reader.livenessProbe.initialDelaySeconds | default 20 }}
+            periodSeconds: {{ .Values.reader.livenessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.reader.livenessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.reader.livenessProbe.failureThreshold | default 6 }}
+            successThreshold: {{ .Values.reader.livenessProbe.successThreshold | default 1 }}
           readinessProbe:
             httpGet:
-              path: "/ready"
+              path: /ready
               port: http
-            initialDelaySeconds: 15 #Default 0
-            periodSeconds: 15 #Default 10
-            timeoutSeconds: 3 #Default 1
-            successThreshold: 1 #Default 1
-            failureThreshold: 3 #Default 3
-          
+            initialDelaySeconds: {{ .Values.reader.readinessProbe.initialDelaySeconds | default 20 }}
+            periodSeconds: {{ .Values.reader.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.reader.readinessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.reader.readinessProbe.failureThreshold | default 6 }}
+            successThreshold: {{ .Values.reader.readinessProbe.successThreshold | default 1 }}
       dnsPolicy: ClusterFirst
       imagePullSecrets:
         - name: qryn-dckr
