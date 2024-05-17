@@ -56,7 +56,7 @@ spec:
           ports:
             - name: http
               containerPort: {{.Values.reader.env.qrynHttpSettingsPort }}
-              protocol: HTTP
+              protocol: TCP
           resources: {{- toYaml .Values.reader.resources | nindent 12 }}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
