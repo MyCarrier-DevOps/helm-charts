@@ -21,6 +21,7 @@ qryn:
     QRYN_DATABASE_DATA_0_NAME: "qryn"
     QRYN_DATABASE_DATA_0_PORT: "9000"
     QRYN_DATABASE_DATA_0_SECURE: "false"
+    QRYN_SYSTEM_SETTINGS_LICENSE_AUTO_SHUTDOWN: "true"
 
 reader:
   autoscaling:
@@ -53,17 +54,28 @@ reader:
   type: ClusterIP
   podAnnotations: []
   livenessProbe: {}
-    # initialDelaySeconds: 20
+    # initialDelaySeconds: 15
     # periodSeconds: 10
-    # timeoutSeconds: 5
+    # timeoutSeconds: 3
     # failureThreshold: 6
     # successThreshold: 1
   readinessProbe: {}
-    # initialDelaySeconds: 20
+    # initialDelaySeconds: 15
     # periodSeconds: 10
-    # timeoutSeconds: 5
+    # timeoutSeconds: 3
     # failureThreshold: 6
     # successThreshold: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  initContainers:
+    enabled: false
+    containers: []
+    # containers:
+    #   - name: logshipper
+    #     image: alpine:latest
+    #     restartPolicy: Always
+    #     command: ['sh', '-c', 'tail -F /opt/logs.txt']
 
 writer:
   labels: []
@@ -96,18 +108,28 @@ writer:
   type: ClusterIP
   podAnnotations: []
   livenessProbe: {}
-    # initialDelaySeconds: 20
+    # initialDelaySeconds: 15
     # periodSeconds: 10
-    # timeoutSeconds: 5
+    # timeoutSeconds: 3
     # failureThreshold: 6
     # successThreshold: 1
   readinessProbe: {}
-    # initialDelaySeconds: 20
+    # initialDelaySeconds: 15
     # periodSeconds: 10
-    # timeoutSeconds: 5
+    # timeoutSeconds: 3
     # failureThreshold: 6
     # successThreshold: 1
-
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  initContainers:
+    enabled: false
+    containers: []
+    # containers:
+    #   - name: logshipper
+    #     image: alpine:latest
+    #     restartPolicy: Always
+    #     command: ['sh', '-c', 'tail -F /opt/logs.txt']
 
 ctrl:
   labels: []
@@ -120,3 +142,6 @@ ctrl:
   replicas: 1
   revisionHistoryLimit: 10
   type: ClusterIP
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

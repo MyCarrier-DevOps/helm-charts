@@ -41,6 +41,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- if .Values.writer.initContainers.enabled }}
+      initContainers:
+      {{- if .Values.writer.initContainers.containers }}
+      {{- include "common.tplvalues.render" (dict "value" .Values.writer.initContainers.containers "context" $) | trim | nindent 8 }}
+      {{- end }}
+      {{- end }} 
       containers:
         - command:
             - sh
@@ -68,18 +74,18 @@ spec:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: {{ .Values.writer.livenessProbe.initialDelaySeconds | default 20 }}
+            initialDelaySeconds: {{ .Values.writer.livenessProbe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.writer.livenessProbe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.writer.livenessProbe.timeoutSeconds | default 5 }}
+            timeoutSeconds: {{ .Values.writer.livenessProbe.timeoutSeconds | default 3 }}
             failureThreshold: {{ .Values.writer.livenessProbe.failureThreshold | default 6 }}
             successThreshold: {{ .Values.writer.livenessProbe.successThreshold | default 1 }}
           readinessProbe:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: {{ .Values.writer.readinessProbe.initialDelaySeconds | default 20 }}
+            initialDelaySeconds: {{ .Values.writer.readinessProbe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.writer.readinessProbe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.writer.readinessProbe.timeoutSeconds | default 5 }}
+            timeoutSeconds: {{ .Values.writer.readinessProbe.timeoutSeconds | default 3 }}
             failureThreshold: {{ .Values.writer.readinessProbe.failureThreshold | default 6 }}
             successThreshold: {{ .Values.writer.readinessProbe.successThreshold | default 1 }}
       dnsPolicy: ClusterFirst
@@ -89,6 +95,18 @@ spec:
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.writer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.writer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.writer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 {{- if .Values.writer.autoscaling.enabled }}
 ---
 apiVersion: autoscaling/v2

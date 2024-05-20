@@ -41,6 +41,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- if .Values.reader.initContainers.enabled }}
+      initContainers:
+      {{- if .Values.reader.initContainers.containers }}
+      {{- include "common.tplvalues.render" (dict "value" .Values.reader.initContainers.containers "context" $) | trim | nindent 8 }}
+      {{- end }}
+      {{- end }} 
       containers:
         - env:
             - name: QRYN_HTTP_SETTINGS_PORT
@@ -64,18 +70,18 @@ spec:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: {{ .Values.reader.livenessProbe.initialDelaySeconds | default 20 }}
+            initialDelaySeconds: {{ .Values.reader.livenessProbe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.reader.livenessProbe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.reader.livenessProbe.timeoutSeconds | default 5 }}
+            timeoutSeconds: {{ .Values.reader.livenessProbe.timeoutSeconds | default 3 }}
             failureThreshold: {{ .Values.reader.livenessProbe.failureThreshold | default 6 }}
             successThreshold: {{ .Values.reader.livenessProbe.successThreshold | default 1 }}
           readinessProbe:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: {{ .Values.reader.readinessProbe.initialDelaySeconds | default 20 }}
+            initialDelaySeconds: {{ .Values.reader.readinessProbe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.reader.readinessProbe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.reader.readinessProbe.timeoutSeconds | default 5 }}
+            timeoutSeconds: {{ .Values.reader.readinessProbe.timeoutSeconds | default 3 }}
             failureThreshold: {{ .Values.reader.readinessProbe.failureThreshold | default 6 }}
             successThreshold: {{ .Values.reader.readinessProbe.successThreshold | default 1 }}
       dnsPolicy: ClusterFirst
@@ -85,6 +91,18 @@ spec:
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.reader.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.reader.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.reader.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 {{- if .Values.reader.autoscaling.enabled }}
 ---
 apiVersion: autoscaling/v2
