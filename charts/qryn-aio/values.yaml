@@ -35,6 +35,7 @@ reader:
     hosts:
       - qryn-reader.local.qryn
   labels: []
+  additionalVolumes: []
   enabled: true
   env:
     qrynHttpSettingsPort: 3200
@@ -79,6 +80,7 @@ reader:
 
 writer:
   labels: []
+  additionalVolumes: []
   enabled: true
   ingress:
     enabled: false

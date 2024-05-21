@@ -91,6 +91,10 @@ spec:
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      {{- if .Values.additionalVolumes }}
+      volumes:
+          {{- toYaml .Values.additionalVolumes | nindent 8 }} 
+      {{- end }}
       {{- with .Values.reader.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
