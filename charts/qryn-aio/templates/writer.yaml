@@ -35,6 +35,7 @@ spec:
     metadata:
       labels:
         io.metrico.service: qryn-writer
+        sidecar.istio.io/inject: "false"
       {{- include "qryn-all-in-one.selectorLabels" . | nindent 8 }}
       {{- with .Values.writer.podAnnotations }}
       annotations:
