@@ -49,14 +49,23 @@ spec:
       {{- end }}
       {{- end }} 
       containers:
+      {{- if .Values.reader.additionalContainers }}
+      {{- include "common.tplvalues.render" (dict "value" .Values.reader.additionalContainers "context" $) | trim | nindent 8 }}
+      {{- end }}
         - env:
             - name: QRYN_HTTP_SETTINGS_PORT
               value: {{ quote .Values.reader.env.qrynHttpSettingsPort }}
             - name: KUBERNETES_CLUSTER_DOMAIN
               value: {{ quote .Values.kubernetesClusterDomain }}
+          {{- if .Values.reader.chproxy.enabled }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "qryn-all-in-one.fullname" . }}-q2ch
+          {{- else }}
           envFrom:
             - configMapRef:
                 name: {{ include "qryn-all-in-one.fullname" . }}-qryn
+          {{- end }}
           image: {{ .Values.reader.image.repository }}:{{ .Values.reader.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.reader.imagePullPolicy }}
           name: qryn-reader

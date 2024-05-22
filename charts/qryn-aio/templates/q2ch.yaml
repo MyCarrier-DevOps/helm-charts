@@ -1,0 +1,14 @@
+{{- if .Values.reader.chproxy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qryn-all-in-one.fullname" . }}-q2ch
+  labels:
+  {{- include "qryn-all-in-one.labels" . | nindent 4 }}
+  {{- with .Values.q2ch.annotations }}
+  annotations:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}
+data:
+  {{- .Values.q2ch.data | toYaml | nindent 2}}
+{{- end }}

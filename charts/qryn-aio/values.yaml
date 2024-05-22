@@ -23,6 +23,27 @@ qryn:
     QRYN_DATABASE_DATA_0_SECURE: "false"
     QRYN_SYSTEM_SETTINGS_LICENSE_AUTO_SHUTDOWN: "true"
 
+q2ch:
+  annotations: []
+  data:
+    QRYN_LOG_SETTINGS_LEVEL: debug
+    QRYN_LOG_SETTINGS_STDOUT: "true"
+    QRYN_LOG_SETTINGS_SYSLOG: "true"
+    QRYN_MULTITENANCE_SETTINGS_ENABLED: "true"
+    QRYN_SYSTEM_SETTINGS_DB_TIMER: "1"
+    QRYN_SYSTEM_SETTINGS_DYNAMIC_DATABASES: "false"
+    QRYN_SYSTEM_SETTINGS_NO_FORCE_ROTATION: "true"
+    QRYN_SYSTEM_SETTINGS_QUERY_STATS: "true"
+    QRYNCLOUD_LICENSE: XXXX
+    QRYN_DATABASE_DATA_0_NODE: "clickhouse1"
+    QRYN_DATABASE_DATA_0_USER: "default"
+    QRYN_DATABASE_DATA_0_PASS: ""
+    QRYN_DATABASE_DATA_0_HOST: "localhost"
+    QRYN_DATABASE_DATA_0_NAME: "qryn"
+    QRYN_DATABASE_DATA_0_PORT: "9000"
+    QRYN_DATABASE_DATA_0_SECURE: "false"
+    QRYN_SYSTEM_SETTINGS_LICENSE_AUTO_SHUTDOWN: "true"
+
 reader:
   autoscaling:
     enabled: false
@@ -43,6 +64,8 @@ reader:
     repository: qxip/qryn-go-cloud
     tag: 1.2.91-beta.55
   imagePullPolicy: IfNotPresent
+  chproxy:
+    enabled: false
   resources:
     requests:
       memory: 1Gi
@@ -69,6 +92,7 @@ reader:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  additionalContainers: []
   initContainers:
     enabled: false
     containers: []
