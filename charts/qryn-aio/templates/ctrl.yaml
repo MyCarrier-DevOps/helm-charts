@@ -83,17 +83,6 @@ spec:
           schedulerName: default-scheduler
           securityContext: {}
           terminationGracePeriodSeconds: 30
-          lifecycle:
-            preStop:
-              exec:
-                command: 
-                  - "/bin/sh"
-                  - "-c"
-                  - |
-                    pid=$(pgrep -f "curl.*http://localhost:8080/initialize*")
-                    if [ -n "$pid" ]; then
-                      kill -SIGTERM "$pid"
-                    fi
       {{- end -}}
       {{- with .Values.ctrl.nodeSelector }}
       nodeSelector:

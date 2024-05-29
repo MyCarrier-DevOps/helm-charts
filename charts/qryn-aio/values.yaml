@@ -176,7 +176,7 @@ ctrl:
       - "/bin/sh"
       - "-c"
       - |
-        sleep -s 20; \
+        sleep 20; \
         curl -X POST http://localhost:8080/initialize --data-binary @- <<EOF
         {
           "database_data": [
@@ -190,7 +190,7 @@ ctrl:
               "name": "$QRYN_DATABASE_DATA_0_NAME",
               "node": "$QRYN_DATABASE_DATA_0_NODE",
               "pass": "$QRYN_DATABASE_DATA_0_PASS",
-              "port": "$QRYN_DATABASE_DATA_0_PORT",
+              "port": $QRYN_DATABASE_DATA_0_PORT,
               "primary": true,
               "secure": true,
               "ttl_days": 90,
