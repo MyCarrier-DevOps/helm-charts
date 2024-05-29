@@ -117,6 +117,26 @@ entries:
   qryn-aio:
   - apiVersion: v2
     appVersion: 0.2.0
+    created: "2024-05-29T18:05:19.736205059Z"
+    dependencies:
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: A Helm chart for Kubernetes
+    digest: ac7ad71c03683d3c69fd9d4d3c0da675409836181c33da41240710a91e4ca221
+    maintainers:
+    - name: Qryn community
+    name: qryn-aio
+    sources:
+    - https://github.com/metrico/qryn-cloud-helm
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/qryn-aio-0.2.15/qryn-aio-0.2.15.tgz
+    version: 0.2.15
+  - apiVersion: v2
+    appVersion: 0.2.0
     created: "2024-05-29T17:58:01.10703843Z"
     dependencies:
     - name: common
@@ -473,4 +493,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-05-29T17:58:01.107181116Z"
+generated: "2024-05-29T18:05:19.736309665Z"
