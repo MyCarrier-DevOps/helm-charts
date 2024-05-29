@@ -80,7 +80,7 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
-          restartPolicy: OnFailure
+          restartPolicy: Always
           schedulerName: default-scheduler
           securityContext: {}
           terminationGracePeriodSeconds: 30
