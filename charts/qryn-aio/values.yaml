@@ -105,6 +105,7 @@ reader:
 writer:
   labels: []
   additionalVolumes: []
+  autoInitializeDb: true
   enabled: true
   ingress:
     enabled: false
@@ -166,36 +167,10 @@ ctrl:
     tag: 0.1.13
   imagePullPolicy: IfNotPresent
   replicas: 1
+  port: 8080
   revisionHistoryLimit: 10
   type: ClusterIP
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  curl:
-    command:
-      - "/bin/sh"
-      - "-c"
-      - |
-        sleep 20; \
-        curl -X POST http://localhost:8080/initialize --data-binary @- <<EOF
-        {
-          "database_data": [
-            {
-              "cloud": false,
-              "cluster_name": "",
-              "debug": true,
-              "distributed": false,
-              "help": "Settings for Clickhouse Database (data)",
-              "host": "$QRYN_DATABASE_DATA_0_HOST",
-              "name": "$QRYN_DATABASE_DATA_0_NAME",
-              "node": "$QRYN_DATABASE_DATA_0_NODE",
-              "pass": "$QRYN_DATABASE_DATA_0_PASS",
-              "port": $QRYN_DATABASE_DATA_0_PORT,
-              "primary": true,
-              "secure": true,
-              "ttl_days": 90,
-              "user": "$QRYN_DATABASE_DATA_0_USER"
-            }
-          ]
-        }
-        EOF
+    

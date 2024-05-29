@@ -12,8 +12,8 @@ spec:
     io.metrico.service: qryn-ctrl
   {{- include "qryn-all-in-one.selectorLabels" . | nindent 4 }}
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: {{ .Values.ctrl.port }}
+      targetPort: {{ .Values.ctrl.port }}
       protocol: TCP
       name: http
 ---
@@ -59,31 +59,11 @@ spec:
           imagePullPolicy: {{ .Values.ctrl.imagePullPolicy }}
           name: qryn-ctrl
           ports:
-            - containerPort: 8080
+            - containerPort: {{ .Values.ctrl.port }}
               protocol: TCP
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
-        {{- if .Values.ctrl.curl.command }}
-        - command:
-            {{- toYaml .Values.ctrl.curl.command | nindent 12 }}
-          envFrom:
-            - configMapRef:
-                name: {{ include "qryn-all-in-one.fullname" . }}-qryn
-          image: curlimages/curl:latest
-          imagePullPolicy: IfNotPresent
-          name: initialize-qryn-db
-          ports:
-            - containerPort: 9090
-              protocol: TCP
-          resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-          dnsPolicy: ClusterFirst
-          schedulerName: default-scheduler
-          securityContext: {}
-          terminationGracePeriodSeconds: 30
-      {{- end -}}
       {{- with .Values.ctrl.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

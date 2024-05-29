@@ -42,12 +42,58 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- if .Values.writer.initContainers.enabled }}
+      {{- if .Values.writer.autoInitializeDb }}
       initContainers:
-      {{- if .Values.writer.initContainers.containers }}
-      {{- include "common.tplvalues.render" (dict "value" .Values.writer.initContainers.containers "context" $) | trim | nindent 8 }}
+        - env:
+            - name: QRYN_CTRL_HOST
+              value: {{ include "qryn-all-in-one.fullname" . }}-ctrl
+            - name: QRYN_CTRL_PORT
+              value: {{ quote .Values.ctrl.port }}
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              sleep 20; \
+              curl -X POST http://$QRYN_CTRL_HOST:$QRYN_CTRL_PORT/initialize --data-binary @- <<EOF
+              {
+                "database_data": [
+                  {
+                    "cloud": false,
+                    "cluster_name": "",
+                    "debug": true,
+                    "distributed": false,
+                    "help": "Settings for Clickhouse Database (data)",
+                    "host": "$QRYN_DATABASE_DATA_0_HOST",
+                    "name": "$QRYN_DATABASE_DATA_0_NAME",
+                    "node": "$QRYN_DATABASE_DATA_0_NODE",
+                    "pass": "$QRYN_DATABASE_DATA_0_PASS",
+                    "port": $QRYN_DATABASE_DATA_0_PORT,
+                    "primary": true,
+                    "secure": true,
+                    "ttl_days": 90,
+                    "user": "$QRYN_DATABASE_DATA_0_USER"
+                  }
+                ]
+              }
+              EOF
+          envFrom:
+            - configMapRef:
+                name: {{ include "qryn-all-in-one.fullname" . }}-qryn
+          image: curlimages/curl:latest
+          imagePullPolicy: IfNotPresent
+          name: initialize-qryn-db
+          ports:
+            - containerPort: 9090
+              protocol: TCP
+          resources: {}
+          restartPolicy: Never
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
       {{- end }}
-      {{- end }} 
       containers:
         - command:
             - sh
