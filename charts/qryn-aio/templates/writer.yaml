@@ -86,7 +86,6 @@ spec:
             - containerPort: 9090
               protocol: TCP
           resources: {}
-          restartPolicy: OnFailure
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
