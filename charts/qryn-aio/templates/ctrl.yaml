@@ -43,6 +43,9 @@ spec:
       {{- end }}
     spec:
       containers:
+      {{- if .Values.ctrl.additionalContainers }}
+      {{- include "common.tplvalues.render" (dict "value" .Values.ctrl.additionalContainers "context" $) | trim | nindent 8 }}
+      {{- end }}
         - command:
             - ./qryn-ctrl
             - -web
@@ -61,13 +64,38 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
-      dnsPolicy: ClusterFirst
-      imagePullSecrets:
-        - name: qryn-dckr
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      terminationGracePeriodSeconds: 30
+        {{- if .Values.ctrl.curl.command }}
+        - command:
+            {{- toYaml .Values.ctrl.curl.command | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "qryn-all-in-one.fullname" . }}-qryn
+          image: curlimages/curl:latest
+          imagePullPolicy: IfNotPresent
+          name: initialize-qryn-db
+          ports:
+            - containerPort: 9090
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+          lifecycle:
+            preStop:
+              exec:
+                command: 
+                  - "/bin/sh"
+                  - "-c"
+                  - |
+                    pid=$(pgrep -f "curl.*http://localhost:8080/initialize*")
+                    if [ -n "$pid" ]; then
+                      kill -SIGTERM "$pid"
+                    fi
+      {{- end -}}
       {{- with .Values.ctrl.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

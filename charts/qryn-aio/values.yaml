@@ -171,3 +171,31 @@ ctrl:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  curl:
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        sleep -s 20; \
+        curl -X POST http://localhost:8080/initialize --data-binary @- <<EOF
+        {
+          "database_data": [
+            {
+              "cloud": false,
+              "cluster_name": "",
+              "debug": true,
+              "distributed": false,
+              "help": "Settings for Clickhouse Database (data)",
+              "host": "$QRYN_DATABASE_DATA_0_HOST",
+              "name": "$QRYN_DATABASE_DATA_0_NAME",
+              "node": "$QRYN_DATABASE_DATA_0_NODE",
+              "pass": "$QRYN_DATABASE_DATA_0_PASS",
+              "port": "$QRYN_DATABASE_DATA_0_PORT",
+              "primary": true,
+              "secure": true,
+              "ttl_days": 90,
+              "user": "$QRYN_DATABASE_DATA_0_USER"
+            }
+          ]
+        }
+        EOF
