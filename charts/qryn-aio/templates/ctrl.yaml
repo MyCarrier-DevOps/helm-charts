@@ -64,6 +64,8 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+      imagePullSecrets:
+        - name: qryn-dckr
       {{- with .Values.ctrl.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
