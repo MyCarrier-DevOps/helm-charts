@@ -1,0 +1,32 @@
+{{- if (eq .Values.application.deploymentType "cronjob")  }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Values.application.cronjob.name }}
+  labels:
+    {{- include "myc-generic.labels" . | nindent 4 }}
+spec:
+  suspend: {{ .Values.application.cronjob.suspend }}
+  schedule: {{ .Values.application.cronjob.schedule | quote }}
+  jobTemplate:
+    metadata:
+      name: {{ .Values.application.cronjob.name }}
+    spec:
+      template:
+        spec:
+          containers:
+          - image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+            name: {{ .Values.application.cronjob.name }}
+            args:
+            - /bin/sh
+            - -c
+            - {{ .Values.application.cronjob.command }}
+            env:
+            - name: APP_VERSION
+              value: {{ .Values.image.tag | default .Chart.AppVersion }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value }}
+            {{- end }}
+          restartPolicy: {{ .Values.application.cronjob.restartPolicy | default "Never" }}
+{{- end }}
