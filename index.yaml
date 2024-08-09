@@ -114,6 +114,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/clickhouseproxy-1.0.1/clickhouseproxy-1.0.1.tgz
     version: 1.0.1
+  myc-generic:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2024-08-09T22:40:57.176090864Z"
+    description: A Helm chart for Kubernetes
+    digest: 70fe88dc98da74f55de36688a25b1caee081fa26f584f7498f3be4e27e19d368
+    name: myc-generic
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/myc-generic-0.1.1/myc-generic-0.1.1.tgz
+    version: 0.1.1
   qryn-aio:
   - apiVersion: v2
     appVersion: 0.2.0
@@ -573,4 +584,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-06-19T15:55:36.442790072Z"
+generated: "2024-08-09T22:40:57.176159572Z"
