@@ -8,7 +8,7 @@ metadata:
 spec:
   ports:
     {{- range .Values.service.ports }}
-    - containerPort: {{ .port }}
+    - targetPort: {{ .port }}
       protocol: {{ .protocol }}
       name: {{ .name }}
       port: {{ .port }}

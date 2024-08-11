@@ -42,16 +42,25 @@ spec:
             - containerPort: {{ .port }}
               protocol: {{ .protocol }}
               name: {{ .name }}
-              port: {{ .port }}
             {{- end }}
           livenessProbe:
             httpGet:
               path: {{ .Values.application.deployment.healthcheck.path | default "/" }}
               port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+            initialDelaySeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.initialDelaySeconds | default 15 }}
+            periodSeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.timeoutSeconds | default 3 }}
+            failureThreshold: {{ .Values.application.deployment.healthcheck.livenessprobe.failureThreshold | default 6 }}
+            successThreshold: {{ .Values.application.deployment.healthcheck.livenessprobe.successThreshold | default 1 }}
           readinessProbe:
             httpGet:
               path: {{ .Values.application.deployment.healthcheck.path | default "/" }}
               port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+            initialDelaySeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.initialDelaySeconds | default 15 }}
+            periodSeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.timeoutSeconds | default 3 }}
+            failureThreshold: {{ .Values.application.deployment.healthcheck.readinessprobe.failureThreshold | default 6 }}
+            successThreshold: {{ .Values.application.deployment.healthcheck.readinessprobe.successThreshold | default 1 }}
           env:
           - name: APP_VERSION
             value: {{ .Values.image.tag | default .Chart.AppVersion }}

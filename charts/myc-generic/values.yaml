@@ -11,6 +11,18 @@ application:
     healthcheck:
       path: "/healthz"
       port: 8080
+      livenessprobe:
+        initialDelaySeconds: 15
+        periodSeconds: 30
+        timeoutSeconds: 3
+        failureThreshold: 6
+        successThreshold: 1
+      readinessprobe:
+        initialDelaySeconds: 15
+        periodSeconds: 30
+        timeoutSeconds: 3
+        failureThreshold: 6
+        successThreshold: 1
   cronjob:
     name: myCronJob
     suspend: false
@@ -58,6 +70,8 @@ service:
     targetPort: 8080
 
 env: {}
+  # APP_EXAMPLE: "value"
+  # APP_BOOLEAN_AS_STRING: "'true'"
 
 resources: {}
   # limits:
