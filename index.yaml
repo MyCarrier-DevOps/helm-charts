@@ -117,6 +117,16 @@ entries:
   myc-generic:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2024-08-11T04:53:15.72534403Z"
+    description: A Helm chart for Kubernetes
+    digest: 190458dc257183f32643cc204e88942ba27eaec1588bd06ae8f2eece188cfb63
+    name: myc-generic
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/myc-generic-0.1.2/myc-generic-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2024-08-09T22:40:57.176090864Z"
     description: A Helm chart for Kubernetes
     digest: 70fe88dc98da74f55de36688a25b1caee081fa26f584f7498f3be4e27e19d368
@@ -584,4 +594,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-08-09T22:40:57.176159572Z"
+generated: "2024-08-11T04:53:15.72541929Z"
