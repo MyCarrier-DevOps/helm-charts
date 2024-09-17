@@ -51,7 +51,7 @@ data:
   {{- if .Values.worker.config.memory.heapHeadroomPerNode }}
     memory.heap-headroom-per-node={{ .Values.worker.config.memory.heapHeadroomPerNode }}
   {{- end }}
-    discovery.uri=http://{{ template "trino.fullname" . }}:{{ .Values.service.port }}
+    discovery.uri=http://{{ template "trino.fullname" . }}.{{ .Values.namespace }}:{{ .Values.service.port }}
   {{- range $configValue := .Values.additionalConfigProperties }}
     {{ $configValue }}
   {{- end }}

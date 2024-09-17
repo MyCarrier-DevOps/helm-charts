@@ -5,6 +5,8 @@
 commonLabels: {}
 commonAnnotations: {}
 
+namespace: monitoring
+
 image:
   repository: trinodb/trino
   pullPolicy: IfNotPresent
