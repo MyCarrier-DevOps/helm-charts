@@ -55,7 +55,7 @@ data:
 {{- if .Values.coordinator.config.memory.heapHeadroomPerNode }}
     memory.heap-headroom-per-node={{ .Values.coordinator.config.memory.heapHeadroomPerNode }}
 {{- end }}
-    discovery.uri=http://trino:{{ .Values.service.port }}
+    discovery.uri=http://{{ template "trino.fullname" . }}.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.service.port }}
 {{- if .Values.server.config.authenticationType }}
     http-server.authentication.type={{ .Values.server.config.authenticationType }}
 {{- end }}
