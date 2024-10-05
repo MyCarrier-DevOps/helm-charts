@@ -1,7 +1,7 @@
 Chart.lock
 custom.yaml
 postgresql-11.6.10.tgz
-test.yaml
+test*.yaml
 */*.tgz
 *ignore*
 charts/*/rendered/
