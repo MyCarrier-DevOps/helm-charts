@@ -140,6 +140,62 @@ entries:
           image: docker.io/bitnami/postgresql:13.16.0-debian-12-r9
     apiVersion: v2
     appVersion: 2.11.1
+    created: "2024-10-05T03:08:31.269315543Z"
+    dependencies:
+    - condition: redis.enabled
+      name: redis
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 20.x.x
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 16.x.x
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: Harbor is an open source trusted cloud-native registry to store,
+      sign, and scan content. It adds functionalities like security, identity, and
+      management to the open source Docker distribution.
+    digest: 8bce8651ccf66a6b2075e12864b1575912628d5151f6dc9bc947680238bce8d7
+    icon: https://bitnami.com/assets/stacks/harbor-core/img/harbor-core-stack-220x234.png
+    keywords:
+    - docker
+    - registry
+    - vulnerability
+    - scan
+    name: harbor
+    sources:
+    - https://github.com/bitnami/charts/tree/main/bitnami/harbor
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/harbor-1.0.2/harbor-1.0.2.tgz
+    version: 1.0.2
+  - annotations:
+      category: Infrastructure
+      images: |
+        - name: harbor-adapter-trivy
+          image: docker.io/bitnami/harbor-adapter-trivy:2.11.1-debian-12-r2
+        - name: harbor-core
+          image: docker.io/bitnami/harbor-core:2.11.1-debian-12-r5
+        - name: harbor-exporter
+          image: docker.io/bitnami/harbor-exporter:2.11.1-debian-12-r5
+        - name: harbor-jobservice
+          image: docker.io/bitnami/harbor-jobservice:2.11.1-debian-12-r4
+        - name: harbor-portal
+          image: docker.io/bitnami/harbor-portal:2.11.1-debian-12-r4
+        - name: harbor-registry
+          image: docker.io/bitnami/harbor-registry:2.11.1-debian-12-r5
+        - name: harbor-registryctl
+          image: docker.io/bitnami/harbor-registryctl:2.11.1-debian-12-r4
+        - name: nginx
+          image: docker.io/bitnami/nginx:1.27.1-debian-12-r4
+        - name: os-shell
+          image: docker.io/bitnami/os-shell:12-debian-12-r30
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:13.16.0-debian-12-r9
+    apiVersion: v2
+    appVersion: 2.11.1
     created: "2024-10-05T02:40:23.324239013Z"
     dependencies:
     - condition: redis.enabled
@@ -757,4 +813,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-10-05T02:40:23.324331727Z"
+generated: "2024-10-05T03:08:31.269373962Z"
