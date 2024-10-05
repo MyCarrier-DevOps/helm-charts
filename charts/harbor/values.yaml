@@ -45,6 +45,9 @@ clusterDomain: cluster.local
 ## @param commonAnnotations Annotations to add to all deployed objects
 ##
 commonAnnotations: {}
+## @param commonAnnotations Annotations to add to deployment, configMap and secret objects to allow Vault Webhook to replace secrets dynamically
+##
+vaultAnnotations: {}
 ## @param commonLabels Labels to add to all deployed objects
 ##
 commonLabels: {}
