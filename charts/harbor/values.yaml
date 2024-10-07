@@ -740,6 +740,17 @@ nginx:
   ## @param nginx.replicaCount Number of NGINX replicas
   ##
   replicaCount: 1
+  ## @param nginx.autoscaling.enabled Set to true if you'd like autoscale horizontally. Default is false
+  ## @param nginx.autoscaling.minReplicas Set minimum replicas if nginx.autoscaling.enabled is set to true
+  ## @param nginx.autoscaling.maxReplicas Set maximum replicas if nginx.autoscaling.enabled is set to true
+  ## @param nginx.autoscaling.targetCPUUtilizationPercentage Set target cpu utilization percentage to trigger autoscaling if nginx.autoscaling.enabled is set to true. Default is 80
+  ## @param nginx.autoscaling.targetMemoryUtilizationPercentage Set target memory utilization percentage to trigger autoscaling if nginx.autoscaling.enabled is set to true. Default is 80
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
   ## Configure extra options for NGINX containers' liveness, readiness and startup probes
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
   ## @param nginx.livenessProbe.enabled Enable livenessProbe on NGINX containers
@@ -1102,6 +1113,17 @@ portal:
   ## @param portal.replicaCount Number of Harbor Portal replicas
   ##
   replicaCount: 1
+  ## @param portal.autoscaling.enabled Set to true if you'd like autoscale horizontally. Default is false
+  ## @param portal.autoscaling.minReplicas Set minimum replicas if portal.autoscaling.enabled is set to true
+  ## @param portal.autoscaling.maxReplicas Set maximum replicas if portal.autoscaling.enabled is set to true
+  ## @param portal.autoscaling.targetCPUUtilizationPercentage Set target cpu utilization percentage to trigger autoscaling if portal.autoscaling.enabled is set to true. Default is 80
+  ## @param portal.autoscaling.targetMemoryUtilizationPercentage Set target memory utilization percentage to trigger autoscaling if core.autoscaling.enabled is set to true. Default is 80
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
   ## Configure extra options for Harbor Portal containers' liveness, readiness and startup probes
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
   ## @param portal.livenessProbe.enabled Enable livenessProbe on Harbor Portal containers
@@ -1534,6 +1556,17 @@ core:
   ## @param core.replicaCount Number of Harbor Core replicas
   ##
   replicaCount: 1
+  ## @param core.autoscaling.enabled Set to true if you'd like autoscale horizontally. Default is false
+  ## @param core.autoscaling.minReplicas Set minimum replicas if core.autoscaling.enabled is set to true
+  ## @param core.autoscaling.maxReplicas Set maximum replicas if core.autoscaling.enabled is set to true
+  ## @param core.autoscaling.targetCPUUtilizationPercentage Set target cpu utilization percentage to trigger autoscaling if core.autoscaling.enabled is set to true. Default is 80
+  ## @param core.autoscaling.targetMemoryUtilizationPercentage Set target memory utilization percentage to trigger autoscaling if core.autoscaling.enabled is set to true. Default is 80
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
   ## Configure extra options for Harbor Core containers' liveness, readiness and startup probes
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
   ## @param core.livenessProbe.enabled Enable livenessProbe on Harbor Core containers
@@ -1936,6 +1969,17 @@ jobservice:
   ## @param jobservice.replicaCount Number of Harbor Jobservice replicas
   ##
   replicaCount: 1
+  ## @param jobservice.autoscaling.enabled Set to true if you'd like autoscale horizontally. Default is false
+  ## @param jobservice.autoscaling.minReplicas Set minimum replicas if jobservice.autoscaling.enabled is set to true
+  ## @param jobservice.autoscaling.maxReplicas Set maximum replicas if jobservice.autoscaling.enabled is set to true
+  ## @param jobservice.autoscaling.targetCPUUtilizationPercentage Set target cpu utilization percentage to trigger autoscaling if jobservice.autoscaling.enabled is set to true. Default is 80
+  ## @param jobservice.autoscaling.targetMemoryUtilizationPercentage Set target memory utilization percentage to trigger autoscaling if core.autoscaling.enabled is set to true. Default is 80
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
   ## Configure extra options for Harbor Jobservice containers' liveness, readiness and startup probes
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
   ## @param jobservice.livenessProbe.enabled Enable livenessProbe on Harbor Jobservice containers
@@ -2311,6 +2355,17 @@ registry:
   ## @param registry.replicaCount Number of Harbor Registry replicas
   ##
   replicaCount: 1
+  ## @param registry.autoscaling.enabled Set to true if you'd like autoscale horizontally. Default is false
+  ## @param registry.autoscaling.minReplicas Set minimum replicas if registry.autoscaling.enabled is set to true
+  ## @param registry.autoscaling.maxReplicas Set maximum replicas if registry.autoscaling.enabled is set to true
+  ## @param registry.autoscaling.targetCPUUtilizationPercentage Set target cpu utilization percentage to trigger autoscaling if registry.autoscaling.enabled is set to true. Default is 80
+  ## @param registry.autoscaling.targetMemoryUtilizationPercentage Set target memory utilization percentage to trigger autoscaling if core.autoscaling.enabled is set to true. Default is 80
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
   ## Configure Harbor Registry pods Security Context
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
   ## @param registry.podSecurityContext.enabled Enabled Harbor Registry pods' Security Context
