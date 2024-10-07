@@ -47,4 +47,4 @@ keywords:
 name: harbor
 sources:
   - https://github.com/bitnami/charts/tree/main/bitnami/harbor
-version: 1.0.3
+version: 1.0.4
