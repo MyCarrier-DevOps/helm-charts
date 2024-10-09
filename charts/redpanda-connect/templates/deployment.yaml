@@ -79,7 +79,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: config
-              mountPath: "/redpanda-connect.yaml"
+              mountPath: "/connect.yaml"
               subPath: "redpanda-connect.yaml"
               readOnly: true
             {{- if .Values.extraVolumeMounts }}
