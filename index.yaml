@@ -684,6 +684,16 @@ entries:
   redpanda-connect:
   - apiVersion: v2
     appVersion: 4.37.0
+    created: "2024-10-09T21:38:38.33139071Z"
+    description: Redpanda-Connect Helm chart for Kubernetes
+    digest: f8ff02cbd34b54a3d4005c2686d73deede5a872caaa7076bab66139734054452
+    name: redpanda-connect
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/redpanda-connect-1.0.4/redpanda-connect-1.0.4.tgz
+    version: 1.0.4
+  - apiVersion: v2
+    appVersion: 4.37.0
     created: "2024-10-09T21:36:37.669321187Z"
     description: Redpanda-Connect Helm chart for Kubernetes
     digest: 84195d454cb4bb355436e33b6729946ff4bff6f75b08c1cce4a03e5f16fb4e41
@@ -956,4 +966,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-10-09T21:36:37.669417186Z"
+generated: "2024-10-09T21:38:38.331495456Z"
