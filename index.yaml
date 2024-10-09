@@ -681,6 +681,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/qryn-aio-0.2.1/qryn-aio-0.2.1.tgz
     version: 0.2.1
+  redpanda-connect:
+  - apiVersion: v2
+    appVersion: 4.37.0
+    created: "2024-10-09T21:18:57.188737781Z"
+    description: Redpanda-Connect Helm chart for Kubernetes
+    digest: 8e54bdc717dced75ecdffe2c3b5923e760e5a745310d24bf034b1c7a4e162544
+    name: redpanda-connect
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/redpanda-connect-1.0.1/redpanda-connect-1.0.1.tgz
+    version: 1.0.1
   splitproxy:
   - apiVersion: v2
     created: "2023-12-28T21:02:50.560133944Z"
@@ -925,4 +936,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-10-07T04:45:51.416344768Z"
+generated: "2024-10-09T21:18:57.18883377Z"
