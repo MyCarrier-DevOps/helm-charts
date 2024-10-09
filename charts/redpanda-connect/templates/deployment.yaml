@@ -51,20 +51,8 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.command }}
-          command:
-            {{- toYaml .Values.command | nindent 12 }}
-          {{- else }}
-          command:
-            - "run"
-          {{- end }}
-          {{- if .Values.args }}
-          args:
-            {{- toYaml .Values.args | nindent 12 }}
-          {{- else }}
-          args:
-            - "/redpanda-connect.yaml"
-          {{- end }}
+          command: []
+          args: []
           ports:
             - name: http
               {{- if .Values.http.address}}
