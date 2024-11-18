@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgcat
+  annotations:
+  {{ include "pgcat.annotations" $ | indent 4 | trim }}
+  {{- with .annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{ include "pgcat.labels" $ | indent 4 | trim }}
+    {{- with .tags }}
+    {{- range $tag, $val := . }}
+    {{ $tag }}: {{ $val | replace " " "-" | quote }}
+    {{- end }}
+    {{- end }}
+    {{- with .labels }}
+    {{- range $label, $lvalue := . }}
+    {{ $label }}: {{ $lvalue | replace " " "-" | quote }}
+    {{- end }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+    {{ include "pgcat.labels" $ | indent 6 | trim }}
+    {{- with .tags }}
+    {{- range $tag, $val := . }}
+    {{ $tag }}: {{ $val | replace " " "-" | quote }}
+    {{- end }}
+    {{- end }}
+    {{- with .labels }}
+    {{- range $label, $lvalue := . }}
+    {{ $label }}: {{ $lvalue | replace " " "-" | quote }}
+    {{- end }}
+    {{- end }}
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+      {{ include "pgcat.annotations" $ | indent 8 | trim }}
+      {{- with .annotations }}
+        {{- toYaml . | nindent 8 }}
+  {{- end }}
+      labels:
+      {{ include "pgcat.labels" $ | indent 8 | trim }}
+      {{- with .tags }}
+      {{- range $tag, $val := . }}
+      {{ $tag }}: {{ $val | replace " " "-" | quote }}
+      {{- end }}
+      {{- end }}
+      {{- with .labels }}
+      {{- range $label, $lvalue := . }}
+      {{ $label }}: {{ $lvalue | replace " " "-" | quote }}
+      {{- end }}
+      {{- end }}
+    spec:
+      volumes:
+        - name: config
+          secret:
+            secretName: pgcat-secret
+      containers:
+        - name: pgcat
+          image: 'ghcr.io/postgresml/pgcat:latest'
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 6432
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pgcat

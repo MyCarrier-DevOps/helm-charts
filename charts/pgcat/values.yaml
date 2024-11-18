@@ -1,0 +1,3 @@
+configurationSecret: pgcat-secret
+annotations: {}
+labels: {}
