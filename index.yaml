@@ -370,6 +370,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/myc-generic-0.1.1/myc-generic-0.1.1.tgz
     version: 0.1.1
+  pgcat:
+  - apiVersion: v2
+    appVersion: v1
+    created: "2024-11-18T23:00:54.023264447Z"
+    description: A Helm chart for Kubernetes
+    digest: 7fa4f6d9d8e5f362d79a8cba81cc3827dd048026f7da2696ffc0ea7589c35c82
+    name: pgcat
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/pgcat-0.0.1/pgcat-0.0.1.tgz
+    version: 0.0.1
   qryn-aio:
   - apiVersion: v2
     appVersion: 0.2.0
@@ -976,4 +987,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2024-10-09T22:11:13.612048621Z"
+generated: "2024-11-18T23:00:54.023388208Z"
