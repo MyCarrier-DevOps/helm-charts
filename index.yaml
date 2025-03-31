@@ -1043,4 +1043,16 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/trino-0.18.1/trino-0.18.1.tgz
     version: 0.18.1
-generated: "2025-03-31T04:28:32.84375938Z"
+  webhookharbor:
+  - apiVersion: v2
+    appVersion: 0.8.0
+    created: "2025-03-31T04:53:59.808564382Z"
+    description: Webhook to configure pods with harbor proxy cache projects - forked
+      for shorter name.
+    digest: 7a7db3781493e41f0ae61c6705fda3ad877b5b4688d908b4e0b752695d33229e
+    name: webhookharbor
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
+    version: 0.8.1
+generated: "2025-03-31T04:53:59.808665282Z"
