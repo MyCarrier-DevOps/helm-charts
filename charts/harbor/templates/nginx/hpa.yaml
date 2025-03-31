@@ -1,0 +1,34 @@
+{{- if .Values.nginx.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "harbor.nginx" . }}
+  {{- $versionLabel := dict "app.kubernetes.io/version" ( include "common.images.version" ( dict "imageRoot" .Values.core.image "chart" .Chart ) ) }}
+  {{- $labels := include "common.tplvalues.merge" ( dict "values" ( list .Values.commonLabels $versionLabel ) "context" . ) }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" $labels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nginx
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "harbor.nginx" . }}
+  minReplicas: {{ .Values.nginx.autoscaling.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.nginx.autoscaling.maxReplicas | default 5 }}
+  metrics:
+    {{- if .Values.nginx.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.nginx.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+{{- end }}
