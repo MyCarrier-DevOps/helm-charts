@@ -1,0 +1,40 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "harbor-webhook.fullname" . }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/{{ include "harbor-webhook.fullname" . }}"
+  {{- end }}
+  namespace: {{ .Release.Namespace }}
+webhooks:
+  - name: {{ include "harbor-webhook.fullname" . }}.{{ .Release.Namespace }}.svc
+    sideEffects: None
+    matchPolicy: Equivalent
+    reinvocationPolicy: IfNeeded
+    admissionReviewVersions:
+      - v1beta1
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - "v1"
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    clientConfig:
+      service:
+        name: {{ include "harbor-webhook.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: "/webhook-v1-pod"
+    {{- if .Values.webhook.namespaceSelector }}
+    namespaceSelector:
+      {{- .Values.webhook.namespaceSelector | toYaml | nindent 6 }}
+    {{- end }}
+    {{- if .Values.webhook.objectSelector }}
+    objectSelector:
+      {{- .Values.webhook.objectSelector | toYaml | nindent 6 }}
+    {{- end }}
