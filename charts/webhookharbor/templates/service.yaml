@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "webhookharbor.fullname" . }}
+  labels:
+    {{- include "webhookharbor.labels" . | nindent 4 }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: https
+      name: https
+    - port: 8080
+      protocol: TCP
+      targetPort: metrics
+      name: prometheus
+  selector:
+    {{- include "webhookharbor.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,30 @@
+{{- if .Values.certManager.enabled }}
+apiVersion: {{ .Values.certManager.apiVersion }}
+kind: Certificate
+metadata:
+  name: {{ include "webhookharbor.fullname" . }}
+  labels:
+    {{- include "webhookharbor.labels" . | nindent 4 }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: {{ include "webhookharbor.fullname" . }}-certs
+  duration: {{ .Values.certManager.duration }}
+  renewBefore: {{ .Values.certManager.renewBefore }}
+  commonName: {{ include "webhookharbor.fullname" . }}.{{ .Release.Namespace }}.svc
+  dnsNames:
+    - {{ include "webhookharbor.fullname" . }}
+    - {{ include "webhookharbor.fullname" . }}.{{ .Release.Namespace }}
+    - {{ include "webhookharbor.fullname" . }}.{{ .Release.Namespace }}.svc
+  issuerRef:
+    kind: Issuer
+    name: {{ include "webhookharbor.fullname" . }}-self-signed-issuer
+---
+apiVersion: {{ .Values.certManager.apiVersion }}
+kind: Issuer
+metadata:
+  name: {{ include "webhookharbor.fullname" . }}-self-signed-issuer
+  labels:
+    {{- include "webhookharbor.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}

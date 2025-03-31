@@ -1,0 +1,6 @@
+apiVersion: v2
+name: webhookharbor
+description: Webhook to configure pods with harbor proxy cache projects - forked for shorter name.
+type: application
+version: 0.8.0
+appVersion: "0.8.0"

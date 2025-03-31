@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "webhookharbor.fullname" . }}
+  labels:
+    {{- include "webhookharbor.selectorLabels" . | nindent 4 }}
+  namespace: {{ .Release.Namespace }}
+data:
+  webhook-config.yaml: |
+    port: {{ .Values.service.port }}
+    {{- if .Values.certManager.enabled }}
+    certDir: "/etc/hcw/certs"
+    {{- else }}
+    certDir: "{{ .Values.certDir }}"
+    {{- end }}
+    {{- if .Values.prometheus.enabled }}
+    metricsAddr: ":{{ .Values.prometheus.port }}"
+    {{- else }}
+    metricsAddr: "0"
+    {{- end }}
+    healthAddr: ":{{ .Values.healthPort }}"
+    verbose: {{ .Values.verbose }}
+    rules:
+    {{- concat (default list .Values.rules) (default list .Values.extraRules) | toYaml | nindent 6 }}
