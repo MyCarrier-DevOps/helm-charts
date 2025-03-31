@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "harbor-webhook.fullname" . }}
+  name: {{ include "harborwebhook.fullname" . }}
   labels:
-    {{- include "harbor-webhook.labels" . | nindent 4 }}
+    {{- include "harborwebhook.labels" . | nindent 4 }}
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "harbor-webhook.selectorLabels" . | nindent 6 }}
+      {{- include "harborwebhook.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -18,14 +18,14 @@ spec:
         {{- end }}
         checksum/configmap: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
       labels:
-        {{- include "harbor-webhook.selectorLabels" . | nindent 8 }}
+        {{- include "harborwebhook.selectorLabels" . | nindent 8 }}
         goharbor.io/harbor-container-webhook-disable: "true"
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "harbor-webhook.serviceAccountName" . }}
+      serviceAccountName: {{ include "harborwebhook.serviceAccountName" . }}
       priorityClassName: {{ .Values.priorityClassName }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
@@ -84,11 +84,11 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "harbor-webhook.fullname" . }}
+            name: {{ include "harborwebhook.fullname" . }}
         {{- if .Values.certManager.enabled }}
         - name: certs
           secret:
-            secretName: {{ include "harbor-webhook.fullname" . }}-certs
+            secretName: {{ include "harborwebhook.fullname" . }}-certs
         {{- end }}
         {{- with .Values.additionalVolumes }}
           {{- toYaml . | nindent 8 }}

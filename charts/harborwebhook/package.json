@@ -1,5 +1,5 @@
 {
-    "name": "harbor-webhook",
+    "name": "harborwebhook",
     "version": "0.0.1",
     "repository": {
         "type": "git",

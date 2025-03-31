@@ -3,13 +3,13 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   labels:
-    {{- include "harbor-webhook.labels" . | nindent 4 }}
-  name: {{ include "harbor-webhook.fullname" . }}
+    {{- include "harborwebhook.labels" . | nindent 4 }}
+  name: {{ include "harborwebhook.fullname" . }}
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
-      {{- include "harbor-webhook.selectorLabels" . | nindent 6 }}
+      {{- include "harborwebhook.selectorLabels" . | nindent 6 }}
   {{- if and .Values.minAvailable (not (hasKey .Values "maxUnavailable")) }}
   minAvailable: {{ .Values.minAvailable }}
   {{- else if .Values.maxUnavailable }}

@@ -1,0 +1,30 @@
+{{- if .Values.certManager.enabled }}
+apiVersion: {{ .Values.certManager.apiVersion }}
+kind: Certificate
+metadata:
+  name: {{ include "harborwebhook.fullname" . }}
+  labels:
+    {{- include "harborwebhook.labels" . | nindent 4 }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: {{ include "harborwebhook.fullname" . }}-certs
+  duration: {{ .Values.certManager.duration }}
+  renewBefore: {{ .Values.certManager.renewBefore }}
+  commonName: {{ include "harborwebhook.fullname" . }}.{{ .Release.Namespace }}.svc
+  dnsNames:
+    - {{ include "harborwebhook.fullname" . }}
+    - {{ include "harborwebhook.fullname" . }}.{{ .Release.Namespace }}
+    - {{ include "harborwebhook.fullname" . }}.{{ .Release.Namespace }}.svc
+  issuerRef:
+    kind: Issuer
+    name: {{ include "harborwebhook.fullname" . }}-self-signed-issuer
+---
+apiVersion: {{ .Values.certManager.apiVersion }}
+kind: Issuer
+metadata:
+  name: {{ include "harborwebhook.fullname" . }}-self-signed-issuer
+  labels:
+    {{- include "harborwebhook.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}
