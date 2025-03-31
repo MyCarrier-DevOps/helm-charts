@@ -2,6 +2,6 @@ apiVersion: v2
 name: harbor-webhook
 description: Webhook to configure pods with harbor proxy cache projects - forked for shorter name.
 type: application
-version: 0.8.1
+version: 0.8.2
 appVersion: "0.8.0"
 kubeVersion: ">= 1.16.0-0"
