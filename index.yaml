@@ -395,6 +395,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/harbor-1.0.1/harbor-1.0.1.tgz
     version: 1.0.1
+  kubedock-dns:
+  - apiVersion: v2
+    appVersion: 0.8.0
+    created: "2025-04-11T21:23:46.675381551Z"
+    description: Kubedock DNS
+    digest: 66ca9abed49909cc6d9cbafeddf7c23f2750898b620ab6f0d4a24caa8b897da9
+    name: kubedock-dns
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/kubedock-dns-0.8.1/kubedock-dns-0.8.1.tgz
+    version: 0.8.1
   myc-generic:
   - apiVersion: v2
     appVersion: 1.0.0
@@ -1055,4 +1066,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-03-31T04:53:59.808665282Z"
+generated: "2025-04-11T21:23:46.675539386Z"
