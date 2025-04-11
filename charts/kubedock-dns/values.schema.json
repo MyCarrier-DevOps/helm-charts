@@ -15,6 +15,14 @@
     "label": {
       "type": "string"
     },
+    "podLabels": {
+      "type": "object",
+      "description": "Additional labels to add to the pods"
+    },
+    "podAnnotations": {
+      "type": "object",
+      "description": "Additional annotations to add to the pods"
+    },
     "registry": {
       "type": "string"
     },
