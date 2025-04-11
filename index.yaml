@@ -408,6 +408,16 @@ entries:
     version: 0.8.1
   - apiVersion: v2
     appVersion: 0.0.7
+    created: "2025-04-11T22:41:19.556444844Z"
+    description: Kubedock DNS
+    digest: 9a09ad037e4261e0245a9de8ff25f782114cbb35ae34e8bbd69187ee4316fa54
+    name: kubedock-dns
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/kubedock-dns-0.0.9/kubedock-dns-0.0.9.tgz
+    version: 0.0.9
+  - apiVersion: v2
+    appVersion: 0.0.7
     created: "2025-04-11T22:35:30.378105783Z"
     description: Kubedock DNS
     digest: 6fe707e8aa162b1e53325a28e4b0b034d5ae28ca6500d462b0dd670aa484b153
@@ -1076,4 +1086,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-04-11T22:35:30.378273809Z"
+generated: "2025-04-11T22:41:19.556536785Z"
