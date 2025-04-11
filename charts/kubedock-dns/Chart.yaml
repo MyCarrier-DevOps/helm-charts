@@ -1,0 +1,8 @@
+apiVersion: v2
+name: kubedock-dns
+description: Kubedock DNS
+
+type: application
+
+version: "0.8.0"
+appVersion: "0.8.0"

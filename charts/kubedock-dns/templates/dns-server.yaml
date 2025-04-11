@@ -1,0 +1,101 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "labels" . | nindent 4 }}
+  name: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-server
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        rollme: {{ randAlphaNum 5 | quote }}
+      labels:
+        app: {{ .Release.Name }}-server
+        {{- include "labels" . | nindent 8 }}
+        {{- if .Values.podLabels }}
+        {{- toYaml .Values.podLabels | nindent 8 }}
+        {{- end }}
+        {{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if not (empty .Values.imagePullSecrets) }}
+      imagePullSecrets:
+        {{- range $secret := .Values.imagePullSecrets }}
+        - name: {{ $secret }}
+        {{- end }}
+      {{- end }}
+
+      serviceAccountName: {{ .Release.Name }}-server
+      containers:
+      - image: {{ .Values.registry }}/kubedock-dns:{{ default .Chart.Version .Values.version }}
+        imagePullPolicy: Always
+        name: kubedock-dns
+{{/*        command:*/}}
+{{/*          - tail*/}}
+{{/*          - -f*/}}
+{{/*          - /dev/null*/}}
+        args:
+          - --v
+          - "{{ .Values.logLevel }}"
+          - --dns-service-name
+          - {{ .Release.Name }}-server
+        ports:
+          - containerPort: 1053
+            name: dns
+          - containerPort: 8443
+            name: https
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+          - mountPath: /etc/kubedock/pki
+            name: pki
+      volumes:
+        - name: pki
+          secret:
+            secretName: {{ .Release.Name }}-mutator-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "labels" . | nindent 4 }}
+  name: {{ .Release.Name }}-server
+spec:
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+    targetPort: 1053
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app: {{ .Release.Name }}-server
+  type: ClusterIP
+
+
+
+
+
+
+
+
+
+
+
+
+
+

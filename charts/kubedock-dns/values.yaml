@@ -1,0 +1,14 @@
+replicas: 1
+logLevel: 3
+
+# only pods with this label set to "true" will be handled
+label: kubedock
+podLabels: {}
+podAnnotations: {}
+# container contiguration
+registry: ghcr.io/erikengerd
+# container version to use.
+version: 0.0.8
+
+
+imagePullSecrets: []
