@@ -54,25 +54,35 @@ spec:
           - name: REDIS_HOST
             value: {{ . }}
           {{- end }}
+          {{- if .Values.redis.host}}
           {{- with .Values.redis.password }}
           - name: REDIS_PASSWORD
             value: {{ . }}
           {{- end }}
+          {{- end }}
+          {{- if .Values.redis.username }}
           {{- with .Values.redis.username }}
           - name: REDIS_USERNAME
             value: {{ . }}
           {{- end }}
+          {{- end }}
+          {{- if .Values.redis.hosts }}
           {{- with .Values.redis.hosts }}
           - name: REDIS_HOSTS
             value: {{ . }}
           {{- end }}
+          {{- end }}
+          {{- if .Values.httpAuth.username}}
           {{- with .Values.httpAuth.username }}
           - name: HTTP_USER
             value: {{ . }}
           {{- end }}
+          {{- end }}
+          {{- if .Values.httpAuth.password }}
           {{- with .Values.httpAuth.password }}
           - name: HTTP_PASSWORD
             value: {{ . }}
+          {{- end }}
           {{- end }}
           - name: K8S_SIGTERM
             value: "1"
