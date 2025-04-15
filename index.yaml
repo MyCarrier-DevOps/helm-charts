@@ -782,6 +782,25 @@ entries:
   redis-commander:
   - apiVersion: v2
     appVersion: latest
+    created: "2025-04-15T21:27:35.754722027Z"
+    description: A Helm chart for redis-commander
+    digest: 592263866daf22ff0c7409637ce8eca1ec011aed7c6e00afeb342f7cb34ff40f
+    home: https://joeferner.github.io/redis-commander
+    keywords:
+    - redis
+    maintainers:
+    - name: Joe Ferner
+      url: https://github.com/joeferner
+    - name: Stefan Seide
+    name: redis-commander
+    sources:
+    - https://github.com/joeferner/redis-commander
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/redis-commander-0.6.3/redis-commander-0.6.3.tgz
+    version: 0.6.3
+  - apiVersion: v2
+    appVersion: latest
     created: "2025-04-15T21:22:06.796355569Z"
     description: A Helm chart for redis-commander
     digest: a5d2554a79431a279573d0509e71fa1718881b2ad2d149f498d93bbc02dcd4ea
@@ -1125,4 +1144,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-04-15T21:22:06.796476403Z"
+generated: "2025-04-15T21:27:35.75481425Z"
