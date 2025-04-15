@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-configmap
+data:
+  {{- if .Values.connections.local_production_json }}
+  local-production-docker.json: |-
+    {{- include "redis-commander.localProductionJson" . | indent 4 }}
+  {{- end }}
+  {{ with .Values.configMapData }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
