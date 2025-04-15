@@ -50,11 +50,13 @@ spec:
           {{- if not (eq $envLength 0) }}
           {{- toYaml .Values.env | nindent 10 }}
           {{- end }}
+          {{- if .Values.redis.host }}
           {{- with .Values.redis.host }}
           - name: REDIS_HOST
             value: {{ . }}
           {{- end }}
-          {{- if .Values.redis.host}}
+          {{- end }}
+          {{- if .Values.redis.password}}
           {{- with .Values.redis.password }}
           - name: REDIS_PASSWORD
             value: {{ . }}
