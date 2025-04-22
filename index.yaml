@@ -395,6 +395,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/harbor-1.0.1/harbor-1.0.1.tgz
     version: 1.0.1
+  hdx-oss-v2:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-04-22T14:45:21.023757484Z"
+    description: A Helm chart for HyperDX OSS
+    digest: 87df8e1326972b0361dcef38ed00ac5a804212575ed01452f827bec077228f21
+    name: hdx-oss-v2
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/hdx-oss-v2-0.1.1/hdx-oss-v2-0.1.1.tgz
+    version: 0.1.1
   kubedock-dns:
   - apiVersion: v2
     appVersion: 0.8.0
@@ -1144,4 +1155,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-04-15T21:27:35.75481425Z"
+generated: "2025-04-22T14:45:21.023866089Z"
