@@ -9,6 +9,7 @@ hyperdx:
   appUrl: "http://localhost"
   logLevel: "info"
   usageStatsEnabled: true
+  env: []
   ingress:
     enabled: false
     host: "localhost"  # Production domain

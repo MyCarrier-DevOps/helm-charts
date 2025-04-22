@@ -33,6 +33,10 @@ spec:
             - configMapRef:
                 name: {{ include "hdx-oss.fullname" . }}-app-config
           env:
+            {{- range $key, $value := .Values.hyperdx.env }}
+            - name: {{ $key }}
+              value: {{ $value }}
+            {{- end }}
             - name: HYPERDX_API_KEY
               valueFrom:
                 secretKeyRef:
