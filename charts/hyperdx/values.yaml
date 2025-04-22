@@ -9,6 +9,8 @@ hyperdx:
   appUrl: "http://localhost"
   logLevel: "info"
   usageStatsEnabled: true
+  annotations: {}
+  labels: {}
   env: []
   ingress:
     enabled: false
