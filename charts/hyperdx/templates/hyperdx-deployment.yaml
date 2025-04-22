@@ -5,13 +5,17 @@ metadata:
   labels:
     {{- include "hdx-oss.labels" . | nindent 4 }}
     app: {{ include "hdx-oss.fullname" . }}
+    {{- if .Values.hyperdx.labels }}
+    {{- with .Values.hyperdx.labels }}
+    {{- toYaml . | nindent 4 }} 
+    {{- end -}}
+    {{- end }}
 spec:
   replicas: 1
   selector:
     matchLabels:
       {{- include "hdx-oss.selectorLabels" . | nindent 6 }}
       app: {{ include "hdx-oss.fullname" . }}
-      {{- toYaml .Values.hyperdx.labels  | nindent 8 }}
   template:
     metadata:
       labels:

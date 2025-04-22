@@ -50,3 +50,4 @@ charts/trino/charts-main/charts/trino/templates/NOTES.txt
 charts/trino/charts-main/charts/trino/templates/secret.yaml
 charts/trino/charts-main/charts/trino/templates/service.yaml
 charts/trino/charts-main/charts/trino/templates/serviceaccount.yaml
+.helm_ls_cache
