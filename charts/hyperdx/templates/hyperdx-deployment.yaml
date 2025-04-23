@@ -35,6 +35,10 @@ spec:
       containers:
         - name: app
           image: "{{ .Values.images.hdx.repository }}:{{ .Values.images.hdx.tag }}"
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
           ports:
             - name: app-port
               containerPort: {{ .Values.hyperdx.app.port }}
