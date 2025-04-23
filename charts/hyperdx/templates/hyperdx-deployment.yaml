@@ -37,9 +37,7 @@ spec:
           image: "{{ .Values.images.hdx.repository }}:{{ .Values.images.hdx.tag }}"
           securityContext:
             capabilities:
-              add:
-                - NET_ADMIN
-                - NET_BIND_SERVICE
+              add: ["NET_ADMIN", "NET_BIND_SERVICE"]
           ports:
             - name: app-port
               containerPort: {{ .Values.hyperdx.app.port }}
