@@ -37,7 +37,7 @@ spec:
           image: "{{ .Values.images.hdx.repository }}:{{ .Values.images.hdx.tag }}"
           ports:
             - name: app-port
-              containerPort: {{ .Values.hyperdx.appPort }}
+              containerPort: {{ .Values.hyperdx.app.port }}
             - name: api-port
               containerPort: {{ .Values.hyperdx.apiPort }}
           envFrom:

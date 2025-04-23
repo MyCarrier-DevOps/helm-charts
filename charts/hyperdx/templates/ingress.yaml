@@ -34,5 +34,5 @@ spec:
               service:
                 name: {{ include "hdx-oss.fullname" . }}-app
                 port:
-                  number: {{ .Values.hyperdx.appPort }}
+                  number: {{ .Values.hyperdx.app.port }}
 {{- end }}
