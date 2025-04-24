@@ -20,7 +20,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: task
-              image: "{{ .Values.images.hdx.repository }}:{{ .Values.images.hdx.tag | default .Chart.AppVersion }}"
+              image: "{{ .Values.hyperdx.image }}"
               command: ["node", "/app/api/build/tasks/index.js", "check-alerts"]
               envFrom:
                 - configMapRef:
@@ -29,7 +29,7 @@ spec:
                 - name: NODE_ENV
                   value: "production"
                 - name: OTEL_SERVICE_NAME
-                  value: "hdx-oss-task-check-alerts"
+                  value: "{{ include "hdx-oss.fullname" . }}-alerts"
               resources:
                 {{- toYaml .Values.tasks.checkAlerts.resources | nindent 16 }}
 {{- end }}

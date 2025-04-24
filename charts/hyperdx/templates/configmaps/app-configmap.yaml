@@ -6,15 +6,15 @@ metadata:
     {{- include "hdx-oss.labels" . | nindent 4 }}
 data:
   APP_PORT: {{ .Values.hyperdx.app.port | quote }}
-  API_PORT: {{ .Values.hyperdx.apiPort | quote }}
+  API_PORT: {{ .Values.hyperdx.api.port | quote }}
   FRONTEND_URL: "{{ .Values.hyperdx.app.url }}{{if .Values.hyperdx.app.appendPort }}:{{ .Values.hyperdx.app.port }}{{ end }}"
-  HYPERDX_API_PORT: "{{ .Values.hyperdx.apiPort }}"
+  HYPERDX_API_PORT: "{{ .Values.hyperdx.api.port }}"
   HYPERDX_APP_PORT: "{{ .Values.hyperdx.app.port }}"
   HYPERDX_APP_URL: "{{ .Values.hyperdx.app.url }}"
   HYPERDX_LOG_LEVEL: "{{ .Values.hyperdx.logLevel }}"
   MINER_API_URL: "http://{{ include "hdx-oss.fullname" . }}-miner:5123"
   MONGO_URI: "mongodb://{{ include "hdx-oss.fullname" . }}-mongodb:{{ .Values.mongodb.port }}/hyperdx"
-  NEXT_PUBLIC_SERVER_URL: "http://localhost:{{ .Values.hyperdx.apiPort }}"
+  NEXT_PUBLIC_SERVER_URL: "http://localhost:{{ .Values.hyperdx.api.port }}"
   OTEL_SERVICE_NAME: "hdx-oss-api"
   REDIS_URL: "redis://{{ include "hdx-oss.fullname" . }}-redis:{{ .Values.redis.port }}"
   USAGE_STATS_ENABLED: "{{ .Values.hyperdx.usageStatsEnabled | default true }}"

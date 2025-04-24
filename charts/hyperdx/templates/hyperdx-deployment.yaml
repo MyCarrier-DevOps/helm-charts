@@ -11,7 +11,7 @@ metadata:
     {{- end -}}
     {{- end }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.hyperdx.replicas | default 1 }}
   selector:
     matchLabels:
       {{- include "hdx-oss.selectorLabels" . | nindent 6 }}
@@ -34,24 +34,35 @@ spec:
           command: ['sh', '-c', 'until nc -z {{ include "hdx-oss.fullname" . }}-mongodb {{ .Values.mongodb.port }}; do echo waiting for mongodb; sleep 2; done;']
       containers:
         - name: app
-          image: "{{ .Values.images.hdx.repository }}:{{ .Values.images.hdx.tag }}"
+          image: "{{ .Values.hyperdx.image }}"
           securityContext:
+            allowPrivilegeEscalation: {{ .Values.hyperdx.securityContext.allowPrivilegeEscalation | default false }}
+            appArmorProfile:
+              type: {{ .Values.hyperdx.securityContext.appArmorProfile.type | default "RuntimeDefault" }}
             capabilities:
-              add: ["NET_ADMIN", "NET_BIND_SERVICE"]
+              add: {{ .Values.hyperdx.securityContext.capabilities.add | default "[]" }}
+              drop: {{ .Values.hyperdx.securityContext.capabilities.drop | default "[]" }}
+            privileged: {{ .Values.hyperdx.securityContext.privileged | default false }}
+            readOnlyRootFilesystem: {{ .Values.hyperdx.securityContext.readOnlyRootFilesystem | default false }}
+            runAsGroup: {{ .Values.hyperdx.securityContext.runAsGroup | default 0 }}
+            runAsUser: {{ .Values.hyperdx.securityContext.runAsUser | default 0 }}
+            runAsNonRoot: {{ .Values.hyperdx.securityContext.runAsNonRoot | default false }}
           ports:
             - name: app-port
               containerPort: {{ .Values.hyperdx.app.port }}
             - name: api-port
-              containerPort: {{ .Values.hyperdx.apiPort }}
+              containerPort: {{ .Values.hyperdx.api.port }}
           envFrom:
             - configMapRef:
                 name: {{ include "hdx-oss.fullname" . }}-app-config
           env:
+            {{- if .Values.hyperd.api.generateKeySecret}}
             - name: HYPERDX_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "hdx-oss.fullname" . }}-app-secrets
                   key: api-key
+            {{- end }}
             {{- with .Values.hyperdx.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

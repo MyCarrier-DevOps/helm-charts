@@ -6,7 +6,7 @@ it is recommended that you use the clickhouse and otel-collector operators inste
 To disable clickhouse and otel-collector, set the following values:
 helm install myrelease hyperdx-helm --set clickhouse.enabled=false --set clickhouse.persistence.enabled=false --set otel.enabled=false
 
-Application URL: {{ include "hdx-oss.fullname" . }}-app:{{ .Values.hyperdx.app.port }}
+Application URL: {{ include "hdx-oss.fullname" . }}-app:{{ .Values.hyperdx.appPort }}
 
 To verify the deployment status, run:
   kubectl get pods -l "app.kubernetes.io/name={{ include "hdx-oss.name" . }}" 

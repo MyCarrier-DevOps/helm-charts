@@ -3,17 +3,41 @@ global:
   imagePullSecrets: []
 
 hyperdx:
-  apiKey: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  apiPort: 8000
+  image: "hyperdx/hyperdx:2-beta"
+  api:
+    key: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    port: 8000
+    generateKeySecret: true # disable to manually create the secret
   app:
     port: 3000
     url: "http://localhost"
-    appendPort: false  # Set to true if you want to append the port to the URL
+    appendPort: false  # Set to true if you want to append the port to the URL in generated links
   logLevel: "info"
+  securityContext:
+    allowPrivilegeEscalation:
+    appArmorProfile:
+      type: "RuntimeDefault" # Set to "RuntimeDefault" for AppArmor support, can also use "Unconfined"
+    capabilities:
+      add: [] # add: ["NET_ADMIN", "NET_BIND_SERVICE"] for reverse proxy support
+      drop: []
+    privileged: false
+    readOnlyRootFilesystem: false
+    runAsGroup: 0
+    runAsUser: 0
+    runAsNonRoot: false
   usageStatsEnabled: true
   annotations: {}
+    # myAnnotation: "myValue"
   labels: {}
+    # myLabel: "myValue"
   env: []
+    # - name: CLICKHOUSE_USER
+    #   value: abc
+    # - name: test
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: some-secret
+    #       key: some-key
   ingress:
     enabled: false
     host: "localhost"  # Production domain
@@ -24,14 +48,18 @@ hyperdx:
     tls:
       enabled: false
       secretName: "hyperdx-tls"
+  replicas: 1
 
 mongodb:
+  image: "mongo:5.0.14-focal"
   port: 27017
 
 redis:
+  image: "redis:7.0.11-alpine"
   port: 6379
 
 clickhouse:
+  image: "clickhouse/clickhouse-server:24-alpine"
   port: 8123
   nativePort: 9000
   enabled: true
@@ -45,29 +73,13 @@ clickhouse:
       otelUserPassword: "otelcollectorpass"
 
 otel:
+  image: "hyperdx/hyperdx-otel-collector:2-beta"
   port: 13133
   nativePort: 24225
   grpcPort: 4317
   httpPort: 4318
   healthPort: 8888
   enabled: true
-
-images:
-  hdx:
-    repository: hyperdx/hyperdx
-    tag: 2-beta
-  redis:
-    repository: redis
-    tag: 7.0.11-alpine
-  mongodb:
-    repository: mongo
-    tag: 5.0.14-focal
-  otelCollector:
-    repository: hyperdx/hyperdx-otel-collector
-    tag: 2-beta
-  clickhouse:
-    repository: clickhouse/clickhouse-server
-    tag: head-alpine
 
 persistence:
   redis:
