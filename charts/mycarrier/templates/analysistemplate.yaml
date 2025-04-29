@@ -1,0 +1,78 @@
+{{- if (eq .Values.application.deploymentType "rollout")  }}
+{{- $environment := .Values.environment.name }}
+{{- $fullName := include "helm.fullname" . }}
+{{- $instance := include "helm.instance" . }}
+{{- $namespace := include "helm.namespace" . }}
+{{- $standardLabels := include "helm.labels.standard" . }}
+{{- $versionLabels :=  include "helm.labels.version" . }}
+{{- $vaultAnnotations := include "helm.annotations.vault" . }}
+{{- $istioAnnotations :=  include "helm.annotations.istio" . }}
+{{- $otelAnnotations :=  include "helm.otel.annotations" . }}
+{{- $gitBranch := .Values.global.gitbranch}}
+{{- $releaseId := .Values.application.image.tag }}
+{{- $releaseDefinitionName := printf "%s-%s" .Values.global.appStack .Values.application.name }}
+{{- range $index, $template := .Values.analysisTemplates }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $environment }}-{{ $template.name }}
+  namespace: {{ $namespace }}
+  labels:    
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  metrics:
+  - name: {{ $environment }}-{{ $template.name }}
+    count: {{ $template.count | default 1 }}
+    failureLimit: {{ $template.failureLimit | default 0 }}
+    provider:
+      {{ if $template.provider.job }}
+      job:
+        spec:
+          backoffLimit: 1
+          template:
+            metadata:
+              labels:
+                sidecar.istio.io/inject: "false"
+              annotations:
+                {{ $vaultAnnotations | nindent 16 | trim }}
+                {{ $istioAnnotations | nindent 16 | trim }}
+                {{ $otelAnnotations | nindent 16 | trim }}
+            spec:
+              containers:
+              - name: {{ $environment }}-{{ $template.name }}
+                image: {{ $template.provider.job.container.image.registry }}/{{ $template.provider.job.container.image.repository }}:{{ $template.provider.job.container.image.tag }}
+                args: 
+                {{- range $template.provider.job.container.args }}
+                - "{{ . }}"
+                {{- end }}
+                env:
+                - name: SERVICE_ADDRESS
+                  value: http://{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local:8080
+                - name: RELEASE_ID
+                  value: {{ $releaseId }}
+                - name: RELEASE_DEFINITION_NAME
+                  value: {{ $releaseDefinitionName }}
+                - name: BRANCH_NAME
+                  value: {{ $gitBranch }}
+                {{- range $template.provider.job.container.env }}
+                - name: {{ .name }}
+                  value: "{{ .value }}"
+                {{- end }}
+              restartPolicy: Never
+      {{ else if $template.provider.web }}
+      web:
+        url: {{ printf "%s/%s" $template.provider.web.url $template.provider.web.statusEndpoint | default (printf "%s-preview.%s.svc.cluster.local:8080/health" $fullName $namespace) }}
+        jsonPath: "{$.status}"
+      successCondition: {{ $template.provider.web.successCondition | default `result == "Healthy"` }}
+      {{ else }}
+      {{- with $template.provider }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{ end }}
+{{- end }}
+{{- end }}

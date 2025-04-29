@@ -1,0 +1,177 @@
+{{- if (eq .Values.application.deploymentType "deployment")  }}
+{{- $fullName := include "helm.fullname" . }}
+{{- $envScaling := include "helm.envScaling" . }}
+{{- $namespace := include "helm.namespace" . }}
+apiVersion: {{ .Values.application.apiVersion | default "apps/v1" }}
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" . | indent 4 | trim }}
+    {{ include "helm.labels.standard" . | indent 4 | trim }}
+    {{ include "helm.labels.version" . | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  {{- if not (or ( and (.Values.application.autoscaling.enabled) (hasPrefix "prod" .Values.environment.name)) (.Values.global.forceAutoscaling))}}
+  replicas: {{ if and (not (kindIs "invalid" .Values.application.replicas)) (or (eq "0" $envScaling) (and (eq "1" $envScaling) (eq "0" (default "0" .Values.application.replicas | toString)))) }}{{ .Values.application.replicas }}{{ else }}{{ 2 }}{{ end }}
+  {{- end }}
+  revisionHistoryLimit: 2
+  minReadySeconds: {{ .Values.application.minReadySeconds | default 0 }}
+  strategy:
+  {{- if .Values.application.updateStrategy }}
+    {{ toYaml .Values.application.updateStrategy | indent 4 | trim }}
+  {{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  {{- end }}
+  selector:
+    matchLabels:
+      {{ include "helm.labels.selector" . | indent 6 | trim }}
+  template:
+    metadata:
+      labels:
+        {{ include "helm.labels.dependencies" . | indent 8 | trim }}
+        {{ include "helm.labels.standard" . | indent 8 | trim }}
+        {{ include "helm.labels.version" . | indent 8 | trim }}
+        {{ include "helm.otel.labels" . | indent 8 | trim }}
+        {{ include "helm.labels.custom" . | indent 8 | trim }}
+      annotations:
+        {{ include "helm.annotations.vault" . | indent 8 | trim }}
+        {{ include "helm.annotations.istio" . | indent 8 | trim }}
+        {{ include "helm.otel.annotations" . | indent 8 | trim }}
+        {{ with .Values.application.annotations }}
+        {{ toYaml . |  indent 8 | trim }}
+        {{- end }}
+    spec:
+      {{ include "helm.podDefaultAffinity" . | indent 6 | trim }}
+      {{ include "helm.podSecurityContext" . | indent 6 | trim }}
+      {{ include "helm.podDefaultToleration" . | indent 6 | trim }}
+      {{- include "helm.podDefaultNodeSelector" . | indent 6 | trim }}
+      {{- include "helm.podDefaultPriorityClassName" . | indent 6 | trim }}
+      {{- with .Values.serviceAccount }}
+      serviceAccountName: {{ .name | default $fullName }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.application.terminationGracePeriodSeconds | default "10" }}
+      {{- with .Values.application.initContainers }}
+      initContainers:
+      {{- range . }}
+        - name: {{ .name }}
+          image: "{{ .image }}:{{ .tag | default $.Chart.AppVersion }}"
+          command: {{ .command }}
+          args:
+            {{ toYaml .args | indent 10 | trim }}
+          env:
+            {{ include "helm.lang.vars" . | indent 12 | trim }}
+            {{ include "helm.otel.language" $ | indent 12 | trim }}
+            {{ include "helm.otel.envVars" $ | indent 12 | trim }}
+            {{ include "helm.vault" $ | indent 12 | trim }}
+          {{- range $key, $value := omit .env "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
+            - name: "{{ $key }}"
+              value: "{{ $value }}"
+          {{- end }}
+          {{ include "helm.containerSecurityContext" $ | indent 10 | trim }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.application.name | default $fullName }}
+          image: "{{ .Values.application.image.registry }}/{{ .Values.application.image.repository }}:{{ .Values.application.image.tag }}"
+          {{- if .Values.application.command }}command: {{ .Values.application.command }}{{end}}
+          {{- if .Values.application.args }}args: {{ .Values.application.args | default "" }}{{end}}
+          imagePullPolicy: {{ .Values.application.pullPolicy | default "IfNotPresent" }}
+          {{- if .Values.application.ports }}
+          ports:
+            {{- range $key, $value := .Values.application.ports }}
+            - name: {{ $key | lower }}
+              containerPort: {{ $value }}
+              protocol: TCP
+            {{- end }}
+          {{- end }}
+          {{- if .Values.application.probes.enableLiveness}}
+          {{- if .Values.application.probes.livenessProbe }}
+          livenessProbe:
+            {{ toYaml .Values.application.probes.livenessProbe | indent 12 | trim }}
+          {{- else }}
+          {{ include "helm.defaultLivenessProbe" . | indent 10 | trim }}
+          {{- end }}
+          {{- end }}
+          {{- if .Values.application.probes.enableReadiness}}
+          {{- if .Values.application.probes.readinessProbe }}
+          readinessProbe:
+            {{ toYaml .Values.application.probes.readinessProbe | indent 12 | trim }}
+          {{- else }}
+          {{ include "helm.defaultReadinessProbe" . | indent 10 | trim }}
+          {{- end }}
+          {{- end }}
+          {{- if .Values.application.probes.enableStartup}}
+          {{- if .Values.application.probes.startupProbe }}
+          startupProbe:
+            {{ toYaml .Values.application.probes.startupProbe | indent 12 | trim }}
+          {{- else }}
+          {{ include "helm.defaultStartupProbe" . | indent 10 | trim }}
+          {{- end }}
+          {{- end }}
+          # lifecycle hooks go here eventually
+          env:
+            {{ include "helm.lang.vars" . | indent 12 | trim }}
+            {{ include "helm.otel.language" . | indent 12 | trim }}
+            {{ include "helm.otel.envVars" . | indent 12 | trim }}
+            {{- range $key, $value := omit .Values.application.env "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl" }}
+            - name: "{{ $key }}"
+              {{- if kindIs "map" $value }}
+              valueFrom:
+                {{ toYaml $value | indent 16 | trim}}
+              {{- else }}
+              value: "{{ tpl (toString $value) $ }}"
+              {{- end }}
+            {{- end }}
+            {{ include "helm.vault" . | indent 12 | trim }}
+          {{- if or .Values.configmap .Values.useSecret }}
+          envFrom:
+            {{- if .Values.configmap }}
+            - configMapRef:
+                name: "{{ $fullName }}"
+            {{- end }}
+            {{- if .Values.useSecret }}
+            - secretRef:
+                name: "{{ $fullName }}-secret"
+            {{- end }}
+          {{- end }}
+          {{ include "helm.resources" . | indent 10 | trim }}
+          {{ include "helm.containerSecurityContext" . | indent 10 | trim }}
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+            {{ include "helm.otel.volumeMounts" . | indent 12 | trim }}
+            {{- if .Values.secrets.mounted }}
+            {{ include "helm.secretVolumeMounts" . | indent 12 | trim -}}
+            {{- end }}
+          {{- if .Values.application.volumes }}
+            {{- range .Values.application.volumes }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              {{- if .subPath }}
+              subPath: {{ .subPath }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
+        {{ include "helm.otel.volumes" . | indent 8 | trim }}
+        {{- if .Values.secrets.mounted }}
+        {{ include "helm.secretVolumes" . | indent 8 | trim -}}
+        {{- end }}
+      {{- if .Values.application.volumes }}
+        {{- range .Values.application.volumes }}
+        - name: {{ .name }}
+          {{ if ( or (and ( .kind ) (eq (.kind | lower) "emptydir")) (not .kind)) }}emptyDir: {}{{- end }}
+        {{- end }}
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.application.pullSecret | default "imagepull"}}
+{{- end }}

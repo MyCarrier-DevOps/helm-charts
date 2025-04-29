@@ -1,0 +1,249 @@
+{{- if or (and (eq .Values.environment.name "dev") (not .Values.application.isFrontend) (hasSuffix "api" .Values.application.name)) (and (eq .Values.environment.name "dev") .Values.application.forceOffload) }}
+{{- $fullName := include "helm.fullname" . }}
+{{- $namespace := include "helm.namespace" . }}
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ $fullName }}-offload-generator
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - git:
+                    files:
+                      - path: Apps/dev-{{ .Values.global.appStack | lower }}/v2-offload.yaml
+                    repoURL: https://github.com/MyCarrier-DevOps/GitOps-dev.git
+                    revision: main
+                - list:
+                    elementsYaml: '{{`{{`}} $filtered := list {{`}}`}}{{`{{`}} range .offloads {{`}}`}}{{`{{`}}if eq .application.name "{{ .Values.application.name }}" {{`}}`}}{{`{{`}} $filtered = append $filtered . {{`}}`}}{{`{{`}} end {{`}}`}}{{`{{`}} end {{`}}`}}{{`{{`}} $filtered | toJson {{`}}`}}'
+          - list:
+              elements:
+                - Values:
+                    global:
+                      appStack: {{ .Values.global.appStack | lower }}
+                      forceAutoscaling: false
+                      gitbranch: {{ .Values.global.gitbranch }}
+                      language: {{ .Values.global.language }}
+                    environment:
+                      name: "{{`{{`}} .name {{`}}`}}"
+                      dependencyenv: dev
+                      domainOverride:
+                        enabled: {{ .Values.environment.domainOverride.enabled }}
+                        staticHostname: {{ .Values.environment.domainOverride.staticHostname }}
+                        domain: {{ .Values.environment.domainOverride.domain }}
+                    application:
+                      isFrontend: {{ .Values.application.isFrontend }}
+                      forceOffload: {{ .Values.application.forceOffload }}
+                      migratingToRollouts: false
+                      labels:
+                        {{- range $key, $value := .Values.application.labels }}
+                        {{ $key }}: {{ $value }}
+                        {{- end }}
+                      annotations:
+                        {{- range $key, $value := .Values.application.annotations }}
+                        {{ $key }}: {{ $value }}
+                        {{- end }}
+                      autoscaling:
+                        enabled: false
+                      deploymentType: {{ .Values.application.deploymentType }}
+                      {{- with .Values.application.env }}
+                      env:
+                        {{- . | toYaml}}
+                      {{- end }}
+                      image:
+                        registry: {{ .Values.application.image.registry }}
+                        repository: {{ .Values.application.image.repository }}
+                        tag: {{ .Values.application.image.tag }}
+                      securityContext:
+                        readOnlyRootFilesystem: {{ .Values.application.securityContext.readOnlyRootFilesystem }}
+                      {{- with .Values.application.initContainers }}
+                      initContainers:
+                      {{- range . }}
+                        - name: {{ .name }}
+                          image: "{{ .image }}:{{ .tag | default $.Chart.AppVersion }}"
+                          command: {{ .command }}
+                          args:
+                            {{ toYaml .args | indent 10 | trim }}
+                          env:
+                            {{ include "helm.lang.vars" . | indent 12 | trim }}
+                            {{ include "helm.otel.language" $ | indent 12 | trim }}
+                            {{ include "helm.otel.envVars" $ | indent 12 | trim }}
+                            {{ include "helm.vault" $ | indent 12 | trim }}
+                          {{- range $key, $value := omit .env "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
+                            - name: "{{ $key }}"
+                              value: "{{ $value }}"
+                          {{- end }}
+                          {{ include "helm.containerSecurityContext" $ | indent 10 | trim }}
+                      {{- end }}
+                      {{- end }}
+                      name: {{ .Values.application.name }}
+                      {{- if .Values.application.ports }}
+                      ports:
+                        {{- range $key, $value := .Values.application.ports }}
+                        {{ $key }}: {{ $value }}
+                        {{- end }}
+                      {{- end }}
+                      pullPolicy: {{ .Values.application.pullPolicy }}
+                      replicas: 1
+                      resources:
+                        limits:
+                          cpu: 500m
+                          memory: 512Mi
+                        requests:
+                          cpu: 100m
+                          memory: 256Mi
+                      version: {{ .Values.application.version }}
+                      {{- if eq .Values.application.deploymentType "rollout" }}
+                      updateStrategy:
+                        canary:
+                          steps:
+                            - setWeight: 25
+                            - analysis:
+                                templates:
+                                  {{- range $index, $template := .Values.analysisTemplates }}
+                                  - templateName: "{{`{{`}} .name {{`}}`}}-{{ $template.name }}"
+                                  {{- end }}
+                            - setWeight: 50
+                            - analysis:
+                                templates:
+                                  {{- range $index, $template := .Values.analysisTemplates }}
+                                  - templateName: "{{`{{`}} .name {{`}}`}}-{{ $template.name }}"
+                                  {{- end }}
+                            - setWeight: 100
+                      {{- else}}
+                      updateStrategy:
+                        type: RollingUpdate
+                        rollingUpdate:
+                          maxUnavailable: 0
+                          maxSurge: 2
+                      {{- end }}
+                    analysisTemplates: {{ if ne .Values.application.deploymentType "rollout" }}[]{{ end }}
+                    {{- if eq .Values.application.deploymentType "rollout" }}
+                      {{ .Values.analysisTemplates | toYaml | indent 22 | trim }}
+                    {{- end}}
+                    serviceMonitor:
+                      enabled: {{ .Values.serviceMonitor.enabled }}
+                    service:
+                      affinityTimeoutSeconds: {{ .Values.service.affinityTimeoutSeconds }}
+                      {{- with .Values.service.annotations }}
+                      annotations:
+                        {{- range $key, $value := . }}
+                        {{ $key }}: {{ $value }}
+                        {{- end }}
+                      {{- end }}
+                      ports:
+                      {{- range $key, $value := .Values.application.ports }}
+                        - name: {{ $key | lower }}
+                          port: {{ $value }}
+                          protocol: TCP
+                      {{- end }}
+                    serviceAccount:
+                      create: {{ .Values.serviceAccount.create }}
+                    networking:
+                      ingress:
+                        type: {{ .Values.networking.ingress.type }}
+                      {{- with .Values.networking.istio }}
+                      istio: 
+                        {{ . | toYaml}}
+                      {{- end }}
+                      {{- with .Values.networking.krakend }}
+                      krakend: 
+                        {{ . | toYaml}}
+                      {{- end }}
+                    disableOtelAutoinstrumentation: {{ .Values.disableOtelAutoinstrumentation }}
+                    secrets:
+                      {{- with .Values.secrets.mounted }}
+                      mounted: 
+                      {{- range . }}
+                        - name: {{ .name }}
+                          mountedFileName: {{ .mountedFileName }}
+                          vault:
+                            path: {{ .vault.path }}
+                            property: {{ .vault.property }}
+                          mount:
+                            path: {{ .mount.path }}
+                            subPath: {{ .mount.subPath }}
+                      {{- end }}
+                      {{- end }}
+                      bulk:
+                        path: {{ .Values.secrets.bulk.path }}
+                      {{- with .Values.secrets.individual }}
+                      individual:
+                        {{- range . }}
+                        - envVarName: {{ .envVarName }}
+                          {{ if .path -}}path: {{ .path }}{{- end }}
+                          {{ if .keyName -}}keyName: {{ .keyName }}{{- end }}
+                        {{- end -}}
+                      {{- end }}
+
+  template:
+    metadata:
+      name: "{{ $fullName }}-offload-{{`{{`}} .name {{`}}`}}"
+      annotations:
+        notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+    spec:
+      project: default
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ $namespace }}
+      source:
+        repoURL: https://github.com/MyCarrier-DevOps/ITM.Helm.Charts.git
+        targetRevision: {{ .Chart.Version}}
+        path: "v2"
+        helm:
+          values: |2+
+            {{`{{`}}- $Values := .Values {{`}}`}}
+            {{`{{`}}- $global := .Values.global {{`}}`}}
+            {{`{{`}}- $val_application := deepCopy .Values.application {{`}}`}}{{`{{`}} $off_app := deepCopy .application {{`}}`}}{{`{{`}} $application := deepCopy $off_app | mergeOverwrite (deepCopy $val_application) {{`}}`}}
+            {{`{{`}}- $val_secrets := deepCopy .Values.secrets {{`}}`}}{{`{{`}} $off_secrets := deepCopy .secrets {{`}}`}}{{`{{`}} $secrets := deepCopy $off_secrets | mergeOverwrite (deepCopy $val_secrets) {{`}}`}}
+            {{`{{`}}- $off_analysisTemplates := deepCopy .analysisTemplates | default list {{`}}`}}
+            {{`{{`}}- $environment := .Values.environment -{{`}}`}}
+            global:
+            {{`{{`}}- .Values.global | toYaml | nindent 2 {{`}}`}}
+            environment:
+            {{`{{`}}- $environment | toYaml | nindent 2 {{`}}`}}
+            application:
+            {{`{{`}}- $application | toYaml | nindent 2 {{`}}`}}
+            serviceAccount:
+            {{`{{`}}- .Values.serviceAccount | toYaml | nindent 2 {{`}}`}}
+            serviceMonitor:
+            {{`{{`}}- .Values.serviceMonitor | toYaml | nindent 2 {{`}}`}}
+            service:
+            {{`{{`}}- .Values.service | toYaml | nindent 2 {{`}}`}}
+            networking:
+            {{`{{`}}- .Values.networking | toYaml | nindent 2 {{`}}`}}
+            disableOtelAutoinstrumentation: true
+            secrets:
+            {{`{{`}}- $secrets | toYaml | nindent 2 {{`}}`}}
+            {{`{{`}}- if (eq .Values.application.deploymentType "rollout")  {{`}}`}}
+            {{`{{`}}- with $off_analysisTemplates {{`}}`}}
+            analysisTemplates:
+            {{`{{`}}- . | toYaml | nindent 2 {{`}}`}}
+            {{`{{`}}- end {{`}}`}}
+            {{`{{`}}- end {{`}}`}}
+            
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ApplyOutOfSyncOnly=true
+          - Validate=true
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+          - ServerSideApply=true
+          - Replace=true
+
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 10m
+{{- end -}}

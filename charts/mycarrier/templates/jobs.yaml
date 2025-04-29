@@ -1,0 +1,22 @@
+{{- range .Values.jobs }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.environment.name | default $.Release.Namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" $ | indent 4 | trim }}
+    {{ include "helm.labels.standard" $ | indent 4 | trim }}
+    {{ include "helm.labels.version" $ | indent 4 | trim }}
+    {{- if .labels }}
+    {{ toYaml .labels | indent 4 | trim }}
+    {{- end }}
+  annotations:
+  {{- with .annotations }}
+    {{ toYaml . | indent 4 | trim }}
+  {{- end }}
+spec:
+  {{- $_ := set $ "job" . }}
+  {{ include "helm.specs.job" $ | indent 2 | trim }}
+{{- end }}

@@ -1,0 +1,169 @@
+{{- if (eq .Values.networking.ingress.type "istio" ) }}
+{{- $domain := include "helm.domain" . }}
+{{- $domainPrefix := include "helm.domain.prefix" . }}
+{{- $namespace := include "helm.namespace" . }}
+{{- $fullName := include "helm.fullname" . }}
+{{- $namespace := include "helm.namespace" . }}
+{{- $metaenv := (include "helm.metaEnvironment" . ) }}
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.standard" . | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    {{ include "helm.annotations.virtualservice" . | indent 4 | trim }}
+spec:
+  hosts:
+  - {{ $fullName }}
+  {{ if hasPrefix "feature" .Values.environment.name }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{ if and (not .Values.environment.domainOverride.staticHostname) (not (hasPrefix "feature" .Values.environment.name))}}- {{ (list ($.Values.global.appStack) ($.Values.application.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{ if and (.Values.environment.domainOverride.staticHostname) (not (hasPrefix "feature" .Values.environment.name)) }}- {{ .Values.environment.domainOverride.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end -}}
+  {{- if and .Values.networking }}
+  {{- range .Values.networking.istio.hosts }}
+  - {{ . }}
+  {{- end }}
+  gateways:
+  - mesh
+  - istio-system/default
+  {{- end }}
+  http:
+  {{- if .Values.networking }}
+  {{- range $key, $value := .Values.networking.istio.redirects }}
+  - name: {{ $key }}
+    match:
+    - authority:
+        prefix: {{ if and (not (contains "prod" $namespace)) ( not $.Values.environment.domainOverride.staticHostname) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
+    redirect:
+      uri: /
+      {{/* scheme: https */}}
+      authority: {{ if and (not (contains "prod" $namespace)) ( not $.Values.environment.domainOverride.staticHostname) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
+  {{- end }}
+  {{- range $key, $value := .Values.networking.istio.routes }}
+  - name: {{ $key }}
+    {{- toYaml $value | nindent 4 }}
+    route:
+    - destination:
+        host: {{ $key }}
+        port:
+          number: 80
+        # subset: default
+    headers:
+      {{- if and $.Values.networking.istio.responseHeaders }}
+      {{- with $.Values.networking.istio.responseHeaders }}
+      {{ toYaml . | indent 6 | trim }}
+      {{- end }}
+      {{- else }}
+      {{ include "helm.istioIngress.responseHeaders" $ | indent 6 | trim }}
+      {{- end }}
+    {{- with $.Values.networking.istio.corsPolicy }}
+    corsPolicy:
+      {{ toYaml $ | indent 6 | trim }}
+    {{- end }}
+    timeout: {{ default "151s" $.Values.service.timeout }}
+    retries:
+      retryOn: {{ default "5xx,reset" $.Values.service.retryOn }}
+      attempts: {{ default 3 $.Values.service.attempts }}
+      perTryTimeout: {{ default "50s" $.Values.service.perTryTimeout }}
+  {{- end }}
+  {{- end }}
+  - name: {{ if (eq .Values.application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
+    route:
+    {{- if $.Values.service.ports }}
+    {{- range $.Values.service.ports }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ .port }}
+      weight: 100
+    {{- if (eq $.Values.application.deploymentType "rollout")  }}
+    - destination:
+        host: {{ $fullName }}-preview
+        port:
+          number: {{ .port }}
+      weight: 0
+    {{- end }}
+    {{- end }}
+    {{- else }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ $.Values.application.ports.http }}
+      weight: 100
+    {{- if (eq .Values.application.deploymentType "rollout")  }}
+    - destination:
+        host: {{ $fullName }}-preview
+        port:
+          number: {{ $.Values.application.ports.http }}
+      weight: 0
+    {{- end }}
+    {{- end }}
+    {{- if .Values.networking }}
+    {{- if .Values.networking.istio.enabled }}
+    headers:
+      {{- if and .Values.networking }}
+      {{- if and .Values.networking.istio.responseHeaders }}
+      {{- with .Values.networking.istio.responseHeaders }}
+      {{ toYaml . | indent 6 | trim }}
+      {{- end }}
+      {{- else }}
+      {{ include "helm.istioIngress.responseHeaders" . | indent 6 | trim }}
+      {{- end }}
+      {{- end }}
+    {{- with .Values.networking.istio.corsPolicy }}
+    corsPolicy:
+      {{ toYaml . | indent 6 | trim }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    timeout: {{ default "151s" .Values.service.timeout }}
+    retries:
+      retryOn: {{ default "5xx,reset" .Values.service.retryOn }}
+      attempts: {{ default 3 .Values.service.attempts }}
+      perTryTimeout: {{ default "50s" .Values.service.perTryTimeout }}
+{{- if not (hasPrefix "feature" .Values.environment.name) }}
+  - name: {{ $fullName }}
+    route:
+      - destination:
+          host: {{ $fullName }}
+          port:
+            number: {{ $.Values.application.ports.http }}
+    match:
+      - headers:
+          Environment:
+            exact: {{ .Values.environment.name }}
+{{- end }}
+{{- if hasPrefix "feature" .Values.environment.name }}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ $fullName }}-offload
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.standard" . | indent 4 | trim }}
+  annotations:
+    {{ include "helm.annotations.virtualservice" . | indent 4 | trim }}
+spec:
+  hosts:
+  {{ if (not .Values.environment.domainOverride.staticHostname)}}- {{ (list ($.Values.global.appStack) ($.Values.application.name) (.Values.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{- if .Values.environment.domainOverride.staticHostname }}- {{ .Values.environment.domainOverride.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+  gateways:
+  - mesh
+  - istio-system/default
+  http:
+  - name: {{ $fullName }}
+    route:
+      - destination:
+          host: {{ $fullName }}
+          port:
+            number: {{ $.Values.application.ports.http }}
+    match:
+      - headers:
+          Environment:
+            exact: {{ .Values.environment.name }}
+{{- end }}
+{{- end }}

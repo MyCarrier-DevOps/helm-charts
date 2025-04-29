@@ -1,0 +1,115 @@
+global:
+  appStack: myAppStack
+  language: csharp
+  forceAutoscaling: false
+  gitbranch: integration
+  branchlabel: integration
+
+environment:
+  name: dev
+  dependencyenv: 
+  domainOverride:
+    enabled: false
+    staticHostname:
+    domain:
+
+application:
+  name:
+  isFrontend: false
+  forceOffload: false
+  migratingToRollouts: false
+  labels: {}
+  annotations: {}
+  autoscaling:
+    enabled: true
+  deploymentType: deployment
+  env: {}
+  image:
+    registry: mycarrieracr.azurecr.io
+    repository: myApp
+    tag: v0.0.1
+  securityContext:
+    readOnlyRootFilesystem:
+  initContainers: {}
+  ports:
+    http: 8080
+  probes:
+    enableReadiness: true
+    enableLiveness: true
+    enableStartup: true
+    readinessProbe: {}
+    livenessProbe: {}
+    startupProbe: {}
+  pullPolicy: Always
+  replicas: 1
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  version:
+  volumes: []
+  updateStrategy: {}
+analysisTemplates: {}
+  
+serviceAccount:
+  create: true
+
+serviceMonitor:
+  enabled: false
+
+service:
+  annotations: {}
+  ports: []
+
+  affinityTimeoutSeconds: "1000"
+
+networking:
+  ingress:
+    type: istio
+  istio: {}
+  krakend: {}
+
+disableOtelAutoinstrumentation: true
+
+secrets:
+  individual: []
+  mounted:
+  bulk:
+    path:
+
+extraObjects:
+
+sub-deploy:
+  enabled: true
+
+# Jobs configuration
+jobs: 
+  # - name: example-job                                 # Required: Job name
+  #   repository: mycarrieracr.azurecr.io/example-job   # Required: Container image repository
+  #   tag: latest                                       # Optional: Container image tag (defaults to application.image.tag)
+  #   argocd: true                                      # Optional: Enable ArgoCD annotations
+  #   timing: pre-deploy                                # Optional: Job timing (pre-deploy, post-deploy, any)
+  #   order: 0                                          # Optional: Execution order within timing group (default: 0)
+  #   ttlSecondsAfterFinished: 100                      # Optional: Time to keep job after completion
+  #   activeDeadlineSeconds: 300                        # Optional: Maximum runtime before termination
+  #   backoffLimit: 3                                   # Optional: Number of retries on failure (default: 0)
+  #   restartPolicy: Never                              # Optional: Restart policy (default: Never)
+  #   imagePullPolicy: IfNotPresent                     # Optional: Image pull policy (default: IfNotPresent)
+  #   command: ["/bin/sh", "-c"]                        # Optional: Command to run
+  #   args:                                             # Optional: Arguments for the command
+  #     - echo "Hello from example job"         
+  #   env: []                                           # Optional: Additional environment variables
+  #   resources:                                        # Optional: Resource requirements
+  #     requests:
+  #       memory: "128Mi"
+  #       cpu: "100m"
+  #     limits:
+  #       memory: "256Mi"
+  #       cpu: "200m"
+  #   volumes: []                                       # Optional: Volume configurations
+  #   labels: {}                                        # Optional: Additional labels
+  #   annotations: {}                                   # Optional: Additional annotations
+
