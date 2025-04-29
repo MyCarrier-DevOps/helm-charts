@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout source code 
-        uses: 'actions/checkout@v2'
+        uses: 'actions/checkout@v4'
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -104,7 +104,7 @@ jobs:
         manifest: ${{ fromJson(needs.prep.outputs.matrix) }}
     steps:
       - name: Checkout source code
-        uses: 'actions/checkout@v2'
+        uses: 'actions/checkout@v4'
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
