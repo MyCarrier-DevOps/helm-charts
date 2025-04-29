@@ -82,7 +82,7 @@ secrets:
 
 extraObjects:
 
-sub-deploy:
+subdeploy:
   enabled: true
 
 # Jobs configuration
