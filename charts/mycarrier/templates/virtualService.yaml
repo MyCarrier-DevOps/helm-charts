@@ -20,8 +20,8 @@ spec:
   hosts:
   - {{ $fullName }}
   {{ if hasPrefix "feature" .Values.global.environment.name }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-  {{ if and (not .Values.global.environment.domainOverride.staticHostname) (not (hasPrefix "feature" .Values.global.environment.name))}}- {{ (list ($.Values.global.appStack) ($.Values.application.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-  {{ if and (.Values.global.environment.domainOverride.staticHostname) (not (hasPrefix "feature" .Values.global.environment.name)) }}- {{ .Values.global.environment.domainOverride.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end -}}
+  {{ if and (not .Values.application.statichostname) (not (hasPrefix "feature" .Values.global.environment.name))}}- {{ (list ($.Values.global.appStack) ($.Values.application.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{ if and (.Values.application.statichostname) (not (hasPrefix "feature" .Values.global.environment.name)) }}- {{ .Values.application.statichostname | trimSuffix "."}}.{{ $domain }}{{ end -}}
   {{- if and .Values.networking }}
   {{- range .Values.networking.istio.hosts }}
   - {{ . }}
@@ -36,11 +36,11 @@ spec:
   - name: {{ $key }}
     match:
     - authority:
-        prefix: {{ if and (not (contains "prod" $namespace)) ( not $.Values.global.environment.domainOverride.staticHostname) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
+        prefix: {{ if and (not (contains "prod" $namespace)) ( not $.Values.application.statichostname) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
     redirect:
       uri: /
       {{/* scheme: https */}}
-      authority: {{ if and (not (contains "prod" $namespace)) ( not $.Values.global.environment.domainOverride.staticHostname) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
+      authority: {{ if and (not (contains "prod" $namespace)) ( not $.Values.application.statichostname) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
   {{- end }}
   {{- range $key, $value := .Values.networking.istio.routes }}
   - name: {{ $key }}
@@ -149,8 +149,8 @@ metadata:
     {{ include "helm.annotations.virtualservice" . | indent 4 | trim }}
 spec:
   hosts:
-  {{ if (not .Values.global.environment.domainOverride.staticHostname)}}- {{ (list ($.Values.global.appStack) ($.Values.application.name) (.Values.global.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-  {{- if .Values.global.environment.domainOverride.staticHostname }}- {{ .Values.global.environment.domainOverride.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+  {{ if (not .Values.application.statichostname)}}- {{ (list ($.Values.global.appStack) ($.Values.application.name) (.Values.global.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{- if .Values.application.statichostname }}- {{ .Values.application.statichostname | trimSuffix "."}}.{{ $domain }}{{- end }}
   gateways:
   - mesh
   - istio-system/default

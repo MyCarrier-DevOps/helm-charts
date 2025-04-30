@@ -1,10 +1,11 @@
+{{- $namespace := include "helm.namespace" . }}
 {{- range .Values.jobs }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ .name }}
-  namespace: {{ $.Values.global.environment.name | default $.Release.Namespace }}
+  namespace: {{ $namespace }}
   labels:
     {{ include "helm.labels.dependencies" $ | indent 4 | trim }}
     {{ include "helm.labels.standard" $ | indent 4 | trim }}

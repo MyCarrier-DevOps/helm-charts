@@ -32,7 +32,7 @@ template:
       - name: {{ .job.imagePullSecret | default "imagepull" }}
     restartPolicy: {{ .job.restartPolicy | default "Never" }}
     containers:
-      - image: "{{ .job.repository }}:{{ default .job.tag $.Values.application.image.tag }}"
+      - image: "{{ .job.image.registry }}/{{ .job.image.repository }}:{{ .job.image.tag }}"
         imagePullPolicy: {{ .job.imagePullPolicy | default "IfNotPresent"}}
         name: {{ .job.name }}
         {{- with .job.command }}
@@ -83,6 +83,9 @@ template:
           - name: tmp-dir
             mountPath: /tmp
           {{ include "helm.otel.volumeMounts" . | indent 10 | trim }}
+          {{- if .Values.secrets.mounted }}
+          {{ include "helm.secretVolumeMounts" . | indent 10 | trim -}}
+          {{- end }}
         {{- if .job.volumes }}
           {{- range .job.volumes }}
           - name: {{ .name }}

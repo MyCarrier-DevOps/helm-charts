@@ -9,11 +9,11 @@ global:
     dependencyenv: 
     domainOverride:
       enabled: false
-      staticHostname:
       domain:
 
 application:
-  name: "1"
+  name: 
+  staticHostname:
   isFrontend: false
   forceOffload: false
   migratingToRollouts: false
