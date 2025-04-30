@@ -34,7 +34,7 @@ spec:
                       dependencyenv: dev
                       domainOverride:
                         enabled: {{ .Values.global.environment.domainOverride.enabled }}
-                        staticHostname: {{ .Values.application.statichostname }}
+                        staticHostname: {{ .Values.application.staticHostname }}
                         domain: {{ .Values.global.environment.domainOverride.domain }}
                     application:
                       isFrontend: {{ .Values.application.isFrontend }}
