@@ -14,9 +14,11 @@ template:
       {{- if .job.timing }}
       {{- $order := .job.order | default 0 }}
       {{- if eq .job.timing "pre-deploy" }}
-      argocd.argoproj.io/sync-wave: {{ ((sub $order 10) | toString | quote) }}
+      argocd.argoproj.io/sync-wave: {{ ( -100 | toString | quote) }}
+      argocd.argoproj.io/hook: PreSync
       {{- else if eq .job.timing "post-deploy" }}
-      argocd.argoproj.io/sync-wave: {{ ((add $order 10) | toString | quote) }}
+      argocd.argoproj.io/sync-wave: {{ (100 | toString | quote) }}
+      argocd.argoproj.io/hook: PostSync
       {{- end }}
       {{- end }}
       {{ include "helm.annotations.vault" . | indent 6 | trim }}

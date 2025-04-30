@@ -1,5 +1,5 @@
 {{- define "helm.podDefaultAffinity" -}}
-{{- if hasPrefix "prod" .Values.environment.name }}
+{{- if hasPrefix "prod" .Values.global.environment.name }}
 affinity:
   podAntiAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
@@ -12,7 +12,7 @@ affinity:
             - key: environment
               operator: In
               values:
-                - {{ .Values.environment.name }}
+                - {{ .Values.global.environment.name }}
         topologyKey: kubernetes.io/hostname
 {{- end -}}
 {{- end -}}

@@ -1,4 +1,4 @@
-{{- if (or ( and (.Values.application.autoscaling.enabled) (hasPrefix "prod" .Values.environment.name)) (.Values.global.forceAutoscaling))}}
+{{- if (or ( and (.Values.application.autoscaling.enabled) (hasPrefix "prod" .Values.global.environment.name)) (.Values.global.forceAutoscaling))}}
 {{- $namespace := include "helm.namespace" . }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

@@ -1,4 +1,4 @@
-{{- if or (and (eq .Values.environment.name "dev") (not .Values.application.isFrontend) (hasSuffix "api" .Values.application.name)) (and (eq .Values.environment.name "dev") .Values.application.forceOffload) }}
+{{- if or (and (eq .Values.global.environment.name "dev") (not .Values.application.isFrontend) (hasSuffix "api" .Values.application.name)) (and (eq .Values.global.environment.name "dev") .Values.application.forceOffload) }}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
 apiVersion: argoproj.io/v1alpha1
@@ -33,9 +33,9 @@ spec:
                       name: "{{`{{`}} .name {{`}}`}}"
                       dependencyenv: dev
                       domainOverride:
-                        enabled: {{ .Values.environment.domainOverride.enabled }}
-                        staticHostname: {{ .Values.environment.domainOverride.staticHostname }}
-                        domain: {{ .Values.environment.domainOverride.domain }}
+                        enabled: {{ .Values.global.environment.domainOverride.enabled }}
+                        staticHostname: {{ .Values.global.environment.domainOverride.staticHostname }}
+                        domain: {{ .Values.global.environment.domainOverride.domain }}
                     application:
                       isFrontend: {{ .Values.application.isFrontend }}
                       forceOffload: {{ .Values.application.forceOffload }}
@@ -202,7 +202,7 @@ spec:
             {{`{{`}}- $val_application := deepCopy .Values.application {{`}}`}}{{`{{`}} $off_app := deepCopy .application {{`}}`}}{{`{{`}} $application := deepCopy $off_app | mergeOverwrite (deepCopy $val_application) {{`}}`}}
             {{`{{`}}- $val_secrets := deepCopy .Values.secrets {{`}}`}}{{`{{`}} $off_secrets := deepCopy .secrets {{`}}`}}{{`{{`}} $secrets := deepCopy $off_secrets | mergeOverwrite (deepCopy $val_secrets) {{`}}`}}
             {{`{{`}}- $off_analysisTemplates := deepCopy .analysisTemplates | default list {{`}}`}}
-            {{`{{`}}- $environment := .Values.environment -{{`}}`}}
+            {{`{{`}}- $environment := .Values.global.environment -{{`}}`}}
             global:
             {{`{{`}}- .Values.global | toYaml | nindent 2 {{`}}`}}
             environment:

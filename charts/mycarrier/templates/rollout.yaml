@@ -5,7 +5,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
-  name: {{ $fullName }}{{- if contains "feature" .Values.environment.name }}{{ end }}
+  name: {{ $fullName }}{{- if contains "feature" .Values.global.environment.name }}{{ end }}
   namespace: {{ $namespace }}
   labels:
     {{- include "helm.labels.dependencies" . | indent 4 | trim }}

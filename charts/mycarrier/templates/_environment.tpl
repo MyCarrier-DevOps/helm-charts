@@ -1,5 +1,5 @@
 {{- define "helm.envType" -}}
-{{- if has .Values.environment.name (list "dev" "preprod" "prod") }}
+{{- if has .Values.global.environment.name (list "dev" "preprod" "prod") }}
 {{- printf "standard" }}
 {{- else }}
 {{- printf "standard" }}
@@ -16,14 +16,14 @@
 {{- printf "dev" }}
 {{- end }}
 {{- else }}
-{{- .Values.environment.name }}
+{{- .Values.global.environment.name }}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.metaEnvironment" -}}
-{{- if hasPrefix "feature" .Values.environment.name}}
+{{- if hasPrefix "feature" .Values.global.environment.name}}
 {{- printf "dev" -}}
 {{- else }}
-{{- .Values.environment.name }}
+{{- .Values.global.environment.name }}
 {{- end }}
 {{- end -}}

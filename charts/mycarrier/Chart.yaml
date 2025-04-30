@@ -10,7 +10,8 @@ dependencies:
     tags:
       - bitnami-common
     version: 2.x.x
-  - name: mycarrier-helm
+  - condition: subdeploy.enabled
+    name: mycarrier-helm
     repository: https://charts.mycarrier.dev
     alias: subdeploy
-    condition: subdeploy.enabled
+    version: 2.x.x

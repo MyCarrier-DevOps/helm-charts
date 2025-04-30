@@ -4,17 +4,16 @@ global:
   forceAutoscaling: false
   gitbranch: integration
   branchlabel: integration
-
-environment:
-  name: dev
-  dependencyenv: 
-  domainOverride:
-    enabled: false
-    staticHostname:
-    domain:
+  environment:
+    name: dev
+    dependencyenv: 
+    domainOverride:
+      enabled: false
+      staticHostname:
+      domain:
 
 application:
-  name:
+  name: "1"
   isFrontend: false
   forceOffload: false
   migratingToRollouts: false
@@ -82,9 +81,8 @@ secrets:
 
 extraObjects:
 
-subdeploy:
-  enabled: true
-  #comment
+presync-job:
+  enabled: false
 
 # Jobs configuration
 jobs: 
@@ -113,4 +111,7 @@ jobs:
   #   volumes: []                                       # Optional: Volume configurations
   #   labels: {}                                        # Optional: Additional labels
   #   annotations: {}                                   # Optional: Additional annotations
+
+subdeploy:
+  enabled: false
 

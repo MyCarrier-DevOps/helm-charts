@@ -15,7 +15,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "10"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  {{- if not (or ( and (.Values.application.autoscaling.enabled) (hasPrefix "prod" .Values.environment.name)) (.Values.global.forceAutoscaling))}}
+  {{- if not (or ( and (.Values.application.autoscaling.enabled) (hasPrefix "prod" .Values.global.environment.name)) (.Values.global.forceAutoscaling))}}
   replicas: {{ if and (not (kindIs "invalid" .Values.application.replicas)) (or (eq "0" $envScaling) (and (eq "1" $envScaling) (eq "0" (default "0" .Values.application.replicas | toString)))) }}{{ .Values.application.replicas }}{{ else }}{{ 2 }}{{ end }}
   {{- end }}
   revisionHistoryLimit: 2

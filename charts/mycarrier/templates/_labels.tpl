@@ -8,7 +8,7 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
 app.kubernetes.io/part-of: {{ .Values.global.appStack}}
 app.kubernetes.io/component: {{ .Values.application.name}}
 app: {{ include "helm.fullname" . | trunc 63 | trimSuffix "-" }}
-mycarrier.tech/environment: {{ .Values.environment.name }}
+mycarrier.tech/environment: {{ .Values.global.environment.name }}
 mycarrier.tech/envscaling: {{ $envScaling | quote }}
 mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}

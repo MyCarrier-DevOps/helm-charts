@@ -1,39 +1,39 @@
 {{- define "helm.domain" -}}
-{{- if .Values.environment.domainOverride.enabled }}
-{{- .Values.environment.domainOverride.domain }}
+{{- if .Values.global.environment.domainOverride.enabled }}
+{{- .Values.global.environment.domainOverride.domain }}
 {{- else }}
-{{- hasPrefix "prod" .Values.environment.name | ternary "mycarriertms.com" "mycarrier.dev" }}
+{{- hasPrefix "prod" .Values.global.environment.name | ternary "mycarriertms.com" "mycarrier.dev" }}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.domain.prefix" -}}
 {{ $metaenv := (include "helm.metaEnvironment" . ) }}
-{{- hasPrefix "prod" .Values.environment.name | ternary "api" $metaenv }}
+{{- hasPrefix "prod" .Values.global.environment.name | ternary "api" $metaenv }}
 {{- end -}}
 
 {{- define "helm.namespace" -}}
-{{- if hasPrefix "feature" .Values.environment.name }}
+{{- if hasPrefix "feature" .Values.global.environment.name }}
 {{- (list ("dev") (.Values.global.appStack)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- (list (.Values.environment.name) (.Values.global.appStack)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
+{{- (list (.Values.global.environment.name) (.Values.global.appStack)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.fullname" -}}
-{{- if hasPrefix "feature" .Values.environment.name }}
-{{- default (list (.Values.global.appStack) (.Values.application.name) (.Values.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
+{{- if hasPrefix "feature" .Values.global.environment.name }}
+{{- default (list (.Values.global.appStack) (.Values.application.name) (.Values.global.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
 {{- else }}
 {{- default (list (.Values.global.appStack) (.Values.application.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.instance" -}}
-{{- default (list (.Values.global.appStack) (.Values.application.name) (.Values.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
+{{- default (list (.Values.global.appStack) (.Values.application.name) (.Values.global.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "helm.envScaling" -}}
 {{- $envList := list "dev" "preprod" }}
-{{- if and (or (has .Values.environment.name $envList) (hasPrefix "feature" .Values.environment.name) ) (not .Values.global.forceAutoscaling) }}{{ 0 }}{{ else }}{{ 1 }}{{ end }}
+{{- if and (or (has .Values.global.environment.name $envList) (hasPrefix "feature" .Values.global.environment.name) ) (not .Values.global.forceAutoscaling) }}{{ 0 }}{{ else }}{{ 1 }}{{ end }}
 {{- end -}}
 
 {{- define "helm.annotations.istio" -}}
@@ -49,7 +49,7 @@ sidecar.istio.io/inject: 'true'
 {{- end }}
 {{- end -}}
 
-# {{- if hasPrefix "prod" .Values.environment.name }}
+# {{- if hasPrefix "prod" .Values.global.environment.name }}
 # external-dns.alpha.kubernetes.io/target: {{ include "helm.ingressDomain" . }}
 # {{- else }}
 # external-dns.alpha.kubernetes.io/target: dev-ingress.{{ include "helm.ingressDomain" . }} 
