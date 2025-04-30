@@ -49,7 +49,6 @@ template:
           {{ include "helm.otel.language" $ | indent 10 | trim }}
           {{- end }}
           {{ include "helm.otel.envVars" . | indent 10 | trim }}
-          {{ include "helm.vault" . | indent 10 | trim }}
         {{- with .job.env }}
           {{ toYaml . | indent 10 | trim }}
         {{- end }}
