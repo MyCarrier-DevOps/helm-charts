@@ -17,6 +17,16 @@ metadata:
   {{- with .annotations }}
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
+  {{- if .timing }}
+    {{- $order := .order | default 0 }}
+  {{- if eq .timing "pre-deploy" }}
+    argocd.argoproj.io/sync-wave: {{ ( -100 | toString | quote) }}
+    argocd.argoproj.io/hook: PreSync
+  {{- else if eq .timing "post-deploy" }}
+    argocd.argoproj.io/sync-wave: {{ (100 | toString | quote) }}
+    argocd.argoproj.io/hook: PostSync
+  {{- end }}
+  {{- end }}
 spec:
   {{- $_ := set $ "job" . }}
   {{ include "helm.specs.job" $ | indent 2 | trim }}

@@ -115,7 +115,6 @@ spec:
           {{ include "helm.defaultStartupProbe" . | indent 10 | trim }}
           {{- end }}
           {{- end }}
-          # lifecycle hooks go here eventually
           env:
             {{ include "helm.lang.vars" . | indent 12 | trim }}
             {{ include "helm.otel.language" . | indent 12 | trim }}

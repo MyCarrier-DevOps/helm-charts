@@ -99,22 +99,15 @@ template:
       - name: tmp-dir
         emptyDir: {}
       {{ include "helm.otel.volumes" . | indent 6 | trim }}
+      {{- if .Values.secrets.mounted }}
+      {{ include "helm.secretVolumes" . | indent 6 | trim -}}
+      {{- end }}
     {{- if .job.volumes }}
       {{- range .job.volumes }}
       - name: {{ .name }}
-        {{- if not .custom }}
-        configMap:
-          name: {{ .configMapName | default (include "helm.fullname" $) }}
-          {{- if .items }}
-          items:
-            {{- range .items }}
-            - key: {{ .key }}
-              path: {{ .path }}
-            {{- end }}
-          {{- end }}
-        {{- end }}
-        {{- if .custom }}
-          {{- toYaml .custom | nindent 10 }}
+        mountPath: {{ .mountPath }}
+        {{- if .subPath }}
+        subPath: {{ .subPath }}
         {{- end }}
       {{- end }}
     {{- end }}
