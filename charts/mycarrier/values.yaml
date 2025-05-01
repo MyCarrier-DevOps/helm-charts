@@ -81,15 +81,11 @@ secrets:
 
 extraObjects:
 
-presync-job:
-  enabled: false
-
 # Jobs configuration
 jobs: 
   # - name: example-job                                 # Required: Job name
   #   repository: mycarrieracr.azurecr.io/example-job   # Required: Container image repository
   #   tag: latest                                       # Optional: Container image tag (defaults to application.image.tag)
-  #   argocd: true                                      # Optional: Enable ArgoCD annotations
   #   timing: pre-deploy                                # Optional: Job timing (pre-deploy, post-deploy, any)
   #   order: 0                                          # Optional: Execution order within timing group (default: 0)
   #   ttlSecondsAfterFinished: 100                      # Optional: Time to keep job after completion

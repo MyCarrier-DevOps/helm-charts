@@ -29,16 +29,16 @@ spec:
                       forceAutoscaling: false
                       gitbranch: {{ .Values.global.gitbranch }}
                       language: {{ .Values.global.language }}
-                    environment:
-                      name: "{{`{{`}} .name {{`}}`}}"
-                      dependencyenv: dev
-                      domainOverride:
-                        enabled: {{ .Values.global.environment.domainOverride.enabled }}
-                        staticHostname: {{ .Values.application.staticHostname }}
-                        domain: {{ .Values.global.environment.domainOverride.domain }}
+                      environment:
+                        name: "{{`{{`}} .name {{`}}`}}"
+                        dependencyenv: dev
+                        domainOverride:
+                          enabled: {{ .Values.global.environment.domainOverride.enabled }}
+                          domain: {{ .Values.global.environment.domainOverride.domain }}
                     application:
                       isFrontend: {{ .Values.application.isFrontend }}
                       forceOffload: {{ .Values.application.forceOffload }}
+                      staticHostname: {{ .Values.application.staticHostname }}
                       migratingToRollouts: false
                       labels:
                         {{- range $key, $value := .Values.application.labels }}
@@ -92,11 +92,11 @@ spec:
                       replicas: 1
                       resources:
                         limits:
-                          cpu: 500m
-                          memory: 512Mi
+                          cpu: {{ .Values.application.resources.limits.cpu | default "500m" }}
+                          memory: {{ .Values.application.resources.limits.memory | default "512Mi" }}
                         requests:
-                          cpu: 100m
-                          memory: 256Mi
+                          cpu: {{ .Values.application.resources.requests.cpu | default "100m" }}
+                          memory: {{ .Values.application.resources.requests.memory | default "256Mi" }}
                       version: {{ .Values.application.version }}
                       {{- if eq .Values.application.deploymentType "rollout" }}
                       updateStrategy:
@@ -156,6 +156,64 @@ spec:
                         {{ . | toYaml}}
                       {{- end }}
                     disableOtelAutoinstrumentation: {{ .Values.disableOtelAutoinstrumentation }}
+                    {{- range .Values.jobs }}
+                    jobs:
+                      - name: {{ .name }}
+                        image:
+                          registry: {{ .image.registry }}
+                          repository: {{ .image.repository  }}
+                          tag: {{ .image.tag }}
+                        repository: {{ .repository }}
+                        tag: {{ .tag | default $.Chart.AppVersion }}
+                        timing: {{ .timing | default "any" }}
+                        order: {{ .order | default 0 }}
+                        ttlSecondsAfterFinished: {{ .ttlSecondsAfterFinished | default 100 }}
+                        activeDeadlineSeconds: {{ .activeDeadlineSeconds | default 1000 }}
+                        backoffLimit: {{ .backoffLimit | default 3 }}
+                        restartPolicy: {{ .restartPolicy | default "Never" }}
+                        imagePullPolicy: {{ .imagePullPolicy | default "IfNotPresent" }}
+                        {{- with .env }}
+                        env:
+                          {{- range $key, $value := . }}
+                          - name: "{{ $key }}"
+                            value: "{{ $value }}"
+                          {{- end }}
+                        {{- end }}
+                        resources:
+                          limits:
+                            cpu: {{ .resources.limits.cpu | default "500m" }}
+                            memory: {{ .resources.limits.memory | default "512Mi" }}
+                          requests:
+                            cpu: {{ .resources.requests.cpu | default "100m" }}
+                            memory: {{ .resources.requests.memory | default "256Mi" }}
+                        {{- with .volumes }}
+                        volumes:
+                          {{- range . }}
+                          - name: {{ .name }}
+                            {{if .mountPath }}mountPath: {{ .mountPath }}{{ end }}
+                            {{if .kind }}kind: {{ .kind }}{{ end }}
+                          {{- end }}
+                        {{- end }}
+                        {{ with .labels }}
+                        labels:
+                          {{- range $key, $value := . }}
+                          {{ $key }}: {{ $value }}
+                          {{- end }}
+                        {{- end }}
+                        {{ with .annotations }}
+                        annotations:
+                          {{- range $key, $value := . }}
+                          {{ $key }}: {{ $value }}
+                          {{- end }}
+                        {{- end }}
+                        {{ with .command }}
+                        command: {{ . }}
+                        {{- end }}
+                        {{ with .args }}
+                        args:
+                          {{ toYaml .args | indent 10 | trim }}
+                        {{- end }}
+                    {{- end }}
                     secrets:
                       {{- with .Values.secrets.mounted }}
                       mounted: 
@@ -170,14 +228,16 @@ spec:
                             subPath: {{ .mount.subPath }}
                       {{- end }}
                       {{- end }}
+                      {{ if ne .Values.secrets.bulk.path "" }}
                       bulk:
                         path: {{ .Values.secrets.bulk.path }}
+                      {{- end }}
                       {{- with .Values.secrets.individual }}
                       individual:
                         {{- range . }}
                         - envVarName: {{ .envVarName }}
-                          {{ if .path -}}path: {{ .path }}{{- end }}
-                          {{ if .keyName -}}keyName: {{ .keyName }}{{- end }}
+                          {{ if .path -}}path: {{ .path }}{{ end }}
+                          {{ if .keyName -}}keyName: {{ .keyName }}{{ end }}
                         {{- end -}}
                       {{- end }}
 
@@ -196,12 +256,11 @@ spec:
         targetRevision: {{ .Chart.Version}}
         path: "v2"
         helm:
-          values: |2+
+          values: |
             {{`{{`}}- $Values := .Values {{`}}`}}
             {{`{{`}}- $global := .Values.global {{`}}`}}
+            {{`{{`}} $data := . {{`}}`}}
             {{`{{`}}- $val_application := deepCopy .Values.application {{`}}`}}{{`{{`}} $off_app := deepCopy .application {{`}}`}}{{`{{`}} $application := deepCopy $off_app | mergeOverwrite (deepCopy $val_application) {{`}}`}}
-            {{`{{`}}- $val_secrets := deepCopy .Values.secrets {{`}}`}}{{`{{`}} $off_secrets := deepCopy .secrets {{`}}`}}{{`{{`}} $secrets := deepCopy $off_secrets | mergeOverwrite (deepCopy $val_secrets) {{`}}`}}
-            {{`{{`}}- $off_analysisTemplates := deepCopy .analysisTemplates | default list {{`}}`}}
             {{`{{`}}- $environment := .Values.global.environment -{{`}}`}}
             global:
             {{`{{`}}- .Values.global | toYaml | nindent 2 {{`}}`}}
@@ -218,14 +277,29 @@ spec:
             networking:
             {{`{{`}}- .Values.networking | toYaml | nindent 2 {{`}}`}}
             disableOtelAutoinstrumentation: true
+            {{`{{`}} if hasKey $data "jobs" {{`}}`}}
+            {{`{{`}} $off_jobs := deepCopy .jobs {{`}}`}}
+            jobs:            
+            {{`{{`}}- with $off_jobs {{`}}`}}
+            {{`{{`}}- . | toYaml | nindent 2 {{`}}`}}
+            {{`{{`}}- end {{`}}`}}
+
+            {{`{{`}} end {{`}}`}}
+            {{`{{`}} if hasKey $data "secrets" {{`}}`}}
+            {{`{{`}}- $val_secrets := deepCopy .Values.secrets {{`}}`}}{{`{{`}} $off_secrets := deepCopy .secrets {{`}}`}}{{`{{`}} $secrets := deepCopy $off_secrets | mergeOverwrite (deepCopy $val_secrets) {{`}}`}}
             secrets:
             {{`{{`}}- $secrets | toYaml | nindent 2 {{`}}`}}
+            {{`{{`}} end {{`}}`}}
+
+            {{`{{`}}if hasKey $data "analysisTemplates" {{`}}`}}
+            {{`{{`}}- $off_analysisTemplates := (deepCopy .analysisTemplates | default list) {{`}}`}}
             {{`{{`}}- if (eq .Values.application.deploymentType "rollout")  {{`}}`}}
             {{`{{`}}- with $off_analysisTemplates {{`}}`}}
             analysisTemplates:
             {{`{{`}}- . | toYaml | nindent 2 {{`}}`}}
             {{`{{`}}- end {{`}}`}}
             {{`{{`}}- end {{`}}`}}
+            {{`{{`}} end {{`}}`}}
             
       syncPolicy:
         automated:
