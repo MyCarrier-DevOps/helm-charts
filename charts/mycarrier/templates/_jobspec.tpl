@@ -105,10 +105,7 @@ template:
     {{- if .job.volumes }}
       {{- range .job.volumes }}
       - name: {{ .name }}
-        mountPath: {{ .mountPath }}
-        {{- if .subPath }}
-        subPath: {{ .subPath }}
-        {{- end }}
+        {{ if ( or (and ( .kind ) (eq (.kind | lower) "emptydir")) (not .kind)) }}emptyDir: {}{{- end }}
       {{- end }}
     {{- end }}
 {{- end -}}
