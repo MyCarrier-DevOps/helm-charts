@@ -1,18 +1,22 @@
-{{- if (eq .Values.application.deploymentType "statefulset")  }}
-{{- if .Values.serviceAccount.create }}
-{{- if .Values.serviceAccount.rules }}
-{{- $namespace := include "helm.namespace" . }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- if (eq $appValues.deploymentType "statefulset")  }}
+{{- if and $appValues.serviceAccount (hasKey $appValues.serviceAccount "create") ($appValues.serviceAccount.create) }}
+{{- if and (hasKey $appValues.serviceAccount "rules") $appValues.serviceAccount.rules }}
+{{- $namespace := include "helm.namespace" $ }}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: {{ $namespace }}
-  name: {{ .Values.serviceAccount.name | default (include "helm.fullname" .) }}
+  name: {{ $appValues.serviceAccount.name | default (include "helm.fullname" $appContext) }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 rules:
-{{ toYaml .Values.serviceAccount.rules | indent 2 }}
+{{ toYaml $appValues.serviceAccount.rules | indent 2 }}
 
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

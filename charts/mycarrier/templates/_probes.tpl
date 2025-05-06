@@ -1,9 +1,9 @@
 {{- define "helm.defaultReadinessProbe" -}}
 {{- if (ne (.Values.global.language | lower) "csharp" ) }}
-{{- if ($.Values.application.ports) }}
+{{- if (dig "ports" (dict) .application) }}
 readinessProbe:
   tcpSocket:
-    port: {{- (or (index .Values.application.ports "http") (index .Values.application.ports "healthcheck")) | toString | indent 1 }}
+    port: {{- (or (index .application.ports "http") (index .application.ports "healthcheck")) | toString | indent 1 }}
   initialDelaySeconds: 10
   periodSeconds: 7
   timeoutSeconds: 1
@@ -15,10 +15,10 @@ readinessProbe:
 
 {{- define "helm.defaultStartupProbe" -}}
 {{- if (ne (.Values.global.language | lower) "csharp" ) }}
-{{- if ($.Values.application.ports) }}
+{{- if (dig "ports" (dict) .application) }}
 startupProbe:
   tcpSocket:
-    port: {{- (or (index .Values.application.ports "http") (index .Values.application.ports "healthcheck")) | toString | indent 1 }}
+    port: {{- (or (index .application.ports "http") (index .application.ports "healthcheck")) | toString | indent 1 }}
   initialDelaySeconds: 30
   periodSeconds: 15
   timeoutSeconds: 10
@@ -26,12 +26,12 @@ startupProbe:
   failureThreshold: 30
 {{- end }}
 {{- else }}
-{{- if ($.Values.application.ports) }}
+{{- if (dig "ports" (dict) .application) }}
 startupProbe:
   failureThreshold: 3
   httpGet:
     path: /health
-    port: {{- (or (index .Values.application.ports "http") (index .Values.application.ports "healthcheck")) | toString | indent 1 }}
+    port: {{- (or (index .application.ports "http") (index .application.ports "healthcheck")) | toString | indent 1 }}
   initialDelaySeconds: 30
   periodSeconds: 15
   successThreshold: 1
@@ -42,10 +42,10 @@ startupProbe:
 
 {{- define "helm.defaultLivenessProbe" -}}
 {{- if (ne (.Values.global.language | lower) "csharp" ) }}
-{{- if ($.Values.application.ports) }}
+{{- if (dig "ports" (dict) .application) }}
 livenessProbe:
   tcpSocket:
-    port: {{- (or (index .Values.application.ports "http") (index .Values.application.ports "healthcheck")) | toString | indent 1 }}
+    port: {{- (or (index .application.ports "http") (index .application.ports "healthcheck")) | toString | indent 1 }}
   initialDelaySeconds: 30
   periodSeconds: 15
   timeoutSeconds: 10
@@ -53,12 +53,12 @@ livenessProbe:
   failureThreshold: 30
 {{- end }}
 {{- else }}
-{{- if ($.Values.application.ports) }}
+{{- if (dig "ports" (dict) .application) }}
 livenessProbe:
   failureThreshold: 3
   httpGet:
     path: /liveness
-    port: {{- (or (index .Values.application.ports "http") (index .Values.application.ports "healthcheck")) | toString | indent 1 }}
+    port: {{- (or (index .application.ports "http") (index .application.ports "healthcheck")) | toString | indent 1 }}
   periodSeconds: 15
   successThreshold: 1
   timeoutSeconds: 10

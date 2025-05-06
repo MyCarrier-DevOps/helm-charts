@@ -1,0 +1,88 @@
+suite: Minimum HPA Configuration Tests
+templates:
+  - autoscaler.yaml
+tests:
+  - it: should create a valid HPA with minimum required configuration
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true # Added this to ensure autoscaling is enabled
+      environment:
+        name: "prod" # Changed to prod as autoscaling may only be allowed in production
+      applications:
+        minimal-hpa-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "minimal-hpa-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: metadata.name
+          value: test-stack-minimal-hpa-app
+      - hasDocuments:
+          count: 1
+      # Verify essential HPA properties
+      - exists:
+          path: spec.scaleTargetRef
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: test-stack-minimal-hpa-app
+      # Verify default values are applied
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 5
+      # Verify at least one metric is configured
+      - exists:
+          path: spec.metrics
+
+  - it: should create HPA with custom replicas and metrics
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true # Added this to ensure autoscaling is enabled
+      environment:
+        name: "prod" # Changed to prod as autoscaling may only be allowed in production
+      applications:
+        custom-hpa-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "custom-hpa-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+            minReplicas: 3
+            maxReplicas: 10
+            targetCPUUtilizationPercentage: 70
+            targetMemoryUtilizationPercentage: 80
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: metadata.name
+          value: test-stack-custom-hpa-app
+      # Verify custom values are applied
+      - equal:
+          path: spec.minReplicas
+          value: 3
+      - equal:
+          path: spec.maxReplicas
+          value: 10
+      # Verify CPU metric exists
+      - exists:
+          path: spec.metrics
+      # Check that both CPU and memory metrics are present
+      - exists:
+          path: spec.metrics[0]
+      - exists:
+          path: spec.metrics[1]

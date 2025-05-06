@@ -1,35 +1,19 @@
-{{- if (or ( and (.Values.application.autoscaling.enabled) (hasPrefix "prod" .Values.global.environment.name)) (.Values.global.forceAutoscaling))}}
-{{- $namespace := include "helm.namespace" . }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- if (and (dig "autoscaling" "enabled" false $appValues) (or (hasPrefix "prod" $.Values.environment.name) (dig "autoscaling" "forceAutoscaling" false $appValues))) }}
+{{- $envScaling := include "helm.envScaling" $ }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $fullName := include "helm.fullname" $appContext }}
+---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "helm.fullname" . }}
+  name: {{ $fullName }}
   namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "11"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  maxReplicas: {{ default "5" .Values.application.autoscaling.maxReplicas }}
-  minReplicas: {{ default "2" .Values.application.autoscaling.minReplicas }}
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 90
-  scaleTargetRef:
-    {{- if (ne .Values.application.deploymentType "rollout")  }}
-    apiVersion: apps/v1
-    {{- else if (eq .Values.application.deploymentType "rollout") }}
-    apiVersion: argoproj.io/v1alpha1
-    {{- end}}
-    {{- if (eq .Values.application.deploymentType "deployment")  }}
-    kind: Deployment
-    {{- else if (eq .Values.application.deploymentType "statefulset") }}
-    kind: StatefulSet
-    {{- else if (eq .Values.application.deploymentType "rollout") }}
-    kind: Rollout
-    {{- end}}
-    name: {{ include "helm.fullname" . }}
-  {{- end -}}
+  {{ include "helm.specs.hpa" $appContext | indent 2 | trim }}
+{{- end -}}
+{{- end }}

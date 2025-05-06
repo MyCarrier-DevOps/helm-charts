@@ -1,23 +1,57 @@
-
 {{- define "helm.labels.standard" -}}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
 {{- $envScaling := include "helm.envScaling" . -}}
-{{- $namespace := include "helm.namespace" . }}
+{{- $namespace := include "helm.namespace" . -}}
 {{- $instance := include "helm.instance" . -}}
+
+{{/* Extract values from context */}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $appStack := $ctx.defaults.appStack -}}
+{{- $branchLabel := $ctx.defaults.branchLabel -}}
+
+{{/* Get app name - first try .appName, then from application if present */}}
+{{- $appName := .appName | default "" -}}
+
 app.kubernetes.io/name: {{ include "helm.fullname" . | trunc 63 }}
 app.kubernetes.io/instance: {{ $instance | trunc 63 }}
-app.kubernetes.io/part-of: {{ .Values.global.appStack}}
-app.kubernetes.io/component: {{ .Values.application.name}}
+app.kubernetes.io/part-of: {{ $appStack }}
+app.kubernetes.io/component: {{ $appName }}
 app: {{ include "helm.fullname" . | trunc 63 | trimSuffix "-" }}
-mycarrier.tech/environment: {{ .Values.global.environment.name }}
+mycarrier.tech/environment: {{ $envName }}
 mycarrier.tech/envscaling: {{ $envScaling | quote }}
 mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
-mycarrier.tech/reference: {{ .Values.global.branchlabel | quote }}
+mycarrier.tech/reference: {{ $branchLabel | quote }}
 {{- end -}}
 
 {{- define "helm.labels.version" }}
-version: {{- printf " %s" (.Values.application.version | default .Values.application.image.tag) | trunc 63 | trimSuffix "-" | trimAll "." }}
-mycarrier/service-version: {{ .Values.application.image.tag }}
+{{- $version := "" -}}
+{{- if and (hasKey . "application") .application -}}
+  {{- if .application.version -}}
+    {{- if kindIs "map" .application.version -}}
+      {{- $version = index .application.version "tag" | default "" -}}
+    {{- else -}}
+      {{- $version = .application.version -}}
+    {{- end -}}
+  {{- else if .application.image -}}
+    {{- if kindIs "map" .application.image -}}
+      {{- $version = .application.image.tag | default "" -}}
+    {{- end -}}
+  {{- end -}}
+{{- else if .job -}}
+  {{- if .job.version -}}
+    {{- $version = .job.version -}}
+  {{- else if .job.image -}}
+    {{- if kindIs "map" .job.image -}}
+      {{- $version = .job.image.tag | default "" -}}
+    {{- else -}}
+      {{- $version = .job.image | default "" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+version: {{- printf " %s" $version | trunc 63 | trimSuffix "-" | trimAll "." }}
+mycarrier/service-version: {{ $version }}
 {{- end }}
 
 {{- define "helm.labels.selector" -}}
@@ -27,18 +61,17 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
 {{- end -}}
 
 {{- define "helm.labels.custom" }}
-    {{- range $key, $value := .Values.application.labels }}
-      {{- (printf "%s: %s" $key (tpl $value $) ) | nindent 0 -}}
+    {{- range $key, $value := dig "labels" (dict) .application }}
+      {{- (printf "%s: %s" $key (tpl (toString $value) $) ) | nindent 0 -}}
     {{- end }}
 {{- end }}
-
 
 {{- define "helm.labels.dependencies" -}}
 {{ $metaenv := (include "helm.metaEnvironment" . ) }}
   {{- $secDict := dict -}}
   {{- $envDict := dict -}}
-  {{- if .Values.secrets}}
-    {{- if .Values.secrets.individual }}
+  {{- if and .Values (hasKey .Values "secrets") -}}
+    {{- if and .Values.secrets (hasKey .Values.secrets "individual") -}}
       {{- range .Values.secrets.individual }}
       {{- if or (contains "servicebus" (lower .envVarName)) (contains "servicebus" (lower (.path | default "")))}}
         {{ $_ := set $secDict "dependency.azservicebus" "true"}}
@@ -70,8 +103,8 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
       {{- end }}
     {{- end }}
   {{- end }}
-  {{- if .Values.application.env }}
-    {{- range $key, $value := .Values.application.env }}
+  {{- if and (hasKey . "application") .application (hasKey .application "env") -}}
+    {{- range $key, $value := .application.env }}
       {{- if (contains "servicebus" (lower $key)) }}
         {{ $_ := set $envDict "dependency.azservicebus" "true"}}
       {{- else if (contains "splitio" (lower $key)) }}

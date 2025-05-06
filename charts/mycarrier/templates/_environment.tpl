@@ -1,5 +1,20 @@
 {{- define "helm.envType" -}}
-{{- if has .Values.global.environment.name (list "dev" "preprod" "prod") }}
+{{- $envName := "" }}
+{{- if .Values }}
+  {{- if .Values.environment }}
+    {{- if .Values.environment.name }}
+      {{- $envName = .Values.environment.name }}
+    {{- else }}
+      {{- $envName = "dev" }}
+    {{- end }}
+  {{- else }}
+    {{- $envName = "dev" }}
+  {{- end }}
+{{- else }}
+  {{- $envName = "dev" }}
+{{- end }}
+
+{{- if has $envName (list "dev" "preprod" "prod") }}
 {{- printf "standard" }}
 {{- else }}
 {{- printf "standard" }}
@@ -10,20 +25,49 @@
 {{- define "helm.envDependency" -}}
 {{- $envType := (include "helm.envType" . ) }}
 {{- if eq $envType "ephemeral" }}
-{{- if .Values.globalEnv.dependencyenv }}
+{{- if and .Values.globalEnv .Values.globalEnv.dependencyenv }}
 {{- .Values.globalEnv.dependencyenv }}
 {{- else }}
 {{- printf "dev" }}
 {{- end }}
 {{- else }}
-{{- .Values.global.environment.name }}
+{{- $envName := "" }}
+{{- if .Values }}
+  {{- if .Values.environment }}
+    {{- if .Values.environment.name }}
+      {{- $envName = .Values.environment.name }}
+    {{- else }}
+      {{- $envName = "dev" }}
+    {{- end }}
+  {{- else }}
+    {{- $envName = "dev" }}
+  {{- end }}
+{{- else }}
+  {{- $envName = "dev" }}
+{{- end }}
+{{- $envName }}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.metaEnvironment" -}}
-{{- if hasPrefix "feature" .Values.global.environment.name}}
+{{- $envName := "" }}
+{{- if .Values }}
+  {{- if .Values.environment }}
+    {{- if .Values.environment.name }}
+      {{- $envName = .Values.environment.name }}
+    {{- else }}
+      {{- $envName = "dev" }}
+    {{- end }}
+  {{- else }}
+    {{- $envName = "dev" }}
+  {{- end }}
+{{- else }}
+  {{- $envName = "dev" }}
+{{- end }}
+
+{{- if hasPrefix "feature" $envName }}
 {{- printf "dev" -}}
 {{- else }}
-{{- .Values.global.environment.name }}
+{{- $envName }}
 {{- end }}
 {{- end -}}

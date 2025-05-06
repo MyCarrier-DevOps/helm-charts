@@ -1,0 +1,85 @@
+suite: HPA autoscaler template tests
+templates:
+  - autoscaler.yaml
+tests:
+  - it: should create HPA for deployment in production environment
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.autoscaling.enabled: true
+      applications.test-app-api.autoscaling.minReplicas: 2
+      applications.test-app-api.autoscaling.maxReplicas: 5
+      applications.test-app-api.autoscaling.targetCPUUtilizationPercentage: 80
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 5
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 80
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: app-test-app-api
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Deployment
+
+  - it: should create HPA for rollout deployment
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.autoscaling.enabled: true
+      applications.test-app-api.autoscaling.minReplicas: 3
+      applications.test-app-api.autoscaling.maxReplicas: 6
+      applications.test-app-api.autoscaling.targetCPUUtilizationPercentage: 70
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 3
+      - equal:
+          path: spec.maxReplicas
+          value: 6
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 70
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: app-test-app-api
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Rollout
+
+  - it: should not create HPA in development without force flag
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.autoscaling.enabled: true
+      applications.test-app-api.autoscaling.minReplicas: 2
+      applications.test-app-api.autoscaling.maxReplicas: 5
+      applications.test-app-api.autoscaling.targetCPUUtilizationPercentage: 80
+      applications.test-app-api.autoscaling.forceAutoscaling: false
+    asserts:
+      - hasDocuments:
+          count: 0

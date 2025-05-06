@@ -14,7 +14,7 @@ securityContext:
   runAsGroup: 3000
   privileged: false
   runAsNonRoot: true
-  readOnlyRootFilesystem: {{ if .Values.application.securityContext.readOnlyRootFilesystem }}true{{ else }}false{{ end }}
+  readOnlyRootFilesystem: {{ if and .application .application.securityContext .application.securityContext.readOnlyRootFilesystem }}true{{ else }}false{{ end }}
   allowPrivilegeEscalation: false
 {{- end }}
 {{- end -}}

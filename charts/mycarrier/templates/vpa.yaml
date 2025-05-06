@@ -1,32 +1,20 @@
-{{- if not (.Values.vpa).disable }}
-{{- if or .Values.deployment .Values.statefulset }}
-{{- $namespace := include "helm.namespace" . }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- if and (hasKey $appValues "vpa") $appValues.vpa.enabled }}
+{{- if or (eq $appValues.deploymentType "deployment") (eq $appValues.deploymentType "statefulset") }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $fullName := include "helm.fullname" $appContext }}
+---
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
-  name: {{ include "helm.fullname" . }}
+  name: {{ $fullName }}
   namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "11"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  targetRef:
-    apiVersion: "apps/v1"
-    kind: {{ if .Values.deployment }}Deployment{{ else if .Values.statefulset }}StatefulSet{{ end }}
-    name: {{ include "helm.fullname" . }}
-  updatePolicy:
-    updateMode: {{ default "Initial" .Values.vpaMode }}
-  resourcePolicy:
-    containerPolicies:
-    - containerName: {{ include "helm.fullname" . }}
-      controlledValues: {{ dig "vpa" "controlledValues" "RequestsOnly" (.Values | merge (dict)) }}
-      minAllowed:
-        cpu: 0m
-        memory: 0Mi
-      maxAllowed:
-        cpu: {{ dig "resources" "limits" "cpu" "1000m" (default .Values.deployment .Values.statefulset) }}
-        memory: {{ dig "resources" "limits" "memory" "1Gi" (default .Values.deployment .Values.statefulset) }}
-    - containerName: istio-proxy
-      mode: "Off"
+  {{ include "helm.specs.vpa" $appContext | indent 2 | trim }}
+{{- end }}
 {{- end }}
 {{- end }}

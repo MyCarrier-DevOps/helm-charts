@@ -1,17 +1,19 @@
-{{- if (eq .Values.application.deploymentType "rollout")  }}
-{{- $environment := .Values.global.environment.name }}
-{{- $fullName := include "helm.fullname" . }}
-{{- $instance := include "helm.instance" . }}
-{{- $namespace := include "helm.namespace" . }}
-{{- $standardLabels := include "helm.labels.standard" . }}
-{{- $versionLabels :=  include "helm.labels.version" . }}
-{{- $vaultAnnotations := include "helm.annotations.vault" . }}
-{{- $istioAnnotations :=  include "helm.annotations.istio" . }}
-{{- $otelAnnotations :=  include "helm.otel.annotations" . }}
-{{- $gitBranch := .Values.global.gitbranch}}
-{{- $releaseId := .Values.application.image.tag }}
-{{- $releaseDefinitionName := printf "%s-%s" .Values.global.appStack .Values.application.name }}
-{{- range $index, $template := .Values.analysisTemplates }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- if (eq $appValues.deploymentType "rollout")  }}
+{{- $environment := $.Values.environment.name }}
+{{- $fullName := include "helm.fullname" $appContext }}
+{{- $instance := include "helm.instance" $appContext }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $standardLabels := include "helm.labels.standard" $appContext }}
+{{- $versionLabels :=  include "helm.labels.version" $appContext }}
+{{- $vaultAnnotations := include "helm.annotations.vault" $ }}
+{{- $istioAnnotations :=  include "helm.annotations.istio" $appContext }}
+{{- $otelAnnotations :=  include "helm.otel.annotations" $ }}
+{{- $gitBranch := $.Values.global.gitbranch}}
+{{- $releaseId := $appValues.image.tag }}
+{{- $releaseDefinitionName := printf "%s-%s" $.Values.global.appStack $appName }}
+{{- range $index, $template := $appValues.analysisTemplates }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
@@ -74,5 +76,6 @@ spec:
       {{- toYaml . | nindent 6 }}
       {{- end }}
       {{ end }}
+{{- end }}
 {{- end }}
 {{- end }}

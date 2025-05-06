@@ -8,7 +8,14 @@ tolerations:
     operator: "Exists"
     effect: "NoExecute"
     tolerationSeconds: 30
-  {{- with (dig "tolerations" "" (default .Values.application )) }}
+  {{- /* Add global tolerations if they exist */}}
+  {{- if .Values.tolerations }}
+  {{ toYaml .Values.tolerations | indent 2 | trim }}
+  {{- end }}
+  {{- /* Add application-specific tolerations if they exist */}}
+  {{- if .application }}
+  {{- with (dig "tolerations" "" .application) }}
   {{ toYaml . |  indent 2 | trim }}
+  {{- end }}
   {{- end }}
 {{- end -}}

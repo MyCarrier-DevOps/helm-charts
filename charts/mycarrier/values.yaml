@@ -1,113 +1,416 @@
+# Default values for mycarrier Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## @section Global Settings
+## Global settings used across all applications
+
+## @param global.appStack - Application stack name, used for naming resources and grouping applications
+## @param global.gitbranch - Name of the git branch (used for feature branches)
+## @param global.branchlabel - Label for the branch, used for reference label
 global:
-  appStack: myAppStack
-  language: csharp
-  forceAutoscaling: false
-  gitbranch: integration
-  branchlabel: integration
-  environment:
-    name: dev
-    dependencyenv: 
-    domainOverride:
-      enabled: false
-      domain:
-
-application:
-  name: 
-  staticHostname:
-  isFrontend: false
-  forceOffload: false
-  migratingToRollouts: false
-  labels: {}
-  annotations: {}
-  autoscaling:
-    enabled: true
-  deploymentType: deployment
-  env: {}
-  image:
-    registry: mycarrieracr.azurecr.io
-    repository: myApp
-    tag: v0.0.1
-  securityContext:
-    readOnlyRootFilesystem:
-  initContainers: {}
-  ports:
-    http: 8080
-  probes:
-    enableReadiness: true
-    enableLiveness: true
-    enableStartup: true
-    readinessProbe: {}
-    livenessProbe: {}
-    startupProbe: {}
-  pullPolicy: Always
-  replicas: 1
-  resources:
-    limits:
-      cpu: 2000m
-      memory: 2Gi
-    requests:
-      cpu: 100m
-      memory: 256Mi
-  version:
-  volumes: []
-  updateStrategy: {}
-analysisTemplates: {}
+  # Application stack name, used for naming resources and grouping applications
+  appStack: "app"
   
-serviceAccount:
-  create: true
+  # Name of the git branch (used for feature branches)
+  gitbranch: ""
+  
+  # Label for the branch, used for reference label
+  branchlabel: ""
 
-serviceMonitor:
-  enabled: false
+  # Use application-level language configuration to override
+  language: "nodejs"
 
-service:
-  annotations: {}
-  ports: []
+  env: {}
+## @section Environment Settings
+## Environment-specific settings
 
-  affinityTimeoutSeconds: "1000"
+## @param environment.name - Environment name (dev, preprod, prod, or feature-*)
+## @param environment.dependencyenv - Environment name for dependencies
+## @param environment.domainOverride.enabled - Whether to override the default domain
+## @param environment.domainOverride.domain - Domain to use when override is enabled
+environment:
+  # Environment name (dev, preprod, prod, or feature-*)
+  name: "dev"
+  
+  # Environment name for dependencies
+  dependencyenv: "dev"
+  
+  # Domain override settings
+  domainOverride:
+    # Whether to override the default domain
+    # Default domains are: mycarrier.dev for non-prod, mycarriertms.com for prod
+    enabled: false
+    
+    # Domain to use when override is enabled
+    domain: "example.com"
 
-networking:
-  ingress:
-    type: istio
-  istio: {}
-  krakend: {}
+## @section Platform Settings
+## Platform-wide settings
 
+## @param enableVaultCA - Enable Vault CA certificate download during pod startup
+## @param disableOtelAutoinstrumentation - Disable OpenTelemetry automatic instrumentation
+## @param tolerations - Default tolerations for all applications
+# Enable Vault CA certificate download during pod startup
+enableVaultCA: false
+
+# Disable OpenTelemetry automatic instrumentation
+# Set to false to enable OpenTelemetry instrumentation
 disableOtelAutoinstrumentation: true
 
-secrets:
-  individual: []
-  mounted:
-  bulk:
-    path:
+# Default tolerations for all applications
+tolerations: []
+  # - key: "key"
+  #   operator: "Equal"
+  #   value: "value"
+  #   effect: "NoSchedule"
 
-extraObjects:
+## @section Applications
+## Configuration for application deployments
 
-# Jobs configuration
-jobs: 
-  # - name: example-job                                 # Required: Job name
-  #   repository: mycarrieracr.azurecr.io/example-job   # Required: Container image repository
-  #   tag: latest                                       # Optional: Container image tag (defaults to application.image.tag)
-  #   timing: pre-deploy                                # Optional: Job timing (pre-deploy, post-deploy, any)
-  #   order: 0                                          # Optional: Execution order within timing group (default: 0)
-  #   ttlSecondsAfterFinished: 100                      # Optional: Time to keep job after completion
-  #   activeDeadlineSeconds: 300                        # Optional: Maximum runtime before termination
-  #   backoffLimit: 3                                   # Optional: Number of retries on failure (default: 0)
-  #   restartPolicy: Never                              # Optional: Restart policy (default: Never)
-  #   imagePullPolicy: IfNotPresent                     # Optional: Image pull policy (default: IfNotPresent)
-  #   command: ["/bin/sh", "-c"]                        # Optional: Command to run
-  #   args:                                             # Optional: Arguments for the command
-  #     - echo "Hello from example job"         
-  #   env: []                                           # Optional: Additional environment variables
-  #   resources:                                        # Optional: Resource requirements
+## @extra applications Map of application definitions where the key is the application name
+## @param applications.example-api.isFrontend - Whether this is a frontend application
+## @param applications.example-api.language - What language is the application written in
+## @param applications.example-api.forceOffload - Whether to force offloading
+## @param applications.example-api.staticHostname - Static hostname for the application
+## @param applications.example-api.labels [object] - Custom labels to add to the application resources
+## @param applications.example-api.annotations [object] - Custom annotations to add to the application resources
+## @param applications.example-api.deploymentType - Type of deployment: deployment, statefulset, or rollout
+## @param applications.example-api.migratingToRollouts - Whether the application is migrating to Argo Rollouts
+## @param applications.example-api.version - Application version
+## @param applications.example-api.image.registry - Docker registry URL
+## @param applications.example-api.image.repository - Docker image repository
+## @param applications.example-api.image.tag - Docker image tag
+## @param applications.example-api.pullPolicy - Image pull policy: IfNotPresent, Always, or Never
+## @param applications.example-api.pullSecret - Name of the pull secret
+## @param applications.example-api.env [object] - Environment variables for the application
+## @param applications.example-api.ports [object] - Ports to expose
+## @param applications.example-api.resources.requests.cpu - CPU resource requests
+## @param applications.example-api.resources.requests.memory - Memory resource requests
+## @param applications.example-api.resources.limits.cpu - CPU resource limits
+## @param applications.example-api.resources.limits.memory - Memory resource limits
+## @param applications.example-api.securityContext.readOnlyRootFilesystem - Whether the root filesystem should be read-only
+## @param applications.example-api.replicas - Number of pod replicas
+## @param applications.example-api.probes.enableLiveness - Enable liveness probe
+## @param applications.example-api.probes.enableReadiness - Enable readiness probe
+## @param applications.example-api.probes.enableStartup - Enable startup probe
+## @param applications.example-api.probes.livenessProbe [object] - Custom liveness probe configuration
+## @param applications.example-api.probes.readinessProbe [object] - Custom readiness probe configuration
+## @param applications.example-api.probes.startupProbe [object] - Custom startup probe configuration
+## @param applications.example-api.service.type - Service type: ClusterIP, NodePort, or LoadBalancer
+## @param applications.example-api.service.headless - Whether the service is headless
+## @param applications.example-api.service.ports [array] - Service port definitions
+## @param applications.example-api.service.annotations [object] - Custom service annotations
+## @param applications.example-api.service.timeout - Service timeout setting
+## @param applications.example-api.service.retryOn - Retry conditions
+## @param applications.example-api.service.attempts - Number of retry attempts
+## @param applications.example-api.service.perTryTimeout - Timeout for each retry
+## @param applications.example-api.service.istioDisabled - Whether to disable Istio for this service
+## @param applications.example-api.networking.ingress.type - Ingress type
+## @param applications.example-api.networking.istio.enabled - Enable Istio configuration
+## @param applications.example-api.networking.istio.hosts [array] - Additional hostnames
+## @param applications.example-api.networking.istio.redirects [object] - Domain redirects
+## @param applications.example-api.networking.istio.routes [object] - Custom routes
+## @param applications.example-api.networking.istio.responseHeaders [object] - Custom response headers
+## @param applications.example-api.networking.istio.corsPolicy [object] - CORS policy
+## @param applications.example-api.serviceAccount.create - Whether to create a service account
+## @param applications.example-api.updateStrategy.type - Update strategy type: RollingUpdate or Recreate
+## @param applications.example-api.updateStrategy.rollingUpdate.maxUnavailable - Maximum unavailable pods during rollout
+## @param applications.example-api.updateStrategy.rollingUpdate.maxSurge - Maximum extra pods during rollout
+## @param applications.example-api.serviceMonitor.enabled - Enable Prometheus ServiceMonitor
+## @param applications.example-api.serviceMonitor.interval - Scrape interval
+## @param applications.example-api.serviceMonitor.scrapeTimeout - Scrape timeout
+## @param applications.example-api.serviceMonitor.scheme - Scrape scheme
+## @param applications.example-api.vpa.enabled - Enable Vertical Pod Autoscaler
+## @param applications.example-api.vpa.controlledValues - Values controlled by VPA: RequestsOnly or RequestsAndLimits
+## @param applications.example-api.vpa.updateMode - VPA update mode: Off, Initial, Auto
+## @param applications.example-api.autoscaling.forceAutoscaling - Force autoscaling to be enabled regardless of environment
+applications: {}
+  # Example application configuration
+  # example-api:
+  #   # Whether this is a frontend application
+  #   isFrontend: false
+    
+  #   # Whether to force offloading
+  #   forceOffload: false
+    
+  #   # Static hostname for the application (optional)
+  #   # staticHostname: "api.example.com"
+    
+  #   # Custom labels to add to the application resources
+  #   labels:
+  #     app.kubernetes.io/component: "api"
+    
+  #   # Custom annotations to add to the application resources
+  #   annotations:
+  #     app.mycarrier.tech/team: "platform"
+    
+  #   # Type of deployment: deployment, statefulset, or rollout
+  #   deploymentType: "deployment"
+    
+  #   # Whether the application is migrating to Argo Rollouts
+  #   migratingToRollouts: false
+    
+  #   # Application version
+  #   version: "1.0.0"
+    
+  #   # Container image settings
+  #   image:
+  #     registry: "myregistry.example.com"
+  #     repository: "mycarrier/example-api"
+  #     tag: "1.0.0"
+    
+  #   # Image pull policy: IfNotPresent, Always, or Never
+  #   pullPolicy: "IfNotPresent"
+    
+  #   # Name of the pull secret
+  #   pullSecret: "imagepull"
+    
+  #   # Environment variables for the application
+  #   env:
+  #     NODE_ENV: "development"
+  #     LOG_LEVEL: "info"
+  #     # Example of valueFrom usage:
+  #     # DB_PASSWORD:
+  #     #   valueFrom:
+  #     #     secretKeyRef:
+  #     #       name: db-secrets
+  #     #       key: password
+    
+  #   # Ports to expose
+  #   # Can be defined as a map with custom names:
+  #   ports:
+  #     http: 8080
+  #     metrics: 9090
+    
+  #   # Resource requests and limits
+  #   resources:
   #     requests:
-  #       memory: "128Mi"
-  #       cpu: "100m"
+  #       cpu: "50m"
+  #       memory: "64Mi"
   #     limits:
+  #       cpu: "500m"
+  #       memory: "512Mi"
+    
+  #   # Security context settings
+  #   securityContext:
+  #     readOnlyRootFilesystem: false
+    
+  #   # Number of pod replicas
+  #   replicas: 1
+    
+  #   # Probe settings
+  #   probes:
+  #     enableLiveness: true
+  #     enableReadiness: true
+  #     enableStartup: false
+  #     # Customize probes if needed:
+  #     # livenessProbe:
+  #     #   httpGet:
+  #     #     path: /health/live
+  #     #     port: http
+  #     #   initialDelaySeconds: 30
+  #     #   periodSeconds: 15
+  #     # readinessProbe:
+  #     #   httpGet:
+  #     #     path: /health/ready
+  #     #     port: http
+  #     #   initialDelaySeconds: 10
+  #     #   periodSeconds: 7
+    
+  #   # Service configuration
+  #   service:
+  #     # Service type: ClusterIP, NodePort, or LoadBalancer
+  #     type: "ClusterIP"
+      
+  #     # Whether the service is headless
+  #     headless: false
+      
+  #     # Service port definitions
+  #     # If not provided, ports from the 'ports' field will be used
+  #     ports:
+  #       - name: http
+  #         port: 80
+  #         targetPort: 8080
+  #         protocol: TCP
+  #       - name: metrics
+  #         port: 9090
+  #         targetPort: 9090
+      
+  #     # Custom service annotations
+  #     annotations:
+  #       prometheus.io/scrape: "true"
+  #       prometheus.io/port: "9090"
+      
+  #     # Service timeout settings
+  #     timeout: "151s"
+  #     retryOn: "5xx,reset"
+  #     attempts: 3
+  #     perTryTimeout: "50s"
+      
+  #     # Whether to disable Istio for this service
+  #     istioDisabled: false
+    
+  #   # Networking configuration
+  #   networking:
+  #     # Ingress configuration
+  #     ingress:
+  #       type: "istio"
+      
+  #     # Istio configuration
+  #     istio:
+  #       enabled: true
+  #       # Additional hostnames
+  #       hosts: []
+  #       # Domain redirects
+  #       redirects: {}
+  #       # Custom routes
+  #       routes: {}
+  #       # Custom response headers
+  #       # If not provided, default security headers will be used
+  #       responseHeaders: {}
+  #       # CORS policy
+  #       corsPolicy: {}
+    
+  #   # Service account configuration
+  #   serviceAccount:
+  #     create: false
+    
+  #   # Node selector for pod scheduling
+  #   # nodeSelector:
+  #   #   disktype: ssd
+    
+  #   # Priority class name for pod scheduling
+  #   # priorityClassName: "high-priority"
+    
+  #   # Update strategy configuration
+  #   updateStrategy:
+  #     # For standard deployments
+  #     type: "RollingUpdate"
+  #     rollingUpdate:
+  #       maxUnavailable: 0
+  #       maxSurge: 2
+      
+  #     # For Argo Rollouts deployments
+  #     # canary:
+  #     #   steps:
+  #     #     - setWeight: 25
+  #     #     - analysis:
+  #     #         templates:
+  #     #           - templateName: load-test
+  #     #     - setWeight: 50
+  #     #     - analysis:
+  #     #         templates:
+  #     #           - templateName: load-test
+  #     #     - setWeight: 100
+  #     #   scaleDownDelaySeconds: 30
+  #     #   scaleDownDelayRevisionLimit: 5
+  #     #   abortScaleDownDelaySeconds: 30
+    
+  #   # Prometheus ServiceMonitor configuration
+  #   serviceMonitor:
+  #     enabled: false
+  #     interval: "30s"
+  #     scrapeTimeout: "10s"
+  #     scheme: "http"
+  #     # relabelings: []
+  #     # metricRelabelings: []
+  #     # tlsConfig: {}
+    
+  #   # Container lifecycle hooks
+  #   # lifecycle:
+  #   #   postStart: "echo 'Container started'"
+  #   #   preStop: "sleep 10 && pkill node"
+    
+  #   # Vertical Pod Autoscaler configuration
+  #   vpa:
+  #     enabled: false
+  #     controlledValues: "RequestsOnly"
+  #     # VPA update mode: Off, Initial, Auto
+  #     updateMode: "Auto"
+    
+  #   # Horizontal Pod Autoscaler configuration
+  #   autoscaling:
+  #     enabled: false
+  #     minReplicas: 2
+  #     maxReplicas: 5
+  #     targetCPUUtilizationPercentage: 80
+  #     forceAutoscaling: false
+  #     # targetMemoryUtilizationPercentage: 80
+
+## @section Kubernetes Jobs
+## Configuration for Kubernetes Jobs to run
+
+## @param jobs [array] - List of Kubernetes Jobs to run
+jobs: []
+  # Example job configuration
+  # - name: db-migration
+  #   # When to run: pre-deploy or post-deploy
+  #   timing: "pre-deploy"
+  #   # Order within the timing group
+  #   order: 0
+  #   # Custom labels
+  #   labels:
+  #     app.kubernetes.io/component: "job"
+  #   # Job-specific annotations
+  #   annotations:
+  #     app.mycarrier.tech/team: "platform"
+  #   # TTL after job completion (in seconds)
+  #   ttlSecondsAfterFinished: 300
+  #   # Job timeout (in seconds)
+  #   activeDeadlineSeconds: 600
+  #   # Number of retries
+  #   backoffLimit: 0
+  #   # Job container image
+  #   image:
+  #     registry: "myregistry.example.com"
+  #     repository: "mycarrier/db-migration"
+  #     tag: "1.0.0"
+  #   # Image pull policy
+  #   imagePullPolicy: "IfNotPresent"
+  #   # Command to run
+  #   command: ["/bin/sh", "-c"]
+  #   # Arguments for the command
+  #   args: ["./run-migration.sh"]
+  #   # Environment variables
+  #   env:
+  #     - name: DB_NAME
+  #       value: "mydb"
+  #   # Resource limits
+  #   resources:
+  #     requests:
+  #       cpu: "100m"
+  #       memory: "64Mi"
+  #     limits:
+  #       cpu: "500m"
   #       memory: "256Mi"
-  #       cpu: "200m"
-  #   volumes: []                                       # Optional: Volume configurations
-  #   labels: {}                                        # Optional: Additional labels
-  #   annotations: {}                                   # Optional: Additional annotations
 
-subdeploy:
-  enabled: false
+## @section Secrets Management
+## Configuration for secrets from Vault
 
+## @param secrets.bulk.path - Path to secrets in Vault for bulk retrieval
+## @param secrets.individual [array] - Individual environment variables from Vault
+## @param secrets.mounted [array] - File-mounted secrets from Vault
+secrets:
+  # Bulk secrets from Vault path
+  bulk:
+    path: "secrets/data/dev/app"
+  
+  # Individual environment variables from Vault
+  individual: []
+    # Example of an individual secret
+    # - envVarName: DB_PASSWORD
+    #   path: secrets/data/dev/app/db
+    #   keyName: password
+  
+  # File-mounted secrets from Vault
+  mounted: []
+    # Example of a mounted secret
+    # - name: certificate
+    #   mountedFileName: cert.pem
+    #   vault:
+    #     path: secrets/data/dev/app/certs
+    #     property: certificate
+    #   mount:
+    #     path: /app/certs
+    #     subPath: cert.pem

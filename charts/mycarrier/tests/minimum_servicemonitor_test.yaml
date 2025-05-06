@@ -1,0 +1,43 @@
+suite: Minimum ServiceMonitor Configuration Tests
+templates:
+  - servicemonitor.yaml
+tests:
+  - it: should create a valid servicemonitor with minimum required configuration
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+      environment:
+        name: "dev"
+      applications:
+        minimal-monitor-app:
+          image:
+            registry: "registry.example.com"
+            repository: "minimal-monitor-app"
+            tag: "1.0.0"
+          ports:
+            metrics: 9090
+          serviceMonitor:
+            enabled: true
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.name
+          value: test-stack-minimal-monitor-app
+      - hasDocuments:
+          count: 1
+      # Verify essential servicemonitor properties
+      - exists:
+          path: spec.selector
+      # Verify endpoints configuration
+      - exists:
+          path: spec.endpoints
+      - contains:
+          path: spec.endpoints
+          content:
+            port: metrics
+            interval: 30s
+            scrapeTimeout: 10s
+            path: /metrics
+            scheme: http

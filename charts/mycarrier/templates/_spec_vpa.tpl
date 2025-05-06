@@ -1,0 +1,22 @@
+{{- define "helm.specs.vpa" -}}
+{{- $fullName := include "helm.fullname" . }}
+{{- $namespace := include "helm.namespace" . }}
+targetRef:
+  apiVersion: "apps/v1"
+  kind: {{ if (eq .application.deploymentType "deployment") }}Deployment{{ else if (eq .application.deploymentType "statefulset") }}StatefulSet{{ end }}
+  name: {{ $fullName }}
+updatePolicy:
+  updateMode: {{ dig "vpa" "updateMode" "Initial" .application }}
+resourcePolicy:
+  containerPolicies:
+  - containerName: {{ .appName | default $fullName }}
+    controlledValues: {{ dig "vpa" "controlledValues" "RequestsOnly" .application }}
+    minAllowed:
+      cpu: 0m
+      memory: 0Mi
+    maxAllowed:
+      cpu: {{ dig "resources" "limits" "cpu" "1000m" .application }}
+      memory: {{ dig "resources" "limits" "memory" "1Gi" .application }}
+  - containerName: istio-proxy
+    mode: "Off"
+{{- end -}}

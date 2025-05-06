@@ -1,0 +1,70 @@
+suite: StatefulSet template tests
+templates:
+  - statefulset.yaml
+tests:
+  - it: should create statefulset when deploymentType is statefulset
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.ports.metrics: 9090
+      applications.test-app-api.replicas: 1
+      applications.test-app-api.probes.enableLiveness: true
+      applications.test-app-api.probes.enableReadiness: true
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: app-test-app-api
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.serviceName
+          value: app-test-app-api
+
+  - it: should set replicas based on environment for statefulset
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: metadata.namespace
+          value: prod-app
+
+  - it: should configure volume mounts when volumes are specified
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.probes.enableLiveness: true
+      # Fix volumes specification with all required fields properly defined
+      applications.test-app-api.volumes:
+        - name: "data"
+          mountPath: "/data"
+          emptyDir: {}
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - exists:
+          path: spec.template.spec.volumes
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts

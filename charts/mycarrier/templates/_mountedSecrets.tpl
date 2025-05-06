@@ -1,7 +1,7 @@
 {{- define "helm.secretVolumeMounts" -}}
 {{- $fullName := include "helm.fullname" . }}
-{{- $env := .Values.global.environment.name -}}
-{{if .Values.secrets.mounted -}}
+{{- $env := .Values.environment.name -}}
+{{- if and .Values (hasKey .Values "secrets") (hasKey .Values.secrets "mounted") -}}
 {{- range .Values.secrets.mounted -}}
 - name: {{ $fullName }}-{{ .name }}-{{ $env }}
   mountPath: {{ .mount.path }}
@@ -14,8 +14,8 @@
 
 {{- define "helm.secretVolumes" -}}
 {{- $fullName := include "helm.fullname" . }}
-{{- $env := .Values.global.environment.name -}}
-{{if .Values.secrets.mounted -}}
+{{- $env := .Values.environment.name -}}
+{{- if and .Values (hasKey .Values "secrets") (hasKey .Values.secrets "mounted") -}}
 {{- range .Values.secrets.mounted -}}
 - name: {{ $fullName }}-{{ .name }}-{{ $env }}
   secret:

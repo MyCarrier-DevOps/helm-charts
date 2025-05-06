@@ -1,20 +1,25 @@
-{{- if (eq .Values.application.deploymentType "statefulset")  }}
-{{- if .Values.serviceAccount.rules }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- if (eq $appValues.deploymentType "statefulset")  }}
+{{- if and $appValues.serviceAccount (hasKey $appValues.serviceAccount "rules") }}
+{{- $namespace := include "helm.namespace" $ }}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ .Values.serviceAccount.name | default (include "helm.fullname" .) }}
-  namespace: {{ .Values.global.environment.name }}
+  name: {{ $appValues.serviceAccount.name | default (include "helm.fullname" $appContext) }}
+  namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 subjects:
 - kind: ServiceAccount
-  name: {{ .Values.serviceAccount.name | default (include "helm.fullname" .) }}
-  namespace: {{ .Values.global.environment.name }}
+  name: {{ $appValues.serviceAccount.name | default (include "helm.fullname" $appContext) }}
+  namespace: {{ $namespace }}
 roleRef:
   kind: Role
-  name: {{ .Values.serviceAccount.name | default (include "helm.fullname" .) }}
+  name: {{ $appValues.serviceAccount.name | default (include "helm.fullname" $appContext) }}
   apiGroup: ''
+{{- end }}
 {{- end }}
 {{- end }}

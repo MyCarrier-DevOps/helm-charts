@@ -1,39 +1,90 @@
 {{- define "helm.domain" -}}
-{{- if .Values.global.environment.domainOverride.enabled }}
-{{- .Values.global.environment.domainOverride.domain }}
-{{- else }}
-{{- hasPrefix "prod" .Values.global.environment.name | ternary "mycarriertms.com" "mycarrier.dev" }}
-{{- end }}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+
+{{- if and .Values.environment (hasKey .Values.environment "domainOverride") (hasKey .Values.environment.domainOverride "enabled") -}}
+  {{- if .Values.environment.domainOverride.enabled -}}
+    {{- .Values.environment.domainOverride.domain -}}
+  {{- else -}}
+    {{- hasPrefix "prod" $envName | ternary "mycarriertms.com" "mycarrier.dev" -}}
+  {{- end -}}
+{{- else -}}
+  {{- hasPrefix "prod" $envName | ternary "mycarriertms.com" "mycarrier.dev" -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "helm.domain.prefix" -}}
-{{ $metaenv := (include "helm.metaEnvironment" . ) }}
-{{- hasPrefix "prod" .Values.global.environment.name | ternary "api" $metaenv }}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $metaenv := (include "helm.metaEnvironment" . ) -}}
+
+{{- hasPrefix "prod" $envName | ternary "api" $metaenv -}}
 {{- end -}}
 
 {{- define "helm.namespace" -}}
-{{- if hasPrefix "feature" .Values.global.environment.name }}
-{{- (list ("dev") (.Values.global.appStack)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $appStack := $ctx.defaults.appStack -}}
+
+{{- if hasPrefix "feature" $envName }}
+{{- (list ("dev") $appStack) | join "-" | lower | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- (list (.Values.global.environment.name) (.Values.global.appStack)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
+{{- (list $envName $appStack) | join "-" | lower | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.fullname" -}}
-{{- if hasPrefix "feature" .Values.global.environment.name }}
-{{- default (list (.Values.global.appStack) (.Values.application.name) (.Values.global.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $appStack := $ctx.defaults.appStack -}}
+
+{{/* Get app name - first try .appName, then from application if present */}}
+{{- $appName := .appName | default "" -}}
+{{- if not $appName -}}
+  {{- if and .Values .Values.application .Values.application.name -}}
+    {{- $appName = .Values.application.name -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if hasPrefix "feature" $envName }}
+{{- (list $appStack $appName $envName) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
 {{- else }}
-{{- default (list (.Values.global.appStack) (.Values.application.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
+{{- (list $appStack $appName) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.instance" -}}
-{{- default (list (.Values.global.appStack) (.Values.application.name) (.Values.global.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $appStack := $ctx.defaults.appStack -}}
+
+{{/* Get app name - first try .appName, then from application if present */}}
+{{- $appName := .appName | default "" -}}
+{{- if not $appName -}}
+  {{- if and .Values .Values.application .Values.application.name -}}
+    {{- $appName = .Values.application.name -}}
+  {{- end -}}
+{{- end -}}
+
+{{- (list $appStack $appName $envName) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "helm.envScaling" -}}
-{{- $envList := list "dev" "preprod" }}
-{{- if and (or (has .Values.global.environment.name $envList) (hasPrefix "feature" .Values.global.environment.name) ) (not .Values.global.forceAutoscaling) }}{{ 0 }}{{ else }}{{ 1 }}{{ end }}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $forceAutoscaling := $ctx.defaults.forceAutoscaling -}}
+
+{{- $envList := list "dev" "preprod" -}}
+{{- if and (or (has $envName $envList) (hasPrefix "feature" $envName)) (not $forceAutoscaling) -}}
+  {{- 0 -}}
+{{- else -}}
+  {{- 1 -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "helm.annotations.istio" -}}
@@ -49,11 +100,6 @@ sidecar.istio.io/inject: 'true'
 {{- end }}
 {{- end -}}
 
-# {{- if hasPrefix "prod" .Values.global.environment.name }}
-# external-dns.alpha.kubernetes.io/target: {{ include "helm.ingressDomain" . }}
-# {{- else }}
-# external-dns.alpha.kubernetes.io/target: dev-ingress.{{ include "helm.ingressDomain" . }} 
-# {{- end }}
 {{- define "helm.annotations.virtualservice" -}}
 external-dns.alpha.kubernetes.io/cloudflare-proxied: 'false'
 {{- end -}}
@@ -73,26 +119,24 @@ response:
 resources:
   requests:
     cpu: 50m
-    memory: {{ dig "resources" "requests" "memory" "64Mi" (default .Values.application) }}
+    memory: {{ dig "resources" "requests" "memory" "64Mi" .application }}
   limits:
-    cpu: {{ dig "resources" "limits" "cpu" "2000m" (default .Values.application) }}
-    memory: {{ dig "resources" "limits" "memory" "2048Mi" (default .Values.application) }}
+    cpu: {{ dig "resources" "limits" "cpu" "2000m" .application }}
+    memory: {{ dig "resources" "limits" "memory" "2048Mi" .application }}
 {{- end -}}
 
-
 {{- define "helm.podDefaultNodeSelector" -}}
-{{- with (dig "nodeSelector" "" (default .Values.application )) }}
+{{- with (dig "nodeSelector" "" .application) }}
 nodeSelector:
   {{ toYaml . |  indent 2 | trim }}
 {{- end }}
 {{- end -}}
 
 {{- define "helm.podDefaultPriorityClassName" -}}
-{{- with (dig "priorityClassName" "" (default .Values.application )) }}
+{{- with (dig "priorityClassName" "" .application) }}
 priorityClassName: {{ toYaml . |  indent 2 | trim }}
 {{- end }}
 {{- end -}}
-
 
 {{- define "helm.selectorExpressions" -}}
 {{- $instance := include "helm.instance" . -}}
@@ -104,5 +148,20 @@ priorityClassName: {{ toYaml . |  indent 2 | trim }}
   operator: In
   values: 
     - {{ $instance | trunc 63 }} 
+{{- end -}}
+
+{{/* 
+Create loop context for multiple applications
+Usage: 
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- include "helm.template-name" $appContext }}
+{{- end }}
+*/}}
+{{- define "helm.apps.loop" -}}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{ include . $appContext }}
+{{- end }}
 {{- end -}}
 

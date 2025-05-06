@@ -1,0 +1,102 @@
+suite: Resource Configuration Tests
+templates:
+  - deployment.yaml
+tests:
+  - it: should set custom resource limits and requests
+    set:
+      environment.name: "dev"
+      applications.resource-test-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "resource-test-app"
+          tag: "1.0.0"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "50m"
+            memory: "256Mi"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+
+  - it: should handle very high resource requirements
+    set:
+      environment.name: "dev"
+      applications.high-resource-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "high-resource-app"
+          tag: "1.0.0"
+        resources:
+          limits:
+            cpu: "8"  # Fixed: Using string format for CPU value
+            memory: "16Gi"
+          requests:
+            cpu: "50m"
+            memory: "8Gi"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 8
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 16Gi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 8Gi
+  
+  - it: should apply environment-specific resource overrides
+    set:
+      environment.name: "prod"
+      applications.env-resource-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "env-resource-app"
+          tag: "1.0.0"
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2048Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 2000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2048Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi

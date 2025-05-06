@@ -1,17 +1,28 @@
+{{- define "helm.getLanguage" -}}
+{{- /* This helper resolves the language from application or falls back to global */}}
+{{- if and (hasKey . "application") .application (hasKey .application "language") -}}
+  {{- .application.language -}}
+{{- else -}}
+  {{- .Values.global.language -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "helm.otel.annotations" -}}
-{{- if .Values.global.language }}
+{{- $language := include "helm.getLanguage" . -}}
+{{- if $language }}
 {{- $languageList := list "nodejs" "java" "python" }}
-{{- if and (has .Values.global.language $languageList) (not .Values.disableOtelAutoinstrumentation | default true) }}
+{{- if and (has $language $languageList) (not .Values.disableOtelAutoinstrumentation | default true) }}
 sidecar.opentelemetry.io/inject: "true"
 instrumentation.opentelemetry.io/container-names: "{{ include "helm.fullname" . }}"
-instrumentation.opentelemetry.io/inject-{{ .Values.global.language }}: {{ include "helm.fullname" . }}
+instrumentation.opentelemetry.io/inject-{{ $language }}: {{ include "helm.fullname" . }}
 {{- end }}
 {{- end -}}
 {{- end -}}
 
 {{- define "helm.otel.labels" -}}
-{{- if .Values.global.language -}}
-language: {{ .Values.global.language | default "undefined" | quote}}
+{{- $language := include "helm.getLanguage" . -}}
+{{- if $language -}}
+language: {{ $language | default "undefined" | quote}}
 {{- end -}}
 {{- end -}}
 
@@ -59,8 +70,9 @@ language: {{ .Values.global.language | default "undefined" | quote}}
 {{- end -}}
 
 {{- define "helm.otel.language" -}}
-{{- if .Values.global.language }}
-{{- if and (contains "csharp" .Values.global.language) (not .Values.disableOtelAutoinstrumentation | default true) }}
+{{- $language := include "helm.getLanguage" . -}}
+{{- if $language }}
+{{- if and (contains "csharp" $language) (not .Values.disableOtelAutoinstrumentation | default true) }}
 - name: "COR_ENABLE_PROFILING"
   value: "1"
 - name: "COR_PROFILER"
@@ -85,14 +97,14 @@ language: {{ .Values.global.language | default "undefined" | quote}}
   value: "AspNet,HttpClient,MongoDb,SqlClient,Elasticsearch,MassTransit"
 - name: "OTEL_DOTNET_AUTO_METRICS_ENABLED_INSTRUMENTATIONS"
   value: "AspNet,HttpClient,NetRuntime"
-  {{/* value: {{ coalesce Values.application.env.OTEL_DOTNET_AUTO_METRICS_ENABLED_INSTRUMENTATIONS .Values.statefulset.env.OTEL_DOTNET_AUTO_METRICS_ENABLED_INSTRUMENTATIONS "AspNet,HttpClient,NetRuntime" }} */}}
+  {{/* value: {{ coalesce (dig "env" "OTEL_DOTNET_AUTO_METRICS_ENABLED_INSTRUMENTATIONS" "" .application) "AspNet,HttpClient,NetRuntime" }} */}}
 - name: "OTEL_DOTNET_AUTO_SQLCLIENT_ADD_DB_STATEMENT"
   value: "true"
 {{- end }}
 {{- $languageList := list "nodejs" "java" "python" }}
-{{- if has .Values.global.language $languageList }}
+{{- if has $language $languageList }}
 {{- end }}
-{{- if contains "nodejs" .Values.global.language }}
+{{- if contains "nodejs" $language }}
 - name: OTEL_TRACES_EXPORTER
   value: otlp
 - name: OTEL_METRICS_EXPORTER
@@ -108,22 +120,24 @@ language: {{ .Values.global.language | default "undefined" | quote}}
   value: "--require @opentelemetry/auto-instrumentations-node/register"
 {{- end }}
 {{- end }}
-{{- if contains "java" .Values.global.language }}
+{{- if contains "java" $language }}
 {{- end }}
-{{- if contains "python" .Values.global.language }}
+{{- if contains "python" $language }}
 {{- end }}
 {{- end -}}
 {{- end -}}
 
 {{- define "helm.otel.volumeMounts" -}}
-{{- if .Values.global.language }}
+{{- $language := include "helm.getLanguage" . -}}
+{{- if $language }}
 - name: otel-log
   mountPath: /var/log/opentelemetry
 {{- end -}}
 {{- end -}}  
 
 {{- define "helm.otel.volumes" -}}
-{{- if .Values.global.language }}
+{{- $language := include "helm.getLanguage" . -}}
+{{- if $language }}
 - name: otel-log
   emptyDir: {}
 {{- end -}}

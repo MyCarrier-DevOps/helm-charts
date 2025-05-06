@@ -1,0 +1,74 @@
+suite: VPA template tests
+templates:
+  - vpa.yaml
+tests:
+  - it: should create VPA when enabled
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.vpa.enabled: true
+      applications.test-app-api.vpa.updateMode: "Auto"
+      applications.test-app-api.vpa.controlledValues: "RequestsOnly"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.targetRef.name
+          value: app-test-app-api
+      - equal:
+          path: spec.targetRef.kind
+          value: Deployment
+      - equal:
+          path: spec.updatePolicy.updateMode
+          value: Auto
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].controlledValues
+          value: RequestsOnly
+
+  - it: should create VPA for statefulset
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.vpa.enabled: true
+      applications.test-app-api.vpa.updateMode: "Auto"
+      applications.test-app-api.vpa.resourcePolicy.containerPolicies[0].containerName: "*"
+      applications.test-app-api.vpa.resourcePolicy.containerPolicies[0].minAllowed.cpu: "100m"
+      applications.test-app-api.vpa.resourcePolicy.containerPolicies[0].minAllowed.memory: "100Mi"
+      applications.test-app-api.vpa.resourcePolicy.containerPolicies[0].maxAllowed.cpu: "1"
+      applications.test-app-api.vpa.resourcePolicy.containerPolicies[0].maxAllowed.memory: "1Gi"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: metadata.name
+          value: app-test-app-api
+      - equal:
+          path: spec.targetRef.kind
+          value: StatefulSet
+      - equal:
+          path: spec.updatePolicy.updateMode
+          value: Auto
+
+  - it: should not create VPA when not enabled
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.vpa.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

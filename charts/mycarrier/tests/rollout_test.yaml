@@ -1,0 +1,69 @@
+suite: Rollout template tests
+templates:
+  - rollout.yaml
+tests:
+  - it: should create rollout when deploymentType is rollout
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.ports.metrics: 9090
+      applications.test-app-api.replicas: 2
+      applications.test-app-api.env: {}
+      applications.test-app-api.probes.enableLiveness: true
+      applications.test-app-api.probes.enableReadiness: true
+      applications.test-app-api.updateStrategy.type: "RollingUpdate"
+      applications.test-app-api.updateStrategy.canary.steps:
+        - setWeight: 25
+        - setWeight: 50
+        - setWeight: 100
+    asserts:
+      - isKind:
+          of: Rollout
+      - exists:
+          path: spec.template.spec.containers[0].image
+
+  - it: should create bluegreen rollout with analysis templates
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.ports.metrics: 9090
+      applications.test-app-api.probes.enableLiveness: true
+      applications.test-app-api.probes.enableReadiness: true
+      applications.test-app-api.replicas: 2
+      applications.test-app-api.env: {}
+      # Fix: Set updateStrategy.bluegreen as an object with properties
+      applications.test-app-api.updateStrategy.type: "RollingUpdate"
+      applications.test-app-api.updateStrategy.bluegreen:
+        activeService: test-app-api
+        previewService: test-app-api-preview
+        autoPromotionEnabled: true
+    asserts:
+      - isKind:
+          of: Rollout
+      - exists:
+          path: spec.strategy.blueGreen
+
+  - it: should not create rollout when deploymentType is not rollout
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.ports.metrics: 9090
+      applications.test-app-api.env: {}
+    asserts:
+      - hasDocuments:
+          count: 0

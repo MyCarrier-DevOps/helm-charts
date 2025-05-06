@@ -14,10 +14,10 @@ template:
       {{- if .job.timing }}
       {{- $order := .job.order | default 0 }}
       {{- if eq .job.timing "pre-deploy" }}
-      argocd.argoproj.io/sync-wave: {{ ( -100 | toString | quote) }}
+      argocd.argoproj.io/sync-wave: {{ ((sub $order 100) | toString | quote) }}
       argocd.argoproj.io/hook: PreSync
       {{- else if eq .job.timing "post-deploy" }}
-      argocd.argoproj.io/sync-wave: {{ (100 | toString | quote) }}
+      argocd.argoproj.io/sync-wave: {{ ((add $order 100) | toString | quote) }}
       argocd.argoproj.io/hook: PostSync
       {{- end }}
       {{- end }}
@@ -25,14 +25,12 @@ template:
       {{ include "helm.otel.annotations" . | indent 6 | trim }}
   spec:
     {{ include "helm.podSecurityContext" . | indent 4 | trim }}
-    {{- with $.Values.serviceAccount }}
-    serviceAccountName: {{ .name | default (include "helm.fullname" $) }}
-    {{- end }}
+    serviceAccountName: default
     imagePullSecrets:
       - name: {{ .job.imagePullSecret | default "imagepull" }}
     restartPolicy: {{ .job.restartPolicy | default "Never" }}
     containers:
-      - image: "{{ .job.image.registry }}/{{ .job.image.repository }}:{{ .job.image.tag }}"
+      - image: "{{ .job.image.registry }}/{{ .job.image.repository }}:{{ .job.image.tag }}}"
         imagePullPolicy: {{ .job.imagePullPolicy | default "IfNotPresent"}}
         name: {{ .job.name }}
         {{- with .job.command }}
@@ -48,7 +46,6 @@ template:
           {{- if hasKey $ "helm.otel.language" }}
           {{ include "helm.otel.language" $ | indent 10 | trim }}
           {{- end }}
-          {{ include "helm.otel.envVars" . | indent 10 | trim }}
         {{- with .job.env }}
           {{ toYaml . | indent 10 | trim }}
         {{- end }}
@@ -83,9 +80,6 @@ template:
           - name: tmp-dir
             mountPath: /tmp
           {{ include "helm.otel.volumeMounts" . | indent 10 | trim }}
-          {{- if .Values.secrets.mounted }}
-          {{ include "helm.secretVolumeMounts" . | indent 10 | trim -}}
-          {{- end }}
         {{- if .job.volumes }}
           {{- range .job.volumes }}
           - name: {{ .name }}
@@ -99,13 +93,23 @@ template:
       - name: tmp-dir
         emptyDir: {}
       {{ include "helm.otel.volumes" . | indent 6 | trim }}
-      {{- if .Values.secrets.mounted }}
-      {{ include "helm.secretVolumes" . | indent 6 | trim -}}
-      {{- end }}
     {{- if .job.volumes }}
       {{- range .job.volumes }}
       - name: {{ .name }}
-        {{ if ( or (and ( .kind ) (eq (.kind | lower) "emptydir")) (not .kind)) }}emptyDir: {}{{- end }}
+        {{- if not .custom }}
+        configMap:
+          name: {{ .configMapName | default (include "helm.fullname" $) }}
+          {{- if .items }}
+          items:
+            {{- range .items }}
+            - key: {{ .key }}
+              path: {{ .path }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- if .custom }}
+          {{- toYaml .custom | nindent 10 }}
+        {{- end }}
       {{- end }}
     {{- end }}
 {{- end -}}

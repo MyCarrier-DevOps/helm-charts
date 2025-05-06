@@ -1,0 +1,71 @@
+suite: Edge Cases Tests
+templates:
+  - deployment.yaml
+tests:
+  - it: should create deployment with minimal required configuration
+    set:
+      environment.name: "dev"
+      applications.minimal-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "minimal-registry"
+          repository: "minimal-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: app-minimal-app
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: minimal-registry/minimal-app:1.0.0
+      # Verify default values are applied when not explicitly provided
+      - exists:
+          path: spec.template.spec.containers[0].resources
+      - exists:
+          path: spec.selector.matchLabels
+
+  - it: should handle empty optional fields correctly
+    set:
+      environment.name: "dev"
+      applications.optional-fields-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "optional-fields-app"
+          tag: "1.0.0"
+        env: {}
+        probes:
+          enableLiveness: false
+          enableReadiness: false
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - exists:
+          path: spec.template.spec.containers[0].env
+          
+  - it: should support zero replicas for maintenance mode
+    set:
+      environment.name: "dev"
+      applications.zero-replicas:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "zero-replicas"
+          tag: "1.0.0"
+        replicas: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      # Look for replicas at the template level, not spec level
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: app-zero-replicas

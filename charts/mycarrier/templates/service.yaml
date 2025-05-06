@@ -1,121 +1,76 @@
-{{- $namespace := include "helm.namespace" . }}
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "helm.fullname" . }}
-  namespace: {{ $namespace }}
-  {{- with .Values.service.annotations }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "5"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    {{ toYaml . | indent 4 | trim }}
-  {{ end }}
-  labels:
-    {{ include "helm.labels.standard" . | indent 4 | trim }}
-spec:
-  type: {{ .Values.service.type | default "ClusterIP" }}
-  {{- if ((.Values.service).headless) }}
-  clusterIP: None
-  {{ end }}
-  ports:
-  {{- if not .Values.service.ports }}
-  {{- range $key, $value := .Values.application.ports }}
-    - name: {{ $key | lower }}
-      port: {{ $value }}
-      protocol: TCP
-  {{- end }}
-  {{- end }}
-  {{- range .Values.service.ports }}
-    - name: {{ .name }}
-      port: {{ .port }}
-      protocol: {{ default "TCP" .protocol }}
-      targetPort: {{ default .port .targetPort  }}
-  {{- end }}
-  selector:
-    {{ include "helm.labels.selector" . | indent 4 | trim }}
-  {{- if or (not .Values.service.disableAffinity) ((.Values.service).headless) }}
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: {{ default "600" .Values.service.affinityTimeoutSeconds }}
-  {{ end }}
-
-{{- if (eq .Values.application.deploymentType "rollout")  }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $fullName := include "helm.fullname" $appContext }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "helm.fullname" . }}-preview
+  name: {{ $fullName }}
   namespace: {{ $namespace }}
-  {{- with .Values.service.annotations }}
   annotations:
     argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    {{ toYaml . | indent 4 | trim }}
-  {{ end }}
+    {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
+    {{ toYaml $appValues.service.annotations | indent 4 | trim }}
+    {{- end }}
   labels:
-    {{ include "helm.labels.standard" . | indent 4 | trim }}
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
 spec:
-  type: {{ .Values.service.type | default "ClusterIP" }}
-  {{- if ((.Values.service).headless) }}
-  clusterIP: None
-  {{ end }}
-  ports:
-  {{- if not .Values.service.ports }}
-  {{- range $key, $value := .Values.application.ports }}
-    - name: {{ $key | lower }}
-      port: {{ $value }}
-      protocol: TCP
-  {{- end }}
-  {{- end }}
-  {{- range .Values.service.ports }}
-    - name: {{ .name }}
-      port: {{ .port }}
-      protocol: {{ default "TCP" .protocol }}
-      targetPort: {{ default .port .targetPort  }}
-  {{- end }}
-  selector:
-    {{ include "helm.labels.selector" . | indent 4 | trim }}
-  {{- if or (not .Values.service.disableAffinity) ((.Values.service).headless) }}
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: {{ default "600" .Values.service.affinityTimeoutSeconds }}
-  {{ end }}
+  {{ include "helm.specs.service" $appContext | indent 2 | trim }}
+
+{{- if (eq $appValues.deploymentType "rollout")  }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-preview
+  namespace: {{ $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
+    {{ toYaml $appValues.service.annotations | indent 4 | trim }}
+    {{- end }}
+  labels:
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+spec:
+  {{ include "helm.specs.service" $appContext | indent 2 | trim }}
 {{- end }}
 
-{{- $root := . -}}
-{{- if .Values.service }}
-{{- range .Values.service.aliases }}
+{{- if and (hasKey $appValues "service") (hasKey $appValues.service "aliases") }}
+{{- range $appValues.service.aliases }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ . }}
   namespace: {{ $namespace }}
-  {{- with $.Values.service.annotations }}
   annotations:
     argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    {{ toYaml $root | indent 4 | trim }}
-  {{ end }}
+    {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
+    {{ toYaml $appValues.service.annotations | indent 4 | trim }}
+    {{- end }}
   labels:
-    {{ include "helm.labels.standard" $root | indent 4 | trim }}
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
 spec:
-  type: {{ $.Values.service.type | default "ClusterIP" }}
+  type: {{ $appValues.service.type | default "ClusterIP" }}
   ports:
-  {{- range $.Values.service.ports }}
+  {{- range $appValues.service.ports }}
     - name: {{ .name | lower }}
       port: {{ .port }}
       {{ if .targetPort }}targetPort: {{ .targetPort }}{{- end }}
   {{- end }}
   selector:
-    {{ include "helm.labels.selector" $root | indent 4 | trim }}
-  {{- if not $.Values.service.disableAffinity }}
+    {{ include "helm.labels.selector" $appContext | indent 4 | trim }}
+  {{- if not $appValues.service.disableAffinity }}
   sessionAffinity: ClientIP
   sessionAffinityConfig:
     clientIP:
-      timeoutSeconds: {{ default "600" $.Values.service.affinityTimeoutSeconds }}
+      timeoutSeconds: {{ default "600" $appValues.service.affinityTimeoutSeconds }}
   {{ end }}
 {{- end }}
-{{- end -}}
+{{- end }}
+---
+{{- end }}

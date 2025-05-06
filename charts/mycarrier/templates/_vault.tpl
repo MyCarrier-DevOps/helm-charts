@@ -4,10 +4,10 @@ vault.security.banzaicloud.io/mutate-probes: "true"
 vault.security.banzaicloud.io/vault-auth-method: azure
 vault.security.banzaicloud.io/vault-path: clusterauth
 vault.security.banzaicloud.io/vault-role: appcluster
-{{- if .Values.secrets }}
+{{- if and .Values (hasKey .Values "secrets") }}
 vault.security.banzaicloud.io/vault-env-daemon: "true"
 {{- end }}
-{{- if .Values.secrets.bulk }}
+{{- if and .Values (hasKey .Values "secrets") (hasKey .Values.secrets "bulk") }}
 vault.security.banzaicloud.io/vault-env-from-path: "{{ .Values.secrets.bulk.path }}"
 {{- end }}
 {{- end -}}
@@ -16,7 +16,7 @@ vault.security.banzaicloud.io/vault-env-from-path: "{{ .Values.secrets.bulk.path
 {{- $fullname := (include "helm.fullname" . ) }}
 {{- $envDependency := (include "helm.envDependency" . ) }}
 {{- $metaenv := (include "helm.metaEnvironment" . ) }}
-{{- if .Values.secrets.individual }}
+{{- if and .Values (hasKey .Values "secrets") (hasKey .Values.secrets "individual") }}
 {{- range .Values.secrets.individual }}
 {{- $keyname := .keyName | default "value"}}
 {{- if .path }}
@@ -26,6 +26,7 @@ vault.security.banzaicloud.io/vault-env-from-path: "{{ .Values.secrets.bulk.path
   value: vault:{{ $val }}#{{ $keyname }}
 {{- else }}
 - name: {{ .envVarName }}
+  {{/* Generate vault path using application name from context if available */}}
   value: {{ printf "vault:secrets/data/%s/%s/%s#%s" $metaenv $.Values.global.appStack .envVarName $keyname }}
 {{- end }}
 {{- end }}

@@ -1,0 +1,72 @@
+suite: Minimum Deployment Configuration Tests
+templates:
+  - deployment.yaml
+tests:
+  - it: should create a valid deployment with minimum required configuration
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+      environment:
+        name: "dev"
+      applications:
+        minimal-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "minimal-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: test-stack-minimal-app
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/minimal-app:1.0.0
+      - hasDocuments:
+          count: 1
+      # Verify essential deployment properties are set
+      - exists:
+          path: spec.selector.matchLabels
+      - exists:
+          path: spec.template.spec.containers[0].resources
+      # Verify labels are properly set
+      - exists:
+          path: metadata.labels
+      - isSubset:
+          path: metadata.labels
+          content:
+            app: test-stack-minimal-app
+            app.kubernetes.io/name: test-stack-minimal-app
+      # Verify container environment variables - at least the defaults should be present
+      - exists:
+          path: spec.template.spec.containers[0].env
+
+  - it: should set default values for unspecified deployment properties
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+      environment:
+        name: "dev"
+      applications:
+        default-values-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "default-values-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      # Verify deployment defaults
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+      # Verify default resource settings
+      - exists:
+          path: spec.template.spec.containers[0].resources.limits
+      - exists:
+          path: spec.template.spec.containers[0].resources.requests

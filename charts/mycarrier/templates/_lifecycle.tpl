@@ -1,5 +1,5 @@
 {{- define "helm.defaultPreStopDelay" -}}
-{{- if and (or ($.Values.application.ports)) (or (.Values.application.ports.http) (.Values.application.ports.healthcheck) ) }}
+{{- if and (dig "ports" false .application) (or (dig "ports" "http" false .application) (dig "ports" "healthcheck" false .application)) }}
 {{- printf "sleep 1 && " }}
 {{- end }}
 {{- end -}}
@@ -11,16 +11,17 @@
 {{- end -}}
 
 {{- define "helm.defaultLifecyclePreStop" -}}
-{{- if .Values.global.language }}
-  {{- if contains "csharp" .Values.global.language }}
+{{- $language := include "helm.getLanguage" . -}}
+{{- if $language }}
+  {{- if contains "csharp" $language }}
   {{- printf "pkill dotnet" }}
-  {{- else if contains "nodejs" .Values.global.language }}
+  {{- else if contains "nodejs" $language }}
   {{- printf "pkill node" }}
-  {{- else if contains "nginx" .Values.global.language }}
+  {{- else if contains "nginx" $language }}
   {{- printf "pkill -QUIT nginx" }}
-  {{- else if contains "java" .Values.global.language }}
+  {{- else if contains "java" $language }}
   {{- printf "pkill java" }}
-  {{- else if contains "python" .Values.global.language }}
+  {{- else if contains "python" $language }}
   {{- printf "pkill vault-env || true" }}
   {{- end }}
 {{- else }}
@@ -32,9 +33,10 @@
 # {{- $customPostStart := include "helm.defaultLifecyclePostStart" . }}
 # {{- $defaultPreStop := include "helm.defaultLifecyclePreStop" . }}
 # {{- $customPreStopDelay := include "helm.defaultPreStopDelay" . }}
-# {{- $postStartCommand := dig "lifecycle" "postStart" "echo postStartTest" (default .Values.application) }}
-# {{- $preStopCommand := dig "lifecycle" "preStop" $defaultPreStop (default .Values.application) }}
-
+# {{/* Use dig to safely access nested properties from application context */}}
+# {{- $postStartCommand := dig "lifecycle" "postStart" "echo postStartTest" .application }}
+# {{- $preStopCommand := dig "lifecycle" "preStop" $defaultPreStop .application }}
+#
 # lifecycle:
 #   postStart:
 #     exec:

@@ -1,0 +1,96 @@
+suite: Environment Variables Tests
+templates:
+  - deployment.yaml
+tests:
+  - it: should set custom environment variables
+    set:
+      environment.name: "dev"
+      applications.env-vars-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "env-vars-app"
+          tag: "1.0.0"
+        env:
+          SIMPLE_ENV_VAR: "simple-value"
+          INTEGER_VAR: "123"
+          COMPLEX_VAR: "value-with-special-chars_$@!%"
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SIMPLE_ENV_VAR
+            value: "simple-value"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INTEGER_VAR
+            value: "123"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: COMPLEX_VAR
+            value: "value-with-special-chars_$@!%"
+
+  - it: should handle environment variables with special formats
+    set:
+      environment.name: "dev"
+      applications.special-env-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "special-env-app"
+          tag: "1.0.0"
+        env:
+          URL_WITH_VARIABLES: "http://service-$(POD_NAME):8080"
+          ENVIRONMENT_SPECIFIC: "development-mode"
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: URL_WITH_VARIABLES
+            value: "http://service-$(POD_NAME):8080"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ENVIRONMENT_SPECIFIC
+            value: "development-mode"
+          
+  - it: should combine default environment variables with custom ones
+    set:
+      environment.name: "dev"
+      applications.combined-env-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "combined-env-app"
+          tag: "1.0.0"
+        env:
+          CUSTOM_VAR_1: "custom-value-1"
+          CUSTOM_VAR_2: "custom-value-2"
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_1
+            value: "custom-value-1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_2
+            value: "custom-value-2"
+      # Test for a default OpenTelemetry environment variable
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_EXPORTER
+            value: otlp
