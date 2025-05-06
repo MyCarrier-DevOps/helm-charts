@@ -1,11 +1,5 @@
 # MyCarrier Helm Chart
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-![Version: 2.5.17](https://img.shields.io/badge/Version-2.5.17-informational?style=flat-square)
-![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
-![Kubernetes: 1.19+](https://img.shields.io/badge/Kubernetes-1.19%2B-informational?style=flat-square)
-![Helm: 3.0+](https://img.shields.io/badge/Helm-3.0%2B-informational?style=flat-square)
-
 A Helm chart for deploying MyCarrier applications to Kubernetes.
 
 ## Overview
