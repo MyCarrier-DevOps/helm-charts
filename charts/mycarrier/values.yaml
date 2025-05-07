@@ -394,7 +394,7 @@ jobs: []
 secrets:
   # Bulk secrets from Vault path
   bulk:
-    path: "secrets/data/dev/app"
+    # path: "secrets/data/dev/app"
   
   # Individual environment variables from Vault
   individual: []

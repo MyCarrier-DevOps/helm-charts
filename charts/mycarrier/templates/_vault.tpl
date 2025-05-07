@@ -6,9 +6,11 @@ vault.security.banzaicloud.io/vault-path: clusterauth
 vault.security.banzaicloud.io/vault-role: appcluster
 {{- if and .Values (hasKey .Values "secrets") }}
 vault.security.banzaicloud.io/vault-env-daemon: "true"
-{{- end }}
-{{- if and .Values (hasKey .Values "secrets") (hasKey .Values.secrets "bulk") }}
+{{- if hasKey .Values.secrets "bulk" }}
+{{- if and (ne (kindOf .Values.secrets.bulk) "invalid") (ne .Values.secrets.bulk nil) (kindOf .Values.secrets.bulk | eq "map") (hasKey .Values.secrets.bulk "path") (.Values.secrets.bulk.path) }}
 vault.security.banzaicloud.io/vault-env-from-path: "{{ .Values.secrets.bulk.path }}"
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}
 

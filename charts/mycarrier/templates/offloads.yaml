@@ -163,6 +163,11 @@ spec:
                         ingress:
                           type: {{ dig "networking" "ingress" "type" "istio" $appValues }}
                       disableOtelAutoinstrumentation: {{ $.Values.disableOtelAutoinstrumentation }}
+                    {{- /* Add jobs only to the first application */}}
+                    {{- if and (eq $appName (keys $.Values.applications | first)) ($.Values.jobs) }}
+                    jobs:
+                      {{- toYaml $.Values.jobs | nindent 22 }}
+                    {{- end }}
                     secrets:
                       {{- with $.Values.secrets.mounted }}
                       mounted: 
@@ -177,8 +182,14 @@ spec:
                             subPath: {{ dig "mount" "subPath" "" . }}
                       {{- end }}
                       {{- end }}
+                      {{- if $.Values.secrets.bulk }}
                       bulk:
+                        {{- if kindOf $.Values.secrets.bulk | eq "map" }}
+                        {{- if hasKey $.Values.secrets.bulk "path" }}
                         path: {{ $.Values.secrets.bulk.path }}
+                        {{- end }}
+                        {{- end }}
+                      {{- end }}
                       {{- with $.Values.secrets.individual }}
                       individual:
                         {{- range . }}
@@ -187,7 +198,6 @@ spec:
                           {{ if .keyName -}}keyName: {{ .keyName }}{{- end }}
                         {{- end -}}
                       {{- end }}
-
   template:
     metadata:
       name: "{{ $fullName }}-offload-{{`{{`}} .name {{`}}`}}"

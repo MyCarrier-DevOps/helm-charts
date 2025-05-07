@@ -925,17 +925,10 @@
             }
           },
           "env": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": "string"
-                }
-              }
+            "type": "object",
+            "description": "Environment variables as key-value pairs",
+            "additionalProperties": {
+              "type": "string"
             }
           },
           "configMapName": {
@@ -1020,14 +1013,31 @@
       "type": "object",
       "properties": {
         "bulk": {
-          "type": "object",
-          "required": ["path"],
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "Path to secrets in vault"
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [],
+              "properties": {
+                "path": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "description": "Path to secrets in vault"
+                    },
+                    {
+                      "type": "null",
+                      "description": "Null value when no vault path is needed"
+                    }
+                  ],
+                  "description": "Path to secrets in vault"
+                }
+              }
+            },
+            {
+              "type": "null",
+              "description": "Null value when no bulk secrets are needed"
             }
-          }
+          ]
         },
         "individual": {
           "type": "array",
