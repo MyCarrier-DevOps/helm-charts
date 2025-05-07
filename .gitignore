@@ -52,5 +52,5 @@ charts/trino/charts-main/charts/trino/templates/service.yaml
 charts/trino/charts-main/charts/trino/templates/serviceaccount.yaml
 .helm_ls_cache
 ./**/.DS_Store
-**/
+*/.DS_Store
 .DS_Store
