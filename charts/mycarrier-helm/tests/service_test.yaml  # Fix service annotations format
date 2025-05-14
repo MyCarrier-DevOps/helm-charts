@@ -1,5 +1,0 @@
-applications:
-  test-app-api:
-    service:
-      annotations:
-        prometheus: "true"
