@@ -11,8 +11,9 @@ metadata:
     {{- end -}}
     {{- end }}
 spec:
-  {{- if .Values.hyperdx.replicas }}
-  replicas: {{ .Values.hyperdx.replicas }}
+  {{- if not .Values.hyperdx.autoscale.enabled }}
+  replicas: {{ .Values.hyperdx.replicas | default 1 }}
+  {{- else }}
   {{- end }}
   selector:
     matchLabels:

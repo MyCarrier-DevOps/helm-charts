@@ -1,0 +1,28 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "hdx-oss.fullname" . }}-app-hpa
+  annotations:
+    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  maxReplicas: {{ .Values.autoscale.maxReplicas | default 10 }}
+  minReplicas: {{ .Values.autoscale.minReplicas | default 2 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscale.targetCPUUtilizationPercentage | default 80 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscale.targetMemoryUtilizationPercentage | default 80 }}
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "hdx-oss.fullname" . }}-app
