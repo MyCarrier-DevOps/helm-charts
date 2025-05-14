@@ -3,7 +3,6 @@
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
-{{- $metaenv := (include "helm.metaEnvironment" $ ) }}
 ---
 apiVersion: batch/v1
 kind: Job
