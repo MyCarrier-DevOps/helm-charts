@@ -15,7 +15,7 @@
 {{- if dig "testtrigger" false .application }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 300 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
-backoffLimit: {{ dig "testrigger" "backoffLimit" 0 .application }}
+backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
 template:
   metadata:
     labels:
@@ -25,11 +25,11 @@ template:
     {{ include "helm.podSecurityContext" . | indent 4 | trim }}
     serviceAccountName: default
     imagePullSecrets:
-      - name: {{ dig "testrigger" "imagePullSecret" "imagepull" .application | quote }}
-    restartPolicy: {{ dig "testrigger" "restartPolicy" "Never" .application | quote  }}
+      - name: {{ dig "testtrigger" "imagePullSecret" "imagepull" .application | quote }}
+    restartPolicy: {{ dig "testtrigger" "restartPolicy" "Never" .application | quote  }}
     containers:
       - image: "alpine/curl:latest"
-        imagePullPolicy: {{ dig "testrigger" "imagePullPolicy" "IfNotPresent" .application | quote }}
+        imagePullPolicy: {{ dig "testtrigger" "imagePullPolicy" "IfNotPresent" .application | quote }}
         name: testtrigger
         command:
           - /bin/sh
