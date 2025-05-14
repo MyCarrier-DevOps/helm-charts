@@ -139,15 +139,15 @@ applications: {}
   #     backoffLimit: 0  # Number of retries for the test job
   #     testdefinitions: # Test definitions to run
   #       - name: "apitests"  # Name of the test suite
-  #         containerImage: "alpine/curl"  # Container image to use for running tests
-  #         containerTag: "latest"  # Tag of the container image
+  #         containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests
+  #         containerTag: "1.10.2"  # Tag of the container image
   #         secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
   #         filters:  # Test filters to select which tests to run
   #           - "TestCategory=coretests"
   #           - "TestCategory=othercoretests"
   #       - name: "somedependencytest"
-  #         containerImage: "alpine/curl"
-  #         containerTag: "latest"
+  #         containerImage: "myregistry.example.com/image/name"
+  #         containerTag: "1.10.2"
   #         secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
   #         filters:
   #           - "TestCategory=otherdomaintests"
