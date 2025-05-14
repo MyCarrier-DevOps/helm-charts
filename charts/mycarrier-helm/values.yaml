@@ -70,6 +70,16 @@ tolerations: []
 
 ## @extra applications Map of application definitions where the key is the application name
 ## @param applications.example-api.isFrontend - Whether this is a frontend application
+## @param applications.example-api.testtrigger [object] - Configuration for automated test jobs
+## @param applications.example-api.testtrigger.ttlSecondsAfterFinished - Time to keep test job resources after completion (seconds)
+## @param applications.example-api.testtrigger.activeDeadlineSeconds - Maximum time for the test job to run (seconds)
+## @param applications.example-api.testtrigger.backoffLimit - Number of retries for the test job
+## @param applications.example-api.testtrigger.testdefinitions [array] - Test definitions to run
+## @param applications.example-api.testtrigger.testdefinitions.name - Name of the test suite
+## @param applications.example-api.testtrigger.testdefinitions.containerImage - Container image to use for running tests
+## @param applications.example-api.testtrigger.testdefinitions.containerTag - Tag of the container image
+## @param applications.example-api.testtrigger.testdefinitions.secretId - Reference to secrets needed for tests
+## @param applications.example-api.testtrigger.testdefinitions.filters [array] - Test filters to select which tests to run
 ## @param applications.example-api.language - What language is the application written in
 ## @param applications.example-api.forceOffload - Whether to force offloading
 ## @param applications.example-api.staticHostname - Static hostname for the application
