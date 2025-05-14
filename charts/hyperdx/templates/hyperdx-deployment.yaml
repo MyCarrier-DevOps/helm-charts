@@ -11,7 +11,9 @@ metadata:
     {{- end -}}
     {{- end }}
 spec:
-  replicas: {{ .Values.hyperdx.replicas | default 1 }}
+  {{- if .Values.hyperdx.replicas }}
+  replicas: {{ .Values.hyperdx.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "hdx-oss.selectorLabels" . | nindent 6 }}
