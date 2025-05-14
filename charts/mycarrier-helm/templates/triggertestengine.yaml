@@ -1,0 +1,23 @@
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- $domainPrefix := include "helm.domain.prefix" $ }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $fullName := include "helm.fullname" $appContext }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullName }}-trigger
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.version" $appContext | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
+    argocd.argoproj.io/sync-wave: "1000"
+    argocd.argoproj.io/hook: PostSync
+    {{ include "helm.annotations.vault" . | indent 4 | trim }}
+spec:
+  {{ include "helm.specs.testenginehook" $appContext | indent 2 | trim }}
+{{- end }}
