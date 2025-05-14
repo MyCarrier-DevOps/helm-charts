@@ -398,6 +398,16 @@ entries:
   hdx-oss-v2:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-05-14T21:54:34.240352378Z"
+    description: A Helm chart for HyperDX OSS
+    digest: 1c64ca6edd00a12a582bd6706b8cdce940916dc19bb2b8523833c7747e81a5bb
+    name: hdx-oss-v2
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/hdx-oss-v2-0.1.15/hdx-oss-v2-0.1.15.tgz
+    version: 0.1.15
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-05-14T21:52:17.156274697Z"
     description: A Helm chart for HyperDX OSS
     digest: 60d5bd2802ecce8c4c02e6d7d71d327ce1035937b418ae5431ed27b91e1cac9e
@@ -1465,4 +1475,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-05-14T21:52:17.156499918Z"
+generated: "2025-05-14T21:54:34.240537564Z"
