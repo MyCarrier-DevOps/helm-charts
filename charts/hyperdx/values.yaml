@@ -57,10 +57,12 @@ hyperdx:
   replicas: 1
 
 mongodb:
+  enabled: true
   image: "mongo:5.0.14-focal"
   port: 27017
 
 redis:
+  enabled: true
   image: "redis:7.0.11-alpine"
   port: 6379
 

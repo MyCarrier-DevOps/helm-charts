@@ -1,3 +1,4 @@
+{{- if .Values.mongodb.enabled}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,3 +44,4 @@ spec:
   selector:
     {{- include "hdx-oss.selectorLabels" . | nindent 4 }}
     app: mongodb
+{{- end }}
