@@ -1,0 +1,40 @@
+suite: Null Optional Fields Tests
+templates:
+  - deployment.yaml
+tests:
+  - it: should accept null values for optional fields in global configuration
+    set:
+      global:
+        appStack: "nulltest"
+        language: "nodejs"
+        gitbranch: null
+        branchlabel: null
+        # forceAutoscaling cannot be null as it must be a boolean
+        forceAutoscaling: false
+      environment:
+        name: "dev"
+        dependencyenv: null
+        domainOverride:
+          enabled: null
+          domain: null
+      enableVaultCA: null
+      disableOtelAutoinstrumentation: null
+      tolerations: null
+      applications:
+        null-test-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: nulltest-null-test-app
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/test-app:1.0.0
+      - hasDocuments:
+          count: 1
