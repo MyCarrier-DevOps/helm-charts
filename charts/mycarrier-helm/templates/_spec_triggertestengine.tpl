@@ -4,6 +4,7 @@
 {{- $httpPort := 8080 }}
 {{- $environment := $.Values.environment.name }}
 {{- $gitBranch := $.Values.global.gitbranch}}
+{{- $stackname := $.Values.global.appStack }}
 {{- if and .Values.service .Values.service.ports }}
   {{- range .Values.service.ports }}
     {{- if eq .name "http" }}
@@ -47,7 +48,7 @@ template:
             -d '{ 
               "IsMonolith": false, 
               "TestName": "{{ .name }}", 
-              "StackName": "{{ $fullName }}", 
+              "StackName": "{{ $stackname }}", 
               "ContainerImage": "{{ .containerImage }}",
               "ContainerTag": "{{ .containerTag }}",
               "TestFilters": {{ .filters | toJson }},
