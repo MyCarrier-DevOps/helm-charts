@@ -30,7 +30,7 @@ template:
       - name: {{ .job.imagePullSecret | default "imagepull" }}
     restartPolicy: {{ .job.restartPolicy | default "Never" }}
     containers:
-      - image: "{{ .job.image.registry }}/{{ .job.image.repository }}:{{ .job.image.tag }}}"
+      - image: "{{ .job.image.registry }}/{{ .job.image.repository }}:{{ .job.image.tag }}"
         imagePullPolicy: {{ .job.imagePullPolicy | default "IfNotPresent"}}
         name: {{ .job.name }}
         {{- with .job.command }}
