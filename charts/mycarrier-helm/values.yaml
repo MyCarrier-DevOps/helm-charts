@@ -147,6 +147,8 @@ applications: {}
   #     ttlSecondsAfterFinished: "300"  # Time to keep test job resources after completion (seconds)
   #     activeDeadlineSeconds: "600"  # Maximum time for the test job to run (seconds)
   #     backoffLimit: 0  # Number of retries for the test job
+  #     apikey: "vault:Secrets/data/testengine#apikey"
+  #     webhook_url: "vault:Secrets/data/testengine#webhook_url"
   #     testdefinitions: # Test definitions to run
   #       - name: "apitests"  # Name of the test suite
   #         containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests

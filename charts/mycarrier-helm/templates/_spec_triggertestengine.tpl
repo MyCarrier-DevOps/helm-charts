@@ -31,6 +31,11 @@ template:
       - image: "alpine/curl:latest"
         imagePullPolicy: {{ dig "testtrigger" "imagePullPolicy" "IfNotPresent" .application | quote }}
         name: testtrigger
+        env:
+        - name: TESTENGINE_APIKEY
+          value: {{ dig "testtrigger" "apikey" "" .application | quote }}
+        - name: TESTENGINEHOOK_URL
+          value: {{ dig "testtrigger" "webhook_url" "" .application | quote }}
         command:
           - /bin/sh
           - -c
