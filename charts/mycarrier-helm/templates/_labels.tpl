@@ -16,7 +16,7 @@
 app.kubernetes.io/name: {{ include "helm.fullname" . | trunc 63 }}
 app.kubernetes.io/instance: {{ $instance | trunc 63 }}
 app.kubernetes.io/part-of: {{ $appStack }}
-app.kubernetes.io/component: {{ $appName }}
+app.kubernetes.io/component: {{ $appName | quote | default "" }}
 app: {{ include "helm.fullname" . | trunc 63 | trimSuffix "-" }}
 mycarrier.tech/environment: {{ $envName }}
 mycarrier.tech/envscaling: {{ $envScaling | quote }}
