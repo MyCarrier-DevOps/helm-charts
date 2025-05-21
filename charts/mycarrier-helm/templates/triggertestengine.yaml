@@ -3,6 +3,7 @@
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
+{{- if .testtrigger }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -20,4 +21,5 @@ metadata:
     {{ include "helm.annotations.vault" . | indent 4 | trim }}
 spec:
   {{ include "helm.specs.testenginehook" $appContext | indent 2 | trim }}
+{{- end }}
 {{- end }}
