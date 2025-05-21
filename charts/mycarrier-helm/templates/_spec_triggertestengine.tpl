@@ -47,7 +47,7 @@ template:
             -d '{ 
               "IsMonolith": false, 
               "TestName": "{{ .name }}", 
-              "StackName": "", 
+              "StackName": "{{ $fullName }}", 
               "ContainerImage": "{{ .containerImage }}",
               "ContainerTag": "{{ .containerTag }}",
               "TestFilters": {{ .filters | toJson }},
