@@ -8,14 +8,12 @@ hosts:
 {{ if hasPrefix "feature" $.Values.environment.name }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{ if and (not .application.staticHostname) (not (hasPrefix "feature" $.Values.environment.name))}}- {{ (list ($.Values.global.appStack) (.appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{ if and (.application.staticHostname) (not (hasPrefix "feature" $.Values.environment.name)) }}- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end -}}
-{{- if .application.networking }}
 {{- range .application.networking.istio.hosts }}
 - {{ . }}
 {{- end }}
 gateways:
 - mesh
 - istio-system/default
-{{- end }}
 http:
 {{- if .application.networking }}
 {{- range $key, $value := .application.networking.istio.redirects }}
