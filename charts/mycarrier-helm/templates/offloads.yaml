@@ -1,8 +1,6 @@
-{{- range $appName, $appValues := .Values.applications }}
-{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
-{{- if or (and (eq $.Values.environment.name "dev") (not (dig "isFrontend" false $appValues)) (hasSuffix "api" $appName)) (and (eq $.Values.environment.name "dev") (dig "forceOffload" false $appValues)) }}
-{{- $fullName := include "helm.fullname" $appContext }}
-{{- $namespace := include "helm.namespace" $ }}
+{{- if (eq .Values.environment.name "dev") }}
+{{- $fullName := include "helm.fullname" . }}
+{{- $namespace := include "helm.namespace" . }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -19,186 +17,34 @@ spec:
               generators:
                 - git:
                     files:
-                      - path: Apps/dev-{{ $.Values.global.appStack | lower }}/v2-offload.yaml
+                      - path: Apps/dev-{{ .Values.global.appStack | lower }}/v2-offload.yaml
                     repoURL: https://github.com/MyCarrier-DevOps/GitOps-dev.git
                     revision: main
                 - list:
-                    elementsYaml: '{{`{{`}} $filtered := list {{`}}`}}{{`{{`}} range .offloads {{`}}`}}{{`{{`}}if eq .application.name "{{ $appName }}" {{`}}`}}{{`{{`}} $filtered = append $filtered . {{`}}`}}{{`{{`}} end {{`}}`}}{{`{{`}} end {{`}}`}}{{`{{`}} $filtered | toJson {{`}}`}}'
+                    elementsYaml: '{{`{{`}} .offloads | toJson {{`}}`}}'
           - list:
               elements:
                 - Values:
                     global:
-                      appStack: {{ $.Values.global.appStack | lower }}
+                      appStack: {{ .Values.global.appStack | lower }}
                       forceAutoscaling: false
-                      gitbranch: {{ $.Values.global.gitbranch }}
-                      language: {{ $.Values.global.language }}
+                      gitbranch: {{ .Values.global.gitbranch }}
+                      language: {{ .Values.global.language }}
                     environment:
                       name: "{{`{{`}} .name {{`}}`}}"
                       dependencyenv: dev
                       domainOverride:
-                        enabled: {{ $.Values.environment.domainOverride.enabled }}
-                        domain: {{ $.Values.environment.domainOverride.domain }}
-                    applications:
-                      {{ $appName }}:
-                        isFrontend: {{ dig "isFrontend" false $appValues }}
-                        forceOffload: {{ dig "forceOffload" false $appValues }}
-                        staticHostname: {{ dig "staticHostname" "" $appValues }}
-                        migratingToRollouts: false
-                        language: {{ dig "language" $.Values.global.language $appValues }}
-                        {{- with dig "labels" (dict) $appValues }}
-                        labels:
-                          {{- range $key, $value := . }}
-                          {{ $key }}: {{ $value }}
-                          {{- end }}
-                        {{- end }}
-                        {{- with dig "annotations" (dict) $appValues }}
-                        annotations:
-                          {{- range $key, $value := . }}
-                          {{ $key }}: {{ $value }}
-                          {{- end }}
-                        {{- end }}
-                        autoscaling:
-                          enabled: false
-                        deploymentType: {{ dig "deploymentType" "deployment" $appValues }}
-                        {{- with dig "env" (dict) $appValues }}
-                        env:
-                        {{- range $key, $value := omit (dig "env" (dict) $appValues) "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
-                          - name: "{{ $key }}"
-                            value: "{{ $value }}"
-                        {{- end }}
-                        {{- end }}
-                        image:
-                          registry: {{ $appValues.image.registry }}
-                          repository: {{ $appValues.image.repository }}
-                          tag: {{ $appValues.image.tag }}
-                        securityContext:
-                          readOnlyRootFilesystem: {{ dig "securityContext" "readOnlyRootFilesystem" false $appValues }}
-                        {{- with dig "initContainers" list $appValues }}
-                        initContainers:
-                        {{- range . }}
-                          - name: {{ .name }}
-                            image: "{{ .image }}:{{ .tag | default $.Chart.AppVersion }}"
-                            command: {{ .command }}
-                            args:
-                              {{ toYaml (dig "args" list .) | indent 10 | trim }}
-                            env:
-                              {{ include "helm.lang.vars" $appContext | indent 12 | trim }}
-                              {{ include "helm.otel.language" $ | indent 12 | trim }}
-                              {{ include "helm.otel.envVars" $ | indent 12 | trim }}
-                              {{ include "helm.vault" $ | indent 12 | trim }}
-                            {{- range $key, $value := omit (dig "env" (dict) .) "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
-                              - name: "{{ $key }}"
-                                value: "{{ $value }}"
-                            {{- end }}
-                            {{ include "helm.containerSecurityContext" $ | indent 10 | trim }}
-                        {{- end }}
-                        {{- end }}
-                        {{- with dig "ports" (dict) $appValues }}
-                        ports:
-                          {{- range $key, $value := . }}
-                          {{ $key }}: {{ $value }}
-                          {{- end }}
-                        {{- end }}
-                        pullPolicy: {{ dig "pullPolicy" "IfNotPresent" $appValues }}
-                        replicas: 1
-                        resources:
-                          limits:
-                            cpu: 500m
-                            memory: 512Mi
-                          requests:
-                            cpu: 100m
-                            memory: 256Mi
-                        version: {{ dig "version" (dict "tag" "latest") $appValues }}
-                        {{- if eq (dig "deploymentType" "deployment" $appValues) "rollout" }}
-                        updateStrategy:
-                          canary:
-                            steps:
-                              - setWeight: 25
-                              - analysis:
-                                  templates:
-                                    {{- range $index, $template := dig "analysisTemplates" list $appValues }}
-                                    - templateName: "{{`{{`}} .name {{`}}`}}-{{ $template.name }}"
-                                    {{- end }}
-                              - setWeight: 50
-                              - analysis:
-                                  templates:
-                                    {{- range $index, $template := dig "analysisTemplates" list $appValues }}
-                                    - templateName: "{{`{{`}} .name {{`}}`}}-{{ $template.name }}"
-                                    {{- end }}
-                              - setWeight: 100
-                        {{- else}}
-                        updateStrategy:
-                          type: RollingUpdate
-                          rollingUpdate:
-                            maxUnavailable: 0
-                            maxSurge: 2
-                        {{- end }}
-                        {{- if ne (dig "deploymentType" "deployment" $appValues) "rollout" }}
-                        analysisTemplates: []
-                        {{- else }}
-                        analysisTemplates:
-                          {{- toYaml (dig "analysisTemplates" list $appValues) | nindent 10 }}
-                        {{- end}}
-                      {{ if dig "serviceMonitor" false $appValues }}
-                      serviceMonitor:
-                        enabled: {{ dig "serviceMonitor" "enabled" false $appValues }}
-                      {{- end }}
-                      service:
-                        {{- if dig "service" "enabled" false $appValues }}
-                        {{- with dig "service" "annotations" (dict) $appValues }}
-                        annotations:
-                          {{- range $key, $value := . }}
-                          {{ $key }}: {{ $value }}
-                          {{- end }}
-                        {{- end }}
-                        {{- end }}
-                        ports:
-                        {{- range $key, $value := dig "ports" (dict) $appValues }}
-                          - name: {{ $key | lower }}
-                            port: {{ $value }}
-                            protocol: TCP
-                        {{- end }}
-                      serviceAccount:
-                        create: {{ dig "serviceAccount" "create" true $appValues }}
-                      networking:
-                        ingress:
-                          type: {{ dig "networking" "ingress" "type" "istio" $appValues }}
-                      disableOtelAutoinstrumentation: {{ $.Values.disableOtelAutoinstrumentation }}
-                    {{- /* Add jobs only to the first application */}}
-                    {{- if and (eq $appName (keys $.Values.applications | first)) ($.Values.jobs) }}
-                    jobs:
-                      {{- toYaml $.Values.jobs | nindent 22 }}
+                        enabled: {{ .Values.environment.domainOverride.enabled }}
+                        domain: {{ .Values.environment.domainOverride.domain }}
+                    applications: {{- with .Values.applications -}}
+                    {{- . | toYaml | nindent 22 }}
                     {{- end }}
-                    secrets:
-                      {{- with $.Values.secrets.mounted }}
-                      mounted: 
-                      {{- range . }}
-                        - name: {{ .name }}
-                          mountedFileName: {{ .mountedFileName }}
-                          vault:
-                            path: {{ .vault.path }}
-                            property: {{ .vault.property }}
-                          mount:
-                            path: {{ .mount.path }}
-                            subPath: {{ dig "mount" "subPath" "" . }}
-                      {{- end }}
-                      {{- end }}
-                      {{- if $.Values.secrets.bulk }}
-                      bulk:
-                        {{- if kindOf $.Values.secrets.bulk | eq "map" }}
-                        {{- if hasKey $.Values.secrets.bulk "path" }}
-                        path: {{ $.Values.secrets.bulk.path }}
-                        {{- end }}
-                        {{- end }}
-                      {{- end }}
-                      {{- with $.Values.secrets.individual }}
-                      individual:
-                        {{- range . }}
-                        - envVarName: {{ .envVarName }}
-                          {{ if .path -}}path: {{ .path }}{{- end }}
-                          {{ if .keyName -}}keyName: {{ .keyName }}{{- end }}
-                        {{- end -}}
-                      {{- end }}
+                    jobs: {{- with .Values.jobs }}
+                    {{- . | toYaml | nindent 22 }}
+                    {{- end }}
+                    secrets: {{- with .Values.secrets }}
+                    {{- . | toYaml | nindent 22 }}
+                    {{- end }}
   template:
     metadata:
       name: "{{ $fullName }}-offload-{{`{{`}} .name {{`}}`}}"
@@ -216,63 +62,7 @@ spec:
         helm:
           values: |2+
             {{`{{`}}- $Values := .Values {{`}}`}}
-            {{`{{`}}- $global := .Values.global {{`}}`}}
-            {{`{{`}}- $val_application := deepCopy .Values.application {{`}}`}}{{`{{`}} $off_app := deepCopy .application {{`}}`}}{{`{{`}} $application := deepCopy $off_app | mergeOverwrite (deepCopy $val_application) {{`}}`}}
-            {{`{{`}}- $val_secrets := deepCopy .Values.secrets {{`}}`}}{{`{{`}} $off_secrets := deepCopy .secrets {{`}}`}}{{`{{`}} $secrets := deepCopy $off_secrets | mergeOverwrite (deepCopy $val_secrets) {{`}}`}}
-            {{`{{`}}- $val_analysisTemplates := deepCopy .Values.analysisTemplates | default list {{`}}`}}
-            {{`{{`}}- $off_analysisTemplates := deepCopy .analysisTemplates | default list {{`}}`}}
-            {{`{{`}}- $mergedAnalysisTemplates := list {{`}}`}}
-
-            {{`{{`}}- range $val_analysisTemplates {{`}}`}}
-              {{`{{`}}- $template := . {{`}}`}}
-              {{`{{`}}- $found := false {{`}}`}}
-              {{`{{`}}- range $offTemplate := $off_analysisTemplates {{`}}`}}
-                {{`{{`}}- if eq $offTemplate.name $template.name {{`}}`}}
-                  {{`{{`}}- $merged := deepCopy $offTemplate | mergeOverwrite (deepCopy $template) {{`}}`}}
-                  {{`{{`}}- $mergedAnalysisTemplates = append $mergedAnalysisTemplates $merged {{`}}`}}
-                  {{`{{`}}- $found = true {{`}}`}}
-                {{`{{`}}- end {{`}}`}}
-              {{`{{`}}- end {{`}}`}}
-              {{`{{`}}- if not $found {{`}}`}}
-                {{`{{`}}- $mergedAnalysisTemplates = append $mergedAnalysisTemplates $template {{`}}`}}
-              {{`{{`}}- end {{`}}`}}
-            {{`{{`}}- end {{`}}`}}
-
-            {{`{{`}}- range $offTemplate := $off_analysisTemplates {{`}}`}}
-              {{`{{`}}- $found := false {{`}}`}}
-              {{`{{`}}- range $template := $val_analysisTemplates {{`}}`}}
-                {{`{{`}}- if eq $template.name $offTemplate.name {{`}}`}}
-                  {{`{{`}}- $found = true {{`}}`}}
-                {{`{{`}}- end {{`}}`}}
-              {{`{{`}}- end {{`}}`}}
-              {{`{{`}}- if not $found {{`}}`}}
-                {{`{{`}}- $mergedAnalysisTemplates = append $mergedAnalysisTemplates $offTemplate {{`}}`}}
-              {{`{{`}}- end {{`}}`}}
-            {{`{{`}}- end {{`}}`}}
-            
-            {{`{{`}}- $environment := .Values.environment -{{`}}`}}
-            global:
-            {{`{{`}}- .Values.global | toYaml | nindent 2 {{`}}`}}
-            environment:
-            {{`{{`}}- $environment | toYaml | nindent 2 {{`}}`}}
-            application:
-            {{`{{`}}- $application | toYaml | nindent 2 {{`}}`}}
-            serviceAccount:
-            {{`{{`}}- .Values.serviceAccount | toYaml | nindent 2 {{`}}`}}
-            serviceMonitor:
-            {{`{{`}}- .Values.serviceMonitor | toYaml | nindent 2 {{`}}`}}
-            service:
-            {{`{{`}}- .Values.service | toYaml | nindent 2 {{`}}`}}
-            networking:
-            {{`{{`}}- .Values.networking | toYaml | nindent 2 {{`}}`}}
-            disableOtelAutoinstrumentation: true
-            secrets:
-            {{`{{`}}- $secrets | toYaml | nindent 2 {{`}}`}}
-            {{`{{`}}- if (eq .Values.application.deploymentType "rollout")  {{`}}`}}
-            analysisTemplates:
-            {{`{{`}}- $mergedAnalysisTemplates | toYaml | nindent 2 {{`}}`}}
-            {{`{{`}}- end {{`}}`}}
-            
+            {{`{{`}}- .Values | toYaml | nindent 12 {{`}}`}}
       syncPolicy:
         automated:
           prune: true
@@ -292,5 +82,4 @@ spec:
             duration: 5s
             factor: 2
             maxDuration: 10m
-{{- end -}}
 {{- end -}}
