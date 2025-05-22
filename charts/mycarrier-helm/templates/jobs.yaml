@@ -10,7 +10,7 @@ metadata:
   {{- $rootContext := fromJson (include "helm.default-context" $rootContext) -}}
   {{- $_ := set $rootContext "job" . -}}
   name: {{ $namespace }}-{{ .name | default "job" }}
-  namespace: {{ $rootContext.defaults.environmentName | default $.Release.Namespace }}
+  namespace: {{ $namespace }}
   labels:
     {{ include "helm.labels.dependencies" $rootContext | indent 4 | trim }}
     {{ include "helm.labels.standard" $rootContext | indent 4 | trim }}
