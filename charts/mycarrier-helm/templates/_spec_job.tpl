@@ -80,6 +80,9 @@ template:
           - name: tmp-dir
             mountPath: /tmp
           {{ include "helm.otel.volumeMounts" . | indent 10 | trim }}
+          {{- if $.Values.secrets.mounted }}
+          {{ include "helm.secretVolumeMounts" $ | indent 10 | trim -}}
+          {{- end }}
         {{- if .job.volumes }}
           {{- range .job.volumes }}
           - name: {{ .name }}
@@ -93,23 +96,13 @@ template:
       - name: tmp-dir
         emptyDir: {}
       {{ include "helm.otel.volumes" . | indent 6 | trim }}
+      {{- if $.Values.secrets.mounted }}
+      {{ include "helm.secretVolumes" $ | indent 6 | trim -}}
+      {{- end }}
     {{- if .job.volumes }}
       {{- range .job.volumes }}
       - name: {{ .name }}
-        {{- if not .custom }}
-        configMap:
-          name: {{ .configMapName | default (include "helm.fullname" $) }}
-          {{- if .items }}
-          items:
-            {{- range .items }}
-            - key: {{ .key }}
-              path: {{ .path }}
-            {{- end }}
-          {{- end }}
-        {{- end }}
-        {{- if .custom }}
-          {{- toYaml .custom | nindent 10 }}
-        {{- end }}
+        {{ if ( or (and ( .kind ) (eq (.kind | lower) "emptydir")) (not .kind)) }}emptyDir: {}{{- end }}
       {{- end }}
     {{- end }}
 {{- end -}}
