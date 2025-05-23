@@ -41,8 +41,8 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Environment name (dev, preprod, prod, or feature-*)",
-          "pattern": "^(dev|preprod|prod|feature-.+)$"
+          "description": "Environment name (dev, preprod, prod, or feature*)",
+          "pattern": "^(dev|preprod|prod|feature.+)$"
         },
         "dependencyenv": {
           "oneOf": [
