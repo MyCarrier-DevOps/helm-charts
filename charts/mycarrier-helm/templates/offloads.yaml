@@ -57,8 +57,8 @@ spec:
         namespace: {{ $namespace }}
       source:
         repoURL: https://github.com/MyCarrier-DevOps/ITM.Helm.Charts.git
+        chart: mycarrier-helm
         targetRevision: {{ $.Chart.Version}}
-        path: "v2"
         helm:
           values: |2+
             {{`{{`}}- $Values := .Values {{`}}`}}
