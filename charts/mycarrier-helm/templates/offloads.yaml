@@ -56,7 +56,7 @@ spec:
         server: https://kubernetes.default.svc
         namespace: {{ $namespace }}
       source:
-        repoURL: https://github.com/MyCarrier-DevOps/ITM.Helm.Charts.git
+        repoURL: https://charts.mycarrier.dev
         chart: mycarrier-helm
         targetRevision: {{ $.Chart.Version}}
         helm:
