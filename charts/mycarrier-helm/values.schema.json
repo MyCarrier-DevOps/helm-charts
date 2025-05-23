@@ -173,6 +173,105 @@
               "type": "string"
             }
           },
+          "testtrigger": {
+            "type": "object",
+            "description": "Configuration for automated test jobs",
+            "properties": {
+              "ttlSecondsAfterFinished": {
+                "type": "string",
+                "description": "Time to keep test job resources after completion (seconds)",
+                "default": "3600"
+              },
+              "activeDeadlineSeconds": {
+                "type": "string",
+                "description": "Maximum time for the test job to run (seconds)",
+                "default": "300"
+              },
+              "backoffLimit": {
+                "type": "integer",
+                "description": "Number of retries for the test job",
+                "default": 0
+              },
+              "apikey": {
+                "type": "string",
+                "description": "API key for the test engine, can be a direct value or a vault reference"
+              },
+              "webhook_url": {
+                "type": "string",
+                "description": "URL of the test engine webhook, can be a direct value or a vault reference"
+              },
+              "resources": {
+                "type": "object",
+                "description": "Resource requests and limits for the test job pod",
+                "properties": {
+                  "requests": {
+                    "type": "object",
+                    "properties": {
+                      "cpu": {
+                        "type": "string",
+                        "default": "100m"
+                      },
+                      "memory": {
+                        "type": "string",
+                        "default": "64Mi"
+                      }
+                    }
+                  },
+                  "limits": {
+                    "type": "object",
+                    "properties": {
+                      "cpu": {
+                        "type": "string",
+                        "default": "500m"
+                      },
+                      "memory": {
+                        "type": "string",
+                        "default": "256Mi"
+                      }
+                    }
+                  }
+                }
+              },
+              "testdefinitions": {
+                "type": "array",
+                "description": "Test definitions to run",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "containerImage", "containerTag", "secretId"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Name of the test suite"
+                    },
+                    "containerImage": {
+                      "type": "string",
+                      "description": "Container image to use for running tests"
+                    },
+                    "containerTag": {
+                      "type": "string",
+                      "description": "Tag of the container image"
+                    },
+                    "secretId": {
+                      "type": "string",
+                      "description": "Reference to secrets needed for tests, can be a direct value or a vault reference"
+                    },
+                    "filters": {
+                      "type": "array",
+                      "description": "Test filters to select which tests to run",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
+                    },
+                    "serviceAddress": {
+                      "type": "string",
+                      "description": "Optional service address for the test to target"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "deploymentType": {
             "type": "string",
             "description": "Type of deployment",

@@ -27,6 +27,13 @@ applications:
       apikey: "<api-key-or-vault-reference>"
       webhook_url: "<webhook-url-or-vault-reference>"
       backoffLimit: <number>
+      resources:
+        requests:
+          memory: "<memory-request>"
+          cpu: "<cpu-request>"
+        limits:
+          memory: "<memory-limit>"
+          cpu: "<cpu-limit>"
       testdefinitions:
         - containerImage: <image-name>
           containerTag: <tag>
@@ -35,31 +42,45 @@ applications:
             - <filter2>
           name: <test-name>
           secretId: "<secret-id-or-vault-reference>"
+          serviceAddress: "<optional-service-address>"
 ```
 
 ## Configuration Parameters
 
 ### Top-Level Parameters
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `activeDeadlineSeconds` | Maximum time in seconds that the test job can run before being terminated | `"300"` |
-| `apikey` | API key for the test engine, can be a direct value or a vault reference | `"vault:Secrets/data/path/to/secret#apikey"` |
-| `backoffLimit` | Number of retries for the test job in case of failure | `0` |
-| `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | `"3600"` |
-| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference | `"vault:Secrets/data/path/to/secret#url"` |
+| Parameter | Description | Required | Default | Example |
+|-----------|-------------|----------|---------|---------|
+| `activeDeadlineSeconds` | Maximum time in seconds that the test job can run before being terminated | No | `"300"` | `"300"` |
+| `apikey` | API key for the test engine, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/path/to/secret#apikey"` |
+| `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
+| `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
+| `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
+| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/path/to/secret#url"` |
+
+*Default resource values:
+```yaml
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+```
 
 ### Test Definition Parameters
 
 Each test definition under `testdefinitions` supports the following parameters:
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `containerImage` | The container image containing the test code | `"testing/exampletestapp"` |
-| `containerTag` | The tag of the container image to use | `"abcd1234"` |
-| `filters` | Array of test filters to apply | `["TestCategory=coretests", "TestCategory=othercoretests"]` |
-| `name` | Name of the test | `"apitests"` |
-| `secretId` | Secret ID for authentication, can be a direct value or a vault reference | `"vault:Secrets/data/auth#secretid"` |
+| Parameter | Description | Required | Default | Example |
+|-----------|-------------|----------|---------|---------|
+| `containerImage` | The container image containing the test code | Yes | None | `"testing/exampletestapp"` |
+| `containerTag` | The tag of the container image to use | Yes | None | `"abcd1234"` |
+| `filters` | Array of test filters to apply | No | `[]` (empty array) | `["TestCategory=coretests", "TestCategory=othercoretests"]` |
+| `name` | Name of the test | Yes | None | `"apitests"` |
+| `secretId` | Secret ID for authentication, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/auth#secretid"` |
+| `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
 
 ## Example Configurations
 
@@ -99,6 +120,32 @@ testtrigger:
       secretId: "vault:Secrets/data/auth#secretid"
 ```
 
+### Configuration with Resources and Custom Service Address
+
+```yaml
+testtrigger:
+  activeDeadlineSeconds: "300"
+  ttlSecondsAfterFinished: "3600"
+  apikey: "vault:Secrets/data/path/to/secret#apikey"
+  webhook_url: "vault:Secrets/data/path/to/secret#url"
+  backoffLimit: 0
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+  testdefinitions:
+    - containerImage: testing/exampletestapp
+      containerTag: abcd1234
+      filters:
+        - TestCategory=coretests
+      name: apitests
+      secretId: "vault:Secrets/data/auth#secretid"
+      serviceAddress: "custom-service.custom-namespace.svc.cluster.local:8080"
+```
+
 ### Multiple Applications with Multiple Tests
 
 The following example shows how multiple applications can each have their own test triggers with multiple test definitions:
@@ -112,6 +159,13 @@ applications:
       apikey: "vault:Secrets/data/path/to/secret#apikey"
       webhook_url: "vault:Secrets/data/path/to/secret#url"
       backoffLimit: 0
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "200m"
+        limits:
+          memory: "512Mi"
+          cpu: "1000m"
       testdefinitions:
         - containerImage: testing/exampletestapp
           containerTag: abcd1234
@@ -120,6 +174,7 @@ applications:
             - TestCategory=othercoretests
           name: apitests
           secretId: "vault:Secrets/data/auth#secretid"
+          serviceAddress: "api.default.svc.cluster.local:9000"
         - containerImage: testing/dependencytests
           containerTag: efgh5678
           filters: []
@@ -138,7 +193,7 @@ applications:
           name: internalapitests
           secretId: "vault:Secrets/data/auth#secretid"
 ```
-Explanation: This configuration will create test jobs for both the `api` and `internal-api` applications. The `api` application will have two separate test jobs, while the `internal-api` application will have one.
+Explanation: This configuration will create test jobs for both the `api` and `internal-api` applications. The `api` application will have two separate test jobs, while the `internal-api` application will have one. The `api` test jobs have custom resource requirements and the first test definition specifies a custom service address.
 
 ## Usage Notes
 
@@ -149,6 +204,10 @@ Explanation: This configuration will create test jobs for both the `api` and `in
 3. **Multiple Test Definitions**: You can define multiple test definitions under a single `testtrigger` configuration, each with its own container image, tag, and filters.
 
 4. **Application-Specific Tests**: Each application in your deployment can have its own `testtrigger` configuration, allowing for application-specific tests.
+
+5. **Resource Configuration**: You can specify custom resources for the test job pods. If not specified, default values (64Mi memory request, 100m CPU request, 256Mi memory limit, 500m CPU limit) will be used.
+
+6. **Service Address**: By default, the service address will be constructed as `<fullname>.<namespace>.svc.cluster.local:<httpPort>`. You can override this for specific test definitions by providing the `serviceAddress` parameter.
 
 
 ## Best Practices

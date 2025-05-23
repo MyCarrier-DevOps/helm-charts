@@ -14,7 +14,7 @@
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
 {{- if dig "testtrigger" false .application }}
-ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 300 .application }}
+ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
 backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
 template:
@@ -37,11 +37,23 @@ template:
           value: {{ dig "testtrigger" "apikey" "" .application | quote }}
         - name: TESTENGINEHOOK_URL
           value: {{ dig "testtrigger" "webhook_url" "" .application | quote }}
+        resources:
+          {{- if .application.testtrigger.resources }}
+          {{ toYaml .application.testtrigger.resources | indent 10 | trim }}
+          {{- else }}
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+          {{- end }}
         command:
           - /bin/sh
           - -c
           - |
           {{- range dig "testtrigger" "testdefinitions" list .application }}
+          {{- $serviceAddress := .serviceAddress | default (printf "%s.%s.svc.cluster.local:%d" $fullName $namespace $httpPort) }}
             curl -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
@@ -56,7 +68,7 @@ template:
                   "EnvironmentName": "{{ $environment }}",
                   "ReleaseId": "{{ $imageTag }}",
                   "SecretId": "{{ .secretId }}",
-                  "ServiceAddress": "http://{{ $fullName }}.{{ $namespace }}.svc.cluster.local:{{ $httpPort }}",
+                  "ServiceAddress": {{ $serviceAddress | quote }},
                   "ReleaseDefinitionName": "{{ $fullName }}",
                   "BranchName": "{{ $gitBranch }}"
                 }

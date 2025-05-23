@@ -149,6 +149,13 @@ applications: {}
   #     backoffLimit: 0  # Number of retries for the test job
   #     apikey: "vault:Secrets/data/testengine#apikey"
   #     webhook_url: "vault:Secrets/data/testengine#webhook_url"
+  #     resources:
+  #       requests:
+  #          cpu: "50m"
+  #          memory: "64Mi"
+  #       limits:
+  #         cpu: "500m"
+  #         memory: "512Mi"
   #     testdefinitions: # Test definitions to run
   #       - name: "apitests"  # Name of the test suite
   #         containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests
@@ -157,6 +164,7 @@ applications: {}
   #         filters:  # Test filters to select which tests to run
   #           - "TestCategory=coretests"
   #           - "TestCategory=othercoretests"
+  #         serviceAddress: "custom-address.dev-exampletestapp.svc.cluster.local" # Custom service address for the test
   #       - name: "somedependencytest"
   #         containerImage: "myregistry.example.com/image/name"
   #         containerTag: "1.10.2"
