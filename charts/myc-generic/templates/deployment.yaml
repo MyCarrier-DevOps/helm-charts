@@ -66,7 +66,12 @@ spec:
             value: {{ .Values.image.tag | default .Chart.AppVersion }}
           {{- range $key, $value := .Values.env }}
           - name: {{ $key }}
+          {{- if kindIs "map" $value }}
+            valueFrom:
+              {{ toYaml $value | indent 14 | trim}}
+          {{- else }}
             value: {{ $value }}
+          {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
