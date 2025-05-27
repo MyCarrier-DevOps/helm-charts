@@ -620,6 +620,16 @@ entries:
   myc-generic:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-05-27T21:31:12.014665901Z"
+    description: A Helm chart for Kubernetes
+    digest: e101c9823cd3fbd3a1d7fc424841809d76bfa24074115bde6630587daba3041a
+    name: myc-generic
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/myc-generic-0.1.5/myc-generic-0.1.5.tgz
+    version: 0.1.5
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-05-27T21:16:45.903689297Z"
     description: A Helm chart for Kubernetes
     digest: 57c74275dcc2bf1f8d03512653e28759b6b89c89d8d0153a83f3ef31b616c6f5
@@ -1909,4 +1919,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-05-27T21:16:45.903882088Z"
+generated: "2025-05-27T21:31:12.014884159Z"
