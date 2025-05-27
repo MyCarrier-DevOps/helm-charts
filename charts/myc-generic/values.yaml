@@ -11,7 +11,8 @@ application:
     healthcheck:
       path: "/healthz"
       port: 8080
-      livenessprobe:
+      probeType: tcpSocket # or httpGet
+      livenessprobe: 
         initialDelaySeconds: 15
         periodSeconds: 30
         timeoutSeconds: 3

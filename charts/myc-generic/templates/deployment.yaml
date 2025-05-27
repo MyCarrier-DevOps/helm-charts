@@ -44,18 +44,28 @@ spec:
               name: {{ .name }}
             {{- end }}
           livenessProbe:
+            {{- if eq (.Values.application.deployment.healthcheck.probeType | default "tcpSocket") "tcpSocket" }}
+            tcpSocket:
+              port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+            {{- else if eq .Values.application.deployment.healthcheck.probeType "httpGet" }}
             httpGet:
               path: {{ .Values.application.deployment.healthcheck.path | default "/" }}
               port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+            {{- end }}
             initialDelaySeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.timeoutSeconds | default 3 }}
             failureThreshold: {{ .Values.application.deployment.healthcheck.livenessprobe.failureThreshold | default 6 }}
             successThreshold: {{ .Values.application.deployment.healthcheck.livenessprobe.successThreshold | default 1 }}
           readinessProbe:
+            {{- if eq (.Values.application.deployment.healthcheck.probeType | default "tcpSocket") "tcpSocket" }}
+            tcpSocket:
+              port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+            {{- else if eq .Values.application.deployment.healthcheck.probeType "httpGet" }}
             httpGet:
               path: {{ .Values.application.deployment.healthcheck.path | default "/" }}
               port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+            {{- end }}
             initialDelaySeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.timeoutSeconds | default 3 }}
