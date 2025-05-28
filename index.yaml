@@ -680,6 +680,22 @@ entries:
     version: 0.1.1
   mycarrier-helm:
   - apiVersion: v2
+    created: "2025-05-28T16:49:09.216819671Z"
+    dependencies:
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: A Helm chart for MyCarrier GitOps
+    digest: a44fc4c69ef5c7aa5435dacda0f4bbef41456ac3b4a58750f6184430cd01e6ab
+    icon: https://go.mycarrier.io/hs-fs/hubfs/Logos/PNG-MC-COLOR-Logo.png?width=366&height=85&name=PNG-MC-COLOR-Logo.png
+    name: mycarrier-helm
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mycarrier-helm-2.5.45/mycarrier-helm-2.5.45.tgz
+    version: 2.5.45
+  - apiVersion: v2
     created: "2025-05-28T00:24:11.786416335Z"
     dependencies:
     - name: common
@@ -1945,4 +1961,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-05-28T00:24:11.786767236Z"
+generated: "2025-05-28T16:49:09.217168441Z"
