@@ -1,6 +1,5 @@
 {{- define "helm.specs.job" -}}
 {{- $fullName := include "helm.fullname" . }}
-ttlSecondsAfterFinished: {{ .job.ttlSecondsAfterFinished }}
 activeDeadlineSeconds: {{ .job.activeDeadlineSeconds }}
 backoffLimit: {{ .job.backoffLimit | default 0 }}
 template:
@@ -11,6 +10,7 @@ template:
       {{ include "helm.otel.labels" . | indent 6 | trim }}
     annotations:
       argocd.argoproj.io/sync-options: Replace=true
+      argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
       {{- if .job.timing }}
       {{- $order := .job.order | default 0 }}
       {{- if eq .job.timing "pre-deploy" }}
