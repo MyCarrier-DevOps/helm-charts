@@ -9,7 +9,7 @@ updatePolicy:
   updateMode: {{ dig "vpa" "updateMode" "Initial" .application }}
 resourcePolicy:
   containerPolicies:
-  - containerName: {{ .appName | default $fullName }}
+  - containerName: {{ .appName | default $fullName | lower | trunc 63 }}
     controlledValues: {{ dig "vpa" "controlledValues" "RequestsOnly" .application }}
     minAllowed:
       cpu: 0m

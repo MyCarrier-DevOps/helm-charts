@@ -69,7 +69,7 @@ template:
     {{- end }}
     {{ if $.Values.enableDebugMode }}shareProcessNamespace: true {{ end }}
     containers:
-      - name: {{ .appName | default $fullName }}
+      - name: {{ .appName | default $fullName | lower | trunc 63 }}
         image: "{{ .application.image.registry }}/{{ .application.image.repository }}:{{ .application.image.tag }}"
         command: {{ .application.command | default "" }}
         args: {{ .application.args | default "" }}
