@@ -22,6 +22,18 @@ global:
   language: "nodejs"
 
   env: {}
+  dependencies:
+    mongodb: false
+    elasticsearch: false
+    redis: false
+    postgres: false
+    sqlserver: false
+    clickhouse: false
+    azureservicebus: false
+    redpanda: false
+    loadsure: false
+    chargify: false
+
 ## @section Environment Settings
 ## Environment-specific settings
 

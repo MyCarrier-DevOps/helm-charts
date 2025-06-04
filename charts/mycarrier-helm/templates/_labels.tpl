@@ -70,6 +70,36 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
 {{ $metaenv := (include "helm.metaEnvironment" . ) }}
   {{- $secDict := dict -}}
   {{- $envDict := dict -}}
+  {{- if $.Values.global.dependencies.azservicebus -}}
+  {{ $_ := set $secDict "dependency.azservicebus" "true"}}
+  {{- end -}}
+  {{- if $.Values.global.dependencies.mongodb }}
+  {{ $_ := set $secDict "dependency.mongo" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.redis)}}
+  {{ $_ := set $secDict "dependency.redis" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.postgres) }}
+  {{ $_ := set $secDict "dependency.postgres" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.sqlserver) }}
+  {{ $_ := set $secDict "dependency.sqlserver" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.clickhouse) }}
+  {{ $_ := set $secDict "dependency.clickhouse" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.redpanda) }}
+  {{ $_ := set $secDict "dependency.redpanda" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.loadsure) }}
+  {{ $_ := set $secDict "dependency.loadsure" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.elasticsearch) }}
+  {{ $_ := set $secDict "dependency.elasticsearch" "true"}}
+  {{- end -}}
+  {{- if ($.Values.global.dependencies.chargify) }}
+  {{ $_ := set $secDict "dependency.chargify" "true"}}
+  {{- end -}}
   {{- if and .Values (hasKey .Values "secrets") -}}
     {{- if and .Values.secrets (hasKey .Values.secrets "individual") -}}
       {{- range .Values.secrets.individual }}
@@ -83,13 +113,21 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
         {{- end -}}
       {{- else if or (contains "mongo" (lower .envVarName)) (contains "mongo" (lower (.path | default ""))) }}
         {{ $_ := set $secDict "dependency.mongo" "true"}}
-      {{- else if or (contains "p44" (lower .envVarName)) (contains "p44" (lower (.path | default ""))) }}
-        {{ $_ := set $secDict "dependency.p44" "true"}}
+      {{- else if or (contains "redis" (lower .envVarName)) (contains "redis" (lower (.path | default ""))) }}
+        {{ $_ := set $secDict "dependency.redis" "true"}}
+      {{- else if or (contains "postgres" (lower .envVarName)) (contains "postgres" (lower (.path | default "")))}}
+        {{ $_ := set $secDict "dependency.postgres" "true"}}
+      {{- else if or (contains "sqlserver" (lower .envVarName)) (contains "sqlserver" (lower (.path | default "")))}}
+        {{ $_ := set $secDict "dependency.sqlserver" "true"}}
+      {{- else if or (contains "clickhouse" (lower .envVarName)) (contains "clickhouse" (lower (.path | default "")))}}
+        {{ $_ := set $secDict "dependency.clickhouse" "true"}}
+      {{- else if or (contains "redpanda" (lower .envVarName)) (contains "redpanda" (lower (.path | default ""))) }}
+        {{ $_ := set $secDict "dependency.redpanda" "true"}}
       {{- else if or (contains "intercom" (lower .envVarName)) (contains "intercom" (lower (.path | default ""))) }}
         {{ $_ := set $secDict "dependency.intercom" "true"}}
-      {{- else if or (contains "loadsure" (lower .envVarName)) (contains "loadsure" (lower (.path | default ""))) }}
+      {{- else if or (contains "loadsure" (lower .envVarName)) (contains "loadsure" (lower (.path | default "")))}}
         {{ $_ := set $secDict "dependency.loadsure" "true"}}
-      {{- else if or (contains "elastic" (lower .envVarName)) (contains "elastic" (lower (.path | default ""))) }}
+      {{- else if or (contains "elastic" (lower .envVarName)) (contains "elastic" (lower (.path | default "")))}}
         {{ $_ := set $secDict "dependency.elasticsearch" "true"}}
       {{- else if or (contains "smc" (lower .envVarName)) (contains "smc" (lower (.path | default ""))) }}
         {{ $_ := set $secDict "dependency.smc" "true"}}
