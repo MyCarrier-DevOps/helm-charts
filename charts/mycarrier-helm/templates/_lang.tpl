@@ -50,8 +50,6 @@
   value: "RedisConnection{{ $metaenv | title }}"
 - name: "RedisConnection{{ $metaenv | title }}"
   value: "vault:secrets/data/{{ $metaenv }}/shared/redisconnection{{ $metaenv }}#value"
-- name: RedisKeyPrefix
-  value: "{{ $metaenv }}:{{ .Values.global.appStack | lower }}:"
 {{- end }}
 {{- if .Values.global.dependencies.azureservicebus }}
 - name: ServiceBusNamespace
