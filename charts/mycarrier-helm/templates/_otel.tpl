@@ -73,33 +73,6 @@ language: {{ $language | default "undefined" | quote}}
 {{- $language := include "helm.getLanguage" . -}}
 {{- if $language }}
 {{- if and (contains "csharp" $language) (not .Values.disableOtelAutoinstrumentation | default true) }}
-- name: "COR_ENABLE_PROFILING"
-  value: "1"
-- name: "COR_PROFILER"
-  value: "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
-- name: "CORECLR_ENABLE_PROFILING"
-  value: "1"
-- name: "CORECLR_PROFILER"
-  value: "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
-- name: "CORECLR_PROFILER_PATH"
-  value: "/opt/opentelemetry/OpenTelemetry.AutoInstrumentation.Native.so"
-- name: "OTEL_DOTNET_AUTO_HOME"
-  value: "/opt/opentelemetry"
-- name: "DOTNET_ADDITIONAL_DEPS"
-  value: "/opt/opentelemetry/AdditionalDeps"
-- name: "DOTNET_SHARED_STORE"
-  value: "/opt/opentelemetry/store"
-- name: "DOTNET_STARTUP_HOOKS"
-  value: "/opt/opentelemetry/netcoreapp3.1/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
-- name: "OTEL_DOTNET_AUTO_INTEGRATIONS_FILE"
-  value: "/opt/opentelemetry/integrations.json"
-- name: "OTEL_DOTNET_AUTO_TRACES_ENABLED_INSTRUMENTATIONS"
-  value: "AspNet,HttpClient,MongoDb,SqlClient,Elasticsearch,MassTransit"
-- name: "OTEL_DOTNET_AUTO_METRICS_ENABLED_INSTRUMENTATIONS"
-  value: "AspNet,HttpClient,NetRuntime"
-  {{/* value: {{ coalesce (dig "env" "OTEL_DOTNET_AUTO_METRICS_ENABLED_INSTRUMENTATIONS" "" .application) "AspNet,HttpClient,NetRuntime" }} */}}
-- name: "OTEL_DOTNET_AUTO_SQLCLIENT_ADD_DB_STATEMENT"
-  value: "true"
 {{- end }}
 {{- $languageList := list "nodejs" "java" "python" }}
 {{- if has $language $languageList }}
