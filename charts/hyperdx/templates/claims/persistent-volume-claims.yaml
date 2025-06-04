@@ -1,3 +1,4 @@
+{{- if not .Values.externalRedisUrl }}
 {{- if .Values.persistence.redis.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -12,6 +13,7 @@ spec:
     requests:
       storage: {{ .Values.persistence.redis.size }}
 ---
+{{- end }}
 {{- end }}
 {{- if .Values.persistence.mongodb.enabled }}
 apiVersion: v1

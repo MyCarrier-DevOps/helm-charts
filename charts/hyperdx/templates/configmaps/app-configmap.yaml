@@ -16,6 +16,6 @@ data:
   MONGO_URI: "mongodb://{{ include "hdx-oss.fullname" . }}-mongodb:{{ .Values.mongodb.port }}/hyperdx"
   NEXT_PUBLIC_SERVER_URL: "http://localhost:{{ .Values.hyperdx.api.port }}"
   OTEL_SERVICE_NAME: "hdx-oss-api"
-  REDIS_URL: "redis://{{ include "hdx-oss.fullname" . }}-redis:{{ .Values.redis.port }}"
+  REDIS_URL: "{{if .Values.externalRedisUrl }}{{ .Values.externalRedisUrl }}{{ else }}redis://{{ include "hdx-oss.fullname" . }}-redis:{{ .Values.redis.port }}{{end}}"
   USAGE_STATS_ENABLED: "{{ .Values.hyperdx.usageStatsEnabled | default true }}"
   CRON_IN_APP_DISABLED: "{{ .Values.tasks.enabled | default false }}"
