@@ -72,9 +72,10 @@ spec:
           - Validate=true
           - CreateNamespace=true
           - PrunePropagationPolicy=foreground
-          - PruneLast=true
+          - PruneLast=false
           - ServerSideApply=true
           - Replace=true
+          - SkipDryRunOnMissingResource=true
 
         retry:
           limit: 5
