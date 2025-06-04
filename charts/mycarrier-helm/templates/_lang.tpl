@@ -13,6 +13,8 @@
   value: "Development"
 - name: KeyVault_RedisConnection
   value: "RedisConnectionDev"
+- name: KeyVaultMongoConnection 
+  value: MongoConnection-dev
 - name: Auth_KeyVault_RedisConnection
   value: "RedisConnectionDev"
 {{- end }}
@@ -29,6 +31,8 @@
   value: "PreProd"
 - name: KeyVault_RedisConnection
   value: "RedisConnectionPreProd"
+- name: KeyVaultMongoConnection 
+  value: MongoConnection-preprod
 - name: Auth_KeyVault_RedisConnection
   value: "RedisConnectionPreProd"
 {{- end }}
@@ -45,6 +49,8 @@
   value: "Production"
 - name: KeyVault_RedisConnection
   value: "RedisConnectionProd"
+- name: KeyVaultMongoConnection 
+  value: MongoConnection-prod
 - name: Auth_KeyVault_RedisConnection
   value: "RedisConnectionProd"
 {{- end }}
