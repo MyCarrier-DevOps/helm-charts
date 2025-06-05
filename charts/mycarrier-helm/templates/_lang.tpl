@@ -27,13 +27,13 @@
 {{- if .Values.global.dependencies.mongodb }}
 - name: KeyVaultMongoConnection
   value: "MongoConnection_{{ $metaenv }}"
-- name: "MongoConnection_{{ $metaenv }}"
+- name: MongoConnection_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/mongodb-{{ .Values.global.appStack | lower }}-{{ $metaenv }}#value"
 {{- end }}
 {{- if .Values.global.dependencies.elasticsearch }}
 - name: KeyVault_ElasticSearch
   value: "ElasticSearchApiKey-{{ .Values.global.appStack | title }}-{{ $metaenv | title }}"
-- name: "ElasticSearchApiKey-{{ .Values.global.appStack | title }}-{{ $metaenv | title }}"
+- name: ElasticSearchApiKey-{{ .Values.global.appStack | title }}-{{ $metaenv | title }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/elasticsearchapikey-{{ .Values.global.appStack | lower }}-{{ $metaenv }}#value"
 {{- if eq $metaenv "prod" }}
 - name: ElasticSearch_Url
@@ -48,12 +48,12 @@
   value: "RedisConnection{{ $metaenv | title }}"
 - name: KeyVault_RedisConnection
   value: "RedisConnection{{ $metaenv | title }}"
-- name: "RedisConnection{{ $metaenv | title }}"
+- name: RedisConnection{{ $metaenv | title }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/redisconnection{{ $metaenv }}#value"
 {{- end }}
 {{- if .Values.global.dependencies.azureservicebus }}
 - name: ServiceBusNamespace
-  value: "https://inf-{{ $metaenv }}-servicebus.servicebus.windows.net"
+  value: "inf-{{ $metaenv }}-servicebus.servicebus.windows.net"
 - name: ServiceBusFullyQualifiedNamespace
   value: "inf-{{ $metaenv }}-servicebus.servicebus.windows.net"
 {{- end }}
@@ -62,9 +62,9 @@
   value: "LoadsureClaimsToken_{{ $metaenv }}"
 - name: KeyVault_LoadsureToken
   value: "LoadsureToken_{{ $metaenv }}"
-- name: "LoadsureClaimsToken_{{ $metaenv }}"
+- name: LoadsureClaimsToken_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/loadsureclaimstoken-{{ $metaenv }}#value"
-- name: "LoadsureToken_{{ $metaenv }}"
+- name: LoadsureToken_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/loadsuretoken-{{ $metaenv }}#value"
 {{- end }}
 {{- if .Values.global.dependencies.chargify }}
@@ -72,9 +72,9 @@
   value: "ChargifyApiKey_{{ $metaenv }}"
 - name: Maxio_BaseAddress
   value: "ChargifyBaseUrl_{{ $metaenv }}"
-- name: "ChargifyApiKey_{{ $metaenv }}"
+- name: ChargifyApiKey_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/chargifyapikey-{{ $metaenv }}#value"
-- name: "ChargifyBaseUrl_{{ $metaenv }}"
+- name: ChargifyBaseUrl_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/chargifybaseurl-{{ $metaenv }}#value"
 {{- end }}
 - name: Auth_BasicCredentialUrl
@@ -83,49 +83,51 @@
   value: "https://app-common-basiccredential-{{ $metaenv }}-api.azurewebsites.net/"
 - name: KeyVault_SplitIoProxyApiKey
   value: "SplitIoProxyApiKey_{{ $metaenv }}"
-- name: "SplitIoProxyApiKey_{{ $metaenv }}"
+- name: SplitIoProxyApiKey_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/splitioproxyapikey-{{ $metaenv }}#value"
+- name: splitioproxyurl_k8s_{{ $metaenv }}
+  value: "vault:secrets/data/{{ $metaenv }}/shared/splitioproxyurl-k8s-{{ $metaenv }}#value"
 - name: KeyVault_SplitIoProxyUrl
   value: "SplitIoProxyUrl_{{ $metaenv }}"
-- name: "SplitIoProxyUrl_{{ $metaenv }}"
+- name: SplitIoProxyUrl_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/splitioproxyurl-{{ $metaenv }}#value"
 - name: Auth_KeyVault_StrivacityBaseUrl
   value: "StrivacityBaseUrl_{{ $metaenv }}"
 - name: KeyVault_StrivacityBaseUrl
   value: "StrivacityBaseUrl_{{ $metaenv }}"
-- name: "StrivacityBaseUrl_{{ $metaenv }}"
+- name: StrivacityBaseUrl_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacitybaseurl-{{ $metaenv }}#value"
 - name: Auth_KeyVault_StrivacityApiKey
   value: "StrivacityApiKey_{{ $metaenv }}"
 - name: KeyVault_StrivacityApiKey
   value: "StrivacityApiKey_{{ $metaenv }}"
-- name: "StrivacityApiKey_{{ $metaenv }}"
+- name: StrivacityApiKey_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityapikey-{{ $metaenv }}#value"
 - name: Auth_KeyVault_StrivacityApiSecret
   value: "StrivacityApiSecret_{{ $metaenv }}"
 - name: KeyVault_StrivacityApiSecret
   value: "StrivacityApiSecret_{{ $metaenv }}"
-- name: "StrivacityApiSecret_{{ $metaenv }}"
+- name: StrivacityApiSecret_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityapisecret-{{ $metaenv }}#value"
 - name: Auth_KeyVault_StrivacityIdentityStore
   value: "StrivacityIdentityStore_{{ $metaenv }}"
 - name: KeyVault_StrivacityIdentityStore
   value: "StrivacityIdentityStore_{{ $metaenv }}"
-- name: "StrivacityIdentityStore_{{ $metaenv }}"
+- name: StrivacityIdentityStore_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityidentitystore-{{ $metaenv }}#value"
 - name: Auth_KeyVault_StrivacityApiAudience
   value: "StrivacityApiAudience_{{ $metaenv }}"
 - name: KeyVault_StrivacityApiAudience
   value: "StrivacityApiAudience_{{ $metaenv }}"
-- name: "StrivacityApiAudience_{{ $metaenv }}"
+- name: StrivacityApiAudience_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityapiaudience-{{ $metaenv }}#value"
 - name: Auth_KeyVault_StrivacityInviteClientId
   value: "StrivacityInviteClientId_{{ $metaenv }}"
 - name: KeyVault_StrivacityInviteClientId
   value: "StrivacityInviteClientId_{{ $metaenv }}"
-- name: "StrivacityInviteClientId_{{ $metaenv }}"
+- name: StrivacityInviteClientId_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityinviteclientid-{{ $metaenv }}#value"
-- name: "allowanonymouskey_{{ $metaenv }}"
+- name: allowanonymouskey_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/allowanonymouskey-{{ $metaenv }}#value"
 - name: KeyVault_IsActive
   value: "false"

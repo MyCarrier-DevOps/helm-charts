@@ -104,8 +104,9 @@ template:
         {{- end }}
         env:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
-          {{ include "helm.otel.language" $ | indent 10 | trim }}
-          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
+          {{ include "helm.vault" $ | indent 10 | trim }}
+          - name: "ComputedEnvironmentName"
+            value: "{{ $.Values.environment.name | default "dev" }}"
           {{- range $key, $value := $.Values.global.env }}
           - name: "{{ $key }}"
             {{- if kindIs "map" $value }}
@@ -126,7 +127,8 @@ template:
             {{- end }}
           {{- end }}
           {{- end }}
-          {{ include "helm.vault" $ | indent 10 | trim }}
+          {{ include "helm.otel.language" $ | indent 10 | trim }}
+          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
         {{- if or $.Values.configmap $.Values.useSecret }}
         envFrom:
           {{- if $.Values.configmap }}

@@ -88,16 +88,12 @@
 {{- end -}}
 
 {{- define "helm.annotations.istio" -}}
-{{- if .Values.service }}
-proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
-{{- if .Values.service.istioDisabled }}
+{{- if .application.istioDisabled }}
 sidecar.istio.io/inject: 'false'
 {{- else }}
+proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
 sidecar.istio.io/inject: 'true'
-{{- end }}
-{{- else }}
-sidecar.istio.io/inject: 'true'
-{{- end }}
+{{- end -}}
 {{- end -}}
 
 {{- define "helm.annotations.virtualservice" -}}
