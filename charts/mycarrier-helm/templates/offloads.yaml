@@ -30,18 +30,18 @@ spec:
                       forceAutoscaling: false
                       gitbranch: {{ .Values.global.gitbranch }}
                       language: {{ .Values.global.language }}
-                    environment:
-                      name: "{{`{{`}} .name {{`}}`}}"
-                      dependencyenv: dev
-                      domainOverride:
-                        enabled: {{ .Values.environment.domainOverride.enabled }}
-                        domain: {{ .Values.environment.domainOverride.domain }}
                       env:
                         {{- .Values.global.env | toYaml | nindent 24 }}
                       dependencies:
                         {{- with .Values.global.dependencies }}
                         {{- toYaml . | nindent 24 }}
                         {{- end }}
+                    environment:
+                      name: "{{`{{`}} .name {{`}}`}}"
+                      dependencyenv: dev
+                      domainOverride:
+                        enabled: {{ .Values.environment.domainOverride.enabled }}
+                        domain: {{ .Values.environment.domainOverride.domain }}
                     applications: {{- with .Values.applications -}}
                     {{- . | toYaml | nindent 22 }}
                     {{- end }}
