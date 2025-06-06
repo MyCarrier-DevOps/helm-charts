@@ -19,8 +19,9 @@ metadata:
     {{- if .labels }}
     {{ toYaml .labels | indent 4 | trim }}
     {{- end }}
-  {{- with .annotations }}
   annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true,PruneLast=false
+  {{- with .annotations }}
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
 spec:
