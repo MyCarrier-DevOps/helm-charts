@@ -9,7 +9,7 @@ template:
       {{ include "helm.labels.standard" . | indent 6 | trim }}
       {{ include "helm.otel.labels" . | indent 6 | trim }}
     annotations:
-      argocd.argoproj.io/sync-options: Force=true,Replace=true
+      argocd.argoproj.io/sync-options: Prune=true,Replace=true
       argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
       {{- if .job.timing }}
       {{- $order := .job.order | default 0 }}
