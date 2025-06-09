@@ -148,3 +148,123 @@
 {{ include "helm.lang.vars.csharp" . }}
 {{- end }}
 {{- end -}}
+
+{{/*
+SINGLE SOURCE OF TRUTH: Language-specific endpoint definitions
+Returns YAML array that can be converted to Go data structures with fromYamlArray
+*/}}
+{{- define "helm.lang.endpoint.list" -}}
+{{- if eq .Values.global.language "csharp" -}}
+- kind: "exact"
+  match: "/liveness"
+- kind: "exact"
+  match: "/health"
+- kind: "prefix"
+  match: "/api"
+{{- end -}}
+{{- end -}}
+
+{{/*
+Helper template to generate VirtualService HTTP rules for language-specific and user-defined endpoints
+This template generates the complete HTTP rules as strings to avoid duplication
+*/}}
+{{- define "helm.virtualservice.allowedEndpoints" -}}
+{{- $fullName := include "helm.fullname" . -}}
+{{- $mergedEndpoints := list -}}
+
+{{/* Add language-specific endpoints first using centralized template */}}
+{{- $langEndpointsYaml := include "helm.lang.endpoint.list" . -}}
+{{- if $langEndpointsYaml -}}
+{{- $langEndpoints := fromYamlArray $langEndpointsYaml -}}
+{{- $mergedEndpoints = concat $mergedEndpoints $langEndpoints -}}
+{{- end -}}
+
+{{/* Add user-defined endpoints */}}
+{{- if and .application.networking .application.networking.istio.allowedEndpoints -}}
+{{- $mergedEndpoints = concat $mergedEndpoints .application.networking.istio.allowedEndpoints -}}
+{{- end -}}
+
+{{/* Generate HTTP rules for each endpoint */}}
+{{- range $mergedEndpoints -}}
+{{- if typeIs "string" . }}
+{{/* Legacy format support - treat as exact match */}}
+- name: {{ $fullName }}-allowed-{{ . | replace "/" "-" | replace "*" "wildcard" | trimSuffix "-" }}
+  match:
+  - uri:
+      {{- if contains "*" . }}
+      prefix: {{ . | replace "*" "" }}
+      {{- else }}
+      exact: {{ . }}
+      {{- end }}
+{{- else }}
+{{/* New format with kind and match fields */}}
+- name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | replace "*" "wildcard" | replace "(" "" | replace ")" "" | replace "|" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
+  match:
+  - uri:
+      {{- if eq .kind "exact" }}
+      exact: {{ .match }}
+      {{- else if eq .kind "prefix" }}
+      prefix: {{ .match }}
+      {{- else if eq .kind "regex" }}
+      regex: {{ .match }}
+      {{- else }}
+      {{/* Default to exact if kind is not recognized */}}
+      exact: {{ .match }}
+      {{- end }}
+{{- end }}
+  route:
+  {{- if and $.application.service $.application.service.ports }}
+  {{- range $.application.service.ports }}
+  - destination:
+      host: {{ $fullName }}
+      port:
+        number: {{ .port }}
+    weight: 100
+  {{- if (eq $.application.deploymentType "rollout")  }}
+  - destination:
+      host: {{ $fullName }}-preview
+      port:
+        number: {{ .port }}
+    weight: 0
+  {{- end }}
+  {{- end }}
+  {{- else }}
+  - destination:
+      host: {{ $fullName }}
+      port:
+        number: {{ default 8080 (dig "ports" "http" nil $.application) }}
+    weight: 100
+  {{- if (eq $.application.deploymentType "rollout")  }}
+  - destination:
+      host: {{ $fullName }}-preview
+      port:
+        number: {{ default 8080 (dig "ports" "http" nil $.application) }}
+    weight: 0
+  {{- end }}
+  {{- end }}
+  {{- if $.application.networking }}
+  {{- if $.application.networking.istio.enabled }}
+  headers:
+    {{- if $.application.networking }}
+    {{- if and $.application.networking.istio.responseHeaders }}
+    {{- with $.application.networking.istio.responseHeaders }}
+    {{ toYaml . | indent 4 | trim }}
+    {{- end }}
+    {{- else }}
+    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+    {{- end }}
+    {{- end }}
+  {{- with $.application.networking.istio.corsPolicy }}
+  corsPolicy:
+    {{ toYaml . | indent 4 | trim }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+  {{/* Safely access service properties with default values if not defined */}}
+  timeout: {{ default "151s" (dig "service" "timeout" "151s" $.application) }}
+  retries:
+    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $.application) }}
+    attempts: {{ default 3 (dig "service" "attempts" 3 $.application) }}
+    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
+{{- end }}
+{{- end -}}

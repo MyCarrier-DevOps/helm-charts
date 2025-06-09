@@ -43,7 +43,7 @@ spec:
       - destination:
           host: {{ $fullName }}
           port:
-            number: {{ $appValues.ports.http }}
+            number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
     match:
       - headers:
           Environment:

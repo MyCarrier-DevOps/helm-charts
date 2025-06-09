@@ -1,0 +1,525 @@
+suite: test language-specific and user-defined endpoint merging
+templates:
+  - virtualService.yaml
+tests:
+  - it: should include only language-specific endpoints for csharp without user-defined endpoints
+    set:
+      global:
+        language: "csharp"
+      applications:
+        testapp:
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /liveness
+            name: app-testapp-allowed--liveness
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /health
+            name: app-testapp-allowed--health
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  prefix: /api
+            name: app-testapp-allowed--api
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+
+  - it: should merge language-specific endpoints with user-defined endpoints for csharp
+    set:
+      global:
+        language: "csharp"
+      applications:
+        testapp:
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - kind: "exact"
+                  match: "/custom/endpoint"
+                - kind: "regex"
+                  match: "/webhook/(stripe|paypal)"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      # Language-specific endpoints should come first
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /liveness
+            name: app-testapp-allowed--liveness
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /health
+            name: app-testapp-allowed--health
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  prefix: /api
+            name: app-testapp-allowed--api
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      # User-defined endpoints should be added after
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /custom/endpoint
+            name: app-testapp-allowed--custom-endpoint
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  regex: /webhook/(stripe|paypal)
+            name: app-testapp-allowed--webhook-stripe-paypal
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+
+  - it: should only include user-defined endpoints for non-csharp languages
+    set:
+      global:
+        language: "nodejs"
+      applications:
+        testapp:
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - kind: "exact"
+                  match: "/api/users"
+                - kind: "prefix"
+                  match: "/docs/"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /api/users
+            name: app-testapp-allowed--api-users
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  prefix: /docs/
+            name: app-testapp-allowed--docs
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+
+  - it: should not generate allowed endpoints section for non-csharp without user-defined endpoints
+    set:
+      global:
+        language: "nodejs"
+      applications:
+        testapp:
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      # Should only have the default route, no allowed endpoints - note the actual output includes headers/retries/timeouts
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            name: app-testapp
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+
+  - it: should support mixed legacy and new format with language-specific endpoints
+    set:
+      global:
+        language: "csharp"
+      applications:
+        testapp:
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/legacy/exact"
+                - kind: "exact"
+                  match: "/new/exact"
+    asserts:
+      - hasDocuments:
+          count: 1
+      # Language-specific endpoints
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /liveness
+            name: app-testapp-allowed--liveness
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /health
+            name: app-testapp-allowed--health
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  prefix: /api
+            name: app-testapp-allowed--api
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      # User-defined endpoints (legacy format)
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /legacy/exact
+            name: app-testapp-allowed--legacy-exact
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
+      # User-defined endpoints (new format)
+      - contains:
+          path: spec.http
+          content:
+            headers:
+              response:
+                set:
+                  Content-Security-Policy: 'default-src https: ''unsafe-eval'' ''unsafe-inline'' blob: data: wss:; object-src ''none''; img-src http://*.osm.org https: data: blob:;'
+                  Referrer-Policy: origin-when-cross-origin
+                  Strict-Transport-Security: max-age=7884000; includeSubDomains; preload
+                  X-Content-Type-Options: nosniff
+                  X-Frame-Options: DENY
+                  X-XSS-Protection: 1; mode=block
+            match:
+              - uri:
+                  exact: /new/exact
+            name: app-testapp-allowed--new-exact
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            route:
+              - destination:
+                  host: app-testapp
+                  port:
+                    number: 8080
+                weight: 100
+            timeout: 151s
