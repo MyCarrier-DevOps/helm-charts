@@ -147,250 +147,250 @@ tolerations: []
 ## @param applications.example-api.vpa.controlledValues - Values controlled by VPA: RequestsOnly or RequestsAndLimits
 ## @param applications.example-api.vpa.updateMode - VPA update mode: Off, Initial, Auto
 ## @param applications.example-api.autoscaling.forceAutoscaling - Force autoscaling to be enabled regardless of environment
-applications: {}
-  # Example application configuration
-  # example-api:
-  #   # Whether this is a frontend application
-  #   isFrontend: false
+# applications: {}
+#       # Example application configuration
+#   example-api:
+#     # Whether this is a frontend application
+#     isFrontend: false
 
-  # The testtrigger section allows you to configure automated test jobs that run against 
-  # your deployed application.
-  #   testtrigger:
-  #     ttlSecondsAfterFinished: "300"  # Time to keep test job resources after completion (seconds)
-  #     activeDeadlineSeconds: "600"  # Maximum time for the test job to run (seconds)
-  #     backoffLimit: 0  # Number of retries for the test job
-  #     apikey: "vault:Secrets/data/testengine#apikey"
-  #     webhook_url: "vault:Secrets/data/testengine#webhook_url"
-  #     resources:
-  #       requests:
-  #          cpu: "50m"
-  #          memory: "64Mi"
-  #       limits:
-  #         cpu: "500m"
-  #         memory: "512Mi"
-  #     testdefinitions: # Test definitions to run
-  #       - name: "apitests"  # Name of the test suite
-  #         containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests
-  #         containerTag: "1.10.2"  # Tag of the container image
-  #         secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
-  #         filters:  # Test filters to select which tests to run
-  #           - "TestCategory=coretests"
-  #           - "TestCategory=othercoretests"
-  #         serviceAddress: "custom-address.dev-exampletestapp.svc.cluster.local" # Custom service address for the test
-  #       - name: "somedependencytest"
-  #         containerImage: "myregistry.example.com/image/name"
-  #         containerTag: "1.10.2"
-  #         secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
-  #         filters:
-  #           - "TestCategory=otherdomaintests"
-  #           - "TestCategory=somedependencytests"
+#       # The testtrigger section allows you to configure automated test jobs that run against 
+#       # your deployed application.
+#     testtrigger:
+#       ttlSecondsAfterFinished: "300"  # Time to keep test job resources after completion (seconds)
+#       activeDeadlineSeconds: "600"  # Maximum time for the test job to run (seconds)
+#       backoffLimit: 0  # Number of retries for the test job
+#       apikey: "vault:Secrets/data/testengine#apikey"
+#       webhook_url: "vault:Secrets/data/testengine#webhook_url"
+#       resources:
+#         requests:
+#            cpu: "50m"
+#            memory: "64Mi"
+#         limits:
+#           cpu: "500m"
+#           memory: "512Mi"
+#       testdefinitions: # Test definitions to run
+#         - name: "apitests"  # Name of the test suite
+#           containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests
+#           containerTag: "1.10.2"  # Tag of the container image
+#           secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
+#           filters:  # Test filters to select which tests to run
+#             - "TestCategory=coretests"
+#             - "TestCategory=othercoretests"
+#           serviceAddress: "custom-address.dev-exampletestapp.svc.cluster.local" # Custom service address for the test
+#         - name: "somedependencytest"
+#           containerImage: "myregistry.example.com/image/name"
+#           containerTag: "1.10.2"
+#           secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
+#           filters:
+#             - "TestCategory=otherdomaintests"
+#             - "TestCategory=somedependencytests"
     
-  #   # Whether to force offloading
-  #   forceOffload: false
-    
-  #   # Static hostname for the application (optional)
-  #   # staticHostname: "api.example.com"
-    
-  #   # Custom labels to add to the application resources
-  #   labels:
-  #     app.kubernetes.io/component: "api"
-    
-  #   # Custom annotations to add to the application resources
-  #   annotations:
-  #     app.mycarrier.tech/team: "platform"
-    
-  #   # Type of deployment: deployment, statefulset, or rollout
-  #   deploymentType: "deployment"
-    
-  #   # Whether the application is migrating to Argo Rollouts
-  #   migratingToRollouts: false
-    
-  #   # Application version
-  #   version: "1.0.0"
-    
-  #   # Container image settings
-  #   image:
-  #     registry: "myregistry.example.com"
-  #     repository: "mycarrier/example-api"
-  #     tag: "1.0.0"
-    
-  #   # Image pull policy: IfNotPresent, Always, or Never
-  #   pullPolicy: "IfNotPresent"
-    
-  #   # Name of the pull secret
-  #   pullSecret: "imagepull"
-    
-  #   # Environment variables for the application
-  #   env:
-  #     NODE_ENV: "development"
-  #     LOG_LEVEL: "info"
-  #     # Example of valueFrom usage:
-  #     # DB_PASSWORD:
-  #     #   valueFrom:
-  #     #     secretKeyRef:
-  #     #       name: db-secrets
-  #     #       key: password
-    
-  #   # Ports to expose
-  #   # Can be defined as a map with custom names:
-  #   ports:
-  #     http: 8080
-  #     metrics: 9090
-    
-  #   # Resource requests and limits
-  #   resources:
-  #     requests:
-  #       cpu: "50m"
-  #       memory: "64Mi"
-  #     limits:
-  #       cpu: "500m"
-  #       memory: "512Mi"
-    
-  #   # Security context settings
-  #   securityContext:
-  #     readOnlyRootFilesystem: false
-    
-  #   # Number of pod replicas
-  #   replicas: 1
-    
-  #   # Probe settings
-  #   probes:
-  #     enableLiveness: true
-  #     enableReadiness: true
-  #     enableStartup: false
-  #     # Customize probes if needed:
-  #     # livenessProbe:
-  #     #   httpGet:
-  #     #     path: /health/live
-  #     #     port: http
-  #     #   initialDelaySeconds: 30
-  #     #   periodSeconds: 15
-  #     # readinessProbe:
-  #     #   httpGet:
-  #     #     path: /health/ready
-  #     #     port: http
-  #     #   initialDelaySeconds: 10
-  #     #   periodSeconds: 7
-    
-  #   # Service configuration
-  #   service:
-  #     # Service type: ClusterIP, NodePort, or LoadBalancer
-  #     type: "ClusterIP"
+#       # Whether to force offloading
+#     forceOffload: false
       
-  #     # Whether the service is headless
-  #     headless: false
+#       # Static hostname for the application (optional)
+#       # staticHostname: "api.example.com"
       
-  #     # Service port definitions
-  #     # If not provided, ports from the 'ports' field will be used
-  #     ports:
-  #       - name: http
-  #         port: 80
-  #         targetPort: 8080
-  #         protocol: TCP
-  #       - name: metrics
-  #         port: 9090
-  #         targetPort: 9090
+#       # Custom labels to add to the application resources
+#     labels:
+#       app.kubernetes.io/component: "api"
       
-  #     # Custom service annotations
-  #     annotations:
-  #       prometheus.io/scrape: "true"
-  #       prometheus.io/port: "9090"
+#       # Custom annotations to add to the application resources
+#     annotations:
+#       app.mycarrier.tech/team: "platform"
       
-  #     # Service timeout settings
-  #     timeout: "151s"
-  #     retryOn: "5xx,reset"
-  #     attempts: 3
-  #     perTryTimeout: "50s"
+#       # Type of deployment: deployment, statefulset, or rollout
+#     deploymentType: "deployment"
       
-  #     # Whether to disable Istio for this service
-  #     istioDisabled: false
+#       # Whether the application is migrating to Argo Rollouts
+#     migratingToRollouts: false
     
-  #   # Networking configuration
-  #   networking:
-  #     # Ingress configuration
-  #     ingress:
-  #       type: "istio"
+#       # Application version
+#     version: "1.0.0"
+    
+#       # Container image settings
+#     image:
+#       registry: "myregistry.example.com"
+#       repository: "mycarrier/example-api"
+#       tag: "1.0.0"
+    
+#       # Image pull policy: IfNotPresent, Always, or Never
+#     pullPolicy: "IfNotPresent"
+    
+#       # Name of the pull secret
+#     pullSecret: "imagepull"
+    
+#       # Environment variables for the application
+#     env:
+#       NODE_ENV: "development"
+#       LOG_LEVEL: "info"
+#       # Example of valueFrom usage:
+#       # DB_PASSWORD:
+#       #   valueFrom:
+#       #     secretKeyRef:
+#       #       name: db-secrets
+#       #       key: password
+    
+#       # Ports to expose
+#       # Can be defined as a map with custom names:
+#     ports:
+#       http: 8080
+#       metrics: 9090
+    
+#       # Resource requests and limits
+#     resources:
+#       requests:
+#         cpu: "50m"
+#         memory: "64Mi"
+#       limits:
+#         cpu: "500m"
+#         memory: "512Mi"
+    
+#       # Security context settings
+#     securityContext:
+#       readOnlyRootFilesystem: false
+    
+#       # Number of pod replicas
+#     replicas: 1
+    
+#       # Probe settings
+#     probes:
+#       enableLiveness: true
+#       enableReadiness: true
+#       enableStartup: false
+#       # Customize probes if needed:
+#       # livenessProbe:
+#       #   httpGet:
+#       #     path: /health/live
+#       #     port: http
+#       #   initialDelaySeconds: 30
+#       #   periodSeconds: 15
+#       # readinessProbe:
+#       #   httpGet:
+#       #     path: /health/ready
+#       #     port: http
+#       #   initialDelaySeconds: 10
+#       #   periodSeconds: 7
+    
+#       # Service configuration
+#     service:
+#       # Service type: ClusterIP, NodePort, or LoadBalancer
+#       type: "ClusterIP"
       
-  #     # Istio configuration
-  #     istio:
-  #       enabled: true
-  #       # Additional hostnames
-  #       hosts: []
-  #       # Domain redirects
-  #       redirects: {}
-  #       # Custom routes
-  #       routes: {}
-  #       # Custom response headers
-  #       # If not provided, default security headers will be used
-  #       responseHeaders: {}
-  #       # CORS policy
-  #       corsPolicy: {}
-    
-  #   # Service account configuration
-  #   serviceAccount:
-  #     create: false
-    
-  #   # Node selector for pod scheduling
-  #   # nodeSelector:
-  #   #   disktype: ssd
-    
-  #   # Priority class name for pod scheduling
-  #   # priorityClassName: "high-priority"
-    
-  #   # Update strategy configuration
-  #   updateStrategy:
-  #     # For standard deployments
-  #     type: "RollingUpdate"
-  #     rollingUpdate:
-  #       maxUnavailable: 0
-  #       maxSurge: 2
+#       # Whether the service is headless
+#       headless: false
       
-  #     # For Argo Rollouts deployments
-  #     # canary:
-  #     #   steps:
-  #     #     - setWeight: 25
-  #     #     - analysis:
-  #     #         templates:
-  #     #           - templateName: load-test
-  #     #     - setWeight: 50
-  #     #     - analysis:
-  #     #         templates:
-  #     #           - templateName: load-test
-  #     #     - setWeight: 100
-  #     #   scaleDownDelaySeconds: 30
-  #     #   scaleDownDelayRevisionLimit: 5
-  #     #   abortScaleDownDelaySeconds: 30
+#       # Service port definitions
+#       # If not provided, ports from the 'ports' field will be used
+#       ports:
+#         - name: http
+#           port: 80
+#           targetPort: 8080
+#           protocol: TCP
+#         - name: metrics
+#           port: 9090
+#           targetPort: 9090
+      
+#       # Custom service annotations
+#       annotations:
+#         prometheus.io/scrape: "true"
+#         prometheus.io/port: "9090"
+      
+#       # Service timeout settings
+#       timeout: "151s"
+#       retryOn: "5xx,reset"
+#       attempts: 3
+#       perTryTimeout: "50s"
+      
+#       # Whether to disable Istio for this service
+#       istioDisabled: false
     
-  #   # Prometheus ServiceMonitor configuration
-  #   serviceMonitor:
-  #     enabled: false
-  #     interval: "30s"
-  #     scrapeTimeout: "10s"
-  #     scheme: "http"
-  #     # relabelings: []
-  #     # metricRelabelings: []
-  #     # tlsConfig: {}
+#       # Networking configuration
+#     networking:
+#       # Ingress configuration
+#       ingress:
+#         type: "istio"
+      
+#       # Istio configuration
+#       istio:
+#         enabled: true
+#         # Additional hostnames
+#         hosts: []
+#         # Domain redirects
+#         redirects: {}
+#         # Custom routes
+#         routes: {}
+#         # Custom response headers
+#         # If not provided, default security headers will be used
+#         responseHeaders: {}
+#         # CORS policy
+#         corsPolicy: {}
+#         allowedEndpoints: []
     
-  #   # Container lifecycle hooks
-  #   # lifecycle:
-  #   #   postStart: "echo 'Container started'"
-  #   #   preStop: "sleep 10 && pkill node"
+#     # Service account configuration
+#     serviceAccount:
+#       create: false
     
-  #   # Vertical Pod Autoscaler configuration
-  #   vpa:
-  #     enabled: false
-  #     controlledValues: "RequestsOnly"
-  #     # VPA update mode: Off, Initial, Auto
-  #     updateMode: "Auto"
+#     # Node selector for pod scheduling
+#     # nodeSelector:
+#     #   disktype: ssd
     
-  #   # Horizontal Pod Autoscaler configuration
-  #   autoscaling:
-  #     enabled: false
-  #     minReplicas: 2
-  #     maxReplicas: 5
-  #     targetCPUUtilizationPercentage: 80
-  #     forceAutoscaling: false
-  #     # targetMemoryUtilizationPercentage: 80
+#     # Priority class name for pod scheduling
+#     # priorityClassName: "high-priority"
+    
+#     # Update strategy configuration
+#     updateStrategy:
+#       # For standard deployments
+#       type: "RollingUpdate"
+#       rollingUpdate:
+#         maxUnavailable: 0
+#         maxSurge: 2
+      
+#       # For Argo Rollouts deployments
+#       # canary:
+#       #   steps:
+#       #     - setWeight: 25
+#       #     - analysis:
+#       #         templates:
+#       #           - templateName: load-test
+#       #     - setWeight: 50
+#       #     - analysis:
+#       #         templates:
+#       #           - templateName: load-test
+#       #     - setWeight: 100
+#       #   scaleDownDelaySeconds: 30
+#       #   scaleDownDelayRevisionLimit: 5
+#       #   abortScaleDownDelaySeconds: 30
+    
+#     # Prometheus ServiceMonitor configuration
+#     serviceMonitor:
+#       enabled: false
+#       interval: "30s"
+#       scrapeTimeout: "10s"
+#       scheme: "http"
+#       # relabelings: []
+#       # metricRelabelings: []
+#       # tlsConfig: {}
+    
+#     # Container lifecycle hooks
+#     # lifecycle:
+#     #   postStart: "echo 'Container started'"
+#     #   preStop: "sleep 10 && pkill node"
+    
+#     # Vertical Pod Autoscaler configuration
+#     vpa:
+#       enabled: false
+#       controlledValues: "RequestsOnly"
+#       # VPA update mode: Off, Initial, Auto
+#       updateMode: "Auto"
+#     # Horizontal Pod Autoscaler configuration
+#     autoscaling:
+#       enabled: false
+#       minReplicas: 2
+#       maxReplicas: 5
+#       targetCPUUtilizationPercentage: 80
+#       forceAutoscaling: false
+#       # targetMemoryUtilizationPercentage: 80
 
 ## @section Kubernetes Jobs
 ## Configuration for Kubernetes Jobs to run

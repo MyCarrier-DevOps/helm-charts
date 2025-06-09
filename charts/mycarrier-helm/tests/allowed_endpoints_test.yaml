@@ -1,0 +1,443 @@
+suite: test allowed endpoints functionality in VirtualService
+templates:
+  - templates/virtualService.yaml
+tests:
+  - it: should create allowed endpoints with exact match
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--api-health
+      - equal:
+          path: spec.http[0].match[0].uri.exact
+          value: "/api/health"
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--api-status
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/api/status"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-forbidden
+      - equal:
+          path: spec.http[2].fault.abort.httpStatus
+          value: 403
+      - equal:
+          path: spec.http[2].fault.abort.percentage.value
+          value: 100
+
+  - it: should create allowed endpoints with wildcard prefix match
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/*"
+                - "/health"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--api-wildcard
+      - equal:
+          path: spec.http[0].match[0].uri.prefix
+          value: "/api/"
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/health"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-forbidden
+      - equal:
+          path: spec.http[2].fault.abort.httpStatus
+          value: 403
+
+  - it: should create allowed endpoints with mixed exact and wildcard matches
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/*"
+                - "/health"
+                - "/metrics"
+                - "/admin/*"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--api-wildcard
+      - equal:
+          path: spec.http[0].match[0].uri.prefix
+          value: "/api/"
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/health"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--metrics
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/metrics"
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-allowed--admin-wildcard
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/admin/"
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-app-forbidden
+      - equal:
+          path: spec.http[4].fault.abort.httpStatus
+          value: 403
+
+  - it: should work with rollout deployment type
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: rollout
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--api-health
+      - equal:
+          path: spec.http[0].route[0].destination.host
+          value: test-stack-test-app
+      - equal:
+          path: spec.http[0].route[0].weight
+          value: 100
+      - equal:
+          path: spec.http[0].route[1].destination.host
+          value: test-stack-test-app-preview
+      - equal:
+          path: spec.http[0].route[1].weight
+          value: 0
+
+  - it: should handle special characters in endpoint names
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/v1/users/*"
+                - "/health-check"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--api-v1-users-wildcard
+      - equal:
+          path: spec.http[0].match[0].uri.prefix
+          value: "/api/v1/users/"
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--health-check
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/health-check"
+
+  - it: should work without service ports defined (use default port)
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/health"
+          ports:
+            http: 9090
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[0].route[0].destination.port.number
+          value: 9090
+
+  - it: should work without ports defined (use default 8080)
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/health"
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[0].route[0].destination.port.number
+          value: 8080
+
+  - it: should not create allowed endpoints section when allowedEndpoints is not defined
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Should not have allowed endpoints or forbidden rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      - notExists:
+          path: spec.http[0].fault
+
+  - it: should not create allowed endpoints section when allowedEndpoints is empty
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints: []
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Should not have allowed endpoints or forbidden rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      - notExists:
+          path: spec.http[0].fault
+
+  - it: should include proper timeout and retry configuration for allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+            timeout: "300s"
+            retryOn: "5xx,reset,connect-failure"
+            attempts: 5
+            perTryTimeout: "60s"
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].timeout
+          value: "300s"
+      - equal:
+          path: spec.http[0].retries.retryOn
+          value: "5xx,reset,connect-failure"
+      - equal:
+          path: spec.http[0].retries.attempts
+          value: 5
+      - equal:
+          path: spec.http[0].retries.perTryTimeout
+          value: "60s"
+
+  - it: should use default timeout and retry values when not specified
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].timeout
+          value: "151s"
+      - equal:
+          path: spec.http[0].retries.retryOn
+          value: "5xx,reset"
+      - equal:
+          path: spec.http[0].retries.attempts
+          value: 3
+      - equal:
+          path: spec.http[0].retries.perTryTimeout
+          value: "50s"
