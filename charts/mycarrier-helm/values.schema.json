@@ -17,16 +17,12 @@
           "enum": ["csharp", "nodejs", "java", "python", "nginx"]
         },
         "gitbranch": {
-          "oneOf": [
-            { "type": "string", "description": "Name of the git branch (used for feature branches)" },
-            { "type": "null" }
-          ]
+          "type": "string",
+          "description": "Name of the git branch (used for feature branches)"
         },
         "branchlabel": {
-          "oneOf": [
-            { "type": "string", "description": "Label for the branch, used for reference label" },
-            { "type": "null" }
-          ]
+          "type": "string",
+          "description": "Label for the branch, used for reference label"
         },
         "forceAutoscaling": {
           "type": "boolean",
@@ -41,82 +37,46 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Environment name (dev, preprod, prod, or feature*)",
-          "pattern": "^(dev|preprod|prod|feature.+)$"
+          "description": "Environment name (dev, preprod, prod, or feature-*)",
+          "pattern": "^(dev|preprod|prod|feature-.+)$"
         },
         "dependencyenv": {
-          "oneOf": [
-            { "type": "string", "description": "Environment name for dependencies", "default": "dev" },
-            { "type": "null" }
-          ]
+          "type": "string",
+          "description": "Environment name for dependencies",
+          "default": "dev"
         },
         "domainOverride": {
-          "oneOf": [
-            { 
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "oneOf": [
-                    { "type": "boolean", "description": "Whether to override the default domain", "default": false },
-                    { "type": "null" }
-                  ]
-                },
-                "domain": {
-                  "oneOf": [
-                    { "type": "string", "description": "Domain to use when override is enabled" },
-                    { "type": "null" }
-                  ]
-                }
-              }
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether to override the default domain",
+              "default": false
             },
-            { "type": "null" }
-          ]
+            "domain": {
+              "type": "string",
+              "description": "Domain to use when override is enabled"
+            }
+          },
+          "required": ["enabled", "domain"]
         }
       }
     },
     "enableVaultCA": {
-      "oneOf": [
-        { "type": "boolean", "description": "Enable Vault CA certificate download during pod startup", "default": false },
-        { "type": "null" }
-      ]
+      "type": "boolean",
+      "description": "Enable Vault CA certificate download during pod startup",
+      "default": false
     },
     "disableOtelAutoinstrumentation": {
-      "oneOf": [
-        { "type": "boolean", "description": "Disable OpenTelemetry automatic instrumentation", "default": true },
-        { "type": "null" }
-      ]
+      "type": "boolean",
+      "description": "Disable OpenTelemetry automatic instrumentation",
+      "default": true
     },
     "tolerations": {
-      "oneOf": [
-        { "type": "array", "description": "Default tolerations for all applications", 
-          "items": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string"
-              },
-              "operator": {
-                "type": "string",
-                "enum": ["Equal", "Exists"]
-              },
-              "value": {
-                "type": "string"
-              },
-              "effect": {
-                "type": "string",
-                "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
-              },
-              "tolerationSeconds": {
-                "type": "integer"
-              }
-            }
-          }
-        },
-        { "type": "null" }
-      ]
-    },
-    "applications": {
-      "type": "object",
+      "type": "array",
+      "description": "Default tolerations for all applications",
+      "items": {
+        "type": "object",
         "properties": {
           "key": {
             "type": "string"
@@ -140,8 +100,12 @@
     },
     "applications": {
       "type": "object",
+      "title": "Application Names Must Be Valid",
       "minProperties": 1,
-      "additionalProperties": {
+      "description": "Application definitions. IMPORTANT: Application names (keys) must contain only lowercase letters (a-z), numbers (0-9), underscores (_), and dashes (-). Uppercase letters, spaces, and special characters are not allowed in application names.",
+      "patternProperties": {
+        "^[a-z0-9_-]+$": {
+          "description": "Application name must contain only lowercase letters (a-z), numbers (0-9), underscores (_), and dashes (-)",
         "type": "object",
         "required": ["image"],
         "properties": {
@@ -171,105 +135,6 @@
             "description": "Custom annotations to add to the application resources",
             "additionalProperties": {
               "type": "string"
-            }
-          },
-          "testtrigger": {
-            "type": "object",
-            "description": "Configuration for automated test jobs",
-            "properties": {
-              "ttlSecondsAfterFinished": {
-                "type": "string",
-                "description": "Time to keep test job resources after completion (seconds)",
-                "default": "3600"
-              },
-              "activeDeadlineSeconds": {
-                "type": "string",
-                "description": "Maximum time for the test job to run (seconds)",
-                "default": "300"
-              },
-              "backoffLimit": {
-                "type": "integer",
-                "description": "Number of retries for the test job",
-                "default": 0
-              },
-              "apikey": {
-                "type": "string",
-                "description": "API key for the test engine, can be a direct value or a vault reference"
-              },
-              "webhook_url": {
-                "type": "string",
-                "description": "URL of the test engine webhook, can be a direct value or a vault reference"
-              },
-              "resources": {
-                "type": "object",
-                "description": "Resource requests and limits for the test job pod",
-                "properties": {
-                  "requests": {
-                    "type": "object",
-                    "properties": {
-                      "cpu": {
-                        "type": "string",
-                        "default": "100m"
-                      },
-                      "memory": {
-                        "type": "string",
-                        "default": "64Mi"
-                      }
-                    }
-                  },
-                  "limits": {
-                    "type": "object",
-                    "properties": {
-                      "cpu": {
-                        "type": "string",
-                        "default": "500m"
-                      },
-                      "memory": {
-                        "type": "string",
-                        "default": "256Mi"
-                      }
-                    }
-                  }
-                }
-              },
-              "testdefinitions": {
-                "type": "array",
-                "description": "Test definitions to run",
-                "items": {
-                  "type": "object",
-                  "required": ["name", "containerImage", "containerTag", "secretId"],
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "description": "Name of the test suite"
-                    },
-                    "containerImage": {
-                      "type": "string",
-                      "description": "Container image to use for running tests"
-                    },
-                    "containerTag": {
-                      "type": "string",
-                      "description": "Tag of the container image"
-                    },
-                    "secretId": {
-                      "type": "string",
-                      "description": "Reference to secrets needed for tests, can be a direct value or a vault reference"
-                    },
-                    "filters": {
-                      "type": "array",
-                      "description": "Test filters to select which tests to run",
-                      "items": {
-                        "type": "string"
-                      },
-                      "default": []
-                    },
-                    "serviceAddress": {
-                      "type": "string",
-                      "description": "Optional service address for the test to target"
-                    }
-                  }
-                }
-              }
             }
           },
           "deploymentType": {
@@ -981,8 +846,10 @@
               }
             }
           }
+          }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "jobs": {
       "type": "array",
@@ -1152,16 +1019,31 @@
       "type": "object",
       "properties": {
         "bulk": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "oneOf": [
-                { "type": "string", "description": "Path to secrets in vault" },
-                { "type": "null", "description": "Null value when no vault path is needed" }
-              ],
-              "description": "Path to secrets in vault"
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [],
+              "properties": {
+                "path": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "description": "Path to secrets in vault"
+                    },
+                    {
+                      "type": "null",
+                      "description": "Null value when no vault path is needed"
+                    }
+                  ],
+                  "description": "Path to secrets in vault"
+                }
+              }
+            },
+            {
+              "type": "null",
+              "description": "Null value when no bulk secrets are needed"
             }
-          }
+          ]
         },
         "individual": {
           "type": "array",
@@ -1174,16 +1056,13 @@
                 "description": "Name of the environment variable"
               },
               "path": {
-                "oneOf": [
-                  { "type": "string", "description": "Path to the secret in vault" },
-                  { "type": "null" }
-                ]
+                "type": "string",
+                "description": "Path to the secret in vault"
               },
               "keyName": {
-                "oneOf": [
-                  { "type": "string", "description": "Key in the secret", "default": "value" },
-                  { "type": "null" }
-                ]
+                "type": "string",
+                "description": "Key in the secret",
+                "default": "value"
               }
             }
           }
@@ -1192,34 +1071,27 @@
           "type": "array",
           "items": {
             "type": "object",
+            "required": ["name", "mountedFileName", "vault", "mount"],
             "properties": {
               "name": {
-                "oneOf": [
-                  { "type": "string", "description": "Name for the secret" },
-                  { "type": "null" }
-                ]
+                "type": "string",
+                "description": "Name for the secret"
               },
               "mountedFileName": {
-                "oneOf": [
-                  { "type": "string", "description": "Filename for the mounted secret" },
-                  { "type": "null" }
-                ]
+                "type": "string",
+                "description": "Filename for the mounted secret"
               },
               "vault": {
                 "type": "object",
                 "required": ["path", "property"],
                 "properties": {
                   "path": {
-                    "oneOf": [
-                      { "type": "string", "description": "Path to the secret in vault" },
-                      { "type": "null" }
-                    ]
+                    "type": "string",
+                    "description": "Path to the secret in vault"
                   },
                   "property": {
-                    "oneOf": [
-                      { "type": "string", "description": "Property in the secret" },
-                      { "type": "null" }
-                    ]
+                    "type": "string",
+                    "description": "Property in the secret"
                   }
                 }
               },
@@ -1231,10 +1103,7 @@
                     "description": "Path to mount the secret"
                   },
                   "subPath": {
-                    "oneOf": [
-                      { "type": "string", "description": "Subpath within the mount" },
-                      { "type": "null", "description": "Null value when no subPath is needed" }
-                    ],
+                    "type": "string",
                     "description": "Subpath within the mount"
                   }
                 }
@@ -1245,3 +1114,4 @@
       }
     }
   }
+}
