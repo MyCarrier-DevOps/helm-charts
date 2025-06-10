@@ -53,7 +53,7 @@ template:
           - -c
           - |
           {{- range dig "testtrigger" "testdefinitions" list .application }}
-          {{- $serviceAddress := .serviceAddress | default (printf "%s.%s.svc.cluster.local:%d" $fullName $namespace $httpPort) }}
+          {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%d" $fullName $namespace $httpPort) }}
             curl -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
