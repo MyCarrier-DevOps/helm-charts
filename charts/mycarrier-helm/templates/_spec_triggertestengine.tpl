@@ -5,12 +5,12 @@
 {{- $environment := $.Values.environment.name }}
 {{- $gitBranch := $.Values.global.gitbranch}}
 {{- $stackname := $.Values.global.appStack }}
-{{- if and .Values.service .Values.service.ports }}
-  {{- range .Values.service.ports }}
-    {{- if eq .name "http" }}
-      {{- $httpPort = .targetPort }}
-    {{- end }}
+{{- if not (dig "service" "ports" false .application) }}
+{{- range $key, $value := .application.ports }}
+  {{- if eq ($key | lower) "http" }}
+    {{- $httpPort = $value }}
   {{- end }}
+{{- end }}
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
 {{- if dig "testtrigger" false .application }}
@@ -53,7 +53,7 @@ template:
           - -c
           - |
           {{- range dig "testtrigger" "testdefinitions" list .application }}
-          {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%d" $fullName $namespace $httpPort) }}
+          {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
             curl -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
