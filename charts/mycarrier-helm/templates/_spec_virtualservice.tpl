@@ -12,6 +12,18 @@ gateways:
 - mesh
 - istio-system/default
 http:
+{{- if not (hasPrefix "feature" $.Values.environment.name) }}
+- name: {{ $fullName }}
+  route:
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ default 8080 (dig "ports" "http" nil .application) }}
+  match:
+    - headers:
+        Environment:
+          exact: {{ $.Values.environment.name }}
+{{- end }}
 {{- if .application.networking }}
 {{- range $key, $value := .application.networking.istio.redirects }}
 - name: {{ $key }}
@@ -50,19 +62,8 @@ http:
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
 {{- end }}
 {{- end }}
-{{- if not (hasPrefix "feature" $.Values.environment.name) }}
-- name: {{ $fullName }}
-  route:
-    - destination:
-        host: {{ $fullName }}
-        port:
-          number: {{ default 8080 (dig "ports" "http" nil .application) }}
-  match:
-    - headers:
-        Environment:
-          exact: {{ $.Values.environment.name }}
-{{- end }}
-{{- if or (and .application.networking .application.networking.istio.allowedEndpoints) }}
+{{- if or (and .application.networking .application.networking.istio.allowedEndpoints) (eq .Values.global.language "csharp") }}
+{{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 - name: {{ $fullName }}-forbidden
   route:
