@@ -58,10 +58,15 @@ http:
   - uri:
       prefix: /
   fault:
+    delay:
+      fixedDelay: 29s
+      percentage:
+        value: 100
     abort:
       httpStatus: 403
       percentage:
         value: 100
+
 {{- else }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   route:
