@@ -3,7 +3,7 @@ name: mycarrier-helm
 description: A Helm chart for MyCarrier GitOps
 type: application
 icon: https://go.mycarrier.io/hs-fs/hubfs/Logos/PNG-MC-COLOR-Logo.png?width=366&height=85&name=PNG-MC-COLOR-Logo.png
-version: 2.5.62
+version: 2.5.63
 dependencies:
   - name: common
     repository: oci://registry-1.docker.io/bitnamicharts
