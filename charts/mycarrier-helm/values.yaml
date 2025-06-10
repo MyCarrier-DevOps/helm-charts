@@ -147,7 +147,7 @@ tolerations: []
 ## @param applications.example-api.vpa.controlledValues - Values controlled by VPA: RequestsOnly or RequestsAndLimits
 ## @param applications.example-api.vpa.updateMode - VPA update mode: Off, Initial, Auto
 ## @param applications.example-api.autoscaling.forceAutoscaling - Force autoscaling to be enabled regardless of environment
-# applications: {}
+applications: {}
 #       # Example application configuration
 #   example-api:
 #     # Whether this is a frontend application

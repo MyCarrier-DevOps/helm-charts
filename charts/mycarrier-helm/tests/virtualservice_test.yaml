@@ -57,7 +57,7 @@ tests:
           path: spec.hosts
           content: api.custom.domain.mycarrier.dev
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: external
 
   - it: should create feature branch specific virtual service

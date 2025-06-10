@@ -62,7 +62,8 @@ http:
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
 {{- end }}
 {{- end }}
-{{- if or (and .application.networking .application.networking.istio.allowedEndpoints) (eq .Values.global.language "csharp") }}
+
+{{- if (dig "application" "networking" "istio" "allowedEndpoints" "" $.application) }}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 - name: {{ $fullName }}-forbidden

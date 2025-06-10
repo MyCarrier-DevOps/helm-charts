@@ -13,6 +13,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -30,25 +31,25 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--api-health
       - equal:
-          path: spec.http[0].match[0].uri.exact
+          path: spec.http[1].match[0].uri.exact
           value: "/api/health"
       - equal:
-          path: spec.http[1].name
+          path: spec.http[2].name
           value: test-stack-test-app-allowed--api-status
       - equal:
-          path: spec.http[1].match[0].uri.exact
+          path: spec.http[2].match[0].uri.exact
           value: "/api/status"
       - equal:
-          path: spec.http[2].name
+          path: spec.http[3].name
           value: test-stack-test-app-forbidden
       - equal:
-          path: spec.http[2].fault.abort.httpStatus
+          path: spec.http[3].fault.abort.httpStatus
           value: 403
       - equal:
-          path: spec.http[2].fault.abort.percentage.value
+          path: spec.http[3].fault.abort.percentage.value
           value: 100
 
   - it: should create allowed endpoints with wildcard prefix match
@@ -62,6 +63,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -79,22 +81,22 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--api-wildcard
       - equal:
-          path: spec.http[0].match[0].uri.prefix
+          path: spec.http[1].match[0].uri.prefix
           value: "/api/"
       - equal:
-          path: spec.http[1].name
+          path: spec.http[2].name
           value: test-stack-test-app-allowed--health
       - equal:
-          path: spec.http[1].match[0].uri.exact
+          path: spec.http[2].match[0].uri.exact
           value: "/health"
       - equal:
-          path: spec.http[2].name
+          path: spec.http[3].name
           value: test-stack-test-app-forbidden
       - equal:
-          path: spec.http[2].fault.abort.httpStatus
+          path: spec.http[3].fault.abort.httpStatus
           value: 403
 
   - it: should create allowed endpoints with mixed exact and wildcard matches
@@ -108,6 +110,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -127,34 +130,34 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--api-wildcard
       - equal:
-          path: spec.http[0].match[0].uri.prefix
+          path: spec.http[1].match[0].uri.prefix
           value: "/api/"
       - equal:
-          path: spec.http[1].name
+          path: spec.http[2].name
           value: test-stack-test-app-allowed--health
       - equal:
-          path: spec.http[1].match[0].uri.exact
+          path: spec.http[2].match[0].uri.exact
           value: "/health"
       - equal:
-          path: spec.http[2].name
+          path: spec.http[3].name
           value: test-stack-test-app-allowed--metrics
       - equal:
-          path: spec.http[2].match[0].uri.exact
+          path: spec.http[3].match[0].uri.exact
           value: "/metrics"
       - equal:
-          path: spec.http[3].name
+          path: spec.http[4].name
           value: test-stack-test-app-allowed--admin-wildcard
       - equal:
-          path: spec.http[3].match[0].uri.prefix
+          path: spec.http[4].match[0].uri.prefix
           value: "/admin/"
       - equal:
-          path: spec.http[4].name
+          path: spec.http[5].name
           value: test-stack-test-app-forbidden
       - equal:
-          path: spec.http[4].fault.abort.httpStatus
+          path: spec.http[5].fault.abort.httpStatus
           value: 403
 
   - it: should work with rollout deployment type
@@ -168,6 +171,7 @@ tests:
         test-app:
           deploymentType: rollout
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -184,19 +188,19 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--api-health
       - equal:
-          path: spec.http[0].route[0].destination.host
+          path: spec.http[1].route[0].destination.host
           value: test-stack-test-app
       - equal:
-          path: spec.http[0].route[0].weight
+          path: spec.http[1].route[0].weight
           value: 100
       - equal:
-          path: spec.http[0].route[1].destination.host
+          path: spec.http[1].route[1].destination.host
           value: test-stack-test-app-preview
       - equal:
-          path: spec.http[0].route[1].weight
+          path: spec.http[1].route[1].weight
           value: 0
 
   - it: should handle special characters in endpoint names
@@ -210,6 +214,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -227,16 +232,16 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--api-v1-users-wildcard
       - equal:
-          path: spec.http[0].match[0].uri.prefix
+          path: spec.http[1].match[0].uri.prefix
           value: "/api/v1/users/"
       - equal:
-          path: spec.http[1].name
+          path: spec.http[2].name
           value: test-stack-test-app-allowed--health-check
       - equal:
-          path: spec.http[1].match[0].uri.exact
+          path: spec.http[2].match[0].uri.exact
           value: "/health-check"
 
   - it: should work without service ports defined (use default port)
@@ -250,6 +255,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -263,10 +269,10 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--health
       - equal:
-          path: spec.http[0].route[0].destination.port.number
+          path: spec.http[1].route[0].destination.port.number
           value: 9090
 
   - it: should work without ports defined (use default 8080)
@@ -280,6 +286,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -291,10 +298,10 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app-allowed--health
       - equal:
-          path: spec.http[0].route[0].destination.port.number
+          path: spec.http[1].route[0].destination.port.number
           value: 8080
 
   - it: should not create allowed endpoints section when allowedEndpoints is not defined
@@ -308,6 +315,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -323,10 +331,10 @@ tests:
           of: VirtualService
       # Should not have allowed endpoints or forbidden rule
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app
       - notExists:
-          path: spec.http[0].fault
+          path: spec.http[1].fault
 
   - it: should not create allowed endpoints section when allowedEndpoints is empty
     set:
@@ -339,6 +347,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -355,10 +364,10 @@ tests:
           of: VirtualService
       # Should not have allowed endpoints or forbidden rule
       - equal:
-          path: spec.http[0].name
+          path: spec.http[1].name
           value: test-stack-test-app
       - notExists:
-          path: spec.http[0].fault
+          path: spec.http[1].fault
 
   - it: should include proper timeout and retry configuration for allowed endpoints
     set:
@@ -371,6 +380,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -391,16 +401,16 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].timeout
+          path: spec.http[1].timeout
           value: "300s"
       - equal:
-          path: spec.http[0].retries.retryOn
+          path: spec.http[1].retries.retryOn
           value: "5xx,reset,connect-failure"
       - equal:
-          path: spec.http[0].retries.attempts
+          path: spec.http[1].retries.attempts
           value: 5
       - equal:
-          path: spec.http[0].retries.perTryTimeout
+          path: spec.http[1].retries.perTryTimeout
           value: "60s"
 
   - it: should use default timeout and retry values when not specified
@@ -414,6 +424,7 @@ tests:
         test-app:
           deploymentType: deployment
           image:
+            registry: mycarrieracr.azurecr.io
             repository: test/app
             tag: latest
           networking:
@@ -430,14 +441,14 @@ tests:
       - isKind:
           of: VirtualService
       - equal:
-          path: spec.http[0].timeout
+          path: spec.http[1].timeout
           value: "151s"
       - equal:
-          path: spec.http[0].retries.retryOn
+          path: spec.http[1].retries.retryOn
           value: "5xx,reset"
       - equal:
-          path: spec.http[0].retries.attempts
+          path: spec.http[1].retries.attempts
           value: 3
       - equal:
-          path: spec.http[0].retries.perTryTimeout
+          path: spec.http[1].retries.perTryTimeout
           value: "50s"

@@ -117,61 +117,74 @@
     },
     "applications": {
       "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "operator": {
-            "type": "string",
-            "enum": ["Equal", "Exists"]
-          },
-          "value": {
-            "type": "string"
-          },
-          "effect": {
-            "type": "string",
-            "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
-          },
-          "tolerationSeconds": {
-            "type": "integer"
-          }
-        }
-      }
-    },
-    "applications": {
-      "type": "object",
       "minProperties": 1,
-      "additionalProperties": {
-        "type": "object",
-        "required": ["image"],
-        "properties": {
+      "patternProperties": {
+        "^[a-z0-9_-]+$": {
+          "type": "object",
+          "required": ["image"],
+          "properties": {
           "isFrontend": {
-            "type": "boolean",
-            "description": "Whether this is a frontend application",
-            "default": false
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Whether this is a frontend application",
+                "default": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "forceOffload": {
-            "type": "boolean",
-            "description": "Whether to force offloading",
-            "default": false
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Whether to force offloading",
+                "default": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "staticHostname": {
-            "type": "string",
-            "description": "Static hostname for the application"
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Static hostname for the application"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "labels": {
-            "type": "object",
-            "description": "Custom labels to add to the application resources",
-            "additionalProperties": {
-              "type": "string"
-            }
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "Custom labels to add to the application resources",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "annotations": {
-            "type": "object",
-            "description": "Custom annotations to add to the application resources",
-            "additionalProperties": {
-              "type": "string"
-            }
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "Custom annotations to add to the application resources",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "testtrigger": {
             "type": "object",
@@ -279,9 +292,16 @@
             "default": "deployment"
           },
           "migratingToRollouts": {
-            "type": "boolean",
-            "description": "Whether the application is migrating to Argo Rollouts",
-            "default": false
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Whether the application is migrating to Argo Rollouts",
+                "default": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "version": {
             "oneOf": [
@@ -298,6 +318,9 @@
                     "description": "Version tag"
                   }
                 }
+              },
+              {
+                "type": "null"
               }
             ],
             "description": "Application version"
@@ -328,7 +351,8 @@
             "properties": {
               "registry": {
                 "type": "string",
-                "description": "Docker registry URL"
+                "description": "Docker registry URL",
+                "default": "mycarrieracr.azurecr.io"
               },
               "repository": {
                 "type": "string",
@@ -341,15 +365,29 @@
             }
           },
           "pullPolicy": {
-            "type": "string",
-            "description": "Image pull policy",
-            "enum": ["IfNotPresent", "Always", "Never"],
-            "default": "IfNotPresent"
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Image pull policy",
+                "enum": ["IfNotPresent", "Always", "Never"],
+                "default": "IfNotPresent"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "pullSecret": {
-            "type": "string",
-            "description": "Name of the pull secret",
-            "default": "imagepull"
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Name of the pull secret",
+                "default": "imagepull"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "command": {
             "type": "array",
@@ -677,7 +715,14 @@
             }
           },
           "priorityClassName": {
-            "type": "string"
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "updateStrategy": {
             "type": "object",
@@ -984,6 +1029,8 @@
         }
       }
     },
+    "additionalProperties": false
+    },
     "jobs": {
       "type": "array",
       "items": {
@@ -1149,20 +1196,27 @@
       }
     },
     "secrets": {
-      "type": "object",
-      "properties": {
-        "bulk": {
+      "oneOf": [
+        {
           "type": "object",
           "properties": {
-            "path": {
+            "bulk": {
               "oneOf": [
-                { "type": "string", "description": "Path to secrets in vault" },
-                { "type": "null", "description": "Null value when no vault path is needed" }
-              ],
-              "description": "Path to secrets in vault"
-            }
-          }
-        },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "oneOf": [
+                        { "type": "string", "description": "Path to secrets in vault" },
+                        { "type": "null", "description": "Null value when no vault path is needed" }
+                      ],
+                      "description": "Path to secrets in vault"
+                    }
+                  }
+                },
+                { "type": "null", "description": "Null value when no bulk secrets are needed" }
+              ]
+            },
         "individual": {
           "type": "array",
           "items": {
@@ -1243,5 +1297,9 @@
           }
         }
       }
+    },
+    { "type": "null", "description": "Null value when no secrets are needed" }
+      ]
     }
   }
+}
