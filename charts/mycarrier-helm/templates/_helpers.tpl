@@ -57,6 +57,22 @@
 {{- end }}
 {{- end -}}
 
+{{- define "helm.basename" -}}
+{{/* Get standardized context with defaults */}}
+{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- $appStack := $ctx.defaults.appStack -}}
+
+{{/* Get app name - first try .appName, then from application if present */}}
+{{- $appName := .appName | default "" -}}
+{{- if not $appName -}}
+  {{- if and .Values .Values.application .Values.application.name -}}
+    {{- $appName = .Values.application.name -}}
+  {{- end -}}
+{{- end -}}
+{{- (list $appStack $appName) | join "-" | lower | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "helm.instance" -}}
 {{/* Get standardized context with defaults */}}
 {{- $ctx := fromJson (include "helm.default-context" .) -}}

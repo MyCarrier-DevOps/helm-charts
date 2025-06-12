@@ -279,6 +279,10 @@
                     "serviceAddress": {
                       "type": "string",
                       "description": "Optional service address for the test to target"
+                    },
+                    "additionalEnvVars": {
+                      "type": "string",
+                      "description": "Additional environment variables to pass to the test container"
                     }
                   }
                 }

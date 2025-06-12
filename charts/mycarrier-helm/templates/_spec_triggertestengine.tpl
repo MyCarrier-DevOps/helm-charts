@@ -1,5 +1,6 @@
 {{- define "helm.specs.testenginehook" -}}
 {{- $fullName := include "helm.fullname" . }}
+{{- $baseName := include "helm.basename" . }}
 {{- $namespace := include "helm.namespace" . }}
 {{- $httpPort := 8080 }}
 {{- $environment := $.Values.environment.name }}
@@ -69,7 +70,7 @@ template:
                   "ReleaseId": "{{ $imageTag }}",
                   "SecretId": "{{ .secretId }}",
                   "ServiceAddress": {{ $serviceAddress | quote }},
-                  "ReleaseDefinitionName": "{{ $fullName }}",
+                  "ReleaseDefinitionName": "{{ $baseName }}",
                   "BranchName": "{{ $gitBranch }}",
                   "AdditionalEnvVars": "{{ .additionalEnvVars}}"
                 }
