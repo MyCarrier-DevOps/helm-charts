@@ -173,6 +173,7 @@ applications: {}
 #           containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests
 #           containerTag: "1.10.2"  # Tag of the container image
 #           secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
+#           additionalEnvVars: "key1=value1;key2=value2" # Additional environment variables for the test
 #           filters:  # Test filters to select which tests to run
 #             - "TestCategory=coretests"
 #             - "TestCategory=othercoretests"

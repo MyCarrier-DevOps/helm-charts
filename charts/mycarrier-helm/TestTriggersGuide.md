@@ -43,6 +43,7 @@ applications:
           name: <test-name>
           secretId: "<secret-id-or-vault-reference>"
           serviceAddress: "<optional-service-address>"
+          additionalEnvVars: "key1=value1;key2=value2"
 ```
 
 ## Configuration Parameters
@@ -81,6 +82,7 @@ Each test definition under `testdefinitions` supports the following parameters:
 | `name` | Name of the test | Yes | None | `"apitests"` |
 | `secretId` | Secret ID for authentication, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/auth#secretid"` |
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
+| `additionalEnvVars` | Additional environment variables to pass to container as key-value pairs delimited by colon | No | `""` | `"key1=value1;key2=value2"` |
 
 ## Example Configurations
 
@@ -101,6 +103,7 @@ testtrigger:
         - TestCategory=othercoretests
       name: apitests
       secretId: "vault:Secrets/data/auth#secretid"
+      additionalEnvVars: ""
 ```
 
 ### Configuration without Filters
@@ -118,6 +121,7 @@ testtrigger:
       filters: []
       name: somedependencytest
       secretId: "vault:Secrets/data/auth#secretid"
+      additionalEnvVars: "key1=value1;key2=value2;key3=value3"
 ```
 
 ### Configuration with Resources and Custom Service Address
@@ -144,6 +148,7 @@ testtrigger:
       name: apitests
       secretId: "vault:Secrets/data/auth#secretid"
       serviceAddress: "custom-service.custom-namespace.svc.cluster.local:8080"
+      additionalEnvVars: "key1=value1"
 ```
 
 ### Multiple Applications with Multiple Tests

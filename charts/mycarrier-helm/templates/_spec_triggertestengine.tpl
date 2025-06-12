@@ -70,7 +70,8 @@ template:
                   "SecretId": "{{ .secretId }}",
                   "ServiceAddress": {{ $serviceAddress | quote }},
                   "ReleaseDefinitionName": "{{ $fullName }}",
-                  "BranchName": "{{ $gitBranch }}"
+                  "BranchName": "{{ $gitBranch }}",
+                  "AdditionalEnvVars": "{{ .additionalEnvVars}}"
                 }
               }' "$TESTENGINEHOOK_URL";
           {{- end }}
