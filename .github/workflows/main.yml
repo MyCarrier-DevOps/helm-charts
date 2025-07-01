@@ -28,14 +28,14 @@ jobs:
 
       - name: Get specific changed files   
         id: changed-files-specific
-        uses: tj-actions/changed-files@v22.2
+        uses: tj-actions/changed-files@v45.0.8
         with:
           files: ./charts/*
       
       - name: generate file list
         if: steps.changed-files-specific.outputs.any_modified == 'true'
         id: file-list
-        uses: tj-actions/changed-files@v22.2
+        uses: tj-actions/changed-files@v45.0.8
         with:
           path: charts
 
