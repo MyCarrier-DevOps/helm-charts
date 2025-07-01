@@ -29,7 +29,7 @@ vault.security.banzaicloud.io/vault-env-from-path: "{{ .Values.secrets.bulk.path
 {{- else }}
 - name: {{ .envVarName }}
   {{/* Generate vault path using application name from context if available */}}
-  value: "vault:secrets/data/%s/%s/%s#%s" $metaenv $.Values.global.appStack .envVarName $keyname
+  value: {{ printf "vault:secrets/data/%s/%s/%s#%s" $metaenv $.Values.global.appStack .envVarName $keyname }}
 {{- end }}
 {{- end }}
 {{- end -}}
