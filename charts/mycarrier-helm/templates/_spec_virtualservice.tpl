@@ -24,7 +24,7 @@ http:
         Environment:
           exact: {{ $.Values.environment.name }}
 {{- end }}
-{{- if .application.networking }}
+{{- if and .application.networking .application.networking.istio .application.networking.istio.redirects }}
 {{- range $key, $value := .application.networking.istio.redirects }}
 - name: {{ $key }}
   match:
@@ -63,7 +63,7 @@ http:
 {{- end }}
 {{- end }}
 
-{{- if (dig "application" "networking" "istio" "allowedEndpoints" "" $.application) }}
+{{- if and .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 - name: {{ $fullName }}-forbidden
@@ -114,7 +114,7 @@ http:
     weight: 0
   {{- end }}
   {{- end }}
-  {{- if .application.networking }}
+  {{- if and .application.networking .application.networking.istio }}
   {{- if .application.networking.istio.enabled }}
   headers:
     {{- if .application.networking }}
