@@ -63,7 +63,7 @@ http:
 {{- end }}
 {{- end }}
 
-{{- if and .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints }}
+{{- if and (not (contains "dev" $.Values.environment.name))  .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 - name: {{ $fullName }}-forbidden
