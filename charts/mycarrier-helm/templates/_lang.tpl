@@ -200,6 +200,9 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{/* New format with kind and match fields */}}
 - name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | replace "*" "wildcard" | replace "(" "" | replace ")" "" | replace "|" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
   match:
+  - headers:
+      Environment:
+        exact: {{ $.Values.environment.name }}
   - uri:
       {{- if eq .kind "exact" }}
       exact: {{ .match }}
