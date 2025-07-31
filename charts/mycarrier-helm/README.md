@@ -253,6 +253,52 @@ applications:
       create: false
 ```
 
+### Autoscaling Configuration
+
+The chart provides flexible autoscaling capabilities through two configuration options:
+
+1. **Per-Application Autoscaling** (`applications.<app>.autoscaling.enabled`): Enable autoscaling for individual applications
+2. **Global Force Autoscaling** (`global.forceAutoscaling`): Force autoscaling on ALL applications regardless of environment
+
+#### Autoscaling Behavior
+
+Autoscaling is enabled when either:
+- The application's `autoscaling.enabled` is set to `true`, OR
+- The global `forceAutoscaling` is set to `true`
+
+When autoscaling is **enabled**:
+- A HorizontalPodAutoscaler (HPA) resource is created
+- The `replicas` field is removed from the Deployment to allow HPA control
+- The HPA manages scaling based on CPU/memory utilization
+
+When autoscaling is **disabled**:
+- No HPA resource is created
+- The `replicas` field is set on the Deployment with environment-specific defaults:
+  - Feature environments (`feature-*`): Default 1 replica
+  - Other environments (dev, preprod, prod): Default 2 replicas (or specified value)
+
+#### Example Configuration
+
+```yaml
+global:
+  forceAutoscaling: true    # Force autoscaling on ALL applications
+
+applications:
+  api:
+    autoscaling:
+      enabled: false        # Individual app setting (overridden by global.forceAutoscaling)
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+  worker:
+    autoscaling:
+      enabled: true         # Individual app setting
+      minReplicas: 1
+      maxReplicas: 5
+```
+
+In the above example, both `api` and `worker` would have autoscaling enabled due to `global.forceAutoscaling: true`.
+
 ### Networking Configuration
 
 ```yaml

@@ -1,6 +1,8 @@
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
-{{- if (and (dig "autoscaling" "enabled" false $appValues) (or (hasPrefix "prod" $.Values.environment.name) (dig "autoscaling" "forceAutoscaling" false $appValues))) }}
+{{- $ctx := fromJson (include "helm.default-context" $) }}
+{{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
+{{- if (or (dig "autoscaling" "enabled" false $appValues) $globalForceAutoscaling) }}
 {{- $envScaling := include "helm.envScaling" $ }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}

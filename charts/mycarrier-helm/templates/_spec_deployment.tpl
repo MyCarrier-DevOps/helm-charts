@@ -2,8 +2,24 @@
 {{- $fullName := include "helm.fullname" . }}
 {{- $envScaling := include "helm.envScaling" . }}
 {{- $namespace := include "helm.namespace" . }}
-{{- if (and (dig "autoscaling" "enabled" false .application) (or (hasPrefix "prod" $.Values.environment.name) (dig "autoscaling" "forceAutoscaling" false .application))) }}
-replicas: {{ if and (not (kindIs "invalid" .application.replicas)) (or (eq "0" $envScaling) (and (eq "1" $envScaling) (eq "0" (default "0" .application.replicas | toString)))) }}{{ .application.replicas }}{{ else }}{{ 2 }}{{ end }}
+{{- $ctx := fromJson (include "helm.default-context" .) }}
+{{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
+{{- if not (or (dig "autoscaling" "enabled" false .application) $globalForceAutoscaling) }}
+{{- if eq "0" $envScaling }}
+{{- if hasPrefix "feature" $.Values.environment.name }}
+replicas: {{ .application.replicas | default 1 }}
+{{- else }}
+replicas: {{ .application.replicas | default 2 }}
+{{- end }}
+{{- else }}
+{{- if hasPrefix "feature" $.Values.environment.name }}
+replicas: {{ .application.replicas | default 1 }}
+{{- else if and (not (kindIs "invalid" .application.replicas)) (gt ((.application.replicas | default 2) | int) 1) }}
+replicas: {{ .application.replicas }}
+{{- else }}
+replicas: 2
+{{- end }}
+{{- end }}
 {{- end }}
 revisionHistoryLimit: 2
 minReadySeconds: {{ .application.minReadySeconds | default 0 }}

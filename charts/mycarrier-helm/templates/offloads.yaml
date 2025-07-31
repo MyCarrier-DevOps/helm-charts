@@ -27,7 +27,6 @@ spec:
                 - Values:
                     global:
                       appStack: {{ .Values.global.appStack | lower }}
-                      forceAutoscaling: false
                       gitbranch: {{ .Values.global.gitbranch }}
                       language: {{ .Values.global.language }}
                       env:

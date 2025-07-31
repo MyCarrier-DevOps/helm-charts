@@ -1,0 +1,440 @@
+suite: Autoscaling Matrix Tests
+templates:
+  - autoscaler.yaml
+  - deployment.yaml
+tests:
+  # ===== MATRIX: forceAutoscaling=false, autoscaling.enabled=false =====
+  
+  - it: dev env - no force, no autoscaling, default replicas (envScaling=0)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "dev"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 2  # Default for dev when envScaling=0
+
+  - it: feature env - no force, no autoscaling, default replicas (envScaling=0)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "feature-123"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 1  # Default for feature when envScaling=0
+
+  - it: feature env - no force, no autoscaling, explicit replicas (envScaling=0)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "feature-123"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.replicas: 5
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 5  # Explicit value used
+
+  - it: prod env - no force, no autoscaling, default replicas (envScaling=1)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "prod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 2  # Default for prod when envScaling=1 but no autoscaling
+
+  - it: prod env - no force, no autoscaling, explicit replicas (envScaling=1)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "prod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.replicas: 3
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 3  # Explicit value used
+
+  # ===== MATRIX: forceAutoscaling=false, autoscaling.enabled=true =====
+  
+  - it: dev env - no force, with autoscaling (envScaling=0 but HPA created)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "dev"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: true
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 80
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 2
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 10
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when autoscaling enabled
+
+  - it: feature env - no force, with autoscaling (envScaling=0 but HPA created)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "feature-456"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: true
+      applications.test-app.autoscaling.minReplicas: 1
+      applications.test-app.autoscaling.maxReplicas: 5
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 70
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 1
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 5
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when autoscaling enabled
+
+  - it: prod env - no force, with autoscaling (envScaling=1 and HPA created)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "prod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: true
+      applications.test-app.autoscaling.minReplicas: 3
+      applications.test-app.autoscaling.maxReplicas: 15
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 75
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 3
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 15
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when autoscaling enabled
+
+  # ===== MATRIX: forceAutoscaling=true, autoscaling.enabled=false =====
+  
+  - it: dev env - force autoscaling, individual disabled (envScaling=1, HPA created)
+    set:
+      global.forceAutoscaling: true
+      environment.name: "dev"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 8
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 80
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 2
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 8
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when forced autoscaling
+
+  - it: feature env - force autoscaling, individual disabled (envScaling=1, HPA created)
+    set:
+      global.forceAutoscaling: true
+      environment.name: "feature-789"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.replicas: 7  # This should be ignored due to forced autoscaling
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 1
+      applications.test-app.autoscaling.maxReplicas: 4
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 60
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 1
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 4
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when forced autoscaling, even with explicit value
+
+  - it: prod env - force autoscaling, individual disabled (envScaling=1, HPA created)
+    set:
+      global.forceAutoscaling: true
+      environment.name: "prod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 5
+      applications.test-app.autoscaling.maxReplicas: 20
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 85
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 5
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 20
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when forced autoscaling
+
+  # ===== MATRIX: forceAutoscaling=true, autoscaling.enabled=true =====
+  
+  - it: dev env - force autoscaling, individual enabled (envScaling=1, HPA created)
+    set:
+      global.forceAutoscaling: true
+      environment.name: "dev"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: true
+      applications.test-app.autoscaling.minReplicas: 3
+      applications.test-app.autoscaling.maxReplicas: 12
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 90
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 3
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 12
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when autoscaling enabled
+
+  - it: feature env - force autoscaling, individual enabled (envScaling=1, HPA created)
+    set:
+      global.forceAutoscaling: true
+      environment.name: "feature-abc"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: true
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 6
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 65
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 2
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 6
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when autoscaling enabled
+
+  - it: prod env - force autoscaling, individual enabled (envScaling=1, HPA created)
+    set:
+      global.forceAutoscaling: true
+      environment.name: "prod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: true
+      applications.test-app.autoscaling.minReplicas: 4
+      applications.test-app.autoscaling.maxReplicas: 25
+      applications.test-app.autoscaling.targetCPUUtilizationPercentage: 80
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 4
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 25
+      - template: deployment.yaml
+        notExists:
+          path: spec.replicas  # No replicas when autoscaling enabled
+
+  # ===== EDGE CASES =====
+  
+  - it: preprod env - no force, no autoscaling, default replicas (envScaling=0)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "preprod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 2  # Default for preprod when envScaling=0
+
+  - it: verify envScaling label when forceAutoscaling is true
+    set:
+      global.forceAutoscaling: true
+      environment.name: "dev"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: deployment.yaml
+        equal:
+          path: metadata.labels["mycarrier.tech/envscaling"]
+          value: "1"  # Should be 1 when forceAutoscaling is true
+
+  - it: verify envScaling label when forceAutoscaling is false in dev
+    set:
+      global.forceAutoscaling: false
+      environment.name: "dev"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: deployment.yaml
+        equal:
+          path: metadata.labels["mycarrier.tech/envscaling"]
+          value: "0"  # Should be 0 when forceAutoscaling is false in dev
