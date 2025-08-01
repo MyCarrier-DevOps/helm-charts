@@ -132,7 +132,29 @@ tests:
       - template: deployment.yaml
         equal:
           path: spec.replicas
-          value: 1  # Explicit value of 5 should be respected, not defaulted to 2
+          value: 1  # Explicit value of 1 should be respected, not defaulted to 2
+
+  - it: prod env - no force, no autoscaling, explicit replicas=0 (envScaling=1)
+    set:
+      global.forceAutoscaling: false
+      environment.name: "prod"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "registry.example.com"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.replicas: 0
+      applications.test-app.autoscaling.enabled: false
+      applications.test-app.autoscaling.minReplicas: 2
+      applications.test-app.autoscaling.maxReplicas: 10
+    asserts:
+      - template: autoscaler.yaml
+        hasDocuments:
+          count: 0
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 0  # Explicit value of 0 should be respected, not defaulted to 2
 
   # ===== MATRIX: forceAutoscaling=false, autoscaling.enabled=true =====
   

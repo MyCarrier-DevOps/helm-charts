@@ -6,11 +6,19 @@ on:
       - 'main'
     paths:
       - charts/**
+      - '!charts/**/tests/**'
+      - '!charts/**/*test*.yaml'
+      - '!charts/**/*test*.yml'
   pull_request:
     types:
       - closed
     branches:    
       - 'main'
+    paths:
+      - charts/**
+      - '!charts/**/tests/**'
+      - '!charts/**/*test*.yaml'
+      - '!charts/**/*test*.yml'
 
 jobs:
   prep:
@@ -30,19 +38,27 @@ jobs:
         id: changed-files-specific
         uses: tj-actions/changed-files@v22.2
         with:
-          files: ./charts/*
+          files: |
+            charts/**
+            !charts/**/tests/**
+            !charts/**/*test*.yaml
+            !charts/**/*test*.yml
       
       - name: generate file list
         if: steps.changed-files-specific.outputs.any_modified == 'true'
         id: file-list
         uses: tj-actions/changed-files@v22.2
         with:
-          path: charts
+          files: |
+            charts/**
+            !charts/**/tests/**
+            !charts/**/*test*.yaml
+            !charts/**/*test*.yml
 
       - name: List all changed files
         run: |
           echo "files were changed:${{ steps.changed-files-specific.outputs.any_modified }}"
-          for file in ${{ steps.file-list.all_changed_and_modified_files }}; do
+          for file in ${{ steps.file-list.outputs.all_changed_files }}; do
             echo "$file was changed"
           done
 
@@ -55,7 +71,7 @@ jobs:
           dir=$(pwd)
           charts=$(find $dir/charts -type f -name Chart.yaml | xargs dirname | while read i; do basename $i; done)
           for chart in $charts; do
-              for file in ${{ steps.file-list.outputs.all_changed_and_modified_files }}; do
+              for file in ${{ steps.file-list.outputs.all_changed_files }}; do
               if ( echo $file | grep $chart ); then
                   [[ $first_loop ]] && var=$chart || var="$var\n$chart"
                   unset first_loop
