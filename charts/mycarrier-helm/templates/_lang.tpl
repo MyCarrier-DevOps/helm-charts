@@ -43,6 +43,8 @@
   value: "Production"
 {{- end }}
 {{- if .Values.global.dependencies.mongodb }}
+- name: KeyVault_MongoConnection
+  value: "MongoConnection_{{ $metaenv }}"
 - name: KeyVaultMongoConnection
   value: "MongoConnection_{{ $metaenv }}"
 - name: MongoConnection_{{ $metaenv }}
@@ -101,6 +103,8 @@
   value: "https://app-common-basiccredential-{{ $metaenv }}-api.azurewebsites.net/"
 - name: CustomerCredentialUrl
   value: "https://app-common-basiccredential-{{ $metaenv }}-api.azurewebsites.net/"
+- name: SplitIo_ApiKey
+  value: "vault:secrets/data/{{ $metaenv }}/shared/SplitIo_ApiKey#value"
 - name: KeyVault_SplitIoProxyApiKey
   value: "SplitIoProxyApiKey_{{ $metaenv }}"
 - name: SplitIoProxyApiKey_{{ $metaenv }}
