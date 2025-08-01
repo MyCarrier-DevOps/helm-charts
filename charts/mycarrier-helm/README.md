@@ -232,8 +232,7 @@ applications:
         port: "http"
         initialDelaySeconds: 10
         periodSeconds: 10
-    env: []
-    envFrom: []
+    env: []                                # Environment variables (key-value pairs)
     volumes: []
     volumeMounts: []
     lifecycle:
@@ -350,6 +349,103 @@ secrets:
       mount:
         path: /app/certs
         subPath: cert.pem
+```
+
+### Environment Variables Configuration
+
+The chart supports configuring environment variables at different scopes to provide maximum flexibility. Environment variables can be set at the global level (affecting all applications), per-application level, or using combinations for fine-grained control.
+
+#### Global Environment Variables (All Components, All Environments)
+
+Set environment variables that apply to all applications across all environments:
+
+```yaml
+global:
+  env:
+    LOG_LEVEL: "info"
+    APP_VERSION: "1.0.0"
+    FEATURE_FLAG_SERVICE_URL: "https://features.mycarrier.com"
+
+applications:
+  api:
+    # Application-specific configuration
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/api"
+      tag: "1.0.0"
+  worker:
+    # Application-specific configuration
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/worker"
+      tag: "1.0.0"
+```
+
+#### Component-Specific Variables
+
+Set environment variables for specific applications that apply across all environments:
+
+```yaml
+applications:
+  api:
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/api"
+      tag: "1.0.0"
+    env:
+      API_RATE_LIMIT: "1000"
+      API_TIMEOUT: "30s"
+      ENABLE_METRICS: "true"
+  
+  worker:
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/worker"
+      tag: "1.0.0"
+    env:
+      WORKER_CONCURRENCY: "10"
+      QUEUE_NAME: "background-jobs"
+      WORKER_TIMEOUT: "300s"
+```
+
+#### Combined Approach Example
+
+A comprehensive example showing how global and application-specific environment variables work together:
+
+```yaml
+global:
+  # Global variables for all applications
+  env:
+    COMPANY_NAME: "MyCarrier"
+    ENVIRONMENT: "dev"
+    LOG_LEVEL: "warn"
+
+environment:
+  name: "prod"
+
+applications:
+  api:
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/api"
+      tag: "1.0.0"
+    env:
+      # Application-specific variables
+      API_PORT: "8080"
+      API_WORKERS: "10"
+      # Override global variable for this specific application
+      LOG_LEVEL: "info"  # Always info for API, regardless of environment
+    
+  worker:
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/worker"
+      tag: "1.0.0"
+    env:
+      # Application-specific variables
+      WORKER_TYPE: "background"
+      QUEUE_WORKERS: "20"
+      # This application inherits the global LOG_LEVEL setting
 ```
 
 ## Minimal Configuration Examples
