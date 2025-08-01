@@ -14,7 +14,7 @@ replicas: {{ .application.replicas | default 2 }}
 {{- else }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
 replicas: {{ .application.replicas | default 1 }}
-{{- else if and (not (kindIs "invalid" .application.replicas)) (gt ((.application.replicas | default 2) | int) 1) }}
+{{- else if not (kindIs "invalid" .application.replicas) }}
 replicas: {{ .application.replicas }}
 {{- else }}
 replicas: 2
