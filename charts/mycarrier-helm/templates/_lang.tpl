@@ -1,24 +1,42 @@
 {{- define "helm.lang.vars.csharp" -}}
 {{- $metaenv := (include "helm.metaEnvironment" . ) }}
 {{- if eq $metaenv "dev" }}
+- name: Auth_IdentityApiKey_BaseUrl
+  value: "https://identity-apikey-api.dev.mycarrier.dev"
 - name: Auth_MyCarrierCustomer_BaseUrl
   value: "https://mycarrier-proxy-api.dev.mycarrier.dev"
+- name: Auth_MyCarrierApi_BaseUrl
+  value: "https://mycarrier-proxy-api.dev.mycarrier.dev"
+- name: Auth_UserService_BaseUrl
+  value: "https://user-context-api.dev.mycarrier.dev"
 - name: AuthEnvironment
   value: "Development"
 - name: Auth_Environment
   value: "Development"
 {{- end }}
 {{- if eq $metaenv "preprod" }}
+- name: Auth_IdentityApiKey_BaseUrl
+  value: "https://identity-apikey-api.dev.mycarrier.dev"
 - name: Auth_MyCarrierCustomer_BaseUrl
   value: "https://mycarrier-proxy-api.preprod.mycarrier.dev"
+- name: Auth_MyCarrierApi_BaseUrl
+  value: "https://mycarrier-proxy-api.preprod.mycarrier.dev"
+- name: Auth_UserService_BaseUrl
+  value: "https://user-context-api.preprod.mycarrier.dev"
 - name: AuthEnvironment
   value: "PreProd"
 - name: Auth_Environment
   value: "PreProd"
 {{- end }}
 {{- if eq $metaenv "prod" }}
+- name: Auth_IdentityApiKey_BaseUrl
+  value: "https://identity-apikey-api.api.mycarriertms.com"
 - name: Auth_MyCarrierCustomer_BaseUrl
   value: "https://prod-mycarrier-customer.azurewebsites.net"
+- name: Auth_MyCarrierApi_BaseUrl
+  value: "https://mycarriertms.com/MyCarrierAPI"
+- name: Auth_UserService_BaseUrl
+  value: "https://user-context-api.api.mycarriertms.com"
 - name: AuthEnvironment
   value: "Production"
 - name: Auth_Environment
@@ -77,6 +95,8 @@
 - name: ChargifyBaseUrl_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/chargifybaseurl-{{ $metaenv }}#value"
 {{- end }}
+- name: Analytics_Broker_Topic_Name
+  value: "mc-{{ .Values.global.appStack | lower }}-analytics-{{ $metaenv }}"
 - name: Auth_BasicCredentialUrl
   value: "https://app-common-basiccredential-{{ $metaenv }}-api.azurewebsites.net/"
 - name: CustomerCredentialUrl
@@ -87,6 +107,10 @@
   value: "vault:secrets/data/{{ $metaenv }}/shared/splitioproxyapikey-{{ $metaenv }}#value"
 - name: splitioproxyurl_k8s_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/splitioproxyurl-k8s-{{ $metaenv }}#value"
+- name: Auth_KeyVault_SplitIoProxyApiKey
+  value: "SplitIoProxyApiKey-{{ $metaenv }}"
+- name: Auth_KeyVault_SplitIoProxyUrl
+  value: "SplitIoProxyUrl-{{ $metaenv }}"
 - name: KeyVault_SplitIoProxyUrl
   value: "SplitIoProxyUrl_{{ $metaenv }}"
 - name: SplitIoProxyUrl_{{ $metaenv }}
@@ -129,6 +153,10 @@
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityinviteclientid-{{ $metaenv }}#value"
 - name: allowanonymouskey_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/allowanonymouskey-{{ $metaenv }}#value"
+- name: SplitCommonUser
+  value: "appstackuser@mycarrier.io"
+- name: Auth_SplitCommonUser
+  value: "appstackuser@mycarrier.io"
 - name: KeyVault_IsActive
   value: "false"
 {{- end -}}
