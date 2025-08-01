@@ -107,6 +107,8 @@
   value: "vault:secrets/data/{{ $metaenv }}/shared/SplitIo_ApiKey#value"
 - name: mycarrier-jwt-secret
   value: "vault:secrets/data/{{ $metaenv }}/shared/mycarrier_jwt_secret#value"
+- name: mycarrier_jwt_secret
+  value: "vault:secrets/data/{{ $metaenv }}/shared/mycarrier_jwt_secret#value"
 - name: KeyVault_SplitIoProxyApiKey
   value: "SplitIoProxyApiKey_{{ $metaenv }}"
 - name: SplitIoProxyApiKey_{{ $metaenv }}
