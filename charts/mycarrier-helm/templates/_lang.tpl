@@ -105,6 +105,8 @@
   value: "https://app-common-basiccredential-{{ $metaenv }}-api.azurewebsites.net/"
 - name: SplitIo_ApiKey
   value: "vault:secrets/data/{{ $metaenv }}/shared/SplitIo_ApiKey#value"
+- name: mycarrier-jwt-secret
+  value: "vault:secrets/data/{{ $metaenv }}/shared/mycarrier_jwt_secret#value"
 - name: KeyVault_SplitIoProxyApiKey
   value: "SplitIoProxyApiKey_{{ $metaenv }}"
 - name: SplitIoProxyApiKey_{{ $metaenv }}
