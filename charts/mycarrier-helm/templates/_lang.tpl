@@ -2,13 +2,13 @@
 {{- $metaenv := (include "helm.metaEnvironment" . ) }}
 {{- if eq $metaenv "dev" }}
 - name: Auth_IdentityApiKey_BaseUrl
-  value: vault:secrets/data/dev/shared/auth_identityapikey_baseurl#value
+  value: "vault:secrets/data/dev/shared/auth_identityapikey_baseurl#value"
 - name: Auth_MyCarrierCustomer_BaseUrl
-  value: vault:secrets/data/dev/shared/auth_mycarriercustomer_baseurl#value
+  value: "vault:secrets/data/dev/shared/auth_mycarriercustomer_baseurl#value"
 - name: Auth_MyCarrierApi_BaseUrl
-  value: vault:secrets/data/dev/shared/auth_mycarrierapi_baseurl#value
+  value: "vault:secrets/data/dev/shared/auth_mycarrierapi_baseurl#value"
 - name: Auth_UserService_BaseUrl
-  value: vault:secrets/data/dev/shared/auth_userservice_baseurl#value
+  value: "vault:secrets/data/dev/shared/auth_userservice_baseurl#value"
 - name: AuthEnvironment
   value: "Development"
 - name: Auth_Environment
@@ -16,13 +16,13 @@
 {{- end }}
 {{- if eq $metaenv "preprod" }}
 - name: Auth_IdentityApiKey_BaseUrl
-  value: vault:secrets/data/preprod/shared/auth_identityapikey_baseurl#value
+  value: "vault:secrets/data/preprod/shared/auth_identityapikey_baseurl#value"
 - name: Auth_MyCarrierCustomer_BaseUrl
-  value: vault:secrets/data/preprod/shared/auth_mycarriercustomer_baseurl#value
+  value: "vault:secrets/data/preprod/shared/auth_mycarriercustomer_baseurl#value"
 - name: Auth_MyCarrierApi_BaseUrl
-  value: vault:secrets/data/preprod/shared/auth_mycarrierapi_baseurl#value
+  value: "vault:secrets/data/preprod/shared/auth_mycarrierapi_baseurl#value"
 - name: Auth_UserService_BaseUrl
-  value: vault:secrets/data/preprod/shared/auth_userservice_baseurl#value
+  value: "vault:secrets/data/preprod/shared/auth_userservice_baseurl#value"
 - name: AuthEnvironment
   value: "PreProd"
 - name: Auth_Environment
@@ -30,13 +30,13 @@
 {{- end }}
 {{- if eq $metaenv "prod" }}
 - name: Auth_IdentityApiKey_BaseUrl
-  value: vault:secrets/data/prod/shared/auth_identityapikey_baseurl#value
+  value: "vault:secrets/data/prod/shared/auth_identityapikey_baseurl#value"
 - name: Auth_MyCarrierCustomer_BaseUrl
-  value: vault:secrets/data/prod/shared/auth_mycarriercustomer_baseurl#value
+  value: "vault:secrets/data/prod/shared/auth_mycarriercustomer_baseurl#value"
 - name: Auth_MyCarrierApi_BaseUrl
-  value: vault:secrets/data/prod/shared/auth_mycarrierapi_baseurl#value
+  value: "vault:secrets/data/prod/shared/auth_mycarrierapi_baseurl#value"
 - name: Auth_UserService_BaseUrl
-  value: vault:secrets/data/prod/shared/auth_userservice_baseurl#value
+  value: "vault:secrets/data/prod/shared/auth_userservice_baseurl#value"
 - name: AuthEnvironment
   value: "Production"
 - name: Auth_Environment
