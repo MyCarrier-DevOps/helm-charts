@@ -32,7 +32,7 @@ metadata:
     {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
 spec:
   hosts:
-  {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName) ($.Values.environment.name)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
   {{- if $appValues.staticHostname }}- {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
   gateways:
   - mesh

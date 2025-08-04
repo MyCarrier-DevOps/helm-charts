@@ -7,9 +7,17 @@
 {{- if not (or (dig "autoscaling" "enabled" false .application) $globalForceAutoscaling) }}
 {{- if eq "0" $envScaling }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
-replicas: {{ .application.replicas | default 1 }}
+{{- if not (kindIs "invalid" .application.replicas) }}
+replicas: {{ .application.replicas }}
 {{- else }}
-replicas: {{ .application.replicas | default 2 }}
+replicas: 1
+{{- end }}
+{{- else }}
+{{- if not (kindIs "invalid" .application.replicas) }}
+replicas: {{ .application.replicas }}
+{{- else }}
+replicas: 2
+{{- end }}
 {{- end }}
 {{- else }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
