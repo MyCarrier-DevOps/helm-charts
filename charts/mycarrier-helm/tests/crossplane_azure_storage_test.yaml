@@ -1,0 +1,122 @@
+suite: Crossplane Azure Storage Tests
+templates:
+  - crossplane/azure/storage/claim.yaml
+tests:
+  # Test 1: New storage account with default names
+  - it: should create storage with auto-generated names when not specified
+    set:
+      global.appStack: exampletestapp
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          storage:
+            accounts:
+              - newStorageAccount:
+                  location: "East US"
+                  accountTier: "Standard"
+                  accountReplicationType: "LRS"
+                  accessTier: "Cool"
+                containers:
+                  - name: "uploads"
+                    accessType: "blob"
+                  - name: "logs"
+                    accessType: "private"
+                tags:
+                  environment: "test"
+                  purpose: "example-new-everything-defaults"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: AzureBlobStorage
+      - equal:
+          path: metadata.name
+          value: stexampletestappdev
+      - equal:
+          path: metadata.namespace
+          value: dev-exampletestapp
+      - equal:
+          path: spec.parameters.newStorageAccount.name
+          value: stexampletestappdev
+      - equal:
+          path: spec.parameters.newStorageAccount.location
+          value: "East US"
+      - equal:
+          path: spec.parameters.newResourceGroup.name
+          value: rg-exampletestapp-dev
+
+  # Test 2: Minimal required configuration using fallback path
+  - it: should work with minimal required configuration using fallback path
+    set:
+      global.appStack: minimal
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          storage:
+            accounts:
+              - location: "North Central US"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: AzureBlobStorage
+      - equal:
+          path: metadata.name
+          value: stminimaldev
+      - equal:
+          path: metadata.namespace
+          value: dev-minimal
+      - equal:
+          path: spec.parameters.newStorageAccount.location
+          value: "North Central US"
+      - equal:
+          path: spec.parameters.newResourceGroup.name
+          value: rg-minimal-dev
+
+  # Test 3: No storage accounts configured (should not render)
+  - it: should not create any resources when storage accounts are not configured
+    set:
+      global.appStack: notest
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Test 4: Labels verification
+  - it: should include standard helm labels
+    set:
+      global.appStack: labeltest
+      global.language: nginx
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          storage:
+            accounts:
+              - newStorageAccount:
+                  location: "West US 2"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - exists:
+          path: metadata.labels
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]

@@ -1,0 +1,91 @@
+{{- if .Values.infrastructure.azure.storage.accounts }}
+{{- range $instance := .Values.infrastructure.azure.storage.accounts }}
+---
+apiVersion: azure.platform.io/v1alpha1
+kind: AzureBlobStorage
+metadata:
+  name: {{ 
+    $instance.name | default (
+      ($instance.newStorageAccount).name | default (
+        ($instance.existingStorageAccount).name | default (
+          printf "st%s%s" ($.Values.global.appStack | replace "-" "") ($.Values.environment.name | replace "-" "")
+        )
+      )
+    )
+  }}
+  namespace: {{ $instance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  labels:
+    {{- include "helm.labels.standard" $ | nindent 4 }}
+  {{- if $instance.annotations }}
+  annotations:
+    {{- toYaml $instance.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  parameters:
+    {{- if $instance.existingStorageAccount }}
+    existingStorageAccount:
+      name: {{ $instance.existingStorageAccount.name }}
+    {{- else if $instance.newStorageAccount }}
+    newStorageAccount:
+      name: {{ $instance.newStorageAccount.name | default (printf "st%s%s" ($.Values.global.appStack | replace "-" "" | lower) ($.Values.environment.name | replace "-" "" | lower)) }}
+      location: {{ $instance.newStorageAccount.location }}
+      {{- if $instance.newStorageAccount.accountTier }}
+      accountTier: {{ $instance.newStorageAccount.accountTier }}
+      {{- end }}
+      {{- if $instance.newStorageAccount.accountReplicationType }}
+      accountReplicationType: {{ $instance.newStorageAccount.accountReplicationType }}
+      {{- end }}
+      {{- if $instance.newStorageAccount.accessTier }}
+      accessTier: {{ $instance.newStorageAccount.accessTier }}
+      {{- end }}
+    {{- else }}
+    # Default: create new storage account with auto-generated name (Azure compliant: 3-24 lowercase alphanumeric)
+    newStorageAccount:
+      name: {{ $instance.name | default (printf "st%s%s" ($.Values.global.appStack | replace "-" "" | lower) ($.Values.environment.name | replace "-" "" | lower)) }}
+      location: {{ $instance.location | required "location is required for new storage accounts" }}
+      {{- if $instance.tier }}
+      accountTier: {{ $instance.tier }}
+      {{- end }}
+      {{- if $instance.replicationType }}
+      accountReplicationType: {{ $instance.replicationType }}
+      {{- end }}
+      {{- if $instance.accessTier }}
+      accessTier: {{ $instance.accessTier }}
+      {{- end }}
+    {{- end }}
+    {{- if $instance.existingResourceGroup }}
+    existingResourceGroup:
+      name: {{ $instance.existingResourceGroup.name }}
+    {{- else }}
+    # Default: create new resource group with auto-generated name (Azure compliant: 1-90 chars, alphanumeric, hyphens, underscores, periods, parentheses)
+    newResourceGroup:
+      name: {{ ($instance.newResourceGroup).name | default (printf "rg-%s-%s" $.Values.global.appStack $.Values.environment.name) }}
+    {{- end }}
+    {{- if $instance.containers }}
+    containers:
+      {{- range $container := $instance.containers }}
+      - name: {{ $container.name | required "container name is required" }}
+        {{- if $container.accessType }}
+        accessType: {{ $container.accessType }}
+        {{- end }}
+        {{- if $container.metadata }}
+        metadata:
+          {{- toYaml $container.metadata | nindent 10 }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if $instance.tags }}
+    tags:
+      {{- toYaml $instance.tags | nindent 6 }}
+    {{- end }}
+  {{- if $instance.writeConnectionSecretsToRef }}
+  # writeConnectionSecretsToRef:
+  #   name: {{ $instance.writeConnectionSecretsToRef.name | default (printf "%s-connection" ($instance.name | default (printf "st-%s-%s" $.Values.global.appStack $.Values.environment.name))) }}
+  #   namespace: {{ $instance.writeConnectionSecretsToRef.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  {{- end }}
+  {{- if $instance.compositionRef }}
+  compositionRef:
+    name: {{ $instance.compositionRef.name | default "azure-blob-storage" }}
+  {{- end }}
+{{- end }}
+{{- end }}
