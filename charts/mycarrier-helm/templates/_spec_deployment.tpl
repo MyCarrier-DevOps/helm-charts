@@ -91,8 +91,8 @@ template:
     containers:
       - name: {{ .appName | default $fullName | lower | trunc 63 }}
         image: "{{ .application.image.registry }}/{{ .application.image.repository }}:{{ .application.image.tag }}"
-        {{- if .application.command }}command: {{ .application.command }}{{end}}
-        {{- if .application.args }}args: {{ .application.args | default "" }}{{end}}
+        {{ if .application.command }}command: {{ .application.command }}{{- end }}
+        {{ if .application.args }}args: {{ .application.args | default "" }}{{- end }}
         imagePullPolicy: {{ .application.pullPolicy | default "IfNotPresent" }}
         {{- if .application.ports }}
         ports:
