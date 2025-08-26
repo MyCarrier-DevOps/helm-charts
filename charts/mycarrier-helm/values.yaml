@@ -469,3 +469,68 @@ secrets:
     #   mount:
     #     path: /app/certs
     #     subPath: cert.pem
+
+## @section Infrastructure Resources
+## Infrastructure resources provisioned via Crossplane
+
+## @param infrastructure.azure.storage.accounts [array] - Azure storage account configurations
+## @param infrastructure.azure.storage.accounts[].existingResourceGroup.name - Name of existing resource group to use
+## @param infrastructure.azure.storage.accounts[].newResourceGroup.name - Name for new resource group to create
+## @param infrastructure.azure.storage.accounts[].existingStorageAccount.name - Name of existing storage account to use
+## @param infrastructure.azure.storage.accounts[].newStorageAccount.name - Name for new storage account to create
+## @param infrastructure.azure.storage.accounts[].newStorageAccount.location - Azure region for the storage account
+## @param infrastructure.azure.storage.accounts[].newStorageAccount.accountTier - Storage account tier: Standard or Premium
+## @param infrastructure.azure.storage.accounts[].newStorageAccount.accountReplicationType - Replication type: LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS
+## @param infrastructure.azure.storage.accounts[].newStorageAccount.accessTier - Access tier: Cool, Hot, Archive
+## @param infrastructure.azure.storage.accounts[].containers [array] - Blob containers to create
+## @param infrastructure.azure.storage.accounts[].containers[].name - Container name
+## @param infrastructure.azure.storage.accounts[].containers[].accessType - Container access type: private, blob, container
+## @param infrastructure.azure.storage.accounts[].containers[].metadata [object] - Container metadata
+## @param infrastructure.azure.storage.accounts[].tags [object] - Resource tags
+## @param infrastructure.azure.storage.accounts[].namespace - Kubernetes namespace for the resource
+## @param infrastructure.azure.storage.accounts[].annotations [object] - Custom annotations for the resource
+infrastructure:
+  azure:
+    storage:
+      # Azure storage account configurations
+      accounts: []
+        # Example storage account configuration:
+        # - # Resource Group Options (choose one):
+        #   existingResourceGroup:                          # Option 1: Use existing external resource group
+        #     name: "my-existing-rg"                        # Required: Name of existing resource group
+        #   # OR
+        #   newResourceGroup:                               # Option 2: Create new resource group as part of composition
+        #     name: "my-new-rg"                             # Optional: Name for new resource group (auto-generated if omitted)
+        #   
+        #   # Storage Account Options (choose one):
+        #   existingStorageAccount:                         # Option 1: Use existing external storage account
+        #     name: "mystorageacct"                         # Required: Name of existing storage account
+        #   # OR
+        #   newStorageAccount:                              # Option 2: Create new storage account as part of composition
+        #     name: "mystorageacct"                         # Optional: Name for new storage account (auto-generated if omitted)
+        #     location: "East US"                           # Required: Azure region
+        #     accountTier: "Standard"                       # Optional: Standard (default) or Premium
+        #     accountReplicationType: "LRS"                 # Optional: LRS (default), GRS, RAGRS, ZRS, GZRS, RAGZRS
+        #     accessTier: "Cool"                            # Optional: Cool (default), Hot, Archive
+        #   
+        #   # Optional: Blob containers to create
+        #   containers:
+        #     - name: "uploads"                             # Required: Container name
+        #       accessType: "private"                       # Optional: private (default), blob, container
+        #       metadata:                                   # Optional: Container metadata
+        #         retention: "30days"
+        #         tier: "hot"
+        #     - name: "logs"
+        #       accessType: "blob"
+        #   
+        #   # Optional: Resource tags
+        #   tags:
+        #     environment: "dev"
+        #     purpose: "application-storage"
+        #   
+        #   # Optional: Custom Kubernetes namespace
+        #   namespace: "my-custom-namespace"
+        #   
+        #   # Optional: Custom annotations
+        #   annotations:
+        #     custom.annotation/key: "custom-value"
