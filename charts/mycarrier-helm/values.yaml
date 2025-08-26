@@ -150,6 +150,7 @@ tolerations: []
 applications: {}
 #       # Example application configuration
 #   example-api:
+#     enableDebugMode: false
 #     # Whether this is a frontend application
 #     isFrontend: false
 

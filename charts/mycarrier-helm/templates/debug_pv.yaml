@@ -1,0 +1,31 @@
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{ if $appValues.enableDebugMode }}
+{{- $fullName := include "helm.fullname" $appContext }}
+{{- $namespace := include "helm.namespace" $ }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-{{ $fullName }}
+  namespace: {{ $namespace }}
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azureblob-fuse-premium
+  mountOptions:
+    - -o allow_other
+    - --file-cache-timeout-in-seconds=120
+  csi:
+    driver: blob.csi.azure.com
+    readOnly: false
+    volumeHandle: {{ $fullName }}_debug
+    volumeAttributes:
+      containerName: debug
+    nodeStageSecretRef:
+      name: dotnetdebug
+      namespace: {{ $namespace }}
+{{- end }}
+{{- end }}

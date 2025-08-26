@@ -67,7 +67,7 @@ template:
         {{ include "helm.containerSecurityContext" $ | indent 8 | trim }}
     {{- end }}
     {{- end }}
-    {{ if $.Values.enableDebugMode }}shareProcessNamespace: true {{ end }}
+    {{ if $.application.enableDebugMode }}shareProcessNamespace: true {{ end }}
     containers:
       - name: {{ .appName | default $fullName | lower | trunc 63 }}
         image: "{{ .application.image.registry }}/{{ .application.image.repository }}:{{ .application.image.tag }}"

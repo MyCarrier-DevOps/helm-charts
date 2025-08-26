@@ -1,0 +1,21 @@
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{ if $appValues.enableDebugMode }}
+{{- $fullName := include "helm.fullname" $appContext }}
+{{- $namespace := include "helm.namespace" $ }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-{{ $fullName }}
+  namespace: {{ $namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: pv-{{ $fullName }}
+  storageClassName: azureblob-fuse-premium
+{{- end }}  
+{{- end }}

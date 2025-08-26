@@ -169,6 +169,7 @@ template:
         volumeMounts:
           - name: tmp-dir
             mountPath: /tmp
+          {{ if .application.enableDebugMode }}{{ include "helm.podDebugVolumeMount" . | indent 10 | trim }}{{ end }}
           {{ include "helm.otel.volumeMounts" $ | indent 10 | trim }}
           {{- if $.Values.secrets.mounted }}
           {{ include "helm.secretVolumeMounts" $ | indent 10 | trim -}}
@@ -182,6 +183,7 @@ template:
             {{- end }}
           {{- end }}
         {{- end }}
+      {{ if .application.enableDebugMode }}{{ include "helm.podDebugSidecar" . | indent 6 | trim }} {{ end }}
     volumes:
       - name: tmp-dir
         emptyDir: {}
@@ -190,6 +192,7 @@ template:
       {{ include "helm.secretVolumes" $ | indent 6 | trim -}}
       {{- end }}
     {{- if .application.volumes }}
+      {{ if .application.enableDebugMode }}{{ include "helm.podDebugVolume" . | indent 6 | trim }}{{ end }}
       {{- range .application.volumes }}
       - name: {{ .name }}
         {{ if ( or (and ( .kind ) (eq (.kind | lower) "emptydir")) (not .kind)) }}emptyDir: {}{{- end }}
