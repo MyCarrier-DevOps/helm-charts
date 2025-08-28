@@ -77,9 +77,8 @@ tolerations: []
   #   value: "value"
   #   effect: "NoSchedule"
 
-# If your deployment specific values files are in "my-deployment" this field should be "my-deployment". 
-# Defaults to "deployment".
-deployment: deployment # <-- This should match the name of the subfolder containing the specific deployment. 
+# This should match the name of the subfolder containing the specific deployment.
+deployment: deployment
 
 ## @section Applications
 ## Configuration for application deployments
