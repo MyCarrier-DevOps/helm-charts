@@ -1,6 +1,7 @@
 {{- if (eq .Values.environment.name "dev") }}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $deployment := include "helm.deployment" . }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -21,7 +22,7 @@ spec:
                     repoURL: https://github.com/MyCarrier-DevOps/GitOps-dev.git
                     revision: main
                 - list:
-                    elementsYaml: '{{`{{`}} .offloads | toJson {{`}}`}}'
+                    elementsYaml: '{{`{{`}} .offloads.{{ $deployment }} | toJson {{`}}`}}'
           - list:
               elements:
                 - Values:
@@ -41,6 +42,7 @@ spec:
                       domainOverride:
                         enabled: {{ .Values.environment.domainOverride.enabled }}
                         domain: {{ .Values.environment.domainOverride.domain }}
+                    deployment: {{ $deployment }}
                     applications: {{- with .Values.applications -}}
                     {{- . | toYaml | nindent 22 }}
                     {{- end }}
@@ -67,7 +69,7 @@ spec:
         helm:
           values: |2+
             {{`{{`}}- $Values := .Values {{`}}`}}
-            {{`{{`}}- .Values | toYaml | nindent 12 {{`}}`}}
+            {{`{{`}}- .Values | toYaml {{`}}`}}
       syncPolicy:
         automated:
           prune: true

@@ -77,6 +77,9 @@ tolerations: []
   #   value: "value"
   #   effect: "NoSchedule"
 
+# This should match the name of the subfolder containing the specific deployment.
+deployment: deployment
+
 ## @section Applications
 ## Configuration for application deployments
 

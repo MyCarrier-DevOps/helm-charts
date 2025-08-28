@@ -178,3 +178,6 @@ Usage:
 {{- end -}}
 
 
+{{- define "helm.deployment" -}}
+{{ .Values.deployment | default "deployment" }}
+{{- end -}}
