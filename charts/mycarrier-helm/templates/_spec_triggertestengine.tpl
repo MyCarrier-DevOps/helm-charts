@@ -70,7 +70,7 @@ template:
                   "ReleaseId": "{{ $imageTag }}",
                   "SecretId": "{{ .secretId }}",
                   "ServiceAddress": {{ $serviceAddress | quote }},
-                  "ReleaseDefinitionName": "{{ $baseName }}",
+                  "ReleaseDefinitionName": "{{ .releaseDefinitionName | default $baseName }}",
                   "BranchName": "{{ $gitBranch }}",
                   "AdditionalEnvVars": "{{ .additionalEnvVars}}"
                 }
