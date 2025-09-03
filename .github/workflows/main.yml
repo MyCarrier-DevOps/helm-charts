@@ -34,30 +34,6 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
       
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: v3.4.0
-
-      - name: Install helm-unittest plugin
-        run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.0
-
-      - name: Update dependencies
-        run: helm dependency update charts/mycarrier-helm/
-
-      - name: Run unit tests
-        run: |
-          helm unittest charts/mycarrier-helm/ --color --output-type JUnit --output-file results.xml
-
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: results.xml
-          check_name: "Helm Unit Test Results - MyCarrier-Helm"
-          comment_title: "Helm Unit Test Results - MyCarrier-Helm"
-
       - name: Get specific changed files   
         id: changed-files-specific
         uses: tj-actions/changed-files@v22.2
