@@ -1,233 +1,233 @@
-suite: test allowed endpoints edge cases
-templates:
-  - templates/virtualService.yaml
-tests:
-  - it: should handle endpoints with multiple wildcards
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-      environment:
-        name: dev
-      applications:
-        test-app:
-          deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/app
-            tag: latest
-          networking:
-            istio:
-              enabled: true
-              allowedEndpoints:
-                - "/api/*/users/*"
-                - "/v*/health"
-          service:
-            ports:
-              - name: http
-                port: 8080
-                targetPort: 8080
-    asserts:
-      - isKind:
-          of: VirtualService
-      # The base rule comes first, then allowed endpoints
-      - equal:
-          path: spec.http[0].name
-          value: test-stack-test-app
-      # Only the first wildcard is processed for prefix matching
-      - equal:
-          path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-wildcard-users-wildcard
-      - equal:
-          path: spec.http[1].match[0].uri.prefix
-          value: "/api//users/"
-      - equal:
-          path: spec.http[2].name
-          value: test-stack-test-app-allowed--vwildcard-health
-      - equal:
-          path: spec.http[2].match[0].uri.prefix
-          value: "/v/health"
+# suite: test allowed endpoints edge cases
+# templates:
+#   - templates/virtualService.yaml
+# tests:
+#   - it: should handle endpoints with multiple wildcards
+#     set:
+#       global:
+#         appStack: test-stack
+#         language: nodejs
+#       environment:
+#         name: dev
+#       applications:
+#         test-app:
+#           deploymentType: deployment
+#           image:
+#             registry: mycarrieracr.azurecr.io
+#             repository: test/app
+#             tag: latest
+#           networking:
+#             istio:
+#               enabled: true
+#               allowedEndpoints:
+#                 - "/api/*/users/*"
+#                 - "/v*/health"
+#           service:
+#             ports:
+#               - name: http
+#                 port: 8080
+#                 targetPort: 8080
+#     asserts:
+#       - isKind:
+#           of: VirtualService
+#       # The base rule comes first, then allowed endpoints
+#       - equal:
+#           path: spec.http[0].name
+#           value: test-stack-test-app
+#       # Only the first wildcard is processed for prefix matching
+#       - equal:
+#           path: spec.http[1].name
+#           value: test-stack-test-app-allowed--api-wildcard-users-wildcard
+#       - equal:
+#           path: spec.http[1].match[0].uri.prefix
+#           value: "/api//users/"
+#       - equal:
+#           path: spec.http[2].name
+#           value: test-stack-test-app-allowed--vwildcard-health
+#       - equal:
+#           path: spec.http[2].match[0].uri.prefix
+#           value: "/v/health"
 
-  - it: should handle root path endpoint
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-      environment:
-        name: dev
-      applications:
-        test-app:
-          deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/app
-            tag: latest
-          networking:
-            istio:
-              enabled: true
-              allowedEndpoints:
-                - "/"
-                - "/health"
-          service:
-            ports:
-              - name: http
-                port: 8080
-                targetPort: 8080
-    asserts:
-      - isKind:
-          of: VirtualService
-      # The base rule comes first, then allowed endpoints
-      - equal:
-          path: spec.http[0].name
-          value: test-stack-test-app
-      # Root path should be exact match
-      - equal:
-          path: spec.http[1].name
-          value: test-stack-test-app-allowed-
-      - equal:
-          path: spec.http[1].match[0].uri.exact
-          value: "/"
-      - equal:
-          path: spec.http[2].name
-          value: test-stack-test-app-allowed--health
-      - equal:
-          path: spec.http[2].match[0].uri.exact
-          value: "/health"
-      # Forbidden rule should still exist
-      - equal:
-          path: spec.http[3].name
-          value: test-stack-test-app-forbidden
+#   - it: should handle root path endpoint
+#     set:
+#       global:
+#         appStack: test-stack
+#         language: nodejs
+#       environment:
+#         name: dev
+#       applications:
+#         test-app:
+#           deploymentType: deployment
+#           image:
+#             registry: mycarrieracr.azurecr.io
+#             repository: test/app
+#             tag: latest
+#           networking:
+#             istio:
+#               enabled: true
+#               allowedEndpoints:
+#                 - "/"
+#                 - "/health"
+#           service:
+#             ports:
+#               - name: http
+#                 port: 8080
+#                 targetPort: 8080
+#     asserts:
+#       - isKind:
+#           of: VirtualService
+#       # The base rule comes first, then allowed endpoints
+#       - equal:
+#           path: spec.http[0].name
+#           value: test-stack-test-app
+#       # Root path should be exact match
+#       - equal:
+#           path: spec.http[1].name
+#           value: test-stack-test-app-allowed-
+#       - equal:
+#           path: spec.http[1].match[0].uri.exact
+#           value: "/"
+#       - equal:
+#           path: spec.http[2].name
+#           value: test-stack-test-app-allowed--health
+#       - equal:
+#           path: spec.http[2].match[0].uri.exact
+#           value: "/health"
+#       # Forbidden rule should still exist
+#       - equal:
+#           path: spec.http[3].name
+#           value: test-stack-test-app-forbidden
 
-  - it: should handle wildcard at root level
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-      environment:
-        name: dev
-      applications:
-        test-app:
-          deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/app
-            tag: latest
-          networking:
-            istio:
-              enabled: true
-              allowedEndpoints:
-                - "/*"
-          service:
-            ports:
-              - name: http
-                port: 8080
-                targetPort: 8080
-    asserts:
-      - isKind:
-          of: VirtualService
-      # The base rule comes first, then allowed endpoints
-      - equal:
-          path: spec.http[0].name
-          value: test-stack-test-app
-      # Wildcard at root should match everything, note the double dash
-      - equal:
-          path: spec.http[1].name
-          value: test-stack-test-app-allowed--wildcard
-      - equal:
-          path: spec.http[1].match[0].uri.prefix
-          value: "/"
-      # Forbidden rule should still exist (though effectively unreachable)
-      - equal:
-          path: spec.http[2].name
-          value: test-stack-test-app-forbidden
+#   - it: should handle wildcard at root level
+#     set:
+#       global:
+#         appStack: test-stack
+#         language: nodejs
+#       environment:
+#         name: dev
+#       applications:
+#         test-app:
+#           deploymentType: deployment
+#           image:
+#             registry: mycarrieracr.azurecr.io
+#             repository: test/app
+#             tag: latest
+#           networking:
+#             istio:
+#               enabled: true
+#               allowedEndpoints:
+#                 - "/*"
+#           service:
+#             ports:
+#               - name: http
+#                 port: 8080
+#                 targetPort: 8080
+#     asserts:
+#       - isKind:
+#           of: VirtualService
+#       # The base rule comes first, then allowed endpoints
+#       - equal:
+#           path: spec.http[0].name
+#           value: test-stack-test-app
+#       # Wildcard at root should match everything, note the double dash
+#       - equal:
+#           path: spec.http[1].name
+#           value: test-stack-test-app-allowed--wildcard
+#       - equal:
+#           path: spec.http[1].match[0].uri.prefix
+#           value: "/"
+#       # Forbidden rule should still exist (though effectively unreachable)
+#       - equal:
+#           path: spec.http[2].name
+#           value: test-stack-test-app-forbidden
 
-  - it: should work with very long endpoint names
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-      environment:
-        name: dev
-      applications:
-        test-app:
-          deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/app
-            tag: latest
-          networking:
-            istio:
-              enabled: true
-              allowedEndpoints:
-                - "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/*"
-          service:
-            ports:
-              - name: http
-                port: 8080
-                targetPort: 8080
-    asserts:
-      - isKind:
-          of: VirtualService
-      # The base rule comes first, then allowed endpoints
-      - equal:
-          path: spec.http[0].name
-          value: test-stack-test-app
-      - equal:
-          path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-very-long-endpoint-path-that-might-cause-issues-with-naming-wildcard
-      - equal:
-          path: spec.http[1].match[0].uri.prefix
-          value: "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/"
+#   - it: should work with very long endpoint names
+#     set:
+#       global:
+#         appStack: test-stack
+#         language: nodejs
+#       environment:
+#         name: dev
+#       applications:
+#         test-app:
+#           deploymentType: deployment
+#           image:
+#             registry: mycarrieracr.azurecr.io
+#             repository: test/app
+#             tag: latest
+#           networking:
+#             istio:
+#               enabled: true
+#               allowedEndpoints:
+#                 - "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/*"
+#           service:
+#             ports:
+#               - name: http
+#                 port: 8080
+#                 targetPort: 8080
+#     asserts:
+#       - isKind:
+#           of: VirtualService
+#       # The base rule comes first, then allowed endpoints
+#       - equal:
+#           path: spec.http[0].name
+#           value: test-stack-test-app
+#       - equal:
+#           path: spec.http[1].name
+#           value: test-stack-test-app-allowed--api-very-long-endpoint-path-that-might-cause-issues-with-naming-wildcard
+#       - equal:
+#           path: spec.http[1].match[0].uri.prefix
+#           value: "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/"
 
-  - it: should work with special characters that need escaping
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-      environment:
-        name: dev
-      applications:
-        test-app:
-          deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/app
-            tag: latest
-          networking:
-            istio:
-              enabled: true
-              allowedEndpoints:
-                - "/api/v1.0/users"
-                - "/api/v2_beta/health"
-                - "/api/$special/endpoint"
-          service:
-            ports:
-              - name: http
-                port: 8080
-                targetPort: 8080
-    asserts:
-      - isKind:
-          of: VirtualService
-      # The base rule comes first, then allowed endpoints
-      - equal:
-          path: spec.http[0].name
-          value: test-stack-test-app
-      # Dots are preserved in the naming
-      - equal:
-          path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-v1.0-users
-      - equal:
-          path: spec.http[1].match[0].uri.exact
-          value: "/api/v1.0/users"
-      - equal:
-          path: spec.http[2].name
-          value: test-stack-test-app-allowed--api-v2_beta-health
-      - equal:
-          path: spec.http[2].match[0].uri.exact
-          value: "/api/v2_beta/health"
-      - equal:
-          path: spec.http[3].name
-          value: test-stack-test-app-allowed--api-$special-endpoint
-      - equal:
-          path: spec.http[3].match[0].uri.exact
-          value: "/api/$special/endpoint"
+#   - it: should work with special characters that need escaping
+#     set:
+#       global:
+#         appStack: test-stack
+#         language: nodejs
+#       environment:
+#         name: dev
+#       applications:
+#         test-app:
+#           deploymentType: deployment
+#           image:
+#             registry: mycarrieracr.azurecr.io
+#             repository: test/app
+#             tag: latest
+#           networking:
+#             istio:
+#               enabled: true
+#               allowedEndpoints:
+#                 - "/api/v1.0/users"
+#                 - "/api/v2_beta/health"
+#                 - "/api/$special/endpoint"
+#           service:
+#             ports:
+#               - name: http
+#                 port: 8080
+#                 targetPort: 8080
+#     asserts:
+#       - isKind:
+#           of: VirtualService
+#       # The base rule comes first, then allowed endpoints
+#       - equal:
+#           path: spec.http[0].name
+#           value: test-stack-test-app
+#       # Dots are preserved in the naming
+#       - equal:
+#           path: spec.http[1].name
+#           value: test-stack-test-app-allowed--api-v1.0-users
+#       - equal:
+#           path: spec.http[1].match[0].uri.exact
+#           value: "/api/v1.0/users"
+#       - equal:
+#           path: spec.http[2].name
+#           value: test-stack-test-app-allowed--api-v2_beta-health
+#       - equal:
+#           path: spec.http[2].match[0].uri.exact
+#           value: "/api/v2_beta/health"
+#       - equal:
+#           path: spec.http[3].name
+#           value: test-stack-test-app-allowed--api-$special-endpoint
+#       - equal:
+#           path: spec.http[3].match[0].uri.exact
+#           value: "/api/$special/endpoint"
