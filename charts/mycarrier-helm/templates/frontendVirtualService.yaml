@@ -1,0 +1,91 @@
+{{- $frontendApps := dict }}
+{{- $hasPrimary := false }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- if $appValues.isFrontend }}
+{{- $_ := set $frontendApps $appName $appValues }}
+{{- if $appValues.isPrimary }}
+{{- $hasPrimary = true }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/* Only create multi-frontend VirtualService if we have multiple frontend apps and a primary */}}
+{{- if and (gt (len $frontendApps) 1) $hasPrimary }}
+{{- $domain := include "helm.domain" $ }}
+{{- $domainPrefix := include "helm.domain.prefix" $ }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $primaryApp := "" }}
+{{- range $appName, $appValues := $frontendApps }}
+{{- if $appValues.isPrimary }}{{ $primaryApp = $appName }}{{ end }}
+{{- end }}
+{{- $primaryAppValues := index $frontendApps $primaryApp }}
+{{- $primaryFullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ $primaryFullName }}-multifrontend
+  namespace: {{ $namespace }}
+  labels:
+    {{- $labels := include "helm.labels.standard" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) | fromYaml }}
+    {{- $_ := set $labels "app.kubernetes.io/component" "multifrontend-routing" }}
+    {{ toYaml $labels | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
+spec:
+  {{ include "helm.specs.multifrontend.virtualservice" . | indent 2 | trim }}
+
+{{- if hasPrefix "feature" $.Values.environment.name }}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ $primaryFullName }}-multifrontend-offload
+  namespace: {{ $namespace }}
+  labels:
+    {{- $labels := include "helm.labels.standard" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) | fromYaml }}
+    {{- $_ := set $labels "app.kubernetes.io/component" "multifrontend-offload" }}
+    {{ toYaml $labels | indent 4 | trim }}
+  annotations:
+    {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
+spec:
+  hosts:
+  {{ if (not $primaryAppValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+  {{- if $primaryAppValues.staticHostname }}- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+  gateways:
+  - mesh
+  - istio-system/default
+  http:
+  {{/* Path-based routing for feature environments */}}
+  {{- range $appName, $appValues := $frontendApps }}
+  {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") (not $appValues.isPrimary) }}
+  {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
+  - name: {{ $appName }}-offload-route
+    match:
+    - headers:
+        Environment:
+          exact: {{ $.Values.environment.name }}
+      uri:
+        prefix: {{ $appValues.routePrefix }}
+    route:
+      - destination:
+          host: {{ $fullName }}
+          port:
+            number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
+  {{- end }}
+  {{- end }}
+  {{/* Default route for primary app */}}
+  - name: {{ $primaryApp }}-offload-default
+    route:
+      - destination:
+          host: {{ $primaryFullName }}
+          port:
+            number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
+    match:
+      - headers:
+          Environment:
+            exact: {{ $.Values.environment.name }}
+{{- end }}
+{{- end }}
