@@ -70,19 +70,37 @@ spec:
       uri:
         prefix: {{ $appValues.routePrefix }}
     route:
+      {{- if and $appValues.service $appValues.service.ports }}
+      {{- range $appValues.service.ports }}
+      - destination:
+          host: {{ $fullName }}
+          port:
+            number: {{ .port }}
+      {{- end }}
+      {{- else }}
       - destination:
           host: {{ $fullName }}
           port:
             number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
+      {{- end }}
   {{- end }}
   {{- end }}
   {{/* Default route for primary app */}}
   - name: {{ $primaryApp }}-offload-default
     route:
+      {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
+      {{- range $primaryAppValues.service.ports }}
+      - destination:
+          host: {{ $primaryFullName }}
+          port:
+            number: {{ .port }}
+      {{- end }}
+      {{- else }}
       - destination:
           host: {{ $primaryFullName }}
           port:
             number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
+      {{- end }}
     match:
       - headers:
           Environment:

@@ -43,10 +43,19 @@ http:
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
 - name: {{ $fullName }}-env-match
   route:
+    {{- if and $appValues.service $appValues.service.ports }}
+    {{- range $appValues.service.ports }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ .port }}
+    {{- end }}
+    {{- else }}
     - destination:
         host: {{ $fullName }}
         port:
           number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
+    {{- end }}
   match:
     - headers:
         Environment:
@@ -67,10 +76,19 @@ http:
   - uri:
       prefix: {{ $appValues.routePrefix }}
   route:
+  {{- if and $appValues.service $appValues.service.ports }}
+  {{- range $appValues.service.ports }}
+  - destination:
+      host: {{ $fullName }}
+      port:
+        number: {{ .port }}
+  {{- end }}
+  {{- else }}
   - destination:
       host: {{ $fullName }}
       port:
         number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
+  {{- end }}
   headers:
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
   {{- with $appValues.networking.istio.corsPolicy }}
