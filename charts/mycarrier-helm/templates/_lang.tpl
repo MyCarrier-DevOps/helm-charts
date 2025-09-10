@@ -50,6 +50,14 @@
 - name: MongoConnection_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/mongodb-{{ .Values.global.appStack | lower }}-{{ $metaenv }}#value"
 {{- end }}
+{{- if .Values.global.dependencies.redpanda }}
+- name: redpanda_bootstrapservers
+  value: "vault:secrets/data/{{ $metaenv }}/shared/redpanda_bootstrapservers#value"
+- name: redpanda_saslusername
+  value: "vault:secrets/data/{{ $metaenv }}/shared/redpanda_saslusername#value"
+- name: redpanda_saslpassword
+  value: "vault:secrets/data/{{ $metaenv }}/shared/redpanda_saslpassword#value"
+{{- end }}
 {{- if .Values.global.dependencies.elasticsearch }}
 - name: KeyVault_ElasticSearch
   value: "ElasticSearchApiKey-{{ .Values.global.appStack | title }}-{{ $metaenv | title }}"
