@@ -1,19 +1,9 @@
 {{- define "helm.specs.multifrontend.virtualservice" -}}
-{{- $frontendApps := dict }}
-{{- $primaryApp := "" }}
+{{- $frontendApps := .frontendApps }}
+{{- $primaryApp := .primaryApp }}
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
-
-{{/* Collect all frontend applications */}}
-{{- range $appName, $appValues := .Values.applications }}
-{{- if $appValues.isFrontend }}
-{{- $_ := set $frontendApps $appName $appValues }}
-{{- if $appValues.isPrimary }}
-{{- $primaryApp = $appName }}
-{{- end }}
-{{- end }}
-{{- end }}
 
 hosts:
 {{/* Generate hosts from primary frontend app */}}
@@ -151,6 +141,20 @@ http:
 {{- end }}
 {{- end }}
 
+{{/* Handle path-based redirects for any frontend app */}}
+{{- range $appName, $appValues := $frontendApps }}
+{{- if and $appValues.networking $appValues.networking.istio $appValues.networking.istio.pathRedirects }}
+{{- range $sourcePath, $targetPath := $appValues.networking.istio.pathRedirects }}
+- name: {{ $appName }}-{{ $sourcePath | replace "/" "" }}-redirect
+  match:
+  - uri:
+      exact: /{{ $sourcePath }}
+  redirect:
+    uri: /{{ $targetPath }}
+{{- end }}
+{{- end }}
+{{- end }}
+
 {{/* Default/root route (primary frontend app) - must come last */}}
 {{- if $primaryApp }}
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
@@ -215,4 +219,69 @@ http:
     attempts: {{ default 3 (dig "service" "attempts" 3 $primaryAppValues) }}
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $primaryAppValues) }}
 {{- end }}
+{{- end -}}
+
+{{- define "helm.specs.multifrontend.offload.virtualservice" -}}
+{{- $frontendApps := .frontendApps }}
+{{- $primaryApp := .primaryApp }}
+{{- $domain := include "helm.domain" $ }}
+{{- $domainPrefix := include "helm.domain.prefix" $ }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $primaryAppValues := .primaryAppValues }}
+{{- $primaryFullName := .primaryFullName }}
+
+hosts:
+{{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+{{- if $primaryAppValues.staticHostname }}- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+gateways:
+- mesh
+- istio-system/default
+http:
+{{/* Path-based routing for feature environments */}}
+{{- range $appName, $appValues := $frontendApps }}
+{{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") (not $appValues.isPrimary) }}
+{{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
+- name: {{ $appName }}-offload-route
+  match:
+  - headers:
+      Environment:
+        exact: {{ .Values.environment.name }}
+    uri:
+      prefix: {{ $appValues.routePrefix }}
+  route:
+    {{- if and $appValues.service $appValues.service.ports }}
+    {{- range $appValues.service.ports }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ .port }}
+    {{- end }}
+    {{- else }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{/* Default route for primary app */}}
+- name: {{ $primaryApp }}-offload-default
+  route:
+    {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
+    {{- range $primaryAppValues.service.ports }}
+    - destination:
+        host: {{ $primaryFullName }}
+        port:
+          number: {{ .port }}
+    {{- end }}
+    {{- else }}
+    - destination:
+        host: {{ $primaryFullName }}
+        port:
+          number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
+    {{- end }}
+  match:
+    - headers:
+        Environment:
+          exact: {{ .Values.environment.name }}
 {{- end -}}
