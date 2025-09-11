@@ -79,6 +79,8 @@ http:
       port:
         number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
   {{- end }}
+  rewrite:
+    uri: /
   headers:
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
   {{- with $appValues.networking.istio.corsPolicy }}
