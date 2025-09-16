@@ -157,6 +157,32 @@ http:
 {{- end }}
 {{- end }}
 
+{{/* Catch-all route for the primary frontend app */}}
+{{- if $primaryApp }}
+{{- $primaryAppValues := index $frontendApps $primaryApp }}
+{{- $fullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+- name: {{ $fullName }}-catchall
+  route:
+  - destination:
+      host: {{ $fullName }}
+      port:
+        number: 80
+  match:
+  - uri:
+      exact: /
+  headers:
+    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  corsPolicy:
+    {{ toYaml . | indent 4 | trim }}
+  {{- end }}
+  timeout: {{ default "151s" (dig "service" "timeout" nil $primaryAppValues) }}
+  retries:
+    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" nil $primaryAppValues) }}
+    attempts: {{ default 3 (dig "service" "attempts" nil $primaryAppValues) }}
+    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" nil $primaryAppValues) }}
+{{- end }}
+
 {{/* Default/root route (primary frontend app) - must come last */}}
 {{- if $primaryApp }}
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
