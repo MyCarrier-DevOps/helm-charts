@@ -34,6 +34,8 @@ http:
     uri: /
     authority: {{ if and (not (contains "prod" $namespace)) ( not $.application.staticHostname) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
 {{- end }}
+{{- end }}
+{{- if and .application.networking .application.networking.istio .application.networking.istio.routes }}
 {{- range $key, $value := .application.networking.istio.routes }}
 - name: {{ $key }}
   {{- toYaml $value | nindent 2 }}
