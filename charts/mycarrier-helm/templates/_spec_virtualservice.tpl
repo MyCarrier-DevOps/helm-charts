@@ -45,10 +45,10 @@ http:
       port:
         number: 80
   headers:
-    {{- if and $.application.networking.istio.responseHeaders }}
-    {{- with $.application.networking.istio.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
-    {{- end }}
+    {{- if and $.application.networking.istio.responseHeaders -}}
+    {{- with $.application.networking.istio.responseHeaders -}}
+    {{ toYaml . | indent 4 | trim -}}
+    {{- end -}}
     {{- else }}
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
     {{- end }}
@@ -65,7 +65,7 @@ http:
 {{- end }}
 {{- end }}
 
-{{- if and (not (contains "dev" $.Values.environment.name))  .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints }}
+{{- if and .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints -}}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 - name: {{ $fullName }}-forbidden
