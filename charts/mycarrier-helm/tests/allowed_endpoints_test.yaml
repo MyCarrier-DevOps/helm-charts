@@ -8,7 +8,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -58,7 +58,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -105,7 +105,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -166,7 +166,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: rollout
@@ -209,7 +209,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -250,7 +250,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -281,7 +281,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -310,7 +310,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -342,7 +342,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -375,7 +375,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -419,7 +419,7 @@ tests:
         appStack: test-stack
         language: nodejs
       environment:
-        name: dev
+        name: preprod
       applications:
         test-app:
           deploymentType: deployment
