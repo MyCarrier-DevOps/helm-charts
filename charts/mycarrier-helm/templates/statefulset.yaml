@@ -1,3 +1,4 @@
+{{- $v2migration := .Values.global.v2migration | default false -}}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
 {{- if (eq $appValues.deploymentType "statefulset")  }}
@@ -15,7 +16,11 @@ metadata:
     {{ include "helm.labels.version" $appContext | indent 4 | trim }}
   annotations:
     argocd.argoproj.io/sync-wave: "10"
+    {{- if $v2migration }}
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false
+    {{- else }}
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    {{- end }}
 spec:
   {{ include "helm.specs.statefulset" $appContext | indent 2 | trim }}
 ---
