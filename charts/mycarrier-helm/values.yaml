@@ -21,6 +21,9 @@ global:
   # Use application-level language configuration to override
   language: "nodejs"
 
+  # Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
+  v2migration: false
+  
   env: {}
   dependencies:
     mongodb: false

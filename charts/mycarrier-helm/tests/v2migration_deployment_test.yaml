@@ -1,0 +1,150 @@
+suite: V2 Migration Feature Tests - Deployments
+templates:
+  - deployment.yaml
+tests:
+  - it: should use default sync options when v2migration is false
+    set:
+      global:
+        appStack: "test"
+        language: "nodejs"
+        v2migration: false
+      environment:
+        name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true"
+      - notMatchRegex:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          pattern: "Replace=true"
+      - notMatchRegex:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          pattern: "PruneLast=false"
+
+  - it: should use v2migration sync options when v2migration is true
+    set:
+      global:
+        appStack: "test"
+        language: "nodejs"
+        v2migration: true
+      environment:
+        name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+      - matchRegex:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          pattern: "SkipDryRunOnMissingResource=true"
+      - matchRegex:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          pattern: "Replace=true"
+      - matchRegex:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          pattern: "PruneLast=false"
+
+  - it: should default to false when v2migration is not set
+    set:
+      global:
+        appStack: "test"
+        language: "nodejs"
+        # v2migration not explicitly set - should default to false
+      environment:
+        name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true"
+
+  - it: should work with multiple applications when v2migration is true
+    set:
+      global:
+        appStack: "multi"
+        language: "nodejs"
+        v2migration: true
+      environment:
+        name: "prod"
+      applications:
+        app1:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "app1"
+            tag: "1.0.0"
+        app2:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "app2"
+            tag: "2.0.0"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Deployment
+        documentIndex: 0
+      - isKind:
+          of: Deployment
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+        documentIndex: 1
+
+  - it: should preserve other annotations when v2migration is enabled
+    set:
+      global:
+        appStack: "test"
+        language: "nodejs"
+        v2migration: true
+      environment:
+        name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - exists:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "10"
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
