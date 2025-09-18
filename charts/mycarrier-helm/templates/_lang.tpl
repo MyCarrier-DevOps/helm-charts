@@ -196,7 +196,7 @@ SINGLE SOURCE OF TRUTH: Language-specific endpoint definitions
 Returns YAML array that can be converted to Go data structures with fromYamlArray
 */}}
 {{- define "helm.lang.endpoint.list" -}}
-{{- if eq .Values.global.language "csharp" -}}
+{{- if and (eq .Values.global.language "csharp") (contains "api" (.appName | lower)) -}}
 - kind: "exact"
   match: "/liveness"
 - kind: "exact"
@@ -221,16 +221,65 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- $mergedEndpoints = concat $mergedEndpoints $langEndpoints -}}
 {{- end -}}
 
-{{/* Add user-defined endpoints */}}
+{{/* Add user-defined endpoints, but avoid duplicates */}}
 {{- if and .application.networking .application.networking.istio.allowedEndpoints -}}
-{{- $mergedEndpoints = concat $mergedEndpoints .application.networking.istio.allowedEndpoints -}}
+{{- range .application.networking.istio.allowedEndpoints -}}
+{{- $userEndpoint := . -}}
+{{- $isDuplicate := false -}}
+
+{{/* Check if this user endpoint duplicates any language endpoint */}}
+{{- range $mergedEndpoints -}}
+{{- $langEndpoint := . -}}
+{{/* Compare normalized endpoint values */}}
+{{- $userMatch := "" -}}
+{{- $userKind := "" -}}
+{{- $langMatch := "" -}}
+{{- $langKind := "" -}}
+
+{{/* Normalize user endpoint */}}
+{{- if typeIs "string" $userEndpoint -}}
+{{- $userMatch = $userEndpoint -}}
+{{- if contains "*" $userEndpoint -}}
+{{- $userKind = "prefix" -}}
+{{- else -}}
+{{- $userKind = "exact" -}}
+{{- end -}}
+{{- else -}}
+{{- $userMatch = $userEndpoint.match -}}
+{{- $userKind = $userEndpoint.kind -}}
+{{- end -}}
+
+{{/* Normalize language endpoint */}}
+{{- if typeIs "string" $langEndpoint -}}
+{{- $langMatch = $langEndpoint -}}
+{{- if contains "*" $langEndpoint -}}
+{{- $langKind = "prefix" -}}
+{{- else -}}
+{{- $langKind = "exact" -}}
+{{- end -}}
+{{- else -}}
+{{- $langMatch = $langEndpoint.match -}}
+{{- $langKind = $langEndpoint.kind -}}
+{{- end -}}
+
+{{/* Check for duplicate */}}
+{{- if and (eq $userMatch $langMatch) (eq $userKind $langKind) -}}
+{{- $isDuplicate = true -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Add user endpoint only if not duplicate */}}
+{{- if not $isDuplicate -}}
+{{- $mergedEndpoints = append $mergedEndpoints $userEndpoint -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Generate HTTP rules for each endpoint */}}
 {{- range $mergedEndpoints -}}
 {{- if typeIs "string" . }}
 {{/* Legacy format support - treat as exact match */}}
-- name: {{ $fullName }}-allowed-{{ . | replace "/" "-" | replace "*" "wildcard" | trimSuffix "-" }}
+- name: {{ $fullName }}-allowed-{{ . | replace "/" "-" | replace "*" "wildcard" | trimSuffix "-" | trimPrefix "-" }}
   match:
   - uri:
       {{- if contains "*" . }}
@@ -240,7 +289,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
       {{- end }}
 {{- else }}
 {{/* New format with kind and match fields */}}
-- name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | replace "*" "wildcard" | replace "(" "" | replace ")" "" | replace "|" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
+- name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | replace "*" "wildcard" | replace "(" "" | replace ")" "" | replace "|" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" | trimPrefix "-" }}
   match:
   - uri:
       {{- if eq .kind "exact" }}

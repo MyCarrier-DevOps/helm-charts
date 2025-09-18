@@ -12,7 +12,8 @@ gateways:
 - mesh
 - istio-system/default
 http:
-{{- if not (hasPrefix "feature" $.Values.environment.name) }}
+{{/* Only render default fallback route if we're NOT rendering allowedEndpoints */}}
+{{- if and (not (eq "dev" $.Values.environment.name)) (not (and (not (contains "dev" $.Values.environment.name)) (or (and .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints) (and (eq .Values.global.language "csharp") (contains "api" (.appName | lower)))))) }}
 - name: {{ $fullName }}
   route:
     - destination:
@@ -65,7 +66,7 @@ http:
 {{- end }}
 {{- end }}
 
-{{- if and (not (contains "dev" $.Values.environment.name))  .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints }}
+{{- if and (not (contains "dev" $.Values.environment.name)) (or (and .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints) (and (eq .Values.global.language "csharp") (contains "api" (.appName | lower)))) }}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 - name: {{ $fullName }}-forbidden
