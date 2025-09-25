@@ -84,6 +84,8 @@
   value: "inf-{{ $metaenv }}-servicebus.servicebus.windows.net"
 - name: ServiceBusFullyQualifiedNamespace
   value: "inf-{{ $metaenv }}-servicebus.servicebus.windows.net"
+- name: ServiceBusConnectionNamespace
+  value: "inf-{{ $metaenv }}-servicebus.servicebus.windows.net"
 {{- end }}
 {{- if .Values.global.dependencies.loadsure }}
 - name: KeyVault_LoadsureClaimsToken
