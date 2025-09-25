@@ -16,7 +16,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "10"
     {{- if $v2migration }}
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Replace=true,Force=true
     {{- else }}
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
     {{- end }}
