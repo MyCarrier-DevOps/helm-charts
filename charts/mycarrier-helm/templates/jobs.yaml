@@ -20,7 +20,7 @@ metadata:
     {{ toYaml .labels | indent 4 | trim }}
     {{- end }}
   annotations:
-    argocd.argoproj.io/sync-options: Force=true,Replace=true,PruneLast=false
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
   {{- with .annotations }}
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
