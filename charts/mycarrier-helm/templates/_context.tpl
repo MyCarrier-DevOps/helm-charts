@@ -1,6 +1,9 @@
 {{/*
 Define a helper that creates a context with default values to avoid nil pointer errors.
 This can be used throughout the chart to ensure consistent access to common values.
+
+PERFORMANCE OPTIMIZATION: This function now returns a dict directly instead of JSON.
+The cached version should be used in loops to avoid recomputation.
 */}}
 {{- define "helm.default-context" -}}
 {{- $defaults := dict -}}
@@ -35,4 +38,25 @@ This can be used throughout the chart to ensure consistent access to common valu
 {{- $_ := set $context "defaults" $defaults -}}
 
 {{- $context | toJson -}}
+{{- end -}}
+
+{{/*
+PERFORMANCE OPTIMIZATION: Get or create cached context.
+This helper checks if a precomputed context exists in .ctx, otherwise computes it.
+This eliminates redundant JSON serialization/deserialization in helper functions.
+
+Usage in templates:
+  {{- $ctx := include "helm.context" . | fromJson -}}
+  
+Usage in loops (precompute once):
+  {{- $globalCtx := include "helm.context" $ | fromJson -}}
+  {{- range $appName, $appValues := .Values.applications }}
+    {{- $appContext := merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $ }}
+*/}}
+{{- define "helm.context" -}}
+{{- if .ctx -}}
+  {{- .ctx | toJson -}}
+{{- else -}}
+  {{- include "helm.default-context" . -}}
+{{- end -}}
 {{- end -}}

@@ -1,5 +1,7 @@
+{{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- range $appName, $appValues := .Values.applications }}
-{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- if and (hasKey $appValues "vpa") $appValues.vpa.enabled }}
 {{- if or (eq $appValues.deploymentType "deployment") (eq $appValues.deploymentType "statefulset") }}
 {{- $namespace := include "helm.namespace" $ }}
