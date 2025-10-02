@@ -2,7 +2,7 @@
 {{- $fullName := include "helm.fullname" . }}
 {{- $envScaling := include "helm.envScaling" . }}
 {{- $namespace := include "helm.namespace" . }}
-{{- $ctx := fromJson (include "helm.default-context" .) }}
+{{- $ctx := include "helm.context" . | fromJson }}
 {{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
 {{- if not (or (dig "autoscaling" "enabled" false .application) $globalForceAutoscaling) }}
 {{- if eq "0" $envScaling }}

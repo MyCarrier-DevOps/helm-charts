@@ -1,7 +1,8 @@
+{{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- range $appName, $appValues := .Values.applications }}
-{{- $appContext := (merge (dict "appName" $appName "application" $appValues) $) }}
-{{- $ctx := fromJson (include "helm.default-context" $) }}
-{{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
+{{- $globalForceAutoscaling := $globalCtx.defaults.forceAutoscaling }}
 {{- if (or (dig "autoscaling" "enabled" false $appValues) $globalForceAutoscaling) }}
 {{- $envScaling := include "helm.envScaling" $ }}
 {{- $namespace := include "helm.namespace" $ }}

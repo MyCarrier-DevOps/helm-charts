@@ -1,6 +1,6 @@
 {{- define "helm.labels.standard" -}}
-{{/* Get standardized context with defaults */}}
-{{- $ctx := fromJson (include "helm.default-context" .) -}}
+{{/* Get standardized context with defaults - use cached version if available */}}
+{{- $ctx := include "helm.context" . | fromJson -}}
 {{- $envScaling := include "helm.envScaling" . -}}
 {{- $namespace := include "helm.namespace" . -}}
 {{- $instance := include "helm.instance" . -}}
