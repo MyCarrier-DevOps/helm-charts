@@ -28,7 +28,7 @@ tests:
           pattern: "Replace=true"
       - notMatchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          pattern: "PruneLast=false"
+          pattern: "Force=true"
 
   - it: should use v2migration sync options when v2migration is true
     set:
@@ -50,7 +50,7 @@ tests:
           of: Deployment
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+          value: "SkipDryRunOnMissingResource=true,Replace=true,Force=true"
       - matchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
           pattern: "SkipDryRunOnMissingResource=true"
@@ -59,7 +59,7 @@ tests:
           pattern: "Replace=true"
       - matchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          pattern: "PruneLast=false"
+          pattern: "Force=true"
 
   - it: should default to false when v2migration is not set
     set:
@@ -115,11 +115,11 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+          value: "SkipDryRunOnMissingResource=true,Replace=true,Force=true"
         documentIndex: 0
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+          value: "SkipDryRunOnMissingResource=true,Replace=true,Force=true"
         documentIndex: 1
 
   - it: should preserve other annotations when v2migration is enabled
@@ -147,4 +147,4 @@ tests:
           value: "10"
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+          value: "SkipDryRunOnMissingResource=true,Replace=true,Force=true"

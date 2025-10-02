@@ -1,3 +1,5 @@
+{{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- $frontendApps := dict }}
 {{- $hasPrimary := false }}
 {{- range $appName, $appValues := .Values.applications }}
@@ -16,7 +18,7 @@
 {{- if $appValues.isPrimary }}{{ $primaryApp = $appName }}{{ end }}
 {{- end }}
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
-{{- $primaryFullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+{{- $primaryFullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues "ctx" $globalCtx) $) }}
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}

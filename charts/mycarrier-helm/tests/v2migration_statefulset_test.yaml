@@ -28,7 +28,7 @@ tests:
           pattern: "Replace=true"
       - notMatchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          pattern: "PruneLast=false"
+          pattern: "Force=true"
 
   - it: should use v2migration sync options for statefulset when v2migration is true
     set:
@@ -50,7 +50,7 @@ tests:
           of: StatefulSet
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+          value: "SkipDryRunOnMissingResource=true,Replace=true,Force=true"
       - matchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
           pattern: "SkipDryRunOnMissingResource=true"
@@ -59,7 +59,7 @@ tests:
           pattern: "Replace=true"
       - matchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          pattern: "PruneLast=false"
+          pattern: "Force=true"
 
   - it: should default to false for statefulset when v2migration is not set
     set:
@@ -108,4 +108,4 @@ tests:
           value: "10"
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true,Replace=true,PruneLast=false"
+          value: "SkipDryRunOnMissingResource=true,Replace=true,Force=true"
