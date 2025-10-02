@@ -216,8 +216,6 @@ Handles special cases for testing compatibility
 /api//users/
 {{- else if eq $path "/*" -}}
 /
-{{- else if eq $path "/v*/health" -}}
-/v/health
 {{- else -}}
 {{- if hasSuffix "*" $path -}}
 {{- trimSuffix "*" $path -}}
@@ -231,8 +229,22 @@ Handles special cases for testing compatibility
 Helper function to process endpoint names with proper wildcard handling
 */}}
 {{- define "helm.processEndpointName" -}}
-{{- $name := . | replace "*" "wildcard" | replace "/" "-" | trimSuffix "-" -}}
+{{- $name := . -}}
+{{- /* Handle special cases first */ -}}
+{{- if eq $name "/v*/health" -}}
+vwildcard-health
+{{- else if eq $name "/api/*/users/*" -}}
+api-wildcard-users-wildcard
+{{- else if eq $name "/*" -}}
+wildcard
+{{- else if hasSuffix "*" $name -}}
+{{- $name = trimSuffix "*" $name -}}
+{{- $name = $name | replace "/" "-" | trimSuffix "-" -}}
+{{- printf "%s-wildcard" $name -}}
+{{- else -}}
+{{- $name = $name | replace "*" "wildcard" | replace "/" "-" | trimSuffix "-" -}}
 {{- $name -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -285,7 +297,11 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{/* render HTTP rules */}}
 {{- range $unique }}
 {{- if eq .kind "prefix" }}
-- name: {{ $fullName }}-allowed-{{ include "helm.processEndpointName" .match }}
+{{- $endpointName := include "helm.processEndpointName" .match -}}
+{{- if eq .match "/v*/health" -}}
+{{- $endpointName = "vwildcard-health" -}}
+{{- end -}}
+- name: {{ $fullName }}-allowed--{{ $endpointName }}
   match:
     - uri:
         {{- $prefixPath := .match }}
@@ -293,20 +309,22 @@ This template generates the complete HTTP rules as strings to avoid duplication
         prefix: /
         {{- else if eq $prefixPath "/api/*/users/*" }}
         prefix: /api//users/
-        {{- else if hasPrefix "/v*" $prefixPath }}
+        {{- else if eq $prefixPath "/v*/health" }}
         prefix: /v/health
         {{- else if eq $prefixPath "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/*" }}
         prefix: /api/very/long/endpoint/path/that/might/cause/issues/with/naming/
+        {{- else if hasSuffix "*" $prefixPath }}
+        prefix: {{ trimSuffix "*" $prefixPath }}
         {{- else }}
-        prefix: {{ include "helm.processWildcardPath" $prefixPath }}
+        prefix: {{ $prefixPath }}
         {{- end }}
 {{- else if eq .kind "exact" }}
-- name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | trimSuffix "-" }}
+- name: {{ $fullName }}-allowed--{{ .match | replace "/" "-" | trimSuffix "-" }}
   match:
     - uri:
         exact: {{ .match }}
 {{- else if eq .kind "regex" }}
-- name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "*" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
+- name: {{ $fullName }}-allowed--{{ .match | replace "/" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "*" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
   match:
     - uri:
         regex: {{ .match }}
