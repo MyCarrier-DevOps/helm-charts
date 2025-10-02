@@ -272,8 +272,8 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- $unique := list -}}
 {{- range $mergedEndpoints -}}
   {{- if typeIs "string" . -}}
-    {{- if hasSuffix "*" . -}}
-      {{- $key := printf "prefix:%s" (trimSuffix "*" .) -}}
+    {{- if contains "*" . -}}
+      {{- $key := printf "prefix:%s" . -}}
       {{- if not (hasKey $seen $key) -}}
         {{- $_ := set $seen $key true -}}
         {{- $unique = append $unique (dict "kind" "prefix" "match" .) -}}
