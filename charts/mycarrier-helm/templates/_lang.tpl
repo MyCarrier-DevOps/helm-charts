@@ -239,10 +239,10 @@ api-wildcard-users-wildcard
 wildcard
 {{- else if hasSuffix "*" $name -}}
 {{- $name = trimSuffix "*" $name -}}
-{{- $name = $name | replace "/" "-" | trimSuffix "-" -}}
+{{- $name = $name | replace "/" "-" | trimAll "-" -}}
 {{- printf "%s-wildcard" $name -}}
 {{- else -}}
-{{- $name = $name | replace "*" "wildcard" | replace "/" "-" | trimSuffix "-" -}}
+{{- $name = $name | replace "*" "wildcard" | replace "/" "-" | trimAll "-" -}}
 {{- $name -}}
 {{- end -}}
 {{- end -}}
@@ -300,7 +300,8 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- $endpointName := include "helm.processEndpointName" .match -}}
 {{- if eq .match "/v*/health" -}}
 {{- $endpointName = "vwildcard-health" -}}
-{{- end -}}
+{{- end }}
+
 - name: {{ $fullName }}-allowed--{{ $endpointName }}
   match:
     - uri:
@@ -319,12 +320,14 @@ This template generates the complete HTTP rules as strings to avoid duplication
         prefix: {{ $prefixPath }}
         {{- end }}
 {{- else if eq .kind "exact" }}
-- name: {{ $fullName }}-allowed--{{ .match | replace "/" "-" | trimSuffix "-" }}
+{{- $processedMatch := .match | replace "/" "-" | trimAll "-" }}
+- name: {{ $fullName }}-allowed-{{ if $processedMatch }}-{{ $processedMatch }}{{ end }}
   match:
     - uri:
         exact: {{ .match }}
 {{- else if eq .kind "regex" }}
-- name: {{ $fullName }}-allowed--{{ .match | replace "/" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "*" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
+{{- $processedMatch := .match | replace "/" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "*" "-" | replace "^" "" | replace "$" "" | trimAll "-" }}
+- name: {{ $fullName }}-allowed-{{ if $processedMatch }}-{{ $processedMatch }}{{ end }}
   match:
     - uri:
         regex: {{ .match }}
@@ -369,5 +372,5 @@ This template generates the complete HTTP rules as strings to avoid duplication
     retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $.application) }}
     attempts: {{ default 3 (dig "service" "attempts" 3 $.application) }}
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
-{{- end }}
+{{- end -}}
 {{- end -}}
