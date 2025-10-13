@@ -21,12 +21,12 @@ spec:
                   v2migration: {{ $.Values.global.v2migration }}
                   {{ if $.Values.global.env }}
                   env:
-                    {{- $.Values.global.env | toYaml | nindent 18 }}
+                    {{- $.Values.global.env | toYaml | nindent 20 }}
                   {{ end }}
+                  {{ with $.Values.global.dependencies }}
                   dependencies:
-                    {{- with $.Values.global.dependencies }}
-                    {{- toYaml . | nindent 18 }}
-                    {{- end }}
+                    {{- toYaml . | nindent 20 }}
+                  {{ end }}
                 environment:
                   name: {{ .name }}
                   dependencyenv: {{ .dependencyenv | default "" }}

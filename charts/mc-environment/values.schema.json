@@ -221,6 +221,204 @@
         }
       }
     },
+    "infrastructureAzureStorageContainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Blob container name"
+        },
+        "accessType": {
+          "type": "string",
+          "description": "Container access type",
+          "enum": ["private", "blob", "container"],
+          "default": "private"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional metadata to apply to the container",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "infrastructureAzureExistingResourceGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Existing Azure resource group name"
+        }
+      }
+    },
+    "infrastructureAzureNewResourceGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "New Azure resource group name"
+        }
+      }
+    },
+    "infrastructureAzureExistingStorageAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Existing Azure storage account name"
+        }
+      }
+    },
+    "infrastructureAzureNewStorageAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Desired storage account name"
+        },
+        "location": {
+          "type": "string",
+          "description": "Azure region for the new storage account"
+        },
+        "accountTier": {
+          "type": "string",
+          "description": "Storage account tier",
+          "enum": ["Standard", "Premium"],
+          "default": "Standard"
+        },
+        "accountReplicationType": {
+          "type": "string",
+          "description": "Replication type",
+          "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"],
+          "default": "LRS"
+        },
+        "accessTier": {
+          "type": "string",
+          "description": "Blob access tier",
+          "enum": ["Cool", "Hot", "Archive"],
+          "default": "Cool"
+        }
+      }
+    },
+    "infrastructureAzureStorageAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Base name used when auto-generating storage account"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Kubernetes namespace for the Crossplane claim"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations applied to the Crossplane claim",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "existingResourceGroup": {
+          "$ref": "#/definitions/infrastructureAzureExistingResourceGroup"
+        },
+        "newResourceGroup": {
+          "$ref": "#/definitions/infrastructureAzureNewResourceGroup"
+        },
+        "existingStorageAccount": {
+          "$ref": "#/definitions/infrastructureAzureExistingStorageAccount"
+        },
+        "newStorageAccount": {
+          "$ref": "#/definitions/infrastructureAzureNewStorageAccount"
+        },
+        "location": {
+          "type": "string",
+          "description": "Azure region used when neither existing nor new storage account objects are supplied"
+        },
+        "tier": {
+          "type": "string",
+          "description": "Storage account tier for shorthand configuration",
+          "enum": ["Standard", "Premium"]
+        },
+        "replicationType": {
+          "type": "string",
+          "description": "Replication type for shorthand configuration",
+          "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"]
+        },
+        "accessTier": {
+          "type": "string",
+          "description": "Blob access tier for shorthand configuration",
+          "enum": ["Cool", "Hot", "Archive"]
+        },
+        "containers": {
+          "type": "array",
+          "description": "Blob containers to create",
+          "items": {
+            "$ref": "#/definitions/infrastructureAzureStorageContainer"
+          }
+        },
+        "tags": {
+          "type": "object",
+          "description": "Tags applied to Azure resources",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "compositionRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Crossplane composition reference name",
+              "default": "azure-blob-storage"
+            }
+          }
+        }
+      }
+    },
+    "infrastructureAzureStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accounts": {
+          "type": "array",
+          "description": "List of Azure Blob Storage accounts to manage",
+          "items": {
+            "$ref": "#/definitions/infrastructureAzureStorageAccount"
+          },
+          "default": []
+        }
+      }
+    },
+    "infrastructureAzure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "storage": {
+          "$ref": "#/definitions/infrastructureAzureStorage"
+        }
+      }
+    },
+    "infrastructure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "azure": {
+          "$ref": "#/definitions/infrastructureAzure"
+        }
+      }
+    },
     "enableVaultCA": {
       "oneOf": [
         { "type": "boolean", "description": "Enable Vault CA certificate download during pod startup", "default": false },
@@ -1543,13 +1741,26 @@
     "tolerations": {
       "$ref": "#/definitions/tolerations"
     },
+    "infrastructure": {
+      "oneOf": [
+        { "$ref": "#/definitions/infrastructure" },
+        { "type": "null" }
+      ],
+      "default": {
+        "azure": {
+          "storage": {
+            "accounts": []
+          }
+        }
+      }
+    },
     "environments": {
       "type": "array",
       "description": "List of environments to render Argo CD Applications for",
       "default": [],
       "items": {
         "type": "object",
-        "additionalProperties": true,
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
@@ -1607,9 +1818,10 @@
             ]
           },
           "infrastructure": {
-            "type": "object",
-            "description": "Infrastructure-specific configuration overrides",
-            "additionalProperties": true
+            "oneOf": [
+              { "$ref": "#/definitions/infrastructure" },
+              { "type": "null" }
+            ]
           },
           "deployment": {
             "type": "string",
