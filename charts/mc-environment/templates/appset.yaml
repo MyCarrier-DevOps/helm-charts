@@ -12,6 +12,7 @@ spec:
           elements:
           {{- range .Values.environments }}
             - Values:
+                isEnvironmentDeploy: true
                 global:
                   appStack: {{ $.Values.global.appStack | lower }}
                   gitbranch: {{ $.Values.global.gitbranch }}

@@ -541,3 +541,4 @@ infrastructure:
         #   # Optional: Custom annotations
         #   annotations:
         #     custom.annotation/key: "custom-value"
+isEnvironmentDeploy: false
