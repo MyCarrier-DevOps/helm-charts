@@ -30,8 +30,10 @@ spec:
                       appStack: {{ .Values.global.appStack | lower }}
                       gitbranch: {{ .Values.global.gitbranch }}
                       language: {{ .Values.global.language }}
+                      {{ if .Values.global.env }}
                       env:
                         {{- .Values.global.env | toYaml | nindent 24 }}
+                      {{ end }}
                       dependencies:
                         {{- with .Values.global.dependencies }}
                         {{- toYaml . | nindent 24 }}

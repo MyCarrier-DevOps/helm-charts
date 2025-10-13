@@ -5,5 +5,5 @@ SPDX-License-Identifier: APACHE-2.0
 
 {{- range .Values.extraObjects }}
 ---
-{{ include "common.tplvalues.render" (dict "value" . "context" $) }}
+{{ include "helm.tplvalues.render" (dict "value" . "context" $) }}
 {{- end }}

@@ -181,3 +181,18 @@ Usage:
 {{- define "helm.deployment" -}}
 {{ .Values.deployment | default "deployment" }}
 {{- end -}}
+
+{{- define "helm.tplvalues.render" -}}
+{{/* Render arbitrary values using tpl so extraObjects work without the Bitnami common chart. */}}
+{{- $value := .value -}}
+{{- $context := default .context . -}}
+{{- if kindIs "string" $value -}}
+{{ tpl $value $context }}
+{{- else if kindIs "map" $value -}}
+{{ tpl (toYaml $value) $context }}
+{{- else if kindIs "slice" $value -}}
+{{ tpl (toYaml $value) $context }}
+{{- else -}}
+{{- $value -}}
+{{- end -}}
+{{- end -}}

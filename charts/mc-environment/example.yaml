@@ -1,0 +1,133 @@
+mycarrierChartVersion: 2.5.100
+global:
+  appStack: carriers
+  gitbranch: main
+  branchlabel: main
+  language: nodejs
+  v2migration: false
+  env:
+    LOG_LEVEL: info
+  dependencies:
+    mongodb: false
+    elasticsearch: false
+    redis: true
+    postgres: true
+    sqlserver: false
+    clickhouse: false
+    azureservicebus: false
+    redpanda: false
+    loadsure: false
+    chargify: false
+
+environments:
+  - name: dev
+    destinationNamespace: platform-dev
+    global:
+      gitbranch: dev
+      dependencies:
+        redis: true
+        postgres: true
+    environment:
+      dependencyenv: dev
+      domainOverride:
+        enabled: false
+    applications:
+      shipments-api:
+        image:
+          registry: ghcr.io
+          repository: ghcr.io/mycarrier/shipments-api
+          tag: "1.12.3"
+        env:
+          NODE_ENV: development
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+        service:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 80
+              targetPort: 8080
+    jobs:
+      - name: shipments-db-migrate
+        image:
+          registry: ghcr.io
+          repository: mycarrier/migrations
+          tag: "1.12.3"
+        command: ["npm", "run", "migrate"]
+    secrets:
+      individual:
+        - envVarName: SHIPMENTS_DB_PASSWORD
+          path: secrets/data/shipments
+          keyName: db_password
+      mounted:
+        - name: shipments-config
+          mountedFileName: config.json
+          vault:
+            path: secrets/data/shipments-config
+            property: config
+          mount:
+            path: /app/config
+    infrastructure:
+      azure:
+        storage:
+          accounts:
+            - name: shipments-data
+              sku: Standard_LRS
+
+  - name: prod
+    destinationNamespace: platform-prod
+    releaseName: shipments-prod
+    global:
+      gitbranch: main
+      dependencies:
+        redis: true
+        postgres: true
+        sqlserver: true
+    environment:
+      dependencyenv: prod
+      domainOverride:
+        enabled: true
+        domain: mycarriertms.com
+    applications:
+      shipments-api:
+        image:
+          registry: ghcr.io
+          repository: ghcr.io/mycarrier/shipments-api
+          tag: "1.12.3"
+        replicas: 4
+        autoscaling:
+          enabled: true
+          minReplicas: 4
+          maxReplicas: 12
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        service:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 80
+              targetPort: 8080
+        networking:
+          istio:
+            enabled: true
+            hosts:
+              - api.mycarriertms.com
+    helm:
+      parameters:
+        - name: application.shipments-api.ingress.enableTls
+          value: "true"
+    annotations:
+      notifications.argoproj.io/subscribe.on-sync-succeeded.slack: platform-alerts
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true
+      syncOptions:
+        - ApplyOutOfSyncOnly=true
