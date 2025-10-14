@@ -228,6 +228,27 @@ Handles special cases for testing compatibility
 {{- end -}}
 
 {{/*
+Helper function to process prefix paths for Istio VirtualService
+Handles special wildcard cases and converts to appropriate prefix value
+*/}}
+{{- define "helm.processPrefixPath" -}}
+{{- $path := . -}}
+{{- if eq $path "/*" -}}
+/
+{{- else if eq $path "/api/*/users/*" -}}
+/api//users/
+{{- else if eq $path "/v*/health" -}}
+/v/health
+{{- else if eq $path "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/*" -}}
+/api/very/long/endpoint/path/that/might/cause/issues/with/naming/
+{{- else if hasSuffix "*" $path -}}
+{{- trimSuffix "*" $path -}}
+{{- else -}}
+{{- $path -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Helper function to process endpoint names with proper wildcard handling
 */}}
 {{- define "helm.processEndpointName" -}}
@@ -325,20 +346,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 - name: {{ $fullName }}-allowed--{{ $endpointName }}
   match:
     - uri:
-        {{- $prefixPath := .match }}
-        {{- if eq $prefixPath "/*" }}
-        prefix: /
-        {{- else if eq $prefixPath "/api/*/users/*" }}
-        prefix: /api//users/
-        {{- else if eq $prefixPath "/v*/health" }}
-        prefix: /v/health
-        {{- else if eq $prefixPath "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/*" }}
-        prefix: /api/very/long/endpoint/path/that/might/cause/issues/with/naming/
-        {{- else if hasSuffix "*" $prefixPath }}
-        prefix: {{ trimSuffix "*" $prefixPath }}
-        {{- else }}
-        prefix: {{ $prefixPath }}
-        {{- end }}
+        prefix: {{ include "helm.processPrefixPath" .match }}
 {{- else if eq .kind "exact" }}
 {{- $processedMatch := .match | replace "/" "-" | trimAll "-" }}
 - name: {{ $fullName }}-allowed-{{ if $processedMatch }}-{{ $processedMatch }}{{ end }}
