@@ -72,30 +72,21 @@ language: {{ $language | default "undefined" | quote}}
 {{- define "helm.otel.language" -}}
 {{- $language := include "helm.getLanguage" . -}}
 {{- if $language }}
-{{- if and (contains "csharp" $language) (not .Values.disableOtelAutoinstrumentation | default true) }}
-{{- end }}
-{{- $languageList := list "nodejs" "java" "python" }}
-{{- if has $language $languageList }}
-{{- end }}
-{{- if contains "nodejs" $language }}
 - name: OTEL_TRACES_EXPORTER
   value: otlp
 - name: OTEL_METRICS_EXPORTER
   value: otlp
 - name: OTEL_LOGS_EXPORTER
   value: otlp
-- name: OTEL_NODE_RESOURCE_DETECTORS
-  value: "env,host,os"
 - name: OTEL_SERVICE_NAME
   value: {{ .Values.global.appStack }}
+{{- if contains "nodejs" $language }}
+- name: OTEL_NODE_RESOURCE_DETECTORS
+  value: "env,host,os"
 {{- if not (.Values.disableOtelAutoinstrumentation | default true) }}
 - name: NODE_OPTIONS
   value: "--require @opentelemetry/auto-instrumentations-node/register"
 {{- end }}
-{{- end }}
-{{- if contains "java" $language }}
-{{- end }}
-{{- if contains "python" $language }}
 {{- end }}
 {{- end -}}
 {{- end -}}

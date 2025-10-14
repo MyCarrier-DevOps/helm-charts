@@ -1,0 +1,364 @@
+mycarrierChartVersion: 2.5.100
+
+global:
+  appStack: billoflading
+  language: csharp
+
+  dependencies:
+    mongodb: true
+    elasticsearch: false
+    redis: true
+    postgres: false
+    sqlserver: false
+    clickhouse: false
+    azureservicebus: true
+    redpanda: true
+    loadsure: false
+    chargify: false
+
+environments:
+  - name: prod
+    applications:
+      api:
+        deploymentType: deployment
+        image:
+          registry: mycarrieracr.azurecr.io
+          repository: appstack/billoflading/api
+          tag: release-v1.3.0
+        securityContext:
+          readOnlyRootFilesystem: true
+        ports:
+          http: 8080
+
+        env:
+          AverittApiUrl: https://api.averittexpress.com
+          AverittIsTest: "false"
+          CentralTransportApiUrl: https://client-api.centraltransport.com
+          EstesExpressApiUrl: https://cloudapi.estes-express.com/
+          EstesExpressIsTest: "false"
+          EstesExpressUsername: BRMYCR
+          KeyVault_AverittApiKey: averitt_apiKey_prod
+          KeyVault_EstesExpressApiKey: estes_apikey_prod
+          KeyVault_EstesExpressPassword: estes_password_prod
+          KeyVault_OldDominionPassword: old_dominion_password_prod
+          KeyVault_PittOhioApiSubscriptionKey: pittohio_apikey_prod
+          KeyVault_SaiaApiSubscriptionKey: saia_apikey_prod
+          OldDominionApiUrl: https://api.odfl.com
+          OldDominionMyCarrierCode: TMS
+          OldDominionMyCarrierName: MyCarrier
+          OldDominionUsername: MYCARRIER
+          PittOhioApiUrl: https://api.pittohio.com
+          SaiaApiUrl: https://api.saia.com/
+          SaiaApiVersion: "1"
+          SaiaApiVersionUrl: v1
+        replicaCount: 2
+        testtrigger:
+          activeDeadlineSeconds: "300"
+          apikey: vault:DevOps/data/testengine/api#encoded_header
+          testdefinitions:
+            - containerImage: testing/mc/billoflading/automatedtests/tests
+              containerTag: 25.41.473845c
+              filters: ["TestCategory=ProdCoreAPI"]
+              name: apitests
+              secretId: vault:QA/data/app_auth#SecretId
+          ttlSecondsAfterFinished: "3600"
+          webhook_url: vault:DevOps/data/testengine/api#url
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+          type: RollingUpdate
+
+    disableOtelAutoinstrumentation: true
+    secrets:
+      individual:
+        - envVarName: old_dominion_password_prod
+          path: secrets/prod/billoflading/shared/old-dominion-password-prod
+        - envVarName: pittohio_apikey_prod
+          path: secrets/prod/billoflading/shared/pittohio-apikey-prod
+        - envVarName: saia_apikey_prod
+          path: secrets/prod/billoflading/shared/saia-apikey-prod
+        - envVarName: averitt_apikey_prod
+          path: secrets/prod/billoflading/shared/averitt-apikey-prod
+        - envVarName: estes_apikey_prod
+          path: secrets/prod/billoflading/shared/estes-apikey-prod
+        - envVarName: estes_password_prod
+          path: secrets/prod/billoflading/shared/estes-password-prod
+
+  - name: preprod
+    applications:
+      api:
+        deploymentType: deployment
+        image:
+          registry: mycarrieracr.azurecr.io
+          repository: appstack/billoflading/api
+          tag: 25.41.473845c
+        securityContext:
+          readOnlyRootFilesystem: true
+        ports:
+          http: 8080
+
+        env:
+          AverittApiUrl: https://betaapi.averittexpress.com
+          AverittIsTest: "true"
+          CentralTransportApiUrl: https://client-api.centraltransport.com
+          EstesExpressApiUrl: https://uat-cloudapi.estes-express.com/
+          EstesExpressIsTest: "true"
+          EstesExpressUsername: BRMYCR
+          KeyVault_AverittApiKey: averitt_apiKey_preprod
+          KeyVault_EstesExpressApiKey: estes_apikey_preprod
+          KeyVault_EstesExpressPassword: estes_password_preprod
+          KeyVault_OldDominionPassword: old_dominion_password_preprod
+          KeyVault_PittOhioApiSubscriptionKey: pittohio_apikey_preprod
+          KeyVault_SaiaApiSubscriptionKey: saia_apikey_preprod
+          OldDominionApiUrl: https://apiq.odfl.com
+          OldDominionMyCarrierCode: TMS
+          OldDominionMyCarrierName: MyCarrier
+          OldDominionUsername: MYCARRIER
+          PittOhioApiUrl: https://api.pittohio.com
+          SaiaApiUrl: https://saiapilotapi.azure-api.net/
+          SaiaApiVersion: "1"
+        replicaCount: 2
+        testtrigger:
+          activeDeadlineSeconds: "300"
+          apikey: vault:DevOps/data/testengine/api#encoded_header
+          testdefinitions:
+            - containerImage: testing/mc/billoflading/automatedtests/tests
+              containerTag: 25.41.473845c
+              filters: ["TestCategory=PreProdCoreAPI"]
+              name: apitests
+              secretId: vault:QA/data/app_auth#SecretId
+          ttlSecondsAfterFinished: "3600"
+          webhook_url: vault:DevOps/data/testengine/api#url
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+          type: RollingUpdate
+
+    disableOtelAutoinstrumentation: true
+    secrets:
+      individual:
+        - envVarName: old_dominion_password_preprod
+          path: secrets/preprod/billoflading/shared/old-dominion-password-preprod
+        - envVarName: pittohio_apikey_preprod
+          path: secrets/preprod/billoflading/shared/pittohio-apikey-preprod
+        - envVarName: saia_apikey_preprod
+          path: secrets/preprod/billoflading/shared/saia-apikey-preprod
+        - envVarName: averitt_apikey_preprod
+          path: secrets/preprod/billoflading/shared/averitt-apikey-preprod
+        - envVarName: estes_apikey_preprod
+          path: secrets/preprod/billoflading/shared/estes-apikey-preprod
+        - envVarName: estes_password_preprod
+          path: secrets/preprod/billoflading/shared/estes-password-preprod
+  - name: dev
+    applications:
+      api:
+        deploymentType: deployment
+        image:
+          registry: mycarrieracr.azurecr.io
+          repository: appstack/billoflading/api
+          tag: 25.41.473845c
+        securityContext:
+          readOnlyRootFilesystem: true
+        ports:
+          http: 8080
+
+        env:
+          AverittApiUrl: https://betaapi.averittexpress.com
+          AverittIsTest: "true"
+          CentralTransportApiUrl: https://client-api.centraltransport.com
+          EstesExpressApiUrl: https://uat-cloudapi.estes-express.com/
+          EstesExpressIsTest: "true"
+          EstesExpressUsername: BRMYCR
+          KeyVault_AverittApiKey: averitt_apiKey_preprod
+          KeyVault_EstesExpressApiKey: estes_apikey_preprod
+          KeyVault_EstesExpressPassword: estes_password_preprod
+          KeyVault_OldDominionPassword: old_dominion_password_preprod
+          KeyVault_PittOhioApiSubscriptionKey: pittohio_apikey_preprod
+          KeyVault_SaiaApiSubscriptionKey: saia_apikey_preprod
+          OldDominionApiUrl: https://apiq.odfl.com
+          OldDominionMyCarrierCode: TMS
+          OldDominionMyCarrierName: MyCarrier
+          OldDominionUsername: MYCARRIER
+          PittOhioApiUrl: https://api.pittohio.com
+          SaiaApiUrl: https://saiapilotapi.azure-api.net/
+          SaiaApiVersion: "1"
+        replicaCount: 2
+        testtrigger:
+          activeDeadlineSeconds: "300"
+          apikey: vault:DevOps/data/testengine/api#encoded_header
+          testdefinitions:
+            - containerImage: testing/mc/billoflading/automatedtests/tests
+              containerTag: 25.41.473845c
+              filters: ["TestCategory=PreProdCoreAPI"]
+              name: apitests
+              secretId: vault:QA/data/app_auth#SecretId
+          ttlSecondsAfterFinished: "3600"
+          webhook_url: vault:DevOps/data/testengine/api#url
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+          type: RollingUpdate
+
+    disableOtelAutoinstrumentation: true
+    secrets:
+      individual:
+        - envVarName: averitt_apikey_dev
+          path: secrets/dev/billoflading/shared/averitt-apikey-dev
+        - envVarName: estes_apikey_dev
+          path: secrets/dev/billoflading/shared/estes-apikey-dev
+        - envVarName: old_dominion_password_dev
+          path: secrets/dev/billoflading/shared/old-dominion-password-dev
+        - envVarName: ward_password_dev
+          path: secrets/dev/billoflading/shared/ward-password-dev
+        - envVarName: estes_password_dev
+          path: secrets/dev/billoflading/shared/estes-password-dev
+        - envVarName: pittohio_apikey_dev
+          path: secrets/dev/billoflading/shared/pittohio-apikey-dev
+        - envVarName: saia_apikey_dev
+          path: secrets/dev/billoflading/shared/saia-apikey-dev
+        - envVarName: sefl_apikey_dev
+          path: secrets/dev/billoflading/shared/sefl-apikey-dev
+  - name: feature13
+    applications:
+      api:
+        deploymentType: deployment
+        image:
+          registry: mycarrieracr.azurecr.io
+          repository: appstack/billoflading/api
+          tag: 25.41.473845c
+        securityContext:
+          readOnlyRootFilesystem: true
+        ports:
+          http: 8080
+
+        env:
+          AverittApiUrl: https://betaapi.averittexpress.com
+          AverittIsTest: "true"
+          CentralTransportApiUrl: https://client-api.centraltransport.com
+          EstesExpressApiUrl: https://uat-cloudapi.estes-express.com/
+          EstesExpressIsTest: "true"
+          EstesExpressUsername: BRMYCR
+          KeyVault_AverittApiKey: averitt_apiKey_preprod
+          KeyVault_EstesExpressApiKey: estes_apikey_preprod
+          KeyVault_EstesExpressPassword: estes_password_preprod
+          KeyVault_OldDominionPassword: old_dominion_password_preprod
+          KeyVault_PittOhioApiSubscriptionKey: pittohio_apikey_preprod
+          KeyVault_SaiaApiSubscriptionKey: saia_apikey_preprod
+          OldDominionApiUrl: https://apiq.odfl.com
+          OldDominionMyCarrierCode: TMS
+          OldDominionMyCarrierName: MyCarrier
+          OldDominionUsername: MYCARRIER
+          PittOhioApiUrl: https://api.pittohio.com
+          SaiaApiUrl: https://saiapilotapi.azure-api.net/
+          SaiaApiVersion: "1"
+        replicaCount: 2
+        testtrigger:
+          activeDeadlineSeconds: "300"
+          apikey: vault:DevOps/data/testengine/api#encoded_header
+          testdefinitions:
+            - containerImage: testing/mc/billoflading/automatedtests/tests
+              containerTag: 25.41.473845c
+              filters: ["TestCategory=PreProdCoreAPI"]
+              name: apitests
+              secretId: vault:QA/data/app_auth#SecretId
+          ttlSecondsAfterFinished: "3600"
+          webhook_url: vault:DevOps/data/testengine/api#url
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+          type: RollingUpdate
+
+    disableOtelAutoinstrumentation: true
+    secrets:
+      individual:
+        - envVarName: averitt_apikey_dev
+          path: secrets/dev/billoflading/shared/averitt-apikey-dev
+        - envVarName: estes_apikey_dev
+          path: secrets/dev/billoflading/shared/estes-apikey-dev
+        - envVarName: old_dominion_password_dev
+          path: secrets/dev/billoflading/shared/old-dominion-password-dev
+        - envVarName: ward_password_dev
+          path: secrets/dev/billoflading/shared/ward-password-dev
+        - envVarName: estes_password_dev
+          path: secrets/dev/billoflading/shared/estes-password-dev
+        - envVarName: pittohio_apikey_dev
+          path: secrets/dev/billoflading/shared/pittohio-apikey-dev
+        - envVarName: saia_apikey_dev
+          path: secrets/dev/billoflading/shared/saia-apikey-dev
+        - envVarName: sefl_apikey_dev
+          path: secrets/dev/billoflading/shared/sefl-apikey-dev
+  
+  - name: feature14
+    applications:
+      api:
+        deploymentType: deployment
+        image:
+          registry: mycarrieracr.azurecr.io
+          repository: appstack/billoflading/api
+          tag: 25.41.473845c
+        securityContext:
+          readOnlyRootFilesystem: true
+        ports:
+          http: 8080
+
+        env:
+          AverittApiUrl: https://betaapi.averittexpress.com
+          AverittIsTest: "true"
+          CentralTransportApiUrl: https://client-api.centraltransport.com
+          EstesExpressApiUrl: https://uat-cloudapi.estes-express.com/
+          EstesExpressIsTest: "true"
+          EstesExpressUsername: BRMYCR
+          KeyVault_AverittApiKey: averitt_apiKey_preprod
+          KeyVault_EstesExpressApiKey: estes_apikey_preprod
+          KeyVault_EstesExpressPassword: estes_password_preprod
+          KeyVault_OldDominionPassword: old_dominion_password_preprod
+          KeyVault_PittOhioApiSubscriptionKey: pittohio_apikey_preprod
+          KeyVault_SaiaApiSubscriptionKey: saia_apikey_preprod
+          OldDominionApiUrl: https://apiq.odfl.com
+          OldDominionMyCarrierCode: TMS
+          OldDominionMyCarrierName: MyCarrier
+          OldDominionUsername: MYCARRIER
+          PittOhioApiUrl: https://api.pittohio.com
+          SaiaApiUrl: https://saiapilotapi.azure-api.net/
+          SaiaApiVersion: "1"
+        replicaCount: 2
+        testtrigger:
+          activeDeadlineSeconds: "300"
+          apikey: vault:DevOps/data/testengine/api#encoded_header
+          testdefinitions:
+            - containerImage: testing/mc/billoflading/automatedtests/tests
+              containerTag: 25.41.473845c
+              filters: ["TestCategory=PreProdCoreAPI"]
+              name: apitests
+              secretId: vault:QA/data/app_auth#SecretId
+          ttlSecondsAfterFinished: "3600"
+          webhook_url: vault:DevOps/data/testengine/api#url
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+          type: RollingUpdate
+
+    disableOtelAutoinstrumentation: true
+    secrets:
+      individual:
+        - envVarName: averitt_apikey_dev
+          path: secrets/dev/billoflading/shared/averitt-apikey-dev
+        - envVarName: estes_apikey_dev
+          path: secrets/dev/billoflading/shared/estes-apikey-dev
+        - envVarName: old_dominion_password_dev
+          path: secrets/dev/billoflading/shared/old-dominion-password-dev
+        - envVarName: ward_password_dev
+          path: secrets/dev/billoflading/shared/ward-password-dev
+        - envVarName: estes_password_dev
+          path: secrets/dev/billoflading/shared/estes-password-dev
+        - envVarName: pittohio_apikey_dev
+          path: secrets/dev/billoflading/shared/pittohio-apikey-dev
+        - envVarName: saia_apikey_dev
+          path: secrets/dev/billoflading/shared/saia-apikey-dev
+        - envVarName: sefl_apikey_dev
+          path: secrets/dev/billoflading/shared/sefl-apikey-dev
