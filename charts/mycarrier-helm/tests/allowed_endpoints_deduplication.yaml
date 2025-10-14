@@ -1,0 +1,517 @@
+suite: test endpoint deduplication logic
+templates:
+  - templates/virtualService.yaml
+tests:
+  - it: should deduplicate exact match endpoints with same path
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/health"
+                - "/health"
+                - "/liveness"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Language-specific /liveness (from csharp defaults)
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--liveness
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/liveness"
+      # Language-specific /health (from csharp defaults)
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/health"
+      # Language-specific /api prefix (from csharp defaults)
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+      # Verify no duplicate /health endpoint (should only appear once)
+      - isNull:
+          path: spec.http[4].match[0].uri.exact
+
+  - it: should deduplicate prefix match endpoints with same path
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/*"
+                - "/api/*"
+                - "/users/*"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Language-specific endpoints
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--health
+      # /api from language defaults (prefix)
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+      # User-defined /users/* should be added
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-app-allowed--users-wildcard
+      - equal:
+          path: spec.http[4].match[0].uri.prefix
+          value: "/users/"
+      # Verify no duplicate /api/* (deduplicated with language default)
+      - isNull:
+          path: spec.http[5].match[0].uri.prefix
+
+  - it: should not deduplicate different match types for same path
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - kind: exact
+                  match: "/api"
+                - kind: prefix
+                  match: "/api"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Exact match /api
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--api
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/api"
+      # Prefix match /api (should NOT be deduplicated)
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--api
+      - equal:
+          path: spec.http[2].match[0].uri.prefix
+          value: "/api"
+
+  - it: should deduplicate mixed string and object format endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/health"
+                - kind: exact
+                  match: "/health"
+                - "/api/*"
+                - kind: prefix
+                  match: "/api/*"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # /health exact (deduplicated - only one instance)
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/health"
+      # /api/* prefix (deduplicated - only one instance)
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--api-wildcard
+      - equal:
+          path: spec.http[2].match[0].uri.prefix
+          value: "/api/"
+      # Forbidden rule
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-forbidden
+
+  - it: should deduplicate when user overrides language defaults
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/liveness"
+                - "/health"
+                - "/api/*"
+                - "/custom"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Language defaults should come first and be deduplicated
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-allowed--api
+      # Custom endpoint should be added
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-app-allowed--custom
+      - equal:
+          path: spec.http[4].match[0].uri.exact
+          value: "/custom"
+
+  - it: should handle deduplication with complex wildcard patterns
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/*/users/*"
+                - "/api/*/users/*"
+                - "/v*/health"
+                - kind: prefix
+                  match: "/api/*/users/*"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Should only have one instance of /api/*/users/*
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--api-wildcard-users-wildcard
+      - equal:
+          path: spec.http[1].match[0].uri.prefix
+          value: "/api//users/"
+      # /v*/health should be separate
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--vwildcard-health
+      - equal:
+          path: spec.http[2].match[0].uri.prefix
+          value: "/v/health"
+      # Verify no duplicates exist
+      - isNull:
+          path: spec.http[3].match[0].uri.prefix
+
+  - it: should deduplicate regex endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - kind: regex
+                  match: "^/api/v[0-9]+/.*"
+                - kind: regex
+                  match: "^/api/v[0-9]+/.*"
+                - kind: regex
+                  match: "^/health$"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # First regex should be present
+      - equal:
+          path: spec.http[1].match[0].uri.regex
+          value: "^/api/v[0-9]+/.*"
+      # Second unique regex should be present
+      - equal:
+          path: spec.http[2].match[0].uri.regex
+          value: "^/health$"
+      # Verify duplicate is removed
+      - isNull:
+          path: spec.http[3].match[0].uri.regex
+
+  - it: should preserve order when deduplicating - language defaults first
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/custom1"
+                - "/health"
+                - "/custom2"
+                - "/liveness"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Language defaults should appear first (even if user specifies them later)
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-allowed--api
+      # User endpoints added after (in order, but deduplicated)
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-app-allowed--custom1
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-test-app-allowed--custom2
+
+  - it: should handle empty user endpoints with language defaults
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints: []
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # Only language defaults should be present
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-allowed--api
+      # Forbidden rule
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-app-forbidden
+
+  - it: should deduplicate case-sensitive paths separately
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/Users"
+                - "/api/users"
+                - "/api/USERS"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-test-app
+      # All three should be preserved (case-sensitive)
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/api/Users"
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/api/users"
+      - equal:
+          path: spec.http[3].match[0].uri.exact
+          value: "/api/USERS"

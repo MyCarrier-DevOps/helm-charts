@@ -65,25 +65,19 @@ http:
 {{- end }}
 {{- end }}
 
-{{ if and .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints -}}
+
+{{- $hasAllowedEndpoints := false -}}
+{{- if and .application.networking .application.networking.istio (hasKey .application.networking.istio "allowedEndpoints") -}}
+  {{/* Check if there are user-defined endpoints or language defaults */}}
+  {{- $langEndpointsYaml := include "helm.lang.endpoint.list" . -}}
+  {{- if or .application.networking.istio.allowedEndpoints $langEndpointsYaml -}}
+    {{- $hasAllowedEndpoints = true -}}
+  {{- end -}}
+{{- end -}}
+
+{{ if $hasAllowedEndpoints -}}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
-- name: {{ $fullName }}-forbidden
-  route:
-    - destination:
-        host: {{ $fullName }}
-        port:
-          number: {{ default 8080 (dig "ports" "http" nil .application) }}      
-  fault:
-    delay:
-      fixedDelay: 29s
-      percentage:
-        value: 100
-    abort:
-      httpStatus: 403
-      percentage:
-        value: 100
-
 {{- else }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   route:

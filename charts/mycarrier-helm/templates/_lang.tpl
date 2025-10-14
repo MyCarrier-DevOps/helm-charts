@@ -269,16 +269,23 @@ This template generates the complete HTTP rules as strings to avoid duplication
   {{- $mergedEndpoints = concat $mergedEndpoints .application.networking.istio.allowedEndpoints -}}
 {{- end }}
 
+{{/* Exit early if no endpoints to process */}}
+{{- if not $mergedEndpoints -}}
+{{- else -}}
+
 {{/* Deduplicate endpoints by kind+match */}}
 {{- $seen := dict -}}
 {{- $unique := list -}}
 {{- range $mergedEndpoints -}}
   {{- if typeIs "string" . -}}
     {{- if contains "*" . -}}
-      {{- $key := printf "prefix:%s" . -}}
+      {{/* Normalize path by removing trailing * and / for deduplication key */}}
+      {{- $normalizedPath := trimSuffix "*" . | trimSuffix "/" -}}
+      {{- $key := printf "prefix:%s" $normalizedPath -}}
       {{- if not (hasKey $seen $key) -}}
         {{- $_ := set $seen $key true -}}
-        {{- $unique = append $unique (dict "kind" "prefix" "match" .) -}}
+        {{/* Store original match for proper rendering, but track normalized key */}}
+        {{- $unique = append $unique (dict "kind" "prefix" "match" . "normalized" $normalizedPath) -}}
       {{- end -}}
     {{- else -}}
       {{- $key := printf "exact:%s" . -}}
@@ -288,10 +295,20 @@ This template generates the complete HTTP rules as strings to avoid duplication
       {{- end -}}
     {{- end -}}
   {{- else -}}
-    {{- $key := printf "%s:%s" .kind .match -}}
+    {{/* For dict endpoints, normalize match field for comparison */}}
+    {{- $normalizedMatch := .match -}}
+    {{- if eq .kind "prefix" -}}
+      {{- $normalizedMatch = trimSuffix "*" .match | trimSuffix "/" -}}
+    {{- end -}}
+    {{- $key := printf "%s:%s" .kind $normalizedMatch -}}
     {{- if not (hasKey $seen $key) -}}
       {{- $_ := set $seen $key true -}}
-      {{- $unique = append $unique . -}}
+      {{/* Store original match but track normalized */}}
+      {{- if eq .kind "prefix" -}}
+        {{- $unique = append $unique (dict "kind" .kind "match" .match "normalized" $normalizedMatch) -}}
+      {{- else -}}
+        {{- $unique = append $unique . -}}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
 {{- end }}
@@ -299,6 +316,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{/* render HTTP rules */}}
 {{- range $unique }}
 {{- if eq .kind "prefix" }}
+{{/* Use original match for name generation to preserve wildcards */}}
 {{- $endpointName := include "helm.processEndpointName" .match -}}
 {{- if eq .match "/v*/health" -}}
 {{- $endpointName = "vwildcard-health" -}}
@@ -374,5 +392,22 @@ This template generates the complete HTTP rules as strings to avoid duplication
     retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $.application) }}
     attempts: {{ default 3 (dig "service" "attempts" 3 $.application) }}
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
+{{- end }}
+
+- name: {{ $fullName }}-forbidden
+  route:
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ default 8080 (dig "ports" "http" nil $.application) }}      
+  fault:
+    delay:
+      fixedDelay: 29s
+      percentage:
+        value: 100
+    abort:
+      httpStatus: 403
+      percentage:
+        value: 100
 {{- end -}}
 {{- end -}}
