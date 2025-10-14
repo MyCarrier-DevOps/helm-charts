@@ -19,7 +19,7 @@ global:
   branchlabel: ""
 
   # Use application-level language configuration to override
-  language: ""
+  language: "csharp"
 
   # Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
   v2migration: false
