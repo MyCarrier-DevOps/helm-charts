@@ -1,4 +1,4 @@
-{{- if (eq .Values.environment.name "dev") and (not .Values.isEnvironmentDeploy) }}
+{{- if and (eq .Values.environment.name "dev") (not (.Values.isEnvironmentDeploy | default false)) }}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
 {{- $deployment := include "helm.deployment" . }}
