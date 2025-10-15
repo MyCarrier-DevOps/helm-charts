@@ -19,7 +19,7 @@ global:
   branchlabel: ""
 
   # Use application-level language configuration to override
-  language: "nodejs"
+  language: "csharp"
 
   # Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
   v2migration: false
@@ -602,6 +602,7 @@ infrastructure:
         #   # Optional: Custom annotations
         #   annotations:
         #     custom.annotation/key: "custom-value"
+isEnvironmentDeploy: false
 
     # Azure Service Bus configurations
     servicebus: []

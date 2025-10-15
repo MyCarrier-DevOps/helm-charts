@@ -1,0 +1,90 @@
+# Validates ApplicationSet rendering for mc-environment wrapper
+suite: application set
+templates:
+  - templates/appset.yaml
+tests:
+  - it: renders application set metadata and generator entries
+    values:
+      - fixtures/basic-environments.yaml
+    asserts:
+      - equal:
+          path: kind
+          value: ApplicationSet
+      - equal:
+          path: metadata.name
+          value: carriers
+      - equal:
+          path: spec.goTemplateOptions[0]
+          value: missingkey=error
+      - lengthEqual:
+          path: spec.generators[0].list.elements
+          count: 2
+  - it: forwards environment specific configuration into list elements
+    values:
+      - fixtures/basic-environments.yaml
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.environment.name
+          value: dev
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.deployment
+          value: rollout
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.dependencies.redis
+          value: true
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.env.LOG_LEVEL
+          value: info
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.infrastructure.azure.storage.accounts[0].newStorageAccount.name
+          value: shipmentsdata
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.infrastructure.azure.storage.accounts[0].containers[0].metadata.retention
+          value: "30days"
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.enableVaultCA
+          value: true
+  - it: applies defaults for omitted environment settings
+    values:
+      - fixtures/basic-environments.yaml
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[1].Values.environment.name
+          value: prod
+      - equal:
+          path: spec.generators[0].list.elements[1].Values.enableVaultCA
+          value: false
+      - equal:
+          path: spec.generators[0].list.elements[1].Values.disableOtelAutoinstrumentation
+          value: false
+      - equal:
+          path: spec.generators[0].list.elements[1].Values.deployment
+          value: deployment
+      - equal:
+          path: spec.generators[0].list.elements[1].Values.tolerations
+          value: []
+  - it: configures template with chart source and sync policies
+    values:
+      - fixtures/basic-environments.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.name
+          value: "carriers-{{ .Values.environment.name }}"
+      - equal:
+          path: spec.template.spec.destination.namespace
+          value: "{{ .Values.environment.name }}"
+      - equal:
+          path: spec.template.spec.source.chart
+          value: mycarrier-helm
+      - equal:
+          path: spec.template.spec.source.targetRevision
+          value: "2.5.100"
+      - equal:
+          path: spec.template.spec.syncPolicy.syncOptions[0]
+          value: ApplyOutOfSyncOnly=true
+      - equal:
+          path: spec.template.spec.syncPolicy.syncOptions[2]
+          value: CreateNamespace=true
+      - equal:
+          path: spec.template.spec.syncPolicy.syncOptions[6]
+          value: Replace=true
