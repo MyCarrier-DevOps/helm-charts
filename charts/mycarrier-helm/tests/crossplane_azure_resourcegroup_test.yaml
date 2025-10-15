@@ -1,0 +1,252 @@
+suite: Crossplane Azure Resource Group Tests
+templates:
+  - crossplane/azure/resourcegroup/resourcegroup.yaml
+tests:
+  # Test 1: Basic Resource Group creation
+  - it: should create resource group with minimal configuration
+    set:
+      global.appStack: testapp
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "test.io"
+      applications.test-app-api.image.repository: "test/app"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-test-dev"
+              location: "East US"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ResourceGroup
+      - equal:
+          path: apiVersion
+          value: azure.upbound.io/v1beta1
+      - equal:
+          path: metadata.name
+          value: "rg-test-dev"
+      - equal:
+          path: metadata.namespace
+          value: dev-testapp
+      - equal:
+          path: spec.forProvider.location
+          value: "East US"
+      - equal:
+          path: spec.managementPolicies[0]
+          value: "Observe"
+
+  # Test 2: Resource Group with tags
+  - it: should create resource group with tags
+    set:
+      global.appStack: tagtest
+      global.language: python
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-tagged"
+              location: "West US"
+              tags:
+                environment: "dev"
+                purpose: "testing"
+                team: "platform"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.forProvider.tags.environment
+          value: "dev"
+      - equal:
+          path: spec.forProvider.tags.purpose
+          value: "testing"
+      - equal:
+          path: spec.forProvider.tags.team
+          value: "platform"
+
+  # Test 3: Resource Group with Observe management policy
+  - it: should create resource group with Observe management policy for import
+    set:
+      global.appStack: importtest
+      global.language: java
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-existing"
+              location: "Central US"
+              managementPolicies:
+                - "Observe"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.managementPolicies[0]
+          value: "Observe"
+
+  # Test 4: Resource Group with managedBy field
+  - it: should create resource group with managedBy field
+    set:
+      global.appStack: managedtest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-managed"
+              location: "North Europe"
+              managedBy: "/subscriptions/12345/resourceGroups/parent-rg"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.forProvider.managedBy
+          value: "/subscriptions/12345/resourceGroups/parent-rg"
+
+  # Test 5: Multiple Resource Groups
+  - it: should create multiple resource groups
+    set:
+      global.appStack: multitest
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-app-dev"
+              location: "East US"
+            - name: "rg-data-dev"
+              location: "East US 2"
+            - name: "rg-network-dev"
+              location: "West US"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: ResourceGroup
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "rg-app-dev"
+        documentIndex: 0
+      - isKind:
+          of: ResourceGroup
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "rg-data-dev"
+        documentIndex: 1
+      - isKind:
+          of: ResourceGroup
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: "rg-network-dev"
+        documentIndex: 2
+
+  # Test 6: Resource Group with custom namespace
+  - it: should create resource group in custom kubernetes namespace
+    set:
+      global.appStack: nstest
+      global.language: python
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-custom"
+              location: "UK South"
+              namespace: "custom-k8s-namespace"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.namespace
+          value: "custom-k8s-namespace"
+
+  # Test 7: Resource Group with annotations
+  - it: should create resource group with custom annotations
+    set:
+      global.appStack: annotest
+      global.language: java
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-annotated"
+              location: "Japan East"
+              annotations:
+                custom.annotation/key: "custom-value"
+                another.annotation: "another-value"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.annotations["custom.annotation/key"]
+          value: "custom-value"
+      - equal:
+          path: metadata.annotations["another.annotation"]
+          value: "another-value"
+
+  # Test 8: No resource groups configured
+  - it: should not create any resources when resource groups are not configured
+    set:
+      global.appStack: norgtest
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Test 9: Resource Group with standard labels
+  - it: should include standard helm labels
+    set:
+      global.appStack: labeltest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-labels"
+              location: "Australia East"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - exists:
+          path: metadata.labels
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/instance"]

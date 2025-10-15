@@ -480,6 +480,14 @@ secrets:
 ## @section Infrastructure Resources
 ## Infrastructure resources provisioned via Crossplane
 
+## @param infrastructure.azure.resourceGroup [array] - Azure Resource Group configurations
+## @param infrastructure.azure.resourceGroup[].name - Name of the Resource Group
+## @param infrastructure.azure.resourceGroup[].location - Azure region for the Resource Group
+## @param infrastructure.azure.resourceGroup[].managementPolicies [array] - Crossplane management policies
+## @param infrastructure.azure.resourceGroup[].managedBy - ID of the resource or application that manages this Resource Group
+## @param infrastructure.azure.resourceGroup[].tags [object] - Resource tags
+## @param infrastructure.azure.resourceGroup[].namespace - Kubernetes namespace for the resource
+## @param infrastructure.azure.resourceGroup[].annotations [object] - Custom annotations for the resource
 ## @param infrastructure.azure.storage.accounts [array] - Azure storage account configurations
 ## @param infrastructure.azure.storage.accounts[].existingResourceGroup.name - Name of existing resource group to use
 ## @param infrastructure.azure.storage.accounts[].newResourceGroup.name - Name for new resource group to create
@@ -496,8 +504,61 @@ secrets:
 ## @param infrastructure.azure.storage.accounts[].tags [object] - Resource tags
 ## @param infrastructure.azure.storage.accounts[].namespace - Kubernetes namespace for the resource
 ## @param infrastructure.azure.storage.accounts[].annotations [object] - Custom annotations for the resource
+## @param infrastructure.azure.servicebus [array] - Azure Service Bus configurations
+## @param infrastructure.azure.servicebus[].name - Name of the Service Bus namespace
+## @param infrastructure.azure.servicebus[].namespace - Kubernetes namespace for the resource
+## @param infrastructure.azure.servicebus[].location - Azure region for the Service Bus namespace
+## @param infrastructure.azure.servicebus[].sku - Service Bus SKU: Basic, Standard, or Premium
+## @param infrastructure.azure.servicebus[].resourceGroupName - Name of the resource group
+## @param infrastructure.azure.servicebus[].capacity - Messaging units for Premium SKU (1, 2, 4, 8, or 16)
+## @param infrastructure.azure.servicebus[].managementPolicies [array] - Crossplane management policies (e.g., ["Observe"] for import)
+## @param infrastructure.azure.servicebus[].tags [object] - Resource tags
+## @param infrastructure.azure.servicebus[].annotations [object] - Custom annotations for the resource
+## @param infrastructure.azure.servicebus[].topics [array] - Service Bus topics
+## @param infrastructure.azure.servicebus[].topics[].name - Topic name
+## @param infrastructure.azure.servicebus[].topics[].managementPolicies [array] - Crossplane management policies for topic
+## @param infrastructure.azure.servicebus[].topics[].annotations [object] - Custom annotations for the topic
+## @param infrastructure.azure.servicebus[].topics[].subscriptions [array] - Topic subscriptions (required)
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].name - Subscription name
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].managementPolicies [array] - Crossplane management policies for subscription
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].maxDeliveryCount - Maximum delivery attempts
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].lockDuration - Lock duration (ISO 8601 format)
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].annotations [object] - Custom annotations for the subscription
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules [array] - Subscription rules (optional)
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].name - Rule name
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].filterType - Filter type: SqlFilter or CorrelationFilter
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].sqlFilter - SQL filter expression
+## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].managementPolicies [array] - Crossplane management policies for rule
 infrastructure:
   azure:
+    # Azure Resource Group configurations
+    resourceGroup: []
+      # Example Resource Group configuration:
+      # - name: "rg-app-dev"                              # Required: Resource Group name
+      #   location: "East US"                             # Required: Azure region
+      #
+      #   # Optional: Manage resource lifecycle with managementPolicies
+      #   # managementPolicies: ["Observe"]               # Optional: Management policies (default: ["Observe"] - import/read-only mode)
+      #                                                    # IMPORTANT: "Delete" policy is BLOCKED to protect infrastructure from accidental deletion
+      #                                                    # Default is safe for importing existing resources: ["Observe"]
+      #                                                    # To create/manage new resources: ["Create", "Update", "LateInitialize", "Observe"]
+      #
+      #   # Optional: Managed by resource ID
+      #   # managedBy: "/subscriptions/.../resourceGroups/..."  # Optional: ID of resource that manages this RG
+      #
+      #   # Optional: Resource tags
+      #   tags:
+      #     environment: "dev"
+      #     purpose: "application-resources"
+      #     managed-by: "crossplane"
+      #
+      #   # Optional: Custom Kubernetes namespace
+      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: {env}-{appStack})
+      #
+      #   # Optional: Custom annotations
+      #   annotations:
+      #     custom.annotation/key: "custom-value"
+
     storage:
       # Azure storage account configurations
       accounts: []
@@ -541,3 +602,104 @@ infrastructure:
         #   # Optional: Custom annotations
         #   annotations:
         #     custom.annotation/key: "custom-value"
+
+    # Azure Service Bus configurations
+    servicebus: []
+      # Example Service Bus configuration:
+      # - name: "my-servicebus-namespace"                # Required: Service Bus namespace name
+      #   location: "East US"                             # Required: Azure region
+      #   sku: "Standard"                                 # Required: Basic, Standard, or Premium (no default - must specify)
+      #   resourceGroupName: "rg-app-dev"                 # Optional: Resource group name (default: rg-{appStack}-{env})
+      #
+      #   # Optional: For Premium SKU only
+      #   # capacity: 1                                   # Optional: Messaging units: 1, 2, 4, 8, or 16 (default: 1)
+      #
+      #   # Optional: Manage resource lifecycle with managementPolicies
+      #   # managementPolicies: ["Observe"]               # Optional: Management policies (default: ["Observe"] - import/read-only mode)
+      #                                                    # IMPORTANT: "Delete" policy is BLOCKED to protect infrastructure from accidental deletion
+      #                                                    # Default is safe for importing existing resources: ["Observe"]
+      #                                                    # To create/manage new resources: ["Create", "Update", "LateInitialize", "Observe"]
+      #
+      #   # Optional: Resource tags
+      #   tags:
+      #     environment: "dev"
+      #     purpose: "messaging"
+      #
+      #   # Optional: Custom Kubernetes namespace
+      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: {env}-{appStack})
+      #
+      #   # Required: At least one topic with subscriptions
+      #   topics:
+      #     - name: "orders"                              # Required: Topic name
+      #
+      #       # Optional: Topic-level management policies
+      #       # managementPolicies: ["Observe"]           # Optional: Management policies (default: ["Observe"] - import/read-only mode)
+      #                                                    # IMPORTANT: "Delete" policy is BLOCKED
+      #                                                    # To create/manage new topics: ["Create", "Update", "LateInitialize", "Observe"]
+      #
+      #       # Optional: Topic settings (all have Azure defaults if omitted)
+      #       # maxSizeInMegabytes: 1024                  # Optional: Topic size in MB (default: 1024 for Basic/Standard, 5120 for Premium)
+      #       # requiresDuplicateDetection: false         # Optional: Enable duplicate detection (default: false)
+      #       # defaultMessageTtl: "P14D"                 # Optional: ISO 8601 duration (default: P14D - 14 days)
+      #       # duplicateDetectionHistoryTimeWindow: "PT10M" # Optional: ISO 8601 duration (default: PT10M - 10 minutes)
+      #       # batchedOperationsEnabled: true            # Optional: Enable batched operations (default: true)
+      #       # expressEnabled: false                     # Optional: Enable Express mode (Standard/Premium only, default: false)
+      #       # partitioningEnabled: false                # Optional: Enable partitioning (default: false)
+      #       # supportOrdering: false                    # Optional: Enable message ordering (default: false)
+      #       # autoDeleteOnIdle: "P10675199DT2H48M5.4775807S" # Optional: Auto-delete after idle time (default: never)
+      #
+      #       # Required: At least one subscription per topic
+      #       subscriptions:
+      #         - name: "orders-processor"               # Required: Subscription name
+      #
+      #           # Optional: Subscription-level management policies
+      #           # managementPolicies: ["Observe"]      # Optional: Management policies (default: ["Observe"] - import/read-only mode)
+      #                                                   # IMPORTANT: "Delete" policy is BLOCKED
+      #                                                   # To create/manage new subscriptions: ["Create", "Update", "LateInitialize", "Observe"]
+      #
+      #           # Optional: Subscription settings (all have Azure defaults if omitted)
+      #           # maxDeliveryCount: 10                 # Optional: Maximum delivery attempts (default: 10)
+      #           # lockDuration: "PT1M"                 # Optional: ISO 8601 duration (default: PT1M - 1 minute)
+      #           # requiresSession: false               # Optional: Enable sessions (default: false)
+      #           # defaultMessageTtl: "P14D"            # Optional: ISO 8601 duration (default: P14D - 14 days)
+      #           # deadLetteringOnMessageExpiration: false # Optional: Move expired messages to DLQ (default: false)
+      #           # deadLetteringOnFilterEvaluationError: true # Optional: Move messages to DLQ on filter errors (default: true)
+      #           # batchedOperationsEnabled: true       # Optional: Enable batched operations (default: true)
+      #           # autoDeleteOnIdle: "P10675199DT2H48M5.4775807S" # Optional: Auto-delete after idle time (default: never)
+      #           # forwardTo: "another-topic-or-queue"  # Optional: Forward messages to another entity
+      #           # forwardDeadLetteredMessagesTo: "dlq-topic-or-queue" # Optional: Forward dead-lettered messages
+      #
+      #           # Optional: Subscription rules for message filtering
+      #           rules:
+      #             - name: "high-priority-filter"       # Required: Rule name
+      #               filterType: "SqlFilter"            # Required: SqlFilter or CorrelationFilter
+      #               sqlFilter: "priority = 'high'"     # Required for SqlFilter: SQL expression for filtering
+      #               # action: "SET priority = 'urgent'" # Optional: SQL action to modify message properties
+      #
+      #               # Optional: Rule-level management policies
+      #               # managementPolicies: ["Observe"]  # Optional: Management policies (default: ["Observe"] - import/read-only mode)
+      #                                                   # IMPORTANT: "Delete" policy is BLOCKED
+      #                                                   # To create/manage new rules: ["Create", "Update", "LateInitialize", "Observe"]
+      #
+      #             - name: "correlation-filter-example"
+      #               filterType: "CorrelationFilter"    # Required: Filter type
+      #               correlationFilter:                 # Required for CorrelationFilter: Correlation properties
+      #                 contentType: "application/json"  # Optional: Match content type
+      #                 correlationId: "order-123"       # Optional: Match correlation ID
+      #                 label: "OrderCreated"            # Optional: Match message label
+      #                 messageId: "msg-456"             # Optional: Match message ID
+      #                 properties:                      # Optional: Match custom properties
+      #                   customProp: "customValue"
+      #                 # replyTo: "reply-queue"         # Optional: Match reply-to address
+      #                 # replyToSessionId: "session-123" # Optional: Match reply-to session ID
+      #                 # sessionId: "session-456"       # Optional: Match session ID
+      #                 # to: "destination"              # Optional: Match destination
+      #
+      #         - name: "orders-archive"
+      #           maxDeliveryCount: 1                    # Lower retry for archive subscription
+      #           lockDuration: "PT30S"                  # Shorter lock duration
+      #
+      #     - name: "notifications"
+      #       subscriptions:
+      #         - name: "email-sender"
+      #           maxDeliveryCount: 5                    # Fewer retries for notifications
