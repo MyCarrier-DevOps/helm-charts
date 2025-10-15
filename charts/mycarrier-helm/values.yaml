@@ -602,8 +602,6 @@ infrastructure:
         #   # Optional: Custom annotations
         #   annotations:
         #     custom.annotation/key: "custom-value"
-isEnvironmentDeploy: false
-
     # Azure Service Bus configurations
     servicebus: []
       # Example Service Bus configuration:
@@ -704,3 +702,4 @@ isEnvironmentDeploy: false
       #       subscriptions:
       #         - name: "email-sender"
       #           maxDeliveryCount: 5                    # Fewer retries for notifications
+isEnvironmentDeploy: false
