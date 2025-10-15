@@ -92,7 +92,7 @@ spec:
     {{- if $topic.maxSizeInMegabytes }}
     maxSizeInMegabytes: {{ $topic.maxSizeInMegabytes }}
     {{- end }}
-    {{- if $topic.requiresDuplicateDetection }}
+    {{- if hasKey $topic "requiresDuplicateDetection" }}
     requiresDuplicateDetection: {{ $topic.requiresDuplicateDetection }}
     {{- end }}
     {{- if $topic.defaultMessageTtl }}
@@ -101,16 +101,16 @@ spec:
     {{- if $topic.duplicateDetectionHistoryTimeWindow }}
     duplicateDetectionHistoryTimeWindow: {{ $topic.duplicateDetectionHistoryTimeWindow }}
     {{- end }}
-    {{- if $topic.batchedOperationsEnabled }}
+    {{- if hasKey $topic "batchedOperationsEnabled" }}
     batchedOperationsEnabled: {{ $topic.batchedOperationsEnabled }}
     {{- end }}
-    {{- if $topic.expressEnabled }}
+    {{- if hasKey $topic "expressEnabled" }}
     expressEnabled: {{ $topic.expressEnabled }}
     {{- end }}
-    {{- if $topic.partitioningEnabled }}
+    {{- if hasKey $topic "partitioningEnabled" }}
     partitioningEnabled: {{ $topic.partitioningEnabled }}
     {{- end }}
-    {{- if $topic.supportOrdering }}
+    {{- if hasKey $topic "supportOrdering" }}
     supportOrdering: {{ $topic.supportOrdering }}
     {{- end }}
     {{- if $topic.autoDeleteOnIdle }}
@@ -166,19 +166,19 @@ spec:
     {{- if $subscription.lockDuration }}
     lockDuration: {{ $subscription.lockDuration }}
     {{- end }}
-    {{- if $subscription.requiresSession }}
+    {{- if hasKey $subscription "requiresSession" }}
     requiresSession: {{ $subscription.requiresSession }}
     {{- end }}
     {{- if $subscription.defaultMessageTtl }}
     defaultMessageTtl: {{ $subscription.defaultMessageTtl }}
     {{- end }}
-    {{- if $subscription.deadLetteringOnMessageExpiration }}
+    {{- if hasKey $subscription "deadLetteringOnMessageExpiration" }}
     deadLetteringOnMessageExpiration: {{ $subscription.deadLetteringOnMessageExpiration }}
     {{- end }}
-    {{- if $subscription.deadLetteringOnFilterEvaluationError }}
+    {{- if hasKey $subscription "deadLetteringOnFilterEvaluationError" }}
     deadLetteringOnFilterEvaluationError: {{ $subscription.deadLetteringOnFilterEvaluationError }}
     {{- end }}
-    {{- if $subscription.batchedOperationsEnabled }}
+    {{- if hasKey $subscription "batchedOperationsEnabled" }}
     batchedOperationsEnabled: {{ $subscription.batchedOperationsEnabled }}
     {{- end }}
     {{- if $subscription.autoDeleteOnIdle }}
