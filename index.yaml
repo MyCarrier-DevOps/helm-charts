@@ -627,6 +627,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/kubedock-dns-0.0.8/kubedock-dns-0.0.8.tgz
     version: 0.0.8
+  mc-environment:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-10-15T22:08:37.273109629Z"
+    description: Aggregate multiple mycarrier-helm environments into Argo CD Applications.
+    digest: da4aa78000971489206560c96ad303d2774341791ec35b7af400a996b3290234
+    name: mc-environment
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mc-environment-0.1.2/mc-environment-0.1.2.tgz
+    version: 0.1.2
   myc-generic:
   - apiVersion: v2
     appVersion: 1.0.0
@@ -2861,4 +2872,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2025-10-15T21:27:44.263355841Z"
+generated: "2025-10-15T22:08:37.273447521Z"
