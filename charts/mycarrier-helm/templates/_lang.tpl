@@ -313,9 +313,6 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- if eq .kind "prefix" }}
 {{/* Use original match for name generation to preserve wildcards */}}
 {{- $endpointName := include "helm.processEndpointName" .match -}}
-{{- if eq .match "/v*/health" -}}
-{{- $endpointName = "vwildcard-health" -}}
-{{- end }}
 
 - name: {{ $fullName }}-allowed--{{ $endpointName }}
   match:
