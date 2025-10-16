@@ -1,4 +1,5 @@
-[![Release Charts](https://github.com/MyCarrier-DevOps/helm_charts/actions/workflows/main.yml/badge.svg)](https://github.com/MyCarrier-DevOps/helm_charts/actions/workflows/main.yml)
+[![Release Charts](https://github.com/MyCarrier-DevOps/helm-charts/actions/workflows/main.yml/badge.svg)](https://github.com/MyCarrier-DevOps/helm-charts/actions/workflows/main.yml)
+[![Unit Tests](https://github.com/MyCarrier-DevOps/helm-charts/actions/workflows/unit-tests.yaml/badge.svg)](https://github.com/MyCarrier-DevOps/helm-charts/actions/workflows/unit-tests.yaml)
 ## TL;DR
 
 ```bash
