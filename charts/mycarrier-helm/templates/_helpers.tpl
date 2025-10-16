@@ -188,10 +188,13 @@ Usage:
 {{- $context := default .context . -}}
 {{- if kindIs "string" $value -}}
 {{ tpl $value $context }}
-{{- else if kindIs "map" $value -}}
-{{ tpl (toYaml $value) $context }}
-{{- else if kindIs "slice" $value -}}
-{{ tpl (toYaml $value) $context }}
+{{- else if or (kindIs "map" $value) (kindIs "slice" $value) -}}
+{{- $yaml := toYaml $value -}}
+{{- if and $yaml (contains "{{" $yaml) -}}
+{{ tpl $yaml $context }}
+{{- else -}}
+{{ $yaml }}
+{{- end -}}
 {{- else -}}
 {{- $value -}}
 {{- end -}}
