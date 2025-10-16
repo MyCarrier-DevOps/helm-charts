@@ -210,23 +210,15 @@ Returns YAML array that can be converted to Go data structures with fromYamlArra
 
 {{/*
 Helper function to process prefix paths for Istio VirtualService
-Handles special wildcard cases and converts to appropriate prefix value
+Converts wildcard patterns to Istio-compatible prefix paths by replacing * with /
+Generic algorithm handles all patterns consistently without hardcoded special cases
 */}}
 {{- define "helm.processPrefixPath" -}}
 {{- $path := . -}}
-{{- if eq $path "/*" -}}
-/
-{{- else if eq $path "/api/*/users/*" -}}
-/api//users/
-{{- else if eq $path "/v*/health" -}}
-/v/health
-{{- else if eq $path "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/*" -}}
-/api/very/long/endpoint/path/that/might/cause/issues/with/naming/
-{{- else if hasSuffix "*" $path -}}
-{{- trimSuffix "*" $path -}}
-{{- else -}}
-{{- $path -}}
-{{- end -}}
+{{- /* Replace all * with / for Istio prefix matching */ -}}
+{{- $processed := $path | replace "*" "/" -}}
+{{- /* Remove duplicate slashes that may result from replacement */ -}}
+{{- $processed | replace "//" "/" -}}
 {{- end -}}
 
 {{/*
