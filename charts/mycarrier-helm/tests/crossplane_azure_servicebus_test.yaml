@@ -1,0 +1,764 @@
+suite: Crossplane Azure Service Bus Tests
+templates:
+  - crossplane/azure/servicebus/servicebus.yaml
+tests:
+  # Test 1: Basic Service Bus with minimal configuration
+  - it: should create service bus namespace, topic, and subscription with minimal config
+    set:
+      global.appStack: exampletestapp
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "test-servicebus"
+              location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3  # ServiceBusNamespace, Topic, Subscription
+      - isKind:
+          of: ServiceBusNamespace
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "test-servicebus"
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: dev-exampletestapp
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.location
+          value: "East US"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.sku
+          value: "Standard"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.resourceGroupName
+          value: "rg-exampletestapp-dev"
+        documentIndex: 0
+      - isKind:
+          of: Topic
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "test-servicebus-orders"
+        documentIndex: 1
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "test-servicebus"
+        documentIndex: 1
+      - isKind:
+          of: Subscription
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: "test-servicebus-orders-processor"
+        documentIndex: 2
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "test-servicebus"
+        documentIndex: 2
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/topic"]
+          value: "test-servicebus-orders"
+        documentIndex: 2
+
+  # Test 2: Service Bus with subscription rules (SqlFilter)
+  - it: should create service bus with subscription rules using SqlFilter
+    set:
+      global.appStack: ruletest
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "test-sb-rules"
+              location: "West US"
+              sku: "Standard"
+              topics:
+                - name: "events"
+                  subscriptions:
+                    - name: "filtered-sub"
+                      maxDeliveryCount: 10
+                      rules:
+                        - name: "high-priority"
+                          filterType: "SqlFilter"
+                          sqlFilter: "priority = 'high'"
+    asserts:
+      - hasDocuments:
+          count: 4  # ServiceBusNamespace, Topic, Subscription, SubscriptionRule
+      - isKind:
+          of: SubscriptionRule
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: "test-sb-rules-events-filtered-sub-high-priority"
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.filterType
+          value: "SqlFilter"
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.sqlFilter
+          value: "priority = 'high'"
+        documentIndex: 3
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "test-sb-rules"
+        documentIndex: 3
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/topic"]
+          value: "test-sb-rules-events"
+        documentIndex: 3
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/subscription"]
+          value: "test-sb-rules-events-filtered-sub"
+        documentIndex: 3
+
+  # Test 3: Service Bus with subscription rules (CorrelationFilter)
+  - it: should create service bus with subscription rules using CorrelationFilter
+    set:
+      global.appStack: corrtest
+      global.language: python
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "test-sb-corr"
+              location: "Central US"
+              sku: "Standard"
+              topics:
+                - name: "messages"
+                  subscriptions:
+                    - name: "corr-sub"
+                      rules:
+                        - name: "order-filter"
+                          filterType: "CorrelationFilter"
+                          correlationFilter:
+                            contentType: "application/json"
+                            correlationId: "order-123"
+                            label: "OrderCreated"
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: SubscriptionRule
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.filterType
+          value: "CorrelationFilter"
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.correlationFilter.contentType
+          value: "application/json"
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.correlationFilter.correlationId
+          value: "order-123"
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.correlationFilter.label
+          value: "OrderCreated"
+        documentIndex: 3
+
+  # Test 4: Service Bus with managementPolicies for importing existing resources
+  - it: should support managementPolicies for importing existing resources
+    set:
+      global.appStack: importtest
+      global.language: java
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "existing-sb"
+              location: "North Europe"
+              sku: "Premium"
+              capacity: 1
+              managementPolicies:
+                - "Observe"
+              topics:
+                - name: "existing-topic"
+                  managementPolicies:
+                    - "Observe"
+                  subscriptions:
+                    - name: "existing-sub"
+                      managementPolicies:
+                        - "Observe"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.managementPolicies[0]
+          value: "Observe"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.sku
+          value: "Premium"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.capacity
+          value: 1
+        documentIndex: 0
+      - equal:
+          path: spec.managementPolicies[0]
+          value: "Observe"
+        documentIndex: 1
+      - equal:
+          path: spec.managementPolicies[0]
+          value: "Observe"
+        documentIndex: 2
+
+  # Test 5: Service Bus with multiple topics and subscriptions
+  - it: should create service bus with multiple topics and subscriptions
+    set:
+      global.appStack: exampletestapp
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "multi-sb"
+              location: "West Europe"
+              sku: "Standard"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+                    - name: "archiver"
+                - name: "notifications"
+                  subscriptions:
+                    - name: "email-sender"
+                    - name: "sms-sender"
+    asserts:
+      - hasDocuments:
+          count: 7  # 1 namespace + 2 topics + 4 subscriptions
+      - isKind:
+          of: ServiceBusNamespace
+        documentIndex: 0
+      - isKind:
+          of: Topic
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "multi-sb-orders"
+        documentIndex: 1
+      - isKind:
+          of: Subscription
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: "multi-sb-orders-processor"
+        documentIndex: 2
+      - isKind:
+          of: Subscription
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: "multi-sb-orders-archiver"
+        documentIndex: 3
+      - isKind:
+          of: Topic
+        documentIndex: 4
+      - equal:
+          path: metadata.name
+          value: "multi-sb-notifications"
+        documentIndex: 4
+      - isKind:
+          of: Subscription
+        documentIndex: 5
+      - equal:
+          path: metadata.name
+          value: "multi-sb-notifications-email-sender"
+        documentIndex: 5
+      - isKind:
+          of: Subscription
+        documentIndex: 6
+      - equal:
+          path: metadata.name
+          value: "multi-sb-notifications-sms-sender"
+        documentIndex: 6
+
+  # Test 6: Service Bus with subscription properties
+  - it: should create service bus with subscription properties
+    set:
+      global.appStack: proptest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "prop-sb"
+              location: "South Central US"
+              sku: "Standard"
+              topics:
+                - name: "messages"
+                  subscriptions:
+                    - name: "sub-with-props"
+                      maxDeliveryCount: 5
+                      lockDuration: "PT5M"
+                      requiresSession: true
+                      defaultMessageTtl: "P7D"
+                      deadLetteringOnMessageExpiration: true
+                      batchedOperationsEnabled: false
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.maxDeliveryCount
+          value: 5
+        documentIndex: 2
+      - equal:
+          path: spec.forProvider.lockDuration
+          value: "PT5M"
+        documentIndex: 2
+      - equal:
+          path: spec.forProvider.requiresSession
+          value: true
+        documentIndex: 2
+      - equal:
+          path: spec.forProvider.defaultMessageTtl
+          value: "P7D"
+        documentIndex: 2
+      - equal:
+          path: spec.forProvider.deadLetteringOnMessageExpiration
+          value: true
+        documentIndex: 2
+
+  # Test 7: Service Bus with topic properties
+  - it: should create service bus with topic properties
+    set:
+      global.appStack: topictest
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "topic-sb"
+              location: "East US 2"
+              sku: "Standard"
+              topics:
+                - name: "topic-with-props"
+                  maxSizeInMegabytes: 2048
+                  requiresDuplicateDetection: true
+                  defaultMessageTtl: "P14D"
+                  duplicateDetectionHistoryTimeWindow: "PT10M"
+                  batchedOperationsEnabled: true
+                  partitioningEnabled: true
+                  supportOrdering: true
+                  subscriptions:
+                    - name: "sub1"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.maxSizeInMegabytes
+          value: 2048
+        documentIndex: 1
+      - equal:
+          path: spec.forProvider.requiresDuplicateDetection
+          value: true
+        documentIndex: 1
+      - equal:
+          path: spec.forProvider.defaultMessageTtl
+          value: "P14D"
+        documentIndex: 1
+      - equal:
+          path: spec.forProvider.duplicateDetectionHistoryTimeWindow
+          value: "PT10M"
+        documentIndex: 1
+      - equal:
+          path: spec.forProvider.batchedOperationsEnabled
+          value: true
+        documentIndex: 1
+      - equal:
+          path: spec.forProvider.partitioningEnabled
+          value: true
+        documentIndex: 1
+      - equal:
+          path: spec.forProvider.supportOrdering
+          value: true
+        documentIndex: 1
+
+  # Test 8: Service Bus with custom resource group
+  - it: should create service bus with custom resource group name
+    set:
+      global.appStack: rgtest
+      global.language: python
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "custom-rg-sb"
+              location: "UK South"
+              sku: "Standard"
+              resourceGroupName: "my-custom-rg"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.resourceGroupName
+          value: "my-custom-rg"
+        documentIndex: 0
+
+  # Test 9: Service Bus with tags
+  - it: should create service bus with tags
+    set:
+      global.appStack: tagtest
+      global.language: java
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "tagged-sb"
+              location: "Japan East"
+              sku: "Standard"
+              tags:
+                environment: "dev"
+                purpose: "testing"
+                team: "platform"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.tags.environment
+          value: "dev"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.tags.purpose
+          value: "testing"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.tags.team
+          value: "platform"
+        documentIndex: 0
+
+  # Test 10: Service Bus with custom namespace
+  - it: should create service bus in custom kubernetes namespace
+    set:
+      global.appStack: nstest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "custom-ns-sb"
+              location: "Australia East"
+              sku: "Standard"
+              namespace: "custom-k8s-namespace"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.namespace
+          value: "custom-k8s-namespace"
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "custom-k8s-namespace"
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: "custom-k8s-namespace"
+        documentIndex: 2
+
+  # Test 11: Service Bus with annotations
+  - it: should create service bus with custom annotations
+    set:
+      global.appStack: annotest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "annotated-sb"
+              location: "Canada Central"
+              sku: "Standard"
+              annotations:
+                custom.annotation/key: "custom-value"
+                another.annotation: "another-value"
+              topics:
+                - name: "annotated-topic"
+                  annotations:
+                    topic.annotation: "topic-value"
+                  subscriptions:
+                    - name: "annotated-sub"
+                      annotations:
+                        sub.annotation: "sub-value"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.annotations["custom.annotation/key"]
+          value: "custom-value"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["another.annotation"]
+          value: "another-value"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["topic.annotation"]
+          value: "topic-value"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["sub.annotation"]
+          value: "sub-value"
+        documentIndex: 2
+
+  # Test 12: No service bus configured (should not render)
+  - it: should not create any resources when service bus is not configured
+    set:
+      global.appStack: nosbtest
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Test 13: Labels verification
+  - it: should include standard helm labels on all resources
+    set:
+      global.appStack: labeltest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "label-sb"
+              location: "West US 2"
+              sku: "Standard"
+              topics:
+                - name: "label-topic"
+                  subscriptions:
+                    - name: "label-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - exists:
+          path: metadata.labels
+        documentIndex: 0
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+        documentIndex: 0
+      - exists:
+          path: metadata.labels
+        documentIndex: 1
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+        documentIndex: 1
+      - exists:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+        documentIndex: 1
+      - exists:
+          path: metadata.labels
+        documentIndex: 2
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+        documentIndex: 2
+      - exists:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+        documentIndex: 2
+      - exists:
+          path: metadata.labels["servicebus.mycarrier.io/topic"]
+        documentIndex: 2
+
+  # Test 14: Name truncation for long names
+  - it: should truncate long resource names to 63 characters
+    set:
+      global.appStack: verylongappstack
+      global.language: nodejs
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "very-long-service-bus-namespace-name-that-exceeds-limits"
+              location: "Central US"
+              sku: "Standard"
+              topics:
+                - name: "very-long-topic-name-that-might-cause-truncation-issues"
+                  subscriptions:
+                    - name: "very-long-subscription-name-that-definitely-needs-truncation"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - matchRegex:
+          path: metadata.name
+          pattern: "^.{1,63}$"
+        documentIndex: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: "^.{1,63}$"
+        documentIndex: 2
+      - notMatchRegex:
+          path: metadata.name
+          pattern: "-$"
+        documentIndex: 1
+      - notMatchRegex:
+          path: metadata.name
+          pattern: "-$"
+        documentIndex: 2
+
+  # Test 15: Multiple subscription rules
+  - it: should create multiple subscription rules
+    set:
+      global.appStack: multirule
+      global.language: python
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "multirule-sb"
+              location: "North Central US"
+              sku: "Standard"
+              topics:
+                - name: "events"
+                  subscriptions:
+                    - name: "filtered"
+                      rules:
+                        - name: "high-priority"
+                          filterType: "SqlFilter"
+                          sqlFilter: "priority = 'high'"
+                        - name: "urgent"
+                          filterType: "SqlFilter"
+                          sqlFilter: "urgent = 1"
+                        - name: "order-correlation"
+                          filterType: "CorrelationFilter"
+                          correlationFilter:
+                            label: "Order"
+    asserts:
+      - hasDocuments:
+          count: 6  # namespace + topic + subscription + 3 rules
+      - isKind:
+          of: SubscriptionRule
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.sqlFilter
+          value: "priority = 'high'"
+        documentIndex: 3
+      - isKind:
+          of: SubscriptionRule
+        documentIndex: 4
+      - equal:
+          path: spec.forProvider.sqlFilter
+          value: "urgent = 1"
+        documentIndex: 4
+      - isKind:
+          of: SubscriptionRule
+        documentIndex: 5
+      - equal:
+          path: spec.forProvider.filterType
+          value: "CorrelationFilter"
+        documentIndex: 5
+
+  # Test 16: Service Bus with forwarding configuration
+  - it: should create service bus subscription with forwarding configuration
+    set:
+      global.appStack: fwdtest
+      global.language: java
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "fwd-sb"
+              location: "West US"
+              sku: "Standard"
+              topics:
+                - name: "messages"
+                  subscriptions:
+                    - name: "forwarder"
+                      forwardTo: "archive-topic"
+                      forwardDeadLetteredMessagesTo: "dlq-topic"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.forwardTo
+          value: "archive-topic"
+        documentIndex: 2
+      - equal:
+          path: spec.forProvider.forwardDeadLetteredMessagesTo
+          value: "dlq-topic"
+        documentIndex: 2

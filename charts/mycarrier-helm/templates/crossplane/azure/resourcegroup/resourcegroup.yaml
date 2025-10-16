@@ -1,0 +1,38 @@
+{{- if .Values.infrastructure.azure.resourceGroup }}
+{{- range $rgIndex, $rgInstance := .Values.infrastructure.azure.resourceGroup }}
+{{- if $rgInstance.managementPolicies }}
+{{- if has "Delete" $rgInstance.managementPolicies }}
+{{- fail (printf "Delete management policy is not allowed for Resource Group '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $rgInstance.name) }}
+{{- end }}
+{{- end }}
+---
+apiVersion: azure.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: {{ $rgInstance.name | required "Resource Group name is required" }}
+  namespace: {{ $rgInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  labels:
+    {{- include "helm.labels.standard" $ | nindent 4 }}
+  {{- if $rgInstance.annotations }}
+  annotations:
+    {{- toYaml $rgInstance.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if $rgInstance.managementPolicies }}
+  managementPolicies:
+    {{- toYaml $rgInstance.managementPolicies | nindent 4 }}
+  {{- else }}
+  managementPolicies:
+    - "Observe"
+  {{- end }}
+  forProvider:
+    location: {{ $rgInstance.location | required "Resource Group location is required" }}
+    {{- if $rgInstance.managedBy }}
+    managedBy: {{ $rgInstance.managedBy }}
+    {{- end }}
+    {{- if $rgInstance.tags }}
+    tags:
+      {{- toYaml $rgInstance.tags | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- end }}
