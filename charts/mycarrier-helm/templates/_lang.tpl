@@ -273,8 +273,8 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- range $mergedEndpoints -}}
   {{- if typeIs "string" . -}}
     {{- if contains "*" . -}}
-      {{/* Normalize path by removing trailing * and / for deduplication key */}}
-      {{- $normalizedPath := trimSuffix "*" . | trimSuffix "/" -}}
+      {{/* Normalize path by removing all trailing wildcards and slashes for deduplication key */}}
+      {{- $normalizedPath := . | trimSuffix "*" | trimSuffix "/" | trimSuffix "*" | trimSuffix "/" -}}
       {{- $key := printf "prefix:%s" $normalizedPath -}}
       {{- if not (hasKey $seen $key) -}}
         {{- $_ := set $seen $key true -}}
@@ -292,7 +292,8 @@ This template generates the complete HTTP rules as strings to avoid duplication
     {{/* For dict endpoints, normalize match field for comparison */}}
     {{- $normalizedMatch := .match -}}
     {{- if eq .kind "prefix" -}}
-      {{- $normalizedMatch = trimSuffix "*" .match | trimSuffix "/" -}}
+      {{/* Remove all trailing wildcards and slashes for consistent deduplication */}}
+      {{- $normalizedMatch = .match | trimSuffix "*" | trimSuffix "/" | trimSuffix "*" | trimSuffix "/" -}}
     {{- end -}}
     {{- $key := printf "%s:%s" .kind $normalizedMatch -}}
     {{- if not (hasKey $seen $key) -}}
