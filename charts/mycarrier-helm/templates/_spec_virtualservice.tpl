@@ -66,16 +66,20 @@ http:
 {{- end }}
 
 
-{{- $hasAllowedEndpoints := false -}}
-{{- if and .application.networking .application.networking.istio (hasKey .application.networking.istio "allowedEndpoints") -}}
-  {{/* Check if there are user-defined endpoints or language defaults */}}
-  {{- $langEndpointsYaml := include "helm.lang.endpoint.list" . -}}
-  {{- if or .application.networking.istio.allowedEndpoints $langEndpointsYaml -}}
-    {{- $hasAllowedEndpoints = true -}}
-  {{- end -}}
-{{- end -}}
+{{/* 
+  Determine if we should use allowedEndpoints logic:
+  1. Check if istio is enabled
+  2. Check if there are language-specific default endpoints (e.g., C# has /liveness, /health, /api)
+  3. Check if user has defined custom allowedEndpoints
+*/}}
+{{- $contextWithFullName := dict "Values" .Values "application" .application "fullName" $fullName }}
+{{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim }}
+{{- $hasLangEndpoints := ne $langEndpointsYaml "" }}
+{{- $hasUserEndpoints := and .application.networking .application.networking.istio (hasKey .application.networking.istio "allowedEndpoints") .application.networking.istio.allowedEndpoints }}
+{{- $istioEnabled := and .application.networking .application.networking.istio .application.networking.istio.enabled }}
+{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) }}
 
-{{ if $hasAllowedEndpoints -}}
+{{- if $hasAllowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 {{- else }}

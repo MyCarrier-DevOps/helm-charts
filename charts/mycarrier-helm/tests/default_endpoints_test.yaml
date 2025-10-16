@@ -1,0 +1,718 @@
+suite: test default language endpoints functionality in VirtualService
+templates:
+  - templates/virtualService.yaml
+tests:
+  - it: should create default csharp endpoints when allowedEndpoints is not defined
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--liveness
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/liveness"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-api-allowed--health
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/health"
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-api-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-api-forbidden
+      - equal:
+          path: spec.http[4].fault.abort.httpStatus
+          value: 403
+
+  - it: should create default csharp endpoints when allowedEndpoints is empty array
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints: []
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--liveness
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/liveness"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-api-allowed--health
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/health"
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-api-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-api-forbidden
+      - equal:
+          path: spec.http[4].fault.abort.httpStatus
+          value: 403
+
+  - it: should merge default csharp endpoints with user-defined allowedEndpoints
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/metrics"
+                - "/admin/*"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Default endpoints should come first
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--liveness
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/liveness"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-api-allowed--health
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/health"
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-api-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+      # User-defined endpoints should follow
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-api-allowed--metrics
+      - equal:
+          path: spec.http[4].match[0].uri.exact
+          value: "/metrics"
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-test-api-allowed--admin-wildcard
+      - equal:
+          path: spec.http[5].match[0].uri.prefix
+          value: "/admin/"
+      - equal:
+          path: spec.http[6].name
+          value: test-stack-test-api-forbidden
+      - equal:
+          path: spec.http[6].fault.abort.httpStatus
+          value: 403
+
+  - it: should not create default endpoints for non-csharp language with allowedEndpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/health"
+                - "/metrics"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Should only have user-defined endpoints, no defaults
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--health
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/health"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-api-allowed--metrics
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/metrics"
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-api-forbidden
+      - equal:
+          path: spec.http[3].fault.abort.httpStatus
+          value: 403
+
+  - it: should deduplicate when user provides same endpoint as default
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/health"
+                - "/api/*"
+                - "/metrics"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Should have deduplicated endpoints - /health and /api/* should appear only once
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-api-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-api-allowed--api
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-api-allowed--metrics
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-test-api-forbidden
+      # Verify no duplicates by checking total http rules count (5 = 3 defaults + 1 user + 1 forbidden)
+      - lengthEqual:
+          path: spec.http
+          count: 6
+
+  - it: should work with rollout deployment type and default endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: rollout
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--liveness
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: test-stack-test-api
+      - equal:
+          path: spec.http[1].route[0].weight
+          value: 100
+      - equal:
+          path: spec.http[1].route[1].destination.host
+          value: test-stack-test-api-preview
+      - equal:
+          path: spec.http[1].route[1].weight
+          value: 0
+
+  - it: should handle default endpoints with custom timeout and retry configuration
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+            timeout: "300s"
+            retryOn: "5xx,reset,connect-failure"
+            attempts: 5
+            perTryTimeout: "60s"
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].timeout
+          value: "300s"
+      - equal:
+          path: spec.http[1].retries.retryOn
+          value: "5xx,reset,connect-failure"
+      - equal:
+          path: spec.http[1].retries.attempts
+          value: 5
+      - equal:
+          path: spec.http[1].retries.perTryTimeout
+          value: "60s"
+
+  - it: should not create endpoints section for non-csharp language without allowedEndpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Should not have allowed endpoints or forbidden rule for non-csharp without allowedEndpoints
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api
+      - notExists:
+          path: spec.http[1].fault
+
+  - it: should handle dict format in allowedEndpoints with default csharp endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        test-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - kind: "exact"
+                  match: "/custom"
+                - kind: "prefix"
+                  match: "/admin"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Default endpoints
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-api-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-api-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-api-allowed--api
+      # User-defined dict format endpoints
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-api-allowed--custom
+      - equal:
+          path: spec.http[4].match[0].uri.exact
+          value: "/custom"
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-test-api-allowed-admin
+      - equal:
+          path: spec.http[5].match[0].uri.prefix
+          value: "/admin"
+
+  - it: should automatically add health endpoint for csharp applications without api in name
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        myservice:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/service
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-myservice-allowed--health
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/health"
+
+  - it: should automatically add liveness endpoint for csharp applications without api in name
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        myservice:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/service
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-myservice-allowed--liveness
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/liveness"
+
+  - it: should add api endpoint only when application name contains api
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        my-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-my-api-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+
+  - it: should NOT add api endpoint when application name does not contain api
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        myservice:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/service
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-myservice-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-myservice-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-myservice-forbidden
+
+  - it: should combine default and manual endpoints for api application
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        my-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/fakeendpoint"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-my-api-allowed--liveness
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-my-api-allowed--health
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-my-api-allowed--api
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-my-api-allowed--fakeendpoint
+      - equal:
+          path: spec.http[4].match[0].uri.exact
+          value: "/fakeendpoint"
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-my-api-forbidden
+
+  - it: should disable default endpoints but keep manual endpoints when disableDefaultEndpoints is true
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        my-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              disableDefaultEndpoints: true
+              allowedEndpoints:
+                - "/custom"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-my-api-allowed--custom
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/custom"
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-my-api-forbidden
+
+  - it: should work with empty manual endpoints when defaults are disabled
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        my-api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              disableDefaultEndpoints: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-my-api
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-my-api
+
+  - it: should add api endpoint when stack name contains api
+    set:
+      global:
+        appStack: test-api-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        myservice:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/service
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[3].name
+          value: test-api-stack-myservice-allowed--api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"

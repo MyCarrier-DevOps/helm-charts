@@ -196,15 +196,19 @@
 {{/*
 SINGLE SOURCE OF TRUTH: Language-specific endpoint definitions
 Returns YAML array that can be converted to Go data structures with fromYamlArray
+Expects context with: .Values, .fullName, .application
 */}}
 {{- define "helm.lang.endpoint.list" -}}
-{{- if eq .Values.global.language "csharp" -}}
+{{- $disableDefaults := dig "networking" "istio" "disableDefaultEndpoints" false .application -}}
+{{- if and (eq .Values.global.language "csharp") (not $disableDefaults) -}}
 - kind: "exact"
   match: "/liveness"
 - kind: "exact"
   match: "/health"
+{{- if contains "api" (.fullName | lower) }}
 - kind: "prefix"
   match: "/api"
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -252,8 +256,9 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- $mergedEndpoints := list -}}
 
 {{/* Add language-specific endpoints first using centralized template */}}
-{{- $langEndpointsYaml := include "helm.lang.endpoint.list" . -}}
-{{- if $langEndpointsYaml }}
+{{- $contextWithFullName := dict "Values" $.Values "application" $.application "fullName" $fullName }}
+{{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim -}}
+{{- if ne $langEndpointsYaml "" }}
   {{- $langEndpoints := fromYamlArray $langEndpointsYaml -}}
   {{- $mergedEndpoints = concat $mergedEndpoints $langEndpoints -}}
 {{- end }}
@@ -313,20 +318,28 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- if eq .kind "prefix" }}
 {{/* Use original match for name generation to preserve wildcards */}}
 {{- $endpointName := include "helm.processEndpointName" .match -}}
-
+{{/* Use double dash for wildcard patterns or /api prefix, single dash for other simple prefixes */}}
+{{- if or (contains "*" .match) (eq .match "/api") }}
 - name: {{ $fullName }}-allowed--{{ $endpointName }}
+{{- else }}
+- name: {{ $fullName }}-allowed-{{ $endpointName }}
+{{- end }}
   match:
     - uri:
         prefix: {{ include "helm.processPrefixPath" .match }}
 {{- else if eq .kind "exact" }}
 {{- $processedMatch := .match | replace "/" "-" | trimAll "-" }}
-- name: {{ $fullName }}-allowed-{{ if $processedMatch }}-{{ $processedMatch }}{{ end }}
+{{- if $processedMatch }}
+- name: {{ $fullName }}-allowed--{{ $processedMatch }}
+{{- else }}
+- name: {{ $fullName }}-allowed-
+{{- end }}
   match:
     - uri:
         exact: {{ .match }}
 {{- else if eq .kind "regex" }}
 {{- $processedMatch := .match | replace "/" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "*" "-" | replace "^" "" | replace "$" "" | trimAll "-" }}
-- name: {{ $fullName }}-allowed-{{ if $processedMatch }}-{{ $processedMatch }}{{ end }}
+- name: {{ $fullName }}-allowed--{{ $processedMatch }}
   match:
     - uri:
         regex: {{ .match }}
