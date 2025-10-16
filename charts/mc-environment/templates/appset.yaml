@@ -1,0 +1,86 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ .Values.global.appStack | lower }}
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+      - list:
+          elements:
+          {{- range .Values.environments }}
+            - Values:
+                isEnvironmentDeploy: true
+                global:
+                  appStack: {{ $.Values.global.appStack | lower }}
+                  gitbranch: {{ $.Values.global.gitbranch }}
+                  branchlabel: {{ $.Values.global.branchlabel }}
+                  language: {{ $.Values.global.language }}
+                  v2migration: {{ $.Values.global.v2migration }}
+                  {{ if $.Values.global.env }}
+                  env:
+                    {{- $.Values.global.env | toYaml | nindent 20 }}
+                  {{ end }}
+                  {{ with $.Values.global.dependencies }}
+                  dependencies:
+                    {{- toYaml . | nindent 20 }}
+                  {{ end }}
+                environment:
+                  name: {{ .name }}
+                  dependencyenv: {{ .dependencyenv | default "" }}
+                enableVaultCA: {{ .enableVaultCA | default false }}
+                disableOtelAutoinstrumentation: {{ .disableOtelAutoinstrumentation | default false }}
+                tolerations: {{ .tolerations | default "[]" }}
+                deployment: {{ .deployment | default "deployment" }}
+                {{ with .applications }}applications:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
+                {{ with .jobs }}jobs:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
+                {{ with .secrets }}secrets:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
+                {{ with .infrastructure }}infrastructure:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
+          {{- end }}
+  template:
+    metadata:
+      name: "{{ .Values.global.appStack | lower }}-{{`{{`}} .Values.environment.name {{`}}`}}"
+      annotations:
+        notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+    spec:
+      project: default
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{`{{`}} .Values.environment.name {{`}}`}}"
+      source:
+        repoURL: https://charts.mycarrier.dev
+        chart: mycarrier-helm
+        targetRevision: "{{.Values.mycarrierChartVersion | default "2.5.100"}}"
+        helm:
+          values: |2+
+            {{`{{`}} .Values | toYaml {{`}}`}}
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ApplyOutOfSyncOnly=true
+          - Validate=true
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=false
+          - ServerSideApply=true
+          - Replace=true
+          - SkipDryRunOnMissingResource=true
+
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 10m

@@ -1,0 +1,101 @@
+mycarrierChartVersion: 2.5.100
+
+global:
+  appStack: carriers
+  gitbranch: main
+  branchlabel: main
+  language: nodejs
+  v2migration: false
+  env:
+    LOG_LEVEL: info
+    FEATURE_FLAG: "true"
+  dependencies:
+    mongodb: false
+    elasticsearch: false
+    redis: true
+    postgres: true
+    sqlserver: false
+    clickhouse: false
+    azureservicebus: false
+    redpanda: false
+    loadsure: false
+    chargify: false
+
+environments:
+  - name: dev
+    destinationNamespace: platform-dev
+    deployment: rollout
+    applications:
+      shipments-api:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/shipments-api
+          tag: "1.12.3"
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+    jobs:
+      - name: shipments-db-migrate
+        image:
+          registry: ghcr.io
+          repository: mycarrier/migrations
+          tag: "1.12.3"
+        command:
+          - npm
+          - run
+          - migrate
+    secrets:
+      individual:
+        - envVarName: SHIPMENTS_DB_PASSWORD
+          path: secrets/data/shipments
+          keyName: db_password
+    infrastructure:
+      azure:
+        storage:
+          accounts:
+            - name: shipments-data
+              newResourceGroup:
+                name: shipments-rg
+              newStorageAccount:
+                name: shipmentsdata
+                location: eastus
+                accountTier: Standard
+                accountReplicationType: LRS
+                accessTier: Cool
+              containers:
+                - name: uploads
+                  accessType: private
+                  metadata:
+                    retention: "30days"
+              tags:
+                environment: dev
+    enableVaultCA: true
+    disableOtelAutoinstrumentation: false
+  - name: prod
+    destinationNamespace: platform-prod
+    applications:
+      shipments-api:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/shipments-api
+          tag: "1.12.3"
+        autoscaling:
+          enabled: true
+          minReplicas: 4
+          maxReplicas: 12
+    jobs:
+      - name: shipments-db-migrate
+        image:
+          registry: ghcr.io
+          repository: mycarrier/migrations
+          tag: "1.12.3"
+        command:
+          - npm
+          - run
+          - migrate
+    secrets:
+      individual:
+        - envVarName: SHIPMENTS_DB_PASSWORD
+          path: secrets/data/shipments
+          keyName: db_password

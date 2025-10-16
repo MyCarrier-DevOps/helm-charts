@@ -1,0 +1,31 @@
+mycarrierChartVersion: 2.5.101
+
+global:
+  appStack: ""
+  gitbranch: ""
+  branchlabel: ""
+  language: nodejs
+  v2migration: false
+  env: {}
+  dependencies:
+    mongodb: false
+    elasticsearch: false
+    redis: false
+    postgres: false
+    sqlserver: false
+    clickhouse: false
+    azureservicebus: false
+    redpanda: false
+    loadsure: false
+    chargify: false
+
+environments: []
+  # - name: dev
+  #   applications: {}
+  #   jobs: []
+  #   secrets: {}
+  #   infrastructure: {}
+  #   helm:
+  #     parameters:
+  #       - name: application.example
+  #         value: sample

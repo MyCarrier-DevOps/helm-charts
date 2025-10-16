@@ -1,23 +1,71 @@
 name: Helm-UnitTests
-
 on:
   pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/unit-tests.yaml'
   push:
     branches:
       - main
     paths:
-      - charts/mycarrier-helm/
+      - 'charts/**'
+      - '.github/workflows/unit-tests.yaml'
 
 jobs:
-  unittests:
+  discover:
     runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.changed.outputs.charts }}
     steps:
-      - name: Checkout source code 
-        uses: 'actions/checkout@v4'
+      - name: Checkout source code
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
           fetch-depth: 0
-      
+
+      - name: Detect changed charts
+        id: changed
+        run: |
+          # Identify chart directories touched in the current diff for targeted helm-unittest runs.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+
+          if [[ -z "$base" || "$base" == "null" ]]; then
+            base=$(git rev-parse HEAD^)
+          fi
+
+          changed_files=$(git diff --name-only "$base" HEAD)
+          if [[ -z "$changed_files" ]]; then
+            echo "charts=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          charts=$(echo "$changed_files" | grep '^charts/[^/]\+/[^/]\+' | cut -d/ -f1-2 | sort -u || true)
+          if [[ -z "$charts" ]]; then
+            echo "charts=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          chart_json=$(printf '%s\n' "$charts" | jq -R . | jq -s -c .)
+          echo "Detected charts: $chart_json"
+          echo "charts=$chart_json" >> "$GITHUB_OUTPUT"
+
+  unittests:
+    needs: discover
+    if: ${{ needs.discover.outputs.charts != '[]' && needs.discover.outputs.charts != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.discover.outputs.charts) }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
@@ -27,17 +75,28 @@ jobs:
         run: |
           helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.0
 
-      # - name: Update dependencies
-      #  run: helm dependency update charts/mycarrier-helm/
-
       - name: Run unit tests
+        id: runtests
+        env:
+          CHART_PATH: ${{ matrix.chart }}
         run: |
-          helm unittest charts/mycarrier-helm/ --color --output-type JUnit --output-file results.xml
+          chart_name="$CHART_PATH"
+          safe_name=$(echo "$chart_name" | tr '/' '-')
+          echo "chart_safe_name=$safe_name" >> "$GITHUB_OUTPUT"
+          helm unittest "$chart_name" --color --output-type JUnit --output-file "results-${safe_name}.xml"
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: results.xml
-          check_name: "Helm Unit Test Results - MyCarrier-Helm"
-          comment_title: "Helm Unit Test Results - MyCarrier-Helm"
+          files: results-${{ steps.runtests.outputs.chart_safe_name }}.xml
+          check_name: Helm Unit Test Results - ${{ matrix.chart }}
+          comment_title: Helm Unit Test Results - ${{ matrix.chart }}
+
+  no-changes:
+    needs: discover
+    if: ${{ needs.discover.outputs.charts == '[]' || needs.discover.outputs.charts == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip unit tests
+        run: echo "No chart changes detected; skipping helm-unittest runs."

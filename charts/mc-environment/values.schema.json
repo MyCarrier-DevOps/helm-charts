@@ -1,0 +1,572 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "mycarrierGlobal": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global"
+    },
+    "mycarrierGlobalOverride": {
+      "type": "object",
+      "properties": {
+        "appStack": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global/properties/appStack"
+        },
+        "language": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global/properties/language"
+        },
+        "gitbranch": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global/properties/gitbranch"
+        },
+        "branchlabel": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global/properties/branchlabel"
+        },
+        "forceAutoscaling": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global/properties/forceAutoscaling"
+        }
+      }
+    },
+    "dependenciesFlags": {
+      "type": "object",
+      "properties": {
+        "mongodb": { "type": "boolean", "default": false },
+        "elasticsearch": { "type": "boolean", "default": false },
+        "redis": { "type": "boolean", "default": false },
+        "postgres": { "type": "boolean", "default": false },
+        "sqlserver": { "type": "boolean", "default": false },
+        "clickhouse": { "type": "boolean", "default": false },
+        "azureservicebus": { "type": "boolean", "default": false },
+        "redpanda": { "type": "boolean", "default": false },
+        "loadsure": { "type": "boolean", "default": false },
+        "chargify": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false,
+      "default": {
+        "mongodb": false,
+        "elasticsearch": false,
+        "redis": false,
+        "postgres": false,
+        "sqlserver": false,
+        "clickhouse": false,
+        "azureservicebus": false,
+        "redpanda": false,
+        "loadsure": false,
+        "chargify": false
+      }
+    },
+    "envVariables": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "wrapperGlobal": {
+      "allOf": [
+        { "$ref": "#/definitions/mycarrierGlobal" },
+        {
+          "type": "object",
+          "properties": {
+            "v2migration": {
+              "type": "boolean",
+              "description": "Enable Argo CD v2 migration behaviour",
+              "default": false
+            },
+            "env": {
+              "$ref": "#/definitions/envVariables"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependenciesFlags"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "wrapperGlobalOverride": {
+      "allOf": [
+        { "$ref": "#/definitions/mycarrierGlobalOverride" },
+        {
+          "type": "object",
+          "properties": {
+            "v2migration": {
+              "type": "boolean",
+              "description": "Enable Argo CD v2 migration behaviour"
+            },
+            "env": {
+              "$ref": "#/definitions/envVariables"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependenciesFlags"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "mycarrierEnvironment": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/environment"
+    },
+    "mycarrierEnvironmentOverride": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/environment/properties/name"
+        },
+        "dependencyenv": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/environment/properties/dependencyenv"
+        },
+        "domainOverride": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/environment/properties/domainOverride"
+        }
+      }
+    },
+    "infrastructureAzureStorageContainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Blob container name"
+        },
+        "accessType": {
+          "type": "string",
+          "description": "Container access type",
+          "enum": ["private", "blob", "container"],
+          "default": "private"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional metadata to apply to the container",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "infrastructureAzureExistingResourceGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Existing Azure resource group name"
+        }
+      }
+    },
+    "infrastructureAzureNewResourceGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "New Azure resource group name"
+        }
+      }
+    },
+    "infrastructureAzureExistingStorageAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Existing Azure storage account name"
+        }
+      }
+    },
+    "infrastructureAzureNewStorageAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Desired storage account name"
+        },
+        "location": {
+          "type": "string",
+          "description": "Azure region for the new storage account"
+        },
+        "accountTier": {
+          "type": "string",
+          "description": "Storage account tier",
+          "enum": ["Standard", "Premium"],
+          "default": "Standard"
+        },
+        "accountReplicationType": {
+          "type": "string",
+          "description": "Replication type",
+          "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"],
+          "default": "LRS"
+        },
+        "accessTier": {
+          "type": "string",
+          "description": "Blob access tier",
+          "enum": ["Cool", "Hot", "Archive"],
+          "default": "Cool"
+        }
+      }
+    },
+    "infrastructureAzureStorageAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Base name used when auto-generating storage account"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Kubernetes namespace for the Crossplane claim"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations applied to the Crossplane claim",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "existingResourceGroup": {
+          "$ref": "#/definitions/infrastructureAzureExistingResourceGroup"
+        },
+        "newResourceGroup": {
+          "$ref": "#/definitions/infrastructureAzureNewResourceGroup"
+        },
+        "existingStorageAccount": {
+          "$ref": "#/definitions/infrastructureAzureExistingStorageAccount"
+        },
+        "newStorageAccount": {
+          "$ref": "#/definitions/infrastructureAzureNewStorageAccount"
+        },
+        "location": {
+          "type": "string",
+          "description": "Azure region used when neither existing nor new storage account objects are supplied"
+        },
+        "tier": {
+          "type": "string",
+          "description": "Storage account tier for shorthand configuration",
+          "enum": ["Standard", "Premium"]
+        },
+        "replicationType": {
+          "type": "string",
+          "description": "Replication type for shorthand configuration",
+          "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"]
+        },
+        "accessTier": {
+          "type": "string",
+          "description": "Blob access tier for shorthand configuration",
+          "enum": ["Cool", "Hot", "Archive"]
+        },
+        "containers": {
+          "type": "array",
+          "description": "Blob containers to create",
+          "items": {
+            "$ref": "#/definitions/infrastructureAzureStorageContainer"
+          }
+        },
+        "tags": {
+          "type": "object",
+          "description": "Tags applied to Azure resources",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "compositionRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Crossplane composition reference name",
+              "default": "azure-blob-storage"
+            }
+          }
+        }
+      }
+    },
+    "infrastructureAzureStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accounts": {
+          "type": "array",
+          "description": "List of Azure Blob Storage accounts to manage",
+          "items": {
+            "$ref": "#/definitions/infrastructureAzureStorageAccount"
+          },
+          "default": []
+        }
+      }
+    },
+    "infrastructureAzure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "storage": {
+          "$ref": "#/definitions/infrastructureAzureStorage"
+        }
+      }
+    },
+    "infrastructure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "azure": {
+          "$ref": "#/definitions/infrastructureAzure"
+        }
+      }
+    },
+    "enableVaultCA": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/enableVaultCA"
+    },
+    "disableOtelAutoinstrumentation": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/disableOtelAutoinstrumentation"
+    },
+    "tolerations": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/tolerations"
+    },
+    "applications": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/applications"
+    },
+    "jobs": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/jobs"
+    },
+    "secrets": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/secrets"
+    },
+    "applicationNetworking": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/applications/patternProperties/^[a-z0-9_-]+$/properties/networking"
+    },
+    "applicationServiceAccount": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/applications/patternProperties/^[a-z0-9_-]+$/properties/serviceAccount"
+    },
+    "applicationServiceMonitor": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/applications/patternProperties/^[a-z0-9_-]+$/properties/serviceMonitor"
+    },
+    "isEnvironmentDeploy": {
+      "oneOf": [
+        {
+          "type": "boolean",
+          "description": "Flag used by child chart to control environment level behaviour",
+          "default": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "helmConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "releaseNameTemplate": {
+          "type": "string",
+          "description": "Go template used to build the Helm release name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version of the child chart to deploy"
+        },
+        "valueFiles": {
+          "type": "array",
+          "description": "Additional Helm value files to include",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "description": "List of Helm set parameters to apply",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "required": ["name", "value"]
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "mycarrierChartVersion": {
+      "type": "string",
+      "description": "Version of the mycarrier-helm chart to deploy",
+      "default": "2.5.100"
+    },
+    "isEnvironmentDeploy": {
+      "$ref": "#/definitions/isEnvironmentDeploy"
+    },
+    "global": {
+      "allOf": [
+        { "$ref": "#/definitions/wrapperGlobal" }
+      ],
+      "default": {
+        "appStack": "",
+        "gitbranch": "",
+        "branchlabel": "",
+        "language": "nodejs",
+        "forceAutoscaling": false,
+        "v2migration": false,
+        "env": {},
+        "dependencies": {
+          "mongodb": false,
+          "elasticsearch": false,
+          "redis": false,
+          "postgres": false,
+          "sqlserver": false,
+          "clickhouse": false,
+          "azureservicebus": false,
+          "redpanda": false,
+          "loadsure": false,
+          "chargify": false
+        }
+      }
+    },
+    "enableVaultCA": {
+      "$ref": "#/definitions/enableVaultCA"
+    },
+    "disableOtelAutoinstrumentation": {
+      "$ref": "#/definitions/disableOtelAutoinstrumentation"
+    },
+    "tolerations": {
+      "$ref": "#/definitions/tolerations"
+    },
+    "infrastructure": {
+      "oneOf": [
+        { "$ref": "#/definitions/infrastructure" },
+        { "type": "null" }
+      ],
+      "default": {
+        "azure": {
+          "storage": {
+            "accounts": []
+          }
+        }
+      }
+    },
+    "environments": {
+      "type": "array",
+      "description": "List of environments to render Argo CD Applications for",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the environment entry"
+          },
+          "releaseName": {
+            "type": "string",
+            "description": "Override release name for the generated Application"
+          },
+          "applicationName": {
+            "type": "string",
+            "description": "Explicit Argo CD Application name override"
+          },
+          "destinationNamespace": {
+            "type": "string",
+            "description": "Namespace where the child application should deploy"
+          },
+          "global": {
+            "oneOf": [
+              { "$ref": "#/definitions/wrapperGlobalOverride" },
+              { "type": "null" }
+            ]
+          },
+          "environment": {
+            "oneOf": [
+              { "$ref": "#/definitions/mycarrierEnvironmentOverride" },
+              { "type": "null" }
+            ]
+          },
+          "enableVaultCA": {
+            "$ref": "#/definitions/enableVaultCA"
+          },
+          "disableOtelAutoinstrumentation": {
+            "$ref": "#/definitions/disableOtelAutoinstrumentation"
+          },
+          "tolerations": {
+            "$ref": "#/definitions/tolerations"
+          },
+          "applications": {
+            "oneOf": [
+              { "$ref": "#/definitions/applications" },
+              { "type": "null" }
+            ]
+          },
+          "jobs": {
+            "oneOf": [
+              { "$ref": "#/definitions/jobs" },
+              { "type": "null" }
+            ]
+          },
+          "secrets": {
+            "oneOf": [
+              { "$ref": "#/definitions/secrets" },
+              { "type": "null" }
+            ]
+          },
+          "isEnvironmentDeploy": {
+            "$ref": "#/definitions/isEnvironmentDeploy"
+          },
+          "networking": {
+            "oneOf": [
+              { "$ref": "#/definitions/applicationNetworking" },
+              { "type": "null" }
+            ]
+          },
+          "serviceAccount": {
+            "oneOf": [
+              { "$ref": "#/definitions/applicationServiceAccount" },
+              { "type": "null" }
+            ]
+          },
+          "serviceMonitor": {
+            "oneOf": [
+              { "$ref": "#/definitions/applicationServiceMonitor" },
+              { "type": "null" }
+            ]
+          },
+          "infrastructure": {
+            "oneOf": [
+              { "$ref": "#/definitions/infrastructure" },
+              { "type": "null" }
+            ]
+          },
+          "deployment": {
+            "type": "string",
+            "description": "Default workload controller for applications",
+            "enum": ["deployment", "statefulset", "rollout"],
+            "default": "deployment"
+          },
+          "helm": {
+            "oneOf": [
+              { "$ref": "#/definitions/helmConfig" },
+              { "type": "null" }
+            ]
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "syncPolicy": {
+            "type": "object",
+            "description": "Argo CD sync policy overrides",
+            "additionalProperties": true
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  },
+  "required": ["global", "environments"]
+}
