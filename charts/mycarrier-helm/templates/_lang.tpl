@@ -209,25 +209,6 @@ Returns YAML array that can be converted to Go data structures with fromYamlArra
 {{- end -}}
 
 {{/*
-Helper function to replace wildcards in endpoint paths 
-Handles special cases for testing compatibility
-*/}}
-{{- define "helm.processWildcardPath" -}}
-{{- $path := . -}}
-{{- if eq $path "/api/*/users/*" -}}
-/api//users/
-{{- else if eq $path "/*" -}}
-/
-{{- else -}}
-{{- if hasSuffix "*" $path -}}
-{{- trimSuffix "*" $path -}}
-{{- else -}}
-{{- $path | replace "*" "/" -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Helper function to process prefix paths for Istio VirtualService
 Handles special wildcard cases and converts to appropriate prefix value
 */}}
