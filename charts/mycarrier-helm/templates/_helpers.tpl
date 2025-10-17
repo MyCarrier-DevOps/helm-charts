@@ -29,11 +29,8 @@
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
-{{- if hasPrefix "feature" $envName }}
-{{- (list ("dev") $appStack) | join "-" | lower | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- (list $envName $appStack) | join "-" | lower | trunc 63 | trimSuffix "-" }}
-{{- end }}
+{{ $envName }}
+
 {{- end -}}
 
 {{- define "helm.fullname" -}}
