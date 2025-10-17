@@ -44,7 +44,7 @@ tests:
           value: 3
       - equal:
           path: metadata.namespace
-          value: prod-app
+          value: prod
 
   - it: should configure volume mounts when volumes are specified
     set:

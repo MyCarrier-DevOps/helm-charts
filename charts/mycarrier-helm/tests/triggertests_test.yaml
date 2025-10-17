@@ -5,7 +5,7 @@ tests:
   - it: should create a job for each application
     set:
       fullnameOverride: app
-      namespace: dev-app
+      namespace: dev
       metaEnvironment: dev
       applications:
         app1:
@@ -45,7 +45,7 @@ tests:
           of: Job
       - equal:
           path: metadata.namespace
-          value: dev-app
+          value: dev
       - matchRegex:
           path: metadata.name
           pattern: ^app-app[12]-trigger$
