@@ -663,6 +663,34 @@
                           },
                           "corsPolicy": {
                             "type": "object"
+                          },
+                          "allowedEndpoints": {
+                            "type": "array",
+                            "description": "List of allowed HTTP endpoints for the VirtualService. Can be strings with wildcards or objects with kind and match fields.",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "description": "Endpoint path as a string. If it contains *, it will be treated as a prefix match, otherwise as an exact match."
+                                },
+                                {
+                                  "type": "object",
+                                  "description": "Endpoint definition with explicit kind (prefix, exact, or regex) and match pattern.",
+                                  "required": ["kind", "match"],
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["prefix", "exact", "regex"],
+                                      "description": "Type of URI matching: prefix for path prefixes, exact for exact matches, regex for regular expressions."
+                                    },
+                                    "match": {
+                                      "type": "string",
+                                      "description": "The URI pattern to match against incoming requests."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
                           }
                         }
                       },

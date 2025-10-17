@@ -196,16 +196,59 @@
 {{/*
 SINGLE SOURCE OF TRUTH: Language-specific endpoint definitions
 Returns YAML array that can be converted to Go data structures with fromYamlArray
+Expects context with: .Values, .fullName, .application
 */}}
 {{- define "helm.lang.endpoint.list" -}}
-{{- if eq .Values.global.language "csharp" -}}
+{{- $disableDefaults := dig "networking" "istio" "disableDefaultEndpoints" false .application -}}
+{{- if and (eq .Values.global.language "csharp") (not $disableDefaults) -}}
 - kind: "exact"
   match: "/liveness"
 - kind: "exact"
   match: "/health"
+{{- if contains "api" (.fullName | lower) }}
 - kind: "prefix"
   match: "/api"
 {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Helper function to normalize paths for deduplication
+Removes all trailing wildcards and slashes
+*/}}
+{{- define "helm.normalizePath" -}}
+{{- . | trimSuffix "*" | trimSuffix "/" | trimSuffix "*" | trimSuffix "/" -}}
+{{- end -}}
+
+{{/*
+Helper function to process prefix paths for Istio VirtualService
+Converts wildcard patterns to Istio-compatible prefix paths by replacing * with /
+Generic algorithm handles all patterns consistently without hardcoded special cases
+*/}}
+{{- define "helm.processPrefixPath" -}}
+{{- $path := . -}}
+{{- /* Replace all * with / for Istio prefix matching */ -}}
+{{- $processed := $path | replace "*" "/" -}}
+{{- /* Remove duplicate slashes that may result from replacement */ -}}
+{{- $processed | replace "//" "/" -}}
+{{- end -}}
+
+{{/*
+Helper function to process endpoint names - replaces special characters for Kubernetes naming
+Replaces * with "wildcard", / with -, and removes leading/trailing dashes
+*/}}
+{{- define "helm.processEndpointName" -}}
+{{- $name := . -}}
+{{- $name = $name | replace "*" "wildcard" | replace "/" "-" | trimAll "-" -}}
+{{- $name -}}
+{{- end -}}
+
+{{/*
+Helper function to process regex endpoint names for Kubernetes naming conventions
+Replaces regex special characters with dashes and removes leading/trailing dashes
+*/}}
+{{- define "helm.processRegexEndpointName" -}}
+{{- . | regexReplaceAll "[/\\.\\?\\+\\*]" "-" | regexReplaceAll "[\\^$]" "" | trimAll "-" -}}
 {{- end -}}
 
 {{/*
@@ -217,92 +260,125 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- $mergedEndpoints := list -}}
 
 {{/* Add language-specific endpoints first using centralized template */}}
-{{- $langEndpointsYaml := include "helm.lang.endpoint.list" . -}}
-{{- if $langEndpointsYaml -}}
-{{- $langEndpoints := fromYamlArray $langEndpointsYaml -}}
-{{- $mergedEndpoints = concat $mergedEndpoints $langEndpoints -}}
-{{- end -}}
+{{- $contextWithFullName := dict "Values" $.Values "application" $.application "fullName" $fullName }}
+{{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim -}}
+{{- if ne $langEndpointsYaml "" }}
+  {{- $langEndpoints := fromYamlArray $langEndpointsYaml -}}
+  {{- $mergedEndpoints = concat $mergedEndpoints $langEndpoints -}}
+{{- end }}
 
 {{/* Add user-defined endpoints */}}
 {{- if and .application.networking .application.networking.istio.allowedEndpoints -}}
-{{- $mergedEndpoints = concat $mergedEndpoints .application.networking.istio.allowedEndpoints -}}
-{{- end -}}
+  {{- $mergedEndpoints = concat $mergedEndpoints .application.networking.istio.allowedEndpoints -}}
+{{- end }}
 
-{{/* Generate HTTP rules for each endpoint */}}
+{{/* Exit early if no endpoints to process */}}
+{{- if not $mergedEndpoints -}}
+{{- else -}}
+
+{{/* Deduplicate endpoints by kind+match */}}
+{{- $seen := dict -}}
+{{- $unique := list -}}
 {{- range $mergedEndpoints -}}
-{{- if typeIs "string" . }}
-{{/* Legacy format support - treat as exact match */}}
-- name: {{ $fullName }}-allowed-{{ . | replace "/" "-" | replace "*" "wildcard" | trimSuffix "-" }}
-  match:
-  - uri:
-      {{- if contains "*" . }}
-      prefix: {{ . | replace "*" "" }}
-      {{- else }}
-      exact: {{ . }}
-      {{- end }}
+  {{- if typeIs "string" . -}}
+    {{- if contains "*" . -}}
+      {{- $normalizedPath := include "helm.normalizePath" . -}}
+      {{- $key := printf "prefix:%s" $normalizedPath -}}
+      {{- if not (hasKey $seen $key) -}}
+        {{- $_ := set $seen $key true -}}
+        {{/* Store original match for proper rendering, but track normalized key */}}
+        {{- $unique = append $unique (dict "kind" "prefix" "match" . "normalized" $normalizedPath) -}}
+      {{- end -}}
+    {{- else -}}
+      {{- $key := printf "exact:%s" . -}}
+      {{- if not (hasKey $seen $key) -}}
+        {{- $_ := set $seen $key true -}}
+        {{- $unique = append $unique (dict "kind" "exact" "match" .) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- else -}}
+    {{/* For dict endpoints, normalize match field for comparison */}}
+    {{- $normalizedMatch := .match -}}
+    {{- if eq .kind "prefix" -}}
+      {{- $normalizedMatch = include "helm.normalizePath" .match -}}
+    {{- end -}}
+    {{- $key := printf "%s:%s" .kind $normalizedMatch -}}
+    {{- if not (hasKey $seen $key) -}}
+      {{- $_ := set $seen $key true -}}
+      {{/* Store original match but track normalized */}}
+      {{- if eq .kind "prefix" -}}
+        {{- $unique = append $unique (dict "kind" .kind "match" .match "normalized" $normalizedMatch) -}}
+      {{- else -}}
+        {{- $unique = append $unique . -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end }}
+
+{{/* render HTTP rules */}}
+{{- range $unique }}
+{{- if eq .kind "prefix" }}
+{{/* Use original match for name generation to preserve wildcards */}}
+{{- $endpointName := include "helm.processEndpointName" .match -}}
+{{/* Use double dash for wildcard patterns, single dash for simple prefixes */}}
+{{- if contains "*" .match }}
+- name: {{ $fullName }}-allowed--{{ $endpointName }}
 {{- else }}
-{{/* New format with kind and match fields */}}
-- name: {{ $fullName }}-allowed-{{ .match | replace "/" "-" | replace "*" "wildcard" | replace "(" "" | replace ")" "" | replace "|" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "^" "" | replace "$" "" | trimSuffix "-" }}
+- name: {{ $fullName }}-allowed-{{ $endpointName }}
+{{- end }}
   match:
-  - uri:
-      {{- if eq .kind "exact" }}
-      exact: {{ .match }}
-      {{- else if eq .kind "prefix" }}
-      prefix: {{ .match }}
-      {{- else if eq .kind "regex" }}
-      regex: {{ .match }}
-      {{- else }}
-      {{/* Default to exact if kind is not recognized */}}
-      exact: {{ .match }}
-      {{- end }}
+    - uri:
+        prefix: {{ include "helm.processPrefixPath" .match }}
+{{- else if eq .kind "exact" }}
+{{- $processedMatch := .match | replace "/" "-" | trimAll "-" }}
+{{- if $processedMatch }}
+- name: {{ $fullName }}-allowed--{{ $processedMatch }}
+{{- else }}
+- name: {{ $fullName }}-allowed-
+{{- end }}
+  match:
+    - uri:
+        exact: {{ .match }}
+{{- else if eq .kind "regex" }}
+{{- $processedMatch := include "helm.processRegexEndpointName" .match }}
+- name: {{ $fullName }}-allowed--{{ $processedMatch }}
+  match:
+    - uri:
+        regex: {{ .match }}
 {{- end }}
   route:
-  {{- if and $.application.service $.application.service.ports }}
-  {{- range $.application.service.ports }}
-  - destination:
-      host: {{ $fullName }}
-      port:
-        number: {{ .port }}
-    weight: 100
-  {{- if (eq $.application.deploymentType "rollout")  }}
-  - destination:
-      host: {{ $fullName }}-preview
-      port:
-        number: {{ .port }}
-    weight: 0
-  {{- end }}
-  {{- end }}
-  {{- else }}
-  - destination:
-      host: {{ $fullName }}
-      port:
-        number: {{ default 8080 (dig "ports" "http" nil $.application) }}
-    weight: 100
-  {{- if (eq $.application.deploymentType "rollout")  }}
-  - destination:
-      host: {{ $fullName }}-preview
-      port:
-        number: {{ default 8080 (dig "ports" "http" nil $.application) }}
-    weight: 0
-  {{- end }}
-  {{- end }}
-  {{- if $.application.networking }}
-  {{- if $.application.networking.istio.enabled }}
-  headers:
-    {{- if $.application.networking }}
-    {{- if and $.application.networking.istio.responseHeaders }}
-    {{- with $.application.networking.istio.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
+    {{- if and $.application.service $.application.service.ports }}
+    {{- range $.application.service.ports }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ .port }}
+      weight: 100
+    {{- if eq $.application.deploymentType "rollout" }}
+    - destination:
+        host: {{ $fullName }}-preview
+        port:
+          number: {{ .port }}
+      weight: 0
+    {{- end }}
     {{- end }}
     {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ default 8080 (dig "ports" "http" nil $.application) }}
+      weight: 100
+    {{- if eq $.application.deploymentType "rollout" }}
+    - destination:
+        host: {{ $fullName }}-preview
+        port:
+          number: {{ default 8080 (dig "ports" "http" nil $.application) }}
+      weight: 0
     {{- end }}
     {{- end }}
   {{- with $.application.networking.istio.corsPolicy }}
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
-  {{- end }}
-  {{- end }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ default "151s" (dig "service" "timeout" "151s" $.application) }}
@@ -311,4 +387,21 @@ This template generates the complete HTTP rules as strings to avoid duplication
     attempts: {{ default 3 (dig "service" "attempts" 3 $.application) }}
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
 {{- end }}
+
+- name: {{ $fullName }}-forbidden
+  route:
+    - destination:
+        host: {{ $fullName }}
+        port:
+          number: {{ default 8080 (dig "ports" "http" nil $.application) }}      
+  fault:
+    delay:
+      fixedDelay: 29s
+      percentage:
+        value: 100
+    abort:
+      httpStatus: 403
+      percentage:
+        value: 100
+{{- end -}}
 {{- end -}}

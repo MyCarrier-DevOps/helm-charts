@@ -45,10 +45,10 @@ http:
       port:
         number: 80
   headers:
-    {{- if and $.application.networking.istio.responseHeaders }}
-    {{- with $.application.networking.istio.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
-    {{- end }}
+    {{- if and $.application.networking.istio.responseHeaders -}}
+    {{- with $.application.networking.istio.responseHeaders -}}
+    {{ toYaml . | indent 4 | trim -}}
+    {{- end -}}
     {{- else }}
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
     {{- end }}
@@ -65,25 +65,24 @@ http:
 {{- end }}
 {{- end }}
 
-{{- if and (not (contains "dev" $.Values.environment.name))  .application.networking .application.networking.istio .application.networking.istio.allowedEndpoints }}
+
+{{/* 
+  Determine if we should use allowedEndpoints logic:
+  1. Check if istio is enabled
+  2. Check if there are language-specific default endpoints (e.g., C# has /liveness, /health, /api)
+  3. Check if user has defined custom allowedEndpoints
+*/}}
+{{- $contextWithFullName := dict "Values" .Values "application" .application "fullName" $fullName }}
+{{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim }}
+{{- $hasLangEndpoints := ne $langEndpointsYaml "" }}
+{{- $istioConfig := dig "networking" "istio" dict .application }}
+{{- $hasUserEndpoints := and $istioConfig (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
+{{- $istioEnabled := and .application.networking .application.networking.istio .application.networking.istio.enabled }}
+{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) }}
+
+{{- if $hasAllowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
-- name: {{ $fullName }}-forbidden
-  route:
-    - destination:
-        host: {{ $fullName }}
-        port:
-          number: {{ default 8080 (dig "ports" "http" nil .application) }}      
-  fault:
-    delay:
-      fixedDelay: 29s
-      percentage:
-        value: 100
-    abort:
-      httpStatus: 403
-      percentage:
-        value: 100
-
 {{- else }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   route:
