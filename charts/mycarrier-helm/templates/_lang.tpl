@@ -213,6 +213,14 @@ Expects context with: .Values, .fullName, .application
 {{- end -}}
 
 {{/*
+Helper function to normalize paths for deduplication
+Removes all trailing wildcards and slashes
+*/}}
+{{- define "helm.normalizePath" -}}
+{{- . | trimSuffix "*" | trimSuffix "/" | trimSuffix "*" | trimSuffix "/" -}}
+{{- end -}}
+
+{{/*
 Helper function to process prefix paths for Istio VirtualService
 Converts wildcard patterns to Istio-compatible prefix paths by replacing * with /
 Generic algorithm handles all patterns consistently without hardcoded special cases
@@ -233,6 +241,14 @@ Replaces * with "wildcard", / with -, and removes leading/trailing dashes
 {{- $name := . -}}
 {{- $name = $name | replace "*" "wildcard" | replace "/" "-" | trimAll "-" -}}
 {{- $name -}}
+{{- end -}}
+
+{{/*
+Helper function to process regex endpoint names for Kubernetes naming conventions
+Replaces regex special characters with dashes and removes leading/trailing dashes
+*/}}
+{{- define "helm.processRegexEndpointName" -}}
+{{- . | regexReplaceAll "[/\\.\\?\\+\\*]" "-" | regexReplaceAll "[\\^$]" "" | trimAll "-" -}}
 {{- end -}}
 
 {{/*
@@ -266,8 +282,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- range $mergedEndpoints -}}
   {{- if typeIs "string" . -}}
     {{- if contains "*" . -}}
-      {{/* Normalize path by removing all trailing wildcards and slashes for deduplication key */}}
-      {{- $normalizedPath := . | trimSuffix "*" | trimSuffix "/" | trimSuffix "*" | trimSuffix "/" -}}
+      {{- $normalizedPath := include "helm.normalizePath" . -}}
       {{- $key := printf "prefix:%s" $normalizedPath -}}
       {{- if not (hasKey $seen $key) -}}
         {{- $_ := set $seen $key true -}}
@@ -285,8 +300,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
     {{/* For dict endpoints, normalize match field for comparison */}}
     {{- $normalizedMatch := .match -}}
     {{- if eq .kind "prefix" -}}
-      {{/* Remove all trailing wildcards and slashes for consistent deduplication */}}
-      {{- $normalizedMatch = .match | trimSuffix "*" | trimSuffix "/" | trimSuffix "*" | trimSuffix "/" -}}
+      {{- $normalizedMatch = include "helm.normalizePath" .match -}}
     {{- end -}}
     {{- $key := printf "%s:%s" .kind $normalizedMatch -}}
     {{- if not (hasKey $seen $key) -}}
@@ -326,7 +340,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
     - uri:
         exact: {{ .match }}
 {{- else if eq .kind "regex" }}
-{{- $processedMatch := .match | replace "/" "-" | replace "." "-" | replace "?" "-" | replace "+" "-" | replace "*" "-" | replace "^" "" | replace "$" "" | trimAll "-" }}
+{{- $processedMatch := include "helm.processRegexEndpointName" .match }}
 - name: {{ $fullName }}-allowed--{{ $processedMatch }}
   match:
     - uri:

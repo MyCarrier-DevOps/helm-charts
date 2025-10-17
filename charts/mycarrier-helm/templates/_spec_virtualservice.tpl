@@ -75,7 +75,8 @@ http:
 {{- $contextWithFullName := dict "Values" .Values "application" .application "fullName" $fullName }}
 {{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim }}
 {{- $hasLangEndpoints := ne $langEndpointsYaml "" }}
-{{- $hasUserEndpoints := and .application.networking .application.networking.istio (hasKey .application.networking.istio "allowedEndpoints") .application.networking.istio.allowedEndpoints }}
+{{- $istioConfig := dig "networking" "istio" dict .application }}
+{{- $hasUserEndpoints := and $istioConfig (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
 {{- $istioEnabled := and .application.networking .application.networking.istio .application.networking.istio.enabled }}
 {{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) }}
 
