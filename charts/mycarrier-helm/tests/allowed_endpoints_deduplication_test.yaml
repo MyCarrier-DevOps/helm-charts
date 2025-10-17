@@ -52,7 +52,7 @@ tests:
       # Language-specific /api prefix (from csharp defaults)
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -103,7 +103,7 @@ tests:
       # /api from language defaults (prefix)
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -162,7 +162,7 @@ tests:
       # Prefix match /api (should NOT be deduplicated)
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       - equal:
           path: spec.http[2].match[0].uri.prefix
           value: "/api"
@@ -265,7 +265,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       # Custom endpoint should be added
       - equal:
           path: spec.http[4].name
@@ -418,7 +418,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       # User endpoints added after (in order, but deduplicated)
       - equal:
           path: spec.http[4].name
@@ -466,7 +466,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       # Forbidden rule
       - equal:
           path: spec.http[4].name

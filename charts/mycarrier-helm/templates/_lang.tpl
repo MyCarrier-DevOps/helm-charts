@@ -226,25 +226,13 @@ Generic algorithm handles all patterns consistently without hardcoded special ca
 {{- end -}}
 
 {{/*
-Helper function to process endpoint names with proper wildcard handling
+Helper function to process endpoint names - replaces special characters for Kubernetes naming
+Replaces * with "wildcard", / with -, and removes leading/trailing dashes
 */}}
 {{- define "helm.processEndpointName" -}}
 {{- $name := . -}}
-{{- /* Handle special cases first */ -}}
-{{- if eq $name "/v*/health" -}}
-vwildcard-health
-{{- else if eq $name "/api/*/users/*" -}}
-api-wildcard-users-wildcard
-{{- else if eq $name "/*" -}}
-wildcard
-{{- else if hasSuffix "*" $name -}}
-{{- $name = trimSuffix "*" $name -}}
-{{- $name = $name | replace "/" "-" | trimAll "-" -}}
-{{- printf "%s-wildcard" $name -}}
-{{- else -}}
 {{- $name = $name | replace "*" "wildcard" | replace "/" "-" | trimAll "-" -}}
 {{- $name -}}
-{{- end -}}
 {{- end -}}
 
 {{/*
@@ -318,8 +306,8 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- if eq .kind "prefix" }}
 {{/* Use original match for name generation to preserve wildcards */}}
 {{- $endpointName := include "helm.processEndpointName" .match -}}
-{{/* Use double dash for wildcard patterns or /api prefix, single dash for other simple prefixes */}}
-{{- if or (contains "*" .match) (eq .match "/api") }}
+{{/* Use double dash for wildcard patterns, single dash for simple prefixes */}}
+{{- if contains "*" .match }}
 - name: {{ $fullName }}-allowed--{{ $endpointName }}
 {{- else }}
 - name: {{ $fullName }}-allowed-{{ $endpointName }}
