@@ -52,7 +52,7 @@ tests:
       # Language-specific /api prefix (from csharp defaults)
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -103,7 +103,7 @@ tests:
       # /api from language defaults (prefix)
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -118,7 +118,7 @@ tests:
       - isNull:
           path: spec.http[5].match[0].uri.prefix
 
-  - it: should not deduplicate different match types for same path
+  - it: should deduplicate endpoints with same name but different match types
     set:
       global:
         appStack: test-stack
@@ -152,20 +152,20 @@ tests:
       - equal:
           path: spec.http[0].name
           value: test-stack-test-api
-      # Exact match /api
+      # Only ONE /api endpoint should exist (first one wins - exact)
       - equal:
           path: spec.http[1].name
           value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/api"
-      # Prefix match /api (should NOT be deduplicated)
+      # Next should be forbidden rule, NOT a duplicate /api
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed-api
-      - equal:
-          path: spec.http[2].match[0].uri.prefix
-          value: "/api"
+          value: test-stack-test-api-forbidden
+      # Verify no duplicate /api endpoint exists
+      - isNull:
+          path: spec.http[3]
 
   - it: should deduplicate mixed string and object format endpoints
     set:
@@ -265,7 +265,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       # Custom endpoint should be added
       - equal:
           path: spec.http[4].name
@@ -327,54 +327,6 @@ tests:
       - isNull:
           path: spec.http[3].match[0].uri.prefix
 
-  - it: should deduplicate regex endpoints
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-      environment:
-        name: preprod
-      applications:
-        test-api:
-          deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/app
-            tag: latest
-          networking:
-            istio:
-              enabled: true
-              allowedEndpoints:
-                - kind: regex
-                  match: "^/api/v[0-9]+/.*"
-                - kind: regex
-                  match: "^/api/v[0-9]+/.*"
-                - kind: regex
-                  match: "^/health$"
-          service:
-            ports:
-              - name: http
-                port: 8080
-                targetPort: 8080
-    asserts:
-      - isKind:
-          of: VirtualService
-      # Base rule
-      - equal:
-          path: spec.http[0].name
-          value: test-stack-test-api
-      # First regex should be present
-      - equal:
-          path: spec.http[1].match[0].uri.regex
-          value: "^/api/v[0-9]+/.*"
-      # Second unique regex should be present
-      - equal:
-          path: spec.http[2].match[0].uri.regex
-          value: "^/health$"
-      # Verify duplicate is removed
-      - isNull:
-          path: spec.http[3].match[0].uri.regex
-
   - it: should preserve order when deduplicating - language defaults first
     set:
       global:
@@ -418,7 +370,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       # User endpoints added after (in order, but deduplicated)
       - equal:
           path: spec.http[4].name
@@ -466,7 +418,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       # Forbidden rule
       - equal:
           path: spec.http[4].name

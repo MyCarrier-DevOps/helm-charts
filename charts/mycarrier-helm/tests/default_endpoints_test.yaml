@@ -41,7 +41,7 @@ tests:
           value: "/health"
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -92,7 +92,7 @@ tests:
           value: "/health"
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -146,7 +146,7 @@ tests:
           value: "/health"
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -256,7 +256,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       - equal:
           path: spec.http[4].name
           value: test-stack-test-api-allowed--metrics
@@ -422,7 +422,7 @@ tests:
           value: test-stack-test-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed-api
+          value: test-stack-test-api-allowed--api
       # User-defined dict format endpoints
       - equal:
           path: spec.http[4].name
@@ -432,7 +432,7 @@ tests:
           value: "/custom"
       - equal:
           path: spec.http[5].name
-          value: test-stack-test-api-allowed-admin
+          value: test-stack-test-api-allowed--admin
       - equal:
           path: spec.http[5].match[0].uri.prefix
           value: "/admin"
@@ -528,7 +528,7 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[3].name
-          value: test-stack-my-api-allowed-api
+          value: test-stack-my-api-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -603,7 +603,7 @@ tests:
           value: test-stack-my-api-allowed--health
       - equal:
           path: spec.http[3].name
-          value: test-stack-my-api-allowed-api
+          value: test-stack-my-api-allowed--api
       - equal:
           path: spec.http[4].name
           value: test-stack-my-api-allowed--fakeendpoint
@@ -712,7 +712,7 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[3].name
-          value: test-api-stack-myservice-allowed-api
+          value: test-api-stack-myservice-allowed--api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"

@@ -83,7 +83,7 @@ tests:
       # Root path should be exact match
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed-
+          value: test-stack-test-app-allowed--
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/"

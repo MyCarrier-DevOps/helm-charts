@@ -252,6 +252,50 @@ Replaces regex special characters with dashes and removes leading/trailing dashe
 {{- end -}}
 
 {{/*
+Centralized endpoint name generation for all kinds
+*/}}
+{{- define "helm.renderEndpointName" -}}
+{{- if eq .kind "regex" -}}
+  {{- include "helm.processRegexEndpointName" .match -}}
+{{- else if eq .kind "prefix" -}}
+  {{- include "helm.processEndpointName" .match -}}
+{{- else -}}
+  {{- $processedMatch := .match | replace "/" "-" | trimAll "-" -}}
+  {{- if $processedMatch -}}
+    {{- $processedMatch -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Centralized match rendering for all kinds
+*/}}
+{{- define "helm.renderEndpointMatch" -}}
+{{- if eq .kind "regex" -}}
+- uri:
+    regex: {{ .match | quote }}
+{{- else if eq .kind "prefix" -}}
+- uri:
+    prefix: {{ include "helm.processPrefixPath" .match | quote }}
+{{- else -}}
+- uri:
+    exact: {{ .match | quote }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Centralized HTTP rule name and match rendering for all endpoint kinds
+*/}}
+{{- define "helm.renderEndpointRule" -}}
+{{- $endpointName := include "helm.renderEndpointName" . -}}
+{{- $ruleType := .ruleType -}}
+{{- $fullName := .fullName }}
+- name: {{ $fullName }}-{{ $ruleType }}--{{ $endpointName }}
+  match:
+{{ include "helm.renderEndpointMatch" . | indent 2 }}
+{{- end }}
+
+{{/*
 Helper template to generate VirtualService HTTP rules for language-specific and user-defined endpoints
 This template generates the complete HTTP rules as strings to avoid duplication
 */}}
@@ -276,76 +320,64 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- if not $mergedEndpoints -}}
 {{- else -}}
 
-{{/* Deduplicate endpoints by kind+match */}}
-{{- $seen := dict -}}
+{{/* Deduplicate endpoints by kind+normalizedPath AND check for name conflicts */}}
+{{- $seenPaths := dict -}}
+{{- $seenNames := dict -}}
 {{- $unique := list -}}
 {{- range $mergedEndpoints -}}
+  {{- $endpointName := "" -}}
+  {{- $kind := "" -}}
+  {{- $match := "" -}}
+  {{- $normalizedPath := "" -}}
+  
   {{- if typeIs "string" . -}}
+    {{- $match = . -}}
     {{- if contains "*" . -}}
-      {{- $normalizedPath := include "helm.normalizePath" . -}}
-      {{- $key := printf "prefix:%s" $normalizedPath -}}
-      {{- if not (hasKey $seen $key) -}}
-        {{- $_ := set $seen $key true -}}
-        {{/* Store original match for proper rendering, but track normalized key */}}
-        {{- $unique = append $unique (dict "kind" "prefix" "match" . "normalized" $normalizedPath) -}}
-      {{- end -}}
+      {{- $kind = "prefix" -}}
+      {{- $endpointName = include "helm.processEndpointName" . -}}
+      {{- $normalizedPath = include "helm.normalizePath" . -}}
     {{- else -}}
-      {{- $key := printf "exact:%s" . -}}
-      {{- if not (hasKey $seen $key) -}}
-        {{- $_ := set $seen $key true -}}
-        {{- $unique = append $unique (dict "kind" "exact" "match" .) -}}
-      {{- end -}}
+      {{- $kind = "exact" -}}
+      {{- $processedMatch := . | replace "/" "-" | trimAll "-" -}}
+      {{- $endpointName = $processedMatch -}}
+      {{- $normalizedPath = . -}}
     {{- end -}}
   {{- else -}}
-    {{/* For dict endpoints, normalize match field for comparison */}}
-    {{- $normalizedMatch := .match -}}
+    {{- $kind = .kind -}}
+    {{- $match = .match -}}
     {{- if eq .kind "prefix" -}}
-      {{- $normalizedMatch = include "helm.normalizePath" .match -}}
+      {{- $endpointName = include "helm.processEndpointName" .match -}}
+      {{- $normalizedPath = include "helm.normalizePath" .match -}}
+    {{- else if eq .kind "exact" -}}
+      {{- $processedMatch := .match | replace "/" "-" | trimAll "-" -}}
+      {{- $endpointName = $processedMatch -}}
+      {{- $normalizedPath = .match -}}
+    {{- else if eq .kind "regex" -}}
+      {{- $endpointName = include "helm.processRegexEndpointName" .match -}}
+      {{- $normalizedPath = .match -}}
     {{- end -}}
-    {{- $key := printf "%s:%s" .kind $normalizedMatch -}}
-    {{- if not (hasKey $seen $key) -}}
-      {{- $_ := set $seen $key true -}}
-      {{/* Store original match but track normalized */}}
-      {{- if eq .kind "prefix" -}}
-        {{- $unique = append $unique (dict "kind" .kind "match" .match "normalized" $normalizedMatch) -}}
+  {{- end -}}
+  
+  {{/* Use kind:normalizedPath as primary deduplication key */}}
+  {{- $pathKey := printf "%s:%s" $kind $normalizedPath -}}
+  {{- if not (hasKey $seenPaths $pathKey) -}}
+    {{/* Also check if endpoint name already exists (name conflict detection) */}}
+    {{- if not (hasKey $seenNames $endpointName) -}}
+      {{- $_ := set $seenPaths $pathKey true -}}
+      {{- $_ := set $seenNames $endpointName true -}}
+      {{- if eq $kind "prefix" -}}
+        {{- $unique = append $unique (dict "kind" "prefix" "match" $match "normalized" $normalizedPath) -}}
       {{- else -}}
-        {{- $unique = append $unique . -}}
+        {{- $unique = append $unique (dict "kind" $kind "match" $match) -}}
       {{- end -}}
     {{- end -}}
   {{- end -}}
-{{- end }}
+{{- end -}}
 
-{{/* render HTTP rules */}}
+{{/* render HTTP rules using centralized helper */}}
 {{- range $unique }}
-{{- if eq .kind "prefix" }}
-{{/* Use original match for name generation to preserve wildcards */}}
-{{- $endpointName := include "helm.processEndpointName" .match -}}
-{{/* Use double dash for wildcard patterns, single dash for simple prefixes */}}
-{{- if contains "*" .match }}
-- name: {{ $fullName }}-allowed--{{ $endpointName }}
-{{- else }}
-- name: {{ $fullName }}-allowed-{{ $endpointName }}
-{{- end }}
-  match:
-    - uri:
-        prefix: {{ include "helm.processPrefixPath" .match }}
-{{- else if eq .kind "exact" }}
-{{- $processedMatch := .match | replace "/" "-" | trimAll "-" }}
-{{- if $processedMatch }}
-- name: {{ $fullName }}-allowed--{{ $processedMatch }}
-{{- else }}
-- name: {{ $fullName }}-allowed-
-{{- end }}
-  match:
-    - uri:
-        exact: {{ .match }}
-{{- else if eq .kind "regex" }}
-{{- $processedMatch := include "helm.processRegexEndpointName" .match }}
-- name: {{ $fullName }}-allowed--{{ $processedMatch }}
-  match:
-    - uri:
-        regex: {{ .match }}
-{{- end }}
+{{- $ruleContext := dict "kind" .kind "match" .match "ruleType" "allowed" "fullName" $fullName }}
+{{ include "helm.renderEndpointRule" $ruleContext }}
   route:
     {{- if and $.application.service $.application.service.ports }}
     {{- range $.application.service.ports }}
@@ -387,6 +419,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
     attempts: {{ default 3 (dig "service" "attempts" 3 $.application) }}
     perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
 {{- end }}
+
 
 - name: {{ $fullName }}-forbidden
   route:
