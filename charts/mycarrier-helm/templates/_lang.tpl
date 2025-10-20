@@ -193,8 +193,7 @@
 {{- end }}
 {{- end -}}
 
-{{/*
-SINGLE SOURCE OF TRUTH: Language-specific endpoint definitions
+{{/* Language-specific endpoint definitions
 Returns YAML array that can be converted to Go data structures with fromYamlArray
 Expects context with: .Values, .fullName, .application
 */}}
@@ -252,6 +251,14 @@ Replaces regex special characters with dashes and removes leading/trailing dashe
 {{- end -}}
 
 {{/*
+Helper function to process exact endpoint names for Kubernetes naming conventions
+Replaces / with - and removes leading/trailing dashes
+*/}}
+{{- define "helm.processExactEndpointName" -}}
+{{- . | replace "/" "-" | trimAll "-" -}}
+{{- end -}}
+
+{{/*
 Centralized endpoint name generation for all kinds
 */}}
 {{- define "helm.renderEndpointName" -}}
@@ -260,10 +267,7 @@ Centralized endpoint name generation for all kinds
 {{- else if eq .kind "prefix" -}}
   {{- include "helm.processEndpointName" .match -}}
 {{- else -}}
-  {{- $processedMatch := .match | replace "/" "-" | trimAll "-" -}}
-  {{- if $processedMatch -}}
-    {{- $processedMatch -}}
-  {{- end -}}
+  {{- include "helm.processExactEndpointName" .match -}}
 {{- end -}}
 {{- end -}}
 
@@ -325,40 +329,38 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- $seenNames := dict -}}
 {{- $unique := list -}}
 {{- range $mergedEndpoints -}}
-  {{- $endpointName := "" -}}
-  {{- $kind := "" -}}
-  {{- $match := "" -}}
-  {{- $normalizedPath := "" -}}
-  
+  {{/* Normalize input - convert all endpoints to unified object format */}}
+  {{- $endpoint := dict -}}
   {{- if typeIs "string" . -}}
-    {{- $match = . -}}
+    {{/* Convert string to object based on presence of wildcard */}}
     {{- if contains "*" . -}}
-      {{- $kind = "prefix" -}}
-      {{- $endpointName = include "helm.processEndpointName" . -}}
-      {{- $normalizedPath = include "helm.normalizePath" . -}}
+      {{- $endpoint = dict "kind" "prefix" "match" . -}}
     {{- else -}}
-      {{- $kind = "exact" -}}
-      {{- $processedMatch := . | replace "/" "-" | trimAll "-" -}}
-      {{- $endpointName = $processedMatch -}}
-      {{- $normalizedPath = . -}}
+      {{- $endpoint = dict "kind" "exact" "match" . -}}
     {{- end -}}
   {{- else -}}
-    {{- $kind = .kind -}}
-    {{- $match = .match -}}
-    {{- if eq .kind "prefix" -}}
-      {{- $endpointName = include "helm.processEndpointName" .match -}}
-      {{- $normalizedPath = include "helm.normalizePath" .match -}}
-    {{- else if eq .kind "exact" -}}
-      {{- $processedMatch := .match | replace "/" "-" | trimAll "-" -}}
-      {{- $endpointName = $processedMatch -}}
-      {{- $normalizedPath = .match -}}
-    {{- else if eq .kind "regex" -}}
-      {{- $endpointName = include "helm.processRegexEndpointName" .match -}}
-      {{- $normalizedPath = .match -}}
-    {{- end -}}
+    {{/* Already an object, use as-is */}}
+    {{- $endpoint = . -}}
   {{- end -}}
   
-  {{/* Use kind:normalizedPath as primary deduplication key */}}
+  {{/* Process normalized endpoint - single path for all types */}}
+  {{- $kind := $endpoint.kind -}}
+  {{- $match := $endpoint.match -}}
+  {{- $endpointName := "" -}}
+  {{- $normalizedPath := "" -}}
+  
+  {{- if eq $kind "prefix" -}}
+    {{- $endpointName = include "helm.processEndpointName" $match -}}
+    {{- $normalizedPath = include "helm.normalizePath" $match -}}
+  {{- else if eq $kind "exact" -}}
+    {{- $endpointName = include "helm.processExactEndpointName" $match -}}
+    {{- $normalizedPath = $match -}}
+  {{- else if eq $kind "regex" -}}
+    {{- $endpointName = include "helm.processRegexEndpointName" $match -}}
+    {{- $normalizedPath = $match -}}
+  {{- end -}}
+  
+  {{/* Deduplication using kind:normalizedPath and name conflict detection */}}
   {{- $pathKey := printf "%s:%s" $kind $normalizedPath -}}
   {{- if not (hasKey $seenPaths $pathKey) -}}
     {{/* Also check if endpoint name already exists (name conflict detection) */}}
