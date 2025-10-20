@@ -66,21 +66,21 @@ tests:
       # Default /liveness endpoint
       - equal:
           path: spec.http[1].name
-          value: test-stack-api-app-allowed--liveness
+          value: test-stack-api-app-allowed-liveness
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/liveness"
       # Default /health endpoint
       - equal:
           path: spec.http[2].name
-          value: test-stack-api-app-allowed--health
+          value: test-stack-api-app-allowed-health
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/health"
       # Default /api prefix endpoint
       - equal:
           path: spec.http[3].name
-          value: test-stack-api-app-allowed--api
+          value: test-stack-api-app-allowed-api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"

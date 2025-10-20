@@ -37,13 +37,13 @@ tests:
       # Only the first wildcard is processed for prefix matching
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-wildcard-users-wildcard
+          value: test-stack-test-app-allowed-api-wildcard-users-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/api//users/"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--vwildcard-health
+          value: test-stack-test-app-allowed-vwildcard-health
       - equal:
           path: spec.http[2].match[0].uri.prefix
           value: "/v/health"
@@ -83,13 +83,13 @@ tests:
       # Root path should be exact match
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--
+          value: test-stack-test-app-allowed-
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--health
+          value: test-stack-test-app-allowed-health
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/health"
@@ -132,7 +132,7 @@ tests:
       # Wildcard at root should match everything, note the double dash
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--wildcard
+          value: test-stack-test-app-allowed-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/"
@@ -174,7 +174,7 @@ tests:
           value: test-stack-test-app
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-very-long-endpoint-path-that-might-cause-issues-with-naming-wildcard
+          value: test-stack-test-app-allowed-api-very-long-endpoint-path-that-might-cause-issues-with-naming-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/api/very/long/endpoint/path/that/might/cause/issues/with/naming/"
@@ -215,19 +215,19 @@ tests:
       # Dots are preserved in the naming
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-v1.0-users
+          value: test-stack-test-app-allowed-api-v1.0-users
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/api/v1.0/users"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--api-v2_beta-health
+          value: test-stack-test-app-allowed-api-v2_beta-health
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/api/v2_beta/health"
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-app-allowed--api-$special-endpoint
+          value: test-stack-test-app-allowed-api-$special-endpoint
       - equal:
           path: spec.http[3].match[0].uri.exact
           value: "/api/$special/endpoint"

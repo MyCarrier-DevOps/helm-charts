@@ -32,13 +32,13 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-health
+          value: test-stack-test-app-allowed-api-health
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/api/health"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--api-status
+          value: test-stack-test-app-allowed-api-status
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/api/status"
@@ -82,13 +82,13 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-wildcard
+          value: test-stack-test-app-allowed-api-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/api/"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--health
+          value: test-stack-test-app-allowed-health
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/health"
@@ -131,25 +131,25 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-wildcard
+          value: test-stack-test-app-allowed-api-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/api/"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--health
+          value: test-stack-test-app-allowed-health
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/health"
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-app-allowed--metrics
+          value: test-stack-test-app-allowed-metrics
       - equal:
           path: spec.http[3].match[0].uri.exact
           value: "/metrics"
       - equal:
           path: spec.http[4].name
-          value: test-stack-test-app-allowed--admin-wildcard
+          value: test-stack-test-app-allowed-admin-wildcard
       - equal:
           path: spec.http[4].match[0].uri.prefix
           value: "/admin/"
@@ -189,7 +189,7 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-health
+          value: test-stack-test-app-allowed-api-health
       - equal:
           path: spec.http[1].route[0].destination.host
           value: test-stack-test-app
@@ -233,13 +233,13 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--api-v1-users-wildcard
+          value: test-stack-test-app-allowed-api-v1-users-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/api/v1/users/"
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app-allowed--health-check
+          value: test-stack-test-app-allowed-health-check
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/health-check"
@@ -270,7 +270,7 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--health
+          value: test-stack-test-app-allowed-health
       - equal:
           path: spec.http[1].route[0].destination.port.number
           value: 9090
@@ -299,7 +299,7 @@ tests:
           of: VirtualService
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app-allowed--health
+          value: test-stack-test-app-allowed-health
       - equal:
           path: spec.http[1].route[0].destination.port.number
           value: 8080

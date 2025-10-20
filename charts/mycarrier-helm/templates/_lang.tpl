@@ -294,7 +294,7 @@ Centralized HTTP rule name and match rendering for all endpoint kinds
 {{- $endpointName := include "helm.renderEndpointName" . -}}
 {{- $ruleType := .ruleType -}}
 {{- $fullName := .fullName }}
-- name: {{ $fullName }}-{{ $ruleType }}--{{ $endpointName }}
+- name: {{ $fullName }}-{{ $ruleType }}-{{ $endpointName }}
   match:
 {{ include "helm.renderEndpointMatch" . | indent 2 }}
 {{- end }}

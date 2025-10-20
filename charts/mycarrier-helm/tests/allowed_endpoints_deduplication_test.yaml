@@ -38,21 +38,21 @@ tests:
       # Language-specific /liveness (from csharp defaults)
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--liveness
+          value: test-stack-test-api-allowed-liveness
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/liveness"
       # Language-specific /health (from csharp defaults)
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--health
+          value: test-stack-test-api-allowed-health
       - equal:
           path: spec.http[2].match[0].uri.exact
           value: "/health"
       # Language-specific /api prefix (from csharp defaults)
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
@@ -96,21 +96,21 @@ tests:
       # Language-specific endpoints
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--liveness
+          value: test-stack-test-api-allowed-liveness
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--health
+          value: test-stack-test-api-allowed-health
       # /api from language defaults (prefix)
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       - equal:
           path: spec.http[3].match[0].uri.prefix
           value: "/api"
       # User-defined /users/* should be added
       - equal:
           path: spec.http[4].name
-          value: test-stack-test-api-allowed--users-wildcard
+          value: test-stack-test-api-allowed-users-wildcard
       - equal:
           path: spec.http[4].match[0].uri.prefix
           value: "/users/"
@@ -155,7 +155,7 @@ tests:
       # Only ONE /api endpoint should exist (first one wins - exact)
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/api"
@@ -206,14 +206,14 @@ tests:
       # /health exact (deduplicated - only one instance)
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--health
+          value: test-stack-test-api-allowed-health
       - equal:
           path: spec.http[1].match[0].uri.exact
           value: "/health"
       # /api/* prefix (deduplicated - only one instance)
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--api-wildcard
+          value: test-stack-test-api-allowed-api-wildcard
       - equal:
           path: spec.http[2].match[0].uri.prefix
           value: "/api/"
@@ -259,17 +259,17 @@ tests:
       # Language defaults should come first and be deduplicated
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--liveness
+          value: test-stack-test-api-allowed-liveness
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--health
+          value: test-stack-test-api-allowed-health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       # Custom endpoint should be added
       - equal:
           path: spec.http[4].name
-          value: test-stack-test-api-allowed--custom
+          value: test-stack-test-api-allowed-custom
       - equal:
           path: spec.http[4].match[0].uri.exact
           value: "/custom"
@@ -312,14 +312,14 @@ tests:
       # Should only have one instance of /api/*/users/*
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--api-wildcard-users-wildcard
+          value: test-stack-test-api-allowed-api-wildcard-users-wildcard
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: "/api//users/"
       # /v*/health should be separate
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--vwildcard-health
+          value: test-stack-test-api-allowed-vwildcard-health
       - equal:
           path: spec.http[2].match[0].uri.prefix
           value: "/v/health"
@@ -364,20 +364,20 @@ tests:
       # Language defaults should appear first (even if user specifies them later)
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--liveness
+          value: test-stack-test-api-allowed-liveness
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--health
+          value: test-stack-test-api-allowed-health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       # User endpoints added after (in order, but deduplicated)
       - equal:
           path: spec.http[4].name
-          value: test-stack-test-api-allowed--custom1
+          value: test-stack-test-api-allowed-custom1
       - equal:
           path: spec.http[5].name
-          value: test-stack-test-api-allowed--custom2
+          value: test-stack-test-api-allowed-custom2
 
   - it: should handle empty user endpoints with language defaults
     set:
@@ -412,13 +412,13 @@ tests:
       # Only language defaults should be present
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api-allowed--liveness
+          value: test-stack-test-api-allowed-liveness
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-api-allowed--health
+          value: test-stack-test-api-allowed-health
       - equal:
           path: spec.http[3].name
-          value: test-stack-test-api-allowed--api
+          value: test-stack-test-api-allowed-api
       # Forbidden rule
       - equal:
           path: spec.http[4].name
