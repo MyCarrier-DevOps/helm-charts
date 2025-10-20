@@ -23,7 +23,7 @@ tests:
           value: app-test-app-api
       - equal:
           path: metadata.namespace
-          value: dev-app
+          value: dev
       - contains:
           path: spec.hosts
           content: app-test-app-api.dev.mycarrier.dev

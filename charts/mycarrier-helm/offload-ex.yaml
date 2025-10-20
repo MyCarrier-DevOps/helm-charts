@@ -1,0 +1,1192 @@
+- apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  metadata:
+    annotations:
+      notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+    finalizers:
+      - resources-finalizer.argocd.argoproj.io
+    name: curant-offload-feature20
+  spec:
+    destination:
+      namespace: dev-curant
+      server: https://kubernetes.default.svc
+    project: default
+    source:
+      chart: mycarrier-helm
+      helm:
+        values: |
+          applications:
+            api:
+              deploymentType: deployment
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/api
+                tag: 25.41.3e78ec3
+              networking:
+                istio:
+                  allowedEndpoints:
+                  - kind: exact
+                    match: /robots.txt
+                  - kind: exact
+                    match: /docs
+                  - kind: exact
+                    match: /graphql
+                  - kind: exact
+                    match: /liveness
+                  - kind: exact
+                    match: /health
+                  - kind: exact
+                    match: /sync/stripe
+                  - kind: regex
+                    match: /webhook/(dwolla|plaid|stripe|rutter|quickbooks|sendgrid|oatfi|clearent)
+              ports:
+                http: 10000
+              securityContext:
+                readOnlyRootFilesystem: false
+              staticHostname: dev.api
+              testtrigger:
+                activeDeadlineSeconds: "300"
+                apikey: vault:DevOps/data/testengine/api#encoded_header
+                backoffLimit: 0
+                testdefinitions:
+                - containerImage: testing/curant/tests
+                  containerTag: 25.41.3e78ec3
+                  filters:
+                  - TestCategory=coreapitest
+                  name: apitests
+                  secretId: vault:QA/data/app_auth#SecretId
+                - containerImage: testing/mc/payment/automatedtests/tests
+                  containerTag: 25.41.ae27a5d
+                  filters:
+                  - TestCategory=FeatureCoreAPI
+                  name: paymentapitests
+                  releaseDefinitionName: curant-payment-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://payment-api.dev.mycarrier.dev
+                - containerImage: testing/mc/invoice/automatedtests/tests
+                  containerTag: 25.40.32dba93
+                  filters:
+                  - TestCategory=FeatureCoreAPICurant
+                  name: invoiceapitests
+                  releaseDefinitionName: curant-invoice-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://invoice-api.dev.mycarrier.dev/
+                ttlSecondsAfterFinished: "3600"
+                webhook_url: vault:DevOps/data/testengine/api#url
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+            frontend:
+              deploymentType: deployment
+              forceOffload: true
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/frontend
+                tag: 25.41.3e78ec3
+              isFrontend: true
+              ports:
+                http: 10000
+              staticHostname: dev
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+          deployment: deployment
+          environment:
+            dependencyenv: dev
+            domainOverride:
+              domain: curant.io
+              enabled: true
+            name: feature20
+          global:
+            appStack: curant
+            dependencies:
+              azureservicebus: false
+              chargify: false
+              clickhouse: false
+              elasticsearch: false
+              loadsure: false
+              mongodb: false
+              postgres: false
+              redis: false
+              redpanda: false
+              sqlserver: false
+            env:
+              NEXT_PUBLIC_ENV:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.labels['mycarrier.tech/environment']
+            language: nodejs
+          jobs:
+          - activeDeadlineSeconds: 172800
+            backoffLimit: 3
+            env: {}
+            image:
+              registry: mycarrieracr.azurecr.io
+              repository: appstack/curant/migrations
+              tag: 25.41.3e78ec3
+            imagePullPolicy: IfNotPresent
+            name: migrations
+            order: 0
+            resources:
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+            restartPolicy: Never
+            timing: pre-deploy
+            ttlSecondsAfterFinished: 1800
+            volumes:
+            - kind: emptyDir
+              mountPath: /home/node/.cache
+              name: cache
+            - mountPath: /home/node/.yarn
+              name: yarn
+          secrets:
+            individual:
+            - envVarName: API_ENCRYPTION_KEY
+            - envVarName: API_URL
+            - envVarName: APOLLO_GRAPH_ID
+            - envVarName: APOLLO_GRAPH_VARIANT
+            - envVarName: APOLLO_KEY
+            - envVarName: APOLLO_SCHEMA_REPORTING
+            - envVarName: APP_URL
+            - envVarName: AWS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_BUCKET
+            - envVarName: AWS_S3_DB_SCHEMAS_REGION
+            - envVarName: AWS_S3_DB_SCHEMAS_SECRET_ACCESS_KEY
+            - envVarName: AWS_S3_DOCS_BUCKET
+            - envVarName: AWS_S3_PUBLIC_BUCKET
+            - envVarName: AWS_S3_REGION
+            - envVarName: AWS_SECRET_ACCESS_KEY
+            - envVarName: AZURE_STORAGE_ACCOUNT_NAME
+            - envVarName: AZURE_STORAGE_PRIVATE_CONTAINER
+            - envVarName: AZURE_STORAGE_PUBLIC_CONTAINER
+            - envVarName: CLEARENT_ACCESS_KEY
+            - envVarName: CLEARENT_HIERARCHY_NODE_KEY
+            - envVarName: CLEARENT_PUBLIC_KEY
+            - envVarName: CLEARENT_SECRET_KEY
+            - envVarName: CLEARENT_URL
+            - envVarName: DATABASE_READ_URL
+            - envVarName: DATABASE_SCHEMA
+            - envVarName: DATABASE_SSL
+            - envVarName: DATABASE_URL
+            - envVarName: DWOLLA_ENABLE_API_LOGS
+            - envVarName: DWOLLA_ENV
+            - envVarName: DWOLLA_KEY
+            - envVarName: DWOLLA_LIMIT
+            - envVarName: DWOLLA_SECRET
+            - envVarName: DWOLLA_WEBHOOK_SECRET
+            - envVarName: ENV
+            - envVarName: GOOGLE_CLOUD_CLIENT_EMAIL
+            - envVarName: GOOGLE_CLOUD_CLIENT_ID
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_LOCATION
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_BASE64
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_ID
+            - envVarName: GOOGLE_CLOUD_PROJECT_ID
+            - envVarName: INBOUND_EMAIL_DOMAIN
+            - envVarName: INTERNAL_API_KEY
+            - envVarName: MC_ENV
+            - envVarName: MC_USER_API_URL
+            - envVarName: MULTER_LIMIT_FIELD_SIZE
+            - envVarName: NEXT_PUBLIC_API_URL
+            - envVarName: NEXT_PUBLIC_APP_URL
+            - envVarName: NEXT_PUBLIC_DWOLLA_ENV
+            - envVarName: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+            - envVarName: NEXT_PUBLIC_OATFI_ENV
+            - envVarName: NEXT_PUBLIC_PLAID_ENV
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_REDIRECT_URI
+            - envVarName: NEXT_PUBLIC_RUTTER_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_SECURE_API_URL
+            - envVarName: NEXT_PUBLIC_STRIPE_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_STRIV_AUDIENCE
+            - envVarName: NEXT_PUBLIC_STRIV_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_STRIV_DOMAIN
+            - envVarName: NEXT_PUBLIC_VGS_VAULT_ID
+            - envVarName: NEXT_PUBLIC_VGS_VERSION
+            - envVarName: NODE_ENV
+            - envVarName: NODE_EXTRA_CA_CERTS
+            - envVarName: OATFI_API_KEY
+            - envVarName: OATFI_ENV
+            - envVarName: OPENAI_API_KEY
+            - envVarName: OPENAI_MAX_TOKENS
+            - envVarName: OPENAI_MODEL
+            - envVarName: OPENAI_ORGANIZATION
+            - envVarName: PLAID_CLIENT_ID
+            - envVarName: PLAID_COUNTRY_CODES
+            - envVarName: PLAID_ENV
+            - envVarName: PLAID_REDIRECT_URI
+            - envVarName: PLAID_SECRET
+            - envVarName: PORT
+            - envVarName: QUICKBOOKS_CLIENT_ID
+            - envVarName: QUICKBOOKS_CLIENT_SECRET
+            - envVarName: QUICKBOOKS_VERIFIER_TOKEN
+            - envVarName: REDIS_API_URL
+            - envVarName: REDIS_FE_URL
+            - envVarName: REPLY_TO_EMAIL
+            - envVarName: RUTTER_API_URL
+            - envVarName: RUTTER_CLIENT_ID
+            - envVarName: RUTTER_CLIENT_SECRET
+            - envVarName: RUTTER_SECRET
+            - envVarName: SECURE_API_URL
+            - envVarName: SECURE_KEY
+            - envVarName: SENDGRID_API_KEY
+            - envVarName: SENDGRID_DEV_EMAIL
+            - envVarName: SENDGRID_EVENT_WEBHOOK_PATH
+            - envVarName: SENDGRID_VERIFICATION_KEY
+            - envVarName: SENTRY_AUTH_TOKEN
+            - envVarName: SENTRY_DSN
+            - envVarName: SENTRY_ENV
+            - envVarName: SENTRY_PROFILER_LOGGING_MODE
+            - envVarName: SESSION_COOKIE_SECRET
+            - envVarName: STRIPE_API_KEY
+            - envVarName: STRIPE_WEBHOOK_SECRET
+            - envVarName: STRIV_API_CLIENT_ID
+            - envVarName: STRIV_API_CLIENT_SECRET
+            - envVarName: STRIV_APP_AUDIENCE
+            - envVarName: STRIV_APP_CLIENT_ID
+            - envVarName: STRIV_APP_CLIENT_SECRET
+            - envVarName: STRIV_DOMAIN
+            - envVarName: STRIV_IDENTITY_STORE_NAME
+            - envVarName: TZ
+            - envVarName: USE_GPT_INVOICE_PARSING
+            - envVarName: VGS_ENABLED
+            - envVarName: VGS_ENV
+            - envVarName: VGS_PASSWORD
+            - envVarName: VGS_USERNAME
+            - envVarName: VGS_VAULT_ID
+            - envVarName: WEBHOOK_API_KEY
+            - envVarName: WEBHOOK_URL
+            mounted:
+            - mount:
+                path: /usr/app/certs/
+              mountedFileName: postgres-ca.pem
+              name: postgres-ca
+              vault:
+                path: shared/ms-postgres-ssl
+                property: ca.pem
+      repoURL: https://charts.mycarrier.dev
+      targetRevision: 2.5.101
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true
+      retry:
+        backoff:
+          duration: 5s
+          factor: 2
+          maxDuration: 10m
+        limit: 5
+      syncOptions:
+        - ApplyOutOfSyncOnly=true
+        - Validate=true
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=false
+        - ServerSideApply=true
+        - Replace=true
+        - SkipDryRunOnMissingResource=true
+- apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  metadata:
+    annotations:
+      notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+    finalizers:
+      - resources-finalizer.argocd.argoproj.io
+    name: curant-offload-feature18
+  spec:
+    destination:
+      namespace: dev-curant
+      server: https://kubernetes.default.svc
+    project: default
+    source:
+      chart: mycarrier-helm
+      helm:
+        values: |
+          applications:
+            api:
+              deploymentType: deployment
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/api
+                tag: 25.42.7ce0990
+              networking:
+                istio:
+                  allowedEndpoints:
+                  - kind: exact
+                    match: /robots.txt
+                  - kind: exact
+                    match: /docs
+                  - kind: exact
+                    match: /graphql
+                  - kind: exact
+                    match: /liveness
+                  - kind: exact
+                    match: /health
+                  - kind: exact
+                    match: /sync/stripe
+                  - kind: regex
+                    match: /webhook/(dwolla|plaid|stripe|rutter|quickbooks|sendgrid|oatfi|clearent)
+              ports:
+                http: 10000
+              securityContext:
+                readOnlyRootFilesystem: false
+              staticHostname: dev.api
+              testtrigger:
+                activeDeadlineSeconds: "300"
+                apikey: vault:DevOps/data/testengine/api#encoded_header
+                backoffLimit: 0
+                testdefinitions:
+                - containerImage: testing/curant/tests
+                  containerTag: 25.42.7ce0990
+                  filters:
+                  - TestCategory=coreapitest
+                  name: apitests
+                  secretId: vault:QA/data/app_auth#SecretId
+                - containerImage: testing/mc/payment/automatedtests/tests
+                  containerTag: 25.41.ae27a5d
+                  filters:
+                  - TestCategory=FeatureCoreAPI
+                  name: paymentapitests
+                  releaseDefinitionName: curant-payment-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://payment-api.dev.mycarrier.dev
+                - containerImage: testing/mc/invoice/automatedtests/tests
+                  containerTag: 25.40.32dba93
+                  filters:
+                  - TestCategory=FeatureCoreAPICurant
+                  name: invoiceapitests
+                  releaseDefinitionName: curant-invoice-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://invoice-api.dev.mycarrier.dev/
+                ttlSecondsAfterFinished: "3600"
+                webhook_url: vault:DevOps/data/testengine/api#url
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+            frontend:
+              deploymentType: deployment
+              forceOffload: true
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/frontend
+                tag: 25.42.7ce0990
+              isFrontend: true
+              ports:
+                http: 10000
+              staticHostname: dev
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+          deployment: deployment
+          environment:
+            dependencyenv: dev
+            domainOverride:
+              domain: curant.io
+              enabled: true
+            name: feature18
+          global:
+            appStack: curant
+            dependencies:
+              azureservicebus: false
+              chargify: false
+              clickhouse: false
+              elasticsearch: false
+              loadsure: false
+              mongodb: false
+              postgres: false
+              redis: false
+              redpanda: false
+              sqlserver: false
+            env:
+              NEXT_PUBLIC_ENV:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.labels['mycarrier.tech/environment']
+            language: nodejs
+          jobs:
+          - activeDeadlineSeconds: 172800
+            backoffLimit: 3
+            env: {}
+            image:
+              registry: mycarrieracr.azurecr.io
+              repository: appstack/curant/migrations
+              tag: 25.42.7ce0990
+            imagePullPolicy: IfNotPresent
+            name: migrations
+            order: 0
+            resources:
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+            restartPolicy: Never
+            timing: pre-deploy
+            ttlSecondsAfterFinished: 1800
+            volumes:
+            - kind: emptyDir
+              mountPath: /home/node/.cache
+              name: cache
+            - mountPath: /home/node/.yarn
+              name: yarn
+          secrets:
+            individual:
+            - envVarName: API_ENCRYPTION_KEY
+            - envVarName: API_URL
+            - envVarName: APOLLO_GRAPH_ID
+            - envVarName: APOLLO_GRAPH_VARIANT
+            - envVarName: APOLLO_KEY
+            - envVarName: APOLLO_SCHEMA_REPORTING
+            - envVarName: APP_URL
+            - envVarName: AWS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_BUCKET
+            - envVarName: AWS_S3_DB_SCHEMAS_REGION
+            - envVarName: AWS_S3_DB_SCHEMAS_SECRET_ACCESS_KEY
+            - envVarName: AWS_S3_DOCS_BUCKET
+            - envVarName: AWS_S3_PUBLIC_BUCKET
+            - envVarName: AWS_S3_REGION
+            - envVarName: AWS_SECRET_ACCESS_KEY
+            - envVarName: AZURE_STORAGE_ACCOUNT_NAME
+            - envVarName: AZURE_STORAGE_PRIVATE_CONTAINER
+            - envVarName: AZURE_STORAGE_PUBLIC_CONTAINER
+            - envVarName: CLEARENT_ACCESS_KEY
+            - envVarName: CLEARENT_HIERARCHY_NODE_KEY
+            - envVarName: CLEARENT_PUBLIC_KEY
+            - envVarName: CLEARENT_SECRET_KEY
+            - envVarName: CLEARENT_URL
+            - envVarName: DATABASE_READ_URL
+            - envVarName: DATABASE_SCHEMA
+            - envVarName: DATABASE_SSL
+            - envVarName: DATABASE_URL
+            - envVarName: DWOLLA_ENABLE_API_LOGS
+            - envVarName: DWOLLA_ENV
+            - envVarName: DWOLLA_KEY
+            - envVarName: DWOLLA_LIMIT
+            - envVarName: DWOLLA_SECRET
+            - envVarName: DWOLLA_WEBHOOK_SECRET
+            - envVarName: ENV
+            - envVarName: GOOGLE_CLOUD_CLIENT_EMAIL
+            - envVarName: GOOGLE_CLOUD_CLIENT_ID
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_LOCATION
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_BASE64
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_ID
+            - envVarName: GOOGLE_CLOUD_PROJECT_ID
+            - envVarName: INBOUND_EMAIL_DOMAIN
+            - envVarName: INTERNAL_API_KEY
+            - envVarName: MC_ENV
+            - envVarName: MC_USER_API_URL
+            - envVarName: MULTER_LIMIT_FIELD_SIZE
+            - envVarName: NEXT_PUBLIC_API_URL
+            - envVarName: NEXT_PUBLIC_APP_URL
+            - envVarName: NEXT_PUBLIC_DWOLLA_ENV
+            - envVarName: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+            - envVarName: NEXT_PUBLIC_OATFI_ENV
+            - envVarName: NEXT_PUBLIC_PLAID_ENV
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_REDIRECT_URI
+            - envVarName: NEXT_PUBLIC_RUTTER_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_SECURE_API_URL
+            - envVarName: NEXT_PUBLIC_STRIPE_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_STRIV_AUDIENCE
+            - envVarName: NEXT_PUBLIC_STRIV_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_STRIV_DOMAIN
+            - envVarName: NEXT_PUBLIC_VGS_VAULT_ID
+            - envVarName: NEXT_PUBLIC_VGS_VERSION
+            - envVarName: NODE_ENV
+            - envVarName: NODE_EXTRA_CA_CERTS
+            - envVarName: OATFI_API_KEY
+            - envVarName: OATFI_ENV
+            - envVarName: OPENAI_API_KEY
+            - envVarName: OPENAI_MAX_TOKENS
+            - envVarName: OPENAI_MODEL
+            - envVarName: OPENAI_ORGANIZATION
+            - envVarName: PLAID_CLIENT_ID
+            - envVarName: PLAID_COUNTRY_CODES
+            - envVarName: PLAID_ENV
+            - envVarName: PLAID_REDIRECT_URI
+            - envVarName: PLAID_SECRET
+            - envVarName: PORT
+            - envVarName: QUICKBOOKS_CLIENT_ID
+            - envVarName: QUICKBOOKS_CLIENT_SECRET
+            - envVarName: QUICKBOOKS_VERIFIER_TOKEN
+            - envVarName: REDIS_API_URL
+            - envVarName: REDIS_FE_URL
+            - envVarName: REPLY_TO_EMAIL
+            - envVarName: RUTTER_API_URL
+            - envVarName: RUTTER_CLIENT_ID
+            - envVarName: RUTTER_CLIENT_SECRET
+            - envVarName: RUTTER_SECRET
+            - envVarName: SECURE_API_URL
+            - envVarName: SECURE_KEY
+            - envVarName: SENDGRID_API_KEY
+            - envVarName: SENDGRID_DEV_EMAIL
+            - envVarName: SENDGRID_EVENT_WEBHOOK_PATH
+            - envVarName: SENDGRID_VERIFICATION_KEY
+            - envVarName: SENTRY_AUTH_TOKEN
+            - envVarName: SENTRY_DSN
+            - envVarName: SENTRY_ENV
+            - envVarName: SENTRY_PROFILER_LOGGING_MODE
+            - envVarName: SESSION_COOKIE_SECRET
+            - envVarName: STRIPE_API_KEY
+            - envVarName: STRIPE_WEBHOOK_SECRET
+            - envVarName: STRIV_API_CLIENT_ID
+            - envVarName: STRIV_API_CLIENT_SECRET
+            - envVarName: STRIV_APP_AUDIENCE
+            - envVarName: STRIV_APP_CLIENT_ID
+            - envVarName: STRIV_APP_CLIENT_SECRET
+            - envVarName: STRIV_DOMAIN
+            - envVarName: STRIV_IDENTITY_STORE_NAME
+            - envVarName: TZ
+            - envVarName: USE_GPT_INVOICE_PARSING
+            - envVarName: VGS_ENABLED
+            - envVarName: VGS_ENV
+            - envVarName: VGS_PASSWORD
+            - envVarName: VGS_USERNAME
+            - envVarName: VGS_VAULT_ID
+            - envVarName: WEBHOOK_API_KEY
+            - envVarName: WEBHOOK_URL
+            mounted:
+            - mount:
+                path: /usr/app/certs/
+              mountedFileName: postgres-ca.pem
+              name: postgres-ca
+              vault:
+                path: shared/ms-postgres-ssl
+                property: ca.pem
+      repoURL: https://charts.mycarrier.dev
+      targetRevision: 2.5.101
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true
+      retry:
+        backoff:
+          duration: 5s
+          factor: 2
+          maxDuration: 10m
+        limit: 5
+      syncOptions:
+        - ApplyOutOfSyncOnly=true
+        - Validate=true
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=false
+        - ServerSideApply=true
+        - Replace=true
+        - SkipDryRunOnMissingResource=true
+- apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  metadata:
+    annotations:
+      notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+    finalizers:
+      - resources-finalizer.argocd.argoproj.io
+    name: curant-offload-feature28
+  spec:
+    destination:
+      namespace: dev-curant
+      server: https://kubernetes.default.svc
+    project: default
+    source:
+      chart: mycarrier-helm
+      helm:
+        values: |
+          applications:
+            api:
+              deploymentType: deployment
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/api
+                tag: 25.42.8629edc
+              networking:
+                istio:
+                  allowedEndpoints:
+                  - kind: exact
+                    match: /robots.txt
+                  - kind: exact
+                    match: /docs
+                  - kind: exact
+                    match: /graphql
+                  - kind: exact
+                    match: /liveness
+                  - kind: exact
+                    match: /health
+                  - kind: exact
+                    match: /sync/stripe
+                  - kind: regex
+                    match: /webhook/(dwolla|plaid|stripe|rutter|quickbooks|sendgrid|oatfi|clearent)
+              ports:
+                http: 10000
+              securityContext:
+                readOnlyRootFilesystem: false
+              staticHostname: dev.api
+              testtrigger:
+                activeDeadlineSeconds: "300"
+                apikey: vault:DevOps/data/testengine/api#encoded_header
+                backoffLimit: 0
+                testdefinitions:
+                - containerImage: testing/curant/tests
+                  containerTag: 25.42.8629edc
+                  filters:
+                  - TestCategory=coreapitest
+                  name: apitests
+                  secretId: vault:QA/data/app_auth#SecretId
+                - containerImage: testing/mc/payment/automatedtests/tests
+                  containerTag: 25.41.ae27a5d
+                  filters:
+                  - TestCategory=FeatureCoreAPI
+                  name: paymentapitests
+                  releaseDefinitionName: curant-payment-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://payment-api.dev.mycarrier.dev
+                - containerImage: testing/mc/invoice/automatedtests/tests
+                  containerTag: 25.40.32dba93
+                  filters:
+                  - TestCategory=FeatureCoreAPICurant
+                  name: invoiceapitests
+                  releaseDefinitionName: curant-invoice-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://invoice-api.dev.mycarrier.dev/
+                ttlSecondsAfterFinished: "3600"
+                webhook_url: vault:DevOps/data/testengine/api#url
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+            frontend:
+              deploymentType: deployment
+              forceOffload: true
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/frontend
+                tag: 25.42.8629edc
+              isFrontend: true
+              ports:
+                http: 10000
+              staticHostname: dev
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+          deployment: deployment
+          environment:
+            dependencyenv: dev
+            domainOverride:
+              domain: curant.io
+              enabled: true
+            name: feature28
+          global:
+            appStack: curant
+            dependencies:
+              azureservicebus: false
+              chargify: false
+              clickhouse: false
+              elasticsearch: false
+              loadsure: false
+              mongodb: false
+              postgres: false
+              redis: false
+              redpanda: false
+              sqlserver: false
+            env:
+              NEXT_PUBLIC_ENV:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.labels['mycarrier.tech/environment']
+            language: nodejs
+          jobs:
+          - activeDeadlineSeconds: 172800
+            backoffLimit: 3
+            env: {}
+            image:
+              registry: mycarrieracr.azurecr.io
+              repository: appstack/curant/migrations
+              tag: 25.42.8629edc
+            imagePullPolicy: IfNotPresent
+            name: migrations
+            order: 0
+            resources:
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+            restartPolicy: Never
+            timing: pre-deploy
+            ttlSecondsAfterFinished: 1800
+            volumes:
+            - kind: emptyDir
+              mountPath: /home/node/.cache
+              name: cache
+            - mountPath: /home/node/.yarn
+              name: yarn
+          secrets:
+            individual:
+            - envVarName: API_ENCRYPTION_KEY
+            - envVarName: API_URL
+            - envVarName: APOLLO_GRAPH_ID
+            - envVarName: APOLLO_GRAPH_VARIANT
+            - envVarName: APOLLO_KEY
+            - envVarName: APOLLO_SCHEMA_REPORTING
+            - envVarName: APP_URL
+            - envVarName: AWS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_BUCKET
+            - envVarName: AWS_S3_DB_SCHEMAS_REGION
+            - envVarName: AWS_S3_DB_SCHEMAS_SECRET_ACCESS_KEY
+            - envVarName: AWS_S3_DOCS_BUCKET
+            - envVarName: AWS_S3_PUBLIC_BUCKET
+            - envVarName: AWS_S3_REGION
+            - envVarName: AWS_SECRET_ACCESS_KEY
+            - envVarName: AZURE_STORAGE_ACCOUNT_NAME
+            - envVarName: AZURE_STORAGE_PRIVATE_CONTAINER
+            - envVarName: AZURE_STORAGE_PUBLIC_CONTAINER
+            - envVarName: CLEARENT_ACCESS_KEY
+            - envVarName: CLEARENT_HIERARCHY_NODE_KEY
+            - envVarName: CLEARENT_PUBLIC_KEY
+            - envVarName: CLEARENT_SECRET_KEY
+            - envVarName: CLEARENT_URL
+            - envVarName: DATABASE_READ_URL
+            - envVarName: DATABASE_SCHEMA
+            - envVarName: DATABASE_SSL
+            - envVarName: DATABASE_URL
+            - envVarName: DWOLLA_ENABLE_API_LOGS
+            - envVarName: DWOLLA_ENV
+            - envVarName: DWOLLA_KEY
+            - envVarName: DWOLLA_LIMIT
+            - envVarName: DWOLLA_SECRET
+            - envVarName: DWOLLA_WEBHOOK_SECRET
+            - envVarName: ENV
+            - envVarName: GOOGLE_CLOUD_CLIENT_EMAIL
+            - envVarName: GOOGLE_CLOUD_CLIENT_ID
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_LOCATION
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_BASE64
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_ID
+            - envVarName: GOOGLE_CLOUD_PROJECT_ID
+            - envVarName: INBOUND_EMAIL_DOMAIN
+            - envVarName: INTERNAL_API_KEY
+            - envVarName: MC_ENV
+            - envVarName: MC_USER_API_URL
+            - envVarName: MULTER_LIMIT_FIELD_SIZE
+            - envVarName: NEXT_PUBLIC_API_URL
+            - envVarName: NEXT_PUBLIC_APP_URL
+            - envVarName: NEXT_PUBLIC_DWOLLA_ENV
+            - envVarName: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+            - envVarName: NEXT_PUBLIC_OATFI_ENV
+            - envVarName: NEXT_PUBLIC_PLAID_ENV
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_REDIRECT_URI
+            - envVarName: NEXT_PUBLIC_RUTTER_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_SECURE_API_URL
+            - envVarName: NEXT_PUBLIC_STRIPE_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_STRIV_AUDIENCE
+            - envVarName: NEXT_PUBLIC_STRIV_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_STRIV_DOMAIN
+            - envVarName: NEXT_PUBLIC_VGS_VAULT_ID
+            - envVarName: NEXT_PUBLIC_VGS_VERSION
+            - envVarName: NODE_ENV
+            - envVarName: NODE_EXTRA_CA_CERTS
+            - envVarName: OATFI_API_KEY
+            - envVarName: OATFI_ENV
+            - envVarName: OPENAI_API_KEY
+            - envVarName: OPENAI_MAX_TOKENS
+            - envVarName: OPENAI_MODEL
+            - envVarName: OPENAI_ORGANIZATION
+            - envVarName: PLAID_CLIENT_ID
+            - envVarName: PLAID_COUNTRY_CODES
+            - envVarName: PLAID_ENV
+            - envVarName: PLAID_REDIRECT_URI
+            - envVarName: PLAID_SECRET
+            - envVarName: PORT
+            - envVarName: QUICKBOOKS_CLIENT_ID
+            - envVarName: QUICKBOOKS_CLIENT_SECRET
+            - envVarName: QUICKBOOKS_VERIFIER_TOKEN
+            - envVarName: REDIS_API_URL
+            - envVarName: REDIS_FE_URL
+            - envVarName: REPLY_TO_EMAIL
+            - envVarName: RUTTER_API_URL
+            - envVarName: RUTTER_CLIENT_ID
+            - envVarName: RUTTER_CLIENT_SECRET
+            - envVarName: RUTTER_SECRET
+            - envVarName: SECURE_API_URL
+            - envVarName: SECURE_KEY
+            - envVarName: SENDGRID_API_KEY
+            - envVarName: SENDGRID_DEV_EMAIL
+            - envVarName: SENDGRID_EVENT_WEBHOOK_PATH
+            - envVarName: SENDGRID_VERIFICATION_KEY
+            - envVarName: SENTRY_AUTH_TOKEN
+            - envVarName: SENTRY_DSN
+            - envVarName: SENTRY_ENV
+            - envVarName: SENTRY_PROFILER_LOGGING_MODE
+            - envVarName: SESSION_COOKIE_SECRET
+            - envVarName: STRIPE_API_KEY
+            - envVarName: STRIPE_WEBHOOK_SECRET
+            - envVarName: STRIV_API_CLIENT_ID
+            - envVarName: STRIV_API_CLIENT_SECRET
+            - envVarName: STRIV_APP_AUDIENCE
+            - envVarName: STRIV_APP_CLIENT_ID
+            - envVarName: STRIV_APP_CLIENT_SECRET
+            - envVarName: STRIV_DOMAIN
+            - envVarName: STRIV_IDENTITY_STORE_NAME
+            - envVarName: TZ
+            - envVarName: USE_GPT_INVOICE_PARSING
+            - envVarName: VGS_ENABLED
+            - envVarName: VGS_ENV
+            - envVarName: VGS_PASSWORD
+            - envVarName: VGS_USERNAME
+            - envVarName: VGS_VAULT_ID
+            - envVarName: WEBHOOK_API_KEY
+            - envVarName: WEBHOOK_URL
+            mounted:
+            - mount:
+                path: /usr/app/certs/
+              mountedFileName: postgres-ca.pem
+              name: postgres-ca
+              vault:
+                path: shared/ms-postgres-ssl
+                property: ca.pem
+      repoURL: https://charts.mycarrier.dev
+      targetRevision: 2.5.101
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true
+      retry:
+        backoff:
+          duration: 5s
+          factor: 2
+          maxDuration: 10m
+        limit: 5
+      syncOptions:
+        - ApplyOutOfSyncOnly=true
+        - Validate=true
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=false
+        - ServerSideApply=true
+        - Replace=true
+        - SkipDryRunOnMissingResource=true
+- apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  metadata:
+    annotations:
+      notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+    finalizers:
+      - resources-finalizer.argocd.argoproj.io
+    name: curant-offload-feature27
+  spec:
+    destination:
+      namespace: dev-curant
+      server: https://kubernetes.default.svc
+    project: default
+    source:
+      chart: mycarrier-helm
+      helm:
+        values: |
+          applications:
+            api:
+              deploymentType: deployment
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/api
+                tag: 25.42.0042ea2
+              networking:
+                istio:
+                  allowedEndpoints:
+                  - kind: exact
+                    match: /robots.txt
+                  - kind: exact
+                    match: /docs
+                  - kind: exact
+                    match: /graphql
+                  - kind: exact
+                    match: /liveness
+                  - kind: exact
+                    match: /health
+                  - kind: exact
+                    match: /sync/stripe
+                  - kind: regex
+                    match: /webhook/(dwolla|plaid|stripe|rutter|quickbooks|sendgrid|oatfi|clearent)
+              ports:
+                http: 10000
+              securityContext:
+                readOnlyRootFilesystem: false
+              staticHostname: dev.api
+              testtrigger:
+                activeDeadlineSeconds: "300"
+                apikey: vault:DevOps/data/testengine/api#encoded_header
+                backoffLimit: 0
+                testdefinitions:
+                - containerImage: testing/curant/tests
+                  containerTag: 25.42.0042ea2
+                  filters:
+                  - TestCategory=coreapitest
+                  name: apitests
+                  secretId: vault:QA/data/app_auth#SecretId
+                - containerImage: testing/mc/payment/automatedtests/tests
+                  containerTag: 25.41.ae27a5d
+                  filters:
+                  - TestCategory=FeatureCoreAPI
+                  name: paymentapitests
+                  releaseDefinitionName: curant-payment-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://payment-api.dev.mycarrier.dev
+                - containerImage: testing/mc/invoice/automatedtests/tests
+                  containerTag: 25.40.32dba93
+                  filters:
+                  - TestCategory=FeatureCoreAPICurant
+                  name: invoiceapitests
+                  releaseDefinitionName: curant-invoice-api
+                  secretId: vault:QA/data/app_auth#SecretId
+                  serviceAddress: https://invoice-api.dev.mycarrier.dev/
+                ttlSecondsAfterFinished: "3600"
+                webhook_url: vault:DevOps/data/testengine/api#url
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+            frontend:
+              deploymentType: deployment
+              forceOffload: true
+              image:
+                registry: mycarrieracr.azurecr.io
+                repository: appstack/curant/frontend
+                tag: 25.42.0042ea2
+              isFrontend: true
+              ports:
+                http: 10000
+              staticHostname: dev
+              volumes:
+              - kind: emptyDir
+                mountPath: /home/node/.cache
+                name: cache
+              - mountPath: /home/node/.yarn
+                name: yarn
+          deployment: deployment
+          environment:
+            dependencyenv: dev
+            domainOverride:
+              domain: curant.io
+              enabled: true
+            name: feature27
+          global:
+            appStack: curant
+            dependencies:
+              azureservicebus: false
+              chargify: false
+              clickhouse: false
+              elasticsearch: false
+              loadsure: false
+              mongodb: false
+              postgres: false
+              redis: false
+              redpanda: false
+              sqlserver: false
+            env:
+              NEXT_PUBLIC_ENV:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.labels['mycarrier.tech/environment']
+            language: nodejs
+          jobs:
+          - activeDeadlineSeconds: 172800
+            backoffLimit: 3
+            env: {}
+            image:
+              registry: mycarrieracr.azurecr.io
+              repository: appstack/curant/migrations
+              tag: 25.42.0042ea2
+            imagePullPolicy: IfNotPresent
+            name: migrations
+            order: 0
+            resources:
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+            restartPolicy: Never
+            timing: pre-deploy
+            ttlSecondsAfterFinished: 1800
+            volumes:
+            - kind: emptyDir
+              mountPath: /home/node/.cache
+              name: cache
+            - mountPath: /home/node/.yarn
+              name: yarn
+          secrets:
+            individual:
+            - envVarName: API_ENCRYPTION_KEY
+            - envVarName: API_URL
+            - envVarName: APOLLO_GRAPH_ID
+            - envVarName: APOLLO_GRAPH_VARIANT
+            - envVarName: APOLLO_KEY
+            - envVarName: APOLLO_SCHEMA_REPORTING
+            - envVarName: APP_URL
+            - envVarName: AWS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_ACCESS_KEY_ID
+            - envVarName: AWS_S3_DB_SCHEMAS_BUCKET
+            - envVarName: AWS_S3_DB_SCHEMAS_REGION
+            - envVarName: AWS_S3_DB_SCHEMAS_SECRET_ACCESS_KEY
+            - envVarName: AWS_S3_DOCS_BUCKET
+            - envVarName: AWS_S3_PUBLIC_BUCKET
+            - envVarName: AWS_S3_REGION
+            - envVarName: AWS_SECRET_ACCESS_KEY
+            - envVarName: AZURE_STORAGE_ACCOUNT_NAME
+            - envVarName: AZURE_STORAGE_PRIVATE_CONTAINER
+            - envVarName: AZURE_STORAGE_PUBLIC_CONTAINER
+            - envVarName: CLEARENT_ACCESS_KEY
+            - envVarName: CLEARENT_HIERARCHY_NODE_KEY
+            - envVarName: CLEARENT_PUBLIC_KEY
+            - envVarName: CLEARENT_SECRET_KEY
+            - envVarName: CLEARENT_URL
+            - envVarName: DATABASE_READ_URL
+            - envVarName: DATABASE_SCHEMA
+            - envVarName: DATABASE_SSL
+            - envVarName: DATABASE_URL
+            - envVarName: DWOLLA_ENABLE_API_LOGS
+            - envVarName: DWOLLA_ENV
+            - envVarName: DWOLLA_KEY
+            - envVarName: DWOLLA_LIMIT
+            - envVarName: DWOLLA_SECRET
+            - envVarName: DWOLLA_WEBHOOK_SECRET
+            - envVarName: ENV
+            - envVarName: GOOGLE_CLOUD_CLIENT_EMAIL
+            - envVarName: GOOGLE_CLOUD_CLIENT_ID
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_LOCATION
+            - envVarName: GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_BASE64
+            - envVarName: GOOGLE_CLOUD_PRIVATE_KEY_ID
+            - envVarName: GOOGLE_CLOUD_PROJECT_ID
+            - envVarName: INBOUND_EMAIL_DOMAIN
+            - envVarName: INTERNAL_API_KEY
+            - envVarName: MC_ENV
+            - envVarName: MC_USER_API_URL
+            - envVarName: MULTER_LIMIT_FIELD_SIZE
+            - envVarName: NEXT_PUBLIC_API_URL
+            - envVarName: NEXT_PUBLIC_APP_URL
+            - envVarName: NEXT_PUBLIC_DWOLLA_ENV
+            - envVarName: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+            - envVarName: NEXT_PUBLIC_OATFI_ENV
+            - envVarName: NEXT_PUBLIC_PLAID_ENV
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_QUICKBOOKS_REDIRECT_URI
+            - envVarName: NEXT_PUBLIC_RUTTER_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_SECURE_API_URL
+            - envVarName: NEXT_PUBLIC_STRIPE_PUBLIC_KEY
+            - envVarName: NEXT_PUBLIC_STRIV_AUDIENCE
+            - envVarName: NEXT_PUBLIC_STRIV_CLIENT_ID
+            - envVarName: NEXT_PUBLIC_STRIV_DOMAIN
+            - envVarName: NEXT_PUBLIC_VGS_VAULT_ID
+            - envVarName: NEXT_PUBLIC_VGS_VERSION
+            - envVarName: NODE_ENV
+            - envVarName: NODE_EXTRA_CA_CERTS
+            - envVarName: OATFI_API_KEY
+            - envVarName: OATFI_ENV
+            - envVarName: OPENAI_API_KEY
+            - envVarName: OPENAI_MAX_TOKENS
+            - envVarName: OPENAI_MODEL
+            - envVarName: OPENAI_ORGANIZATION
+            - envVarName: PLAID_CLIENT_ID
+            - envVarName: PLAID_COUNTRY_CODES
+            - envVarName: PLAID_ENV
+            - envVarName: PLAID_REDIRECT_URI
+            - envVarName: PLAID_SECRET
+            - envVarName: PORT
+            - envVarName: QUICKBOOKS_CLIENT_ID
+            - envVarName: QUICKBOOKS_CLIENT_SECRET
+            - envVarName: QUICKBOOKS_VERIFIER_TOKEN
+            - envVarName: REDIS_API_URL
+            - envVarName: REDIS_FE_URL
+            - envVarName: REPLY_TO_EMAIL
+            - envVarName: RUTTER_API_URL
+            - envVarName: RUTTER_CLIENT_ID
+            - envVarName: RUTTER_CLIENT_SECRET
+            - envVarName: RUTTER_SECRET
+            - envVarName: SECURE_API_URL
+            - envVarName: SECURE_KEY
+            - envVarName: SENDGRID_API_KEY
+            - envVarName: SENDGRID_DEV_EMAIL
+            - envVarName: SENDGRID_EVENT_WEBHOOK_PATH
+            - envVarName: SENDGRID_VERIFICATION_KEY
+            - envVarName: SENTRY_AUTH_TOKEN
+            - envVarName: SENTRY_DSN
+            - envVarName: SENTRY_ENV
+            - envVarName: SENTRY_PROFILER_LOGGING_MODE
+            - envVarName: SESSION_COOKIE_SECRET
+            - envVarName: STRIPE_API_KEY
+            - envVarName: STRIPE_WEBHOOK_SECRET
+            - envVarName: STRIV_API_CLIENT_ID
+            - envVarName: STRIV_API_CLIENT_SECRET
+            - envVarName: STRIV_APP_AUDIENCE
+            - envVarName: STRIV_APP_CLIENT_ID
+            - envVarName: STRIV_APP_CLIENT_SECRET
+            - envVarName: STRIV_DOMAIN
+            - envVarName: STRIV_IDENTITY_STORE_NAME
+            - envVarName: TZ
+            - envVarName: USE_GPT_INVOICE_PARSING
+            - envVarName: VGS_ENABLED
+            - envVarName: VGS_ENV
+            - envVarName: VGS_PASSWORD
+            - envVarName: VGS_USERNAME
+            - envVarName: VGS_VAULT_ID
+            - envVarName: WEBHOOK_API_KEY
+            - envVarName: WEBHOOK_URL
+            mounted:
+            - mount:
+                path: /usr/app/certs/
+              mountedFileName: postgres-ca.pem
+              name: postgres-ca
+              vault:
+                path: shared/ms-postgres-ssl
+                property: ca.pem
+      repoURL: https://charts.mycarrier.dev
+      targetRevision: 2.5.101
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true
+      retry:
+        backoff:
+          duration: 5s
+          factor: 2
+          maxDuration: 10m
+        limit: 5
+      syncOptions:
+        - ApplyOutOfSyncOnly=true
+        - Validate=true
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=false
+        - ServerSideApply=true
+        - Replace=true
+        - SkipDryRunOnMissingResource=true

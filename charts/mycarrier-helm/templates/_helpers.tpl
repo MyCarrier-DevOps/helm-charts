@@ -29,11 +29,8 @@
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
-{{- if hasPrefix "feature" $envName }}
-{{- (list ("dev") $appStack) | join "-" | lower | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- (list $envName $appStack) | join "-" | lower | trunc 63 | trimSuffix "-" }}
-{{- end }}
+{{ $envName }}
+
 {{- end -}}
 
 {{- define "helm.fullname" -}}
@@ -182,17 +179,20 @@ Usage:
 {{ .Values.deployment | default "deployment" }}
 {{- end -}}
 
-{{- define "helm.tplvalues.render" -}}
-{{/* Render arbitrary values using tpl so extraObjects work without the Bitnami common chart. */}}
-{{- $value := .value -}}
-{{- $context := default .context . -}}
-{{- if kindIs "string" $value -}}
-{{ tpl $value $context }}
-{{- else if kindIs "map" $value -}}
-{{ tpl (toYaml $value) $context }}
-{{- else if kindIs "slice" $value -}}
-{{ tpl (toYaml $value) $context }}
-{{- else -}}
-{{- $value -}}
-{{- end -}}
-{{- end -}}
+# {{- define "helm.tplvalues.render" -}}
+# {{/* Render arbitrary values using tpl so extraObjects work without the Bitnami common chart. */}}
+# {{- $value := .value -}}
+# {{- $context := default .context . -}}
+# {{- if kindIs "string" $value -}}
+# {{ tpl $value $context }}
+# {{- else if or (kindIs "map" $value) (kindIs "slice" $value) -}}
+# {{- $yaml := toYaml $value -}}
+# {{- if and $yaml (contains "{{" $yaml) -}}
+# {{ tpl $yaml $context }}
+# {{- else -}}
+# {{ $yaml }}
+# {{- end -}}
+# {{- else -}}
+# {{- $value -}}
+# {{- end -}}
+# {{- end -}}
