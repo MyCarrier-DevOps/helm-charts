@@ -187,6 +187,11 @@ http:
 {{- if $primaryApp }}
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
 {{- $primaryFullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+{{- $primaryIstioConfig := dig "networking" "istio" dict $primaryAppValues }}
+{{- $primaryIstioEnabled := true }}
+{{- if and $primaryIstioConfig (hasKey $primaryIstioConfig "enabled") }}
+{{- $primaryIstioEnabled = $primaryIstioConfig.enabled }}
+{{- end }}
 - name: {{ if (eq $primaryAppValues.deploymentType "rollout") }}canary{{ else }}{{ $primaryApp }}-default{{ end }}
   {{- if not (eq $primaryAppValues.routePrefix "/") }}
   match:
@@ -223,22 +228,18 @@ http:
     weight: 0
   {{- end }}
   {{- end }}
-  {{- if and $primaryAppValues.networking $primaryAppValues.networking.istio }}
-  {{- if $primaryAppValues.networking.istio.enabled }}
+  {{- if $primaryIstioEnabled }}
   headers:
-    {{- if $primaryAppValues.networking }}
-    {{- if and $primaryAppValues.networking.istio.responseHeaders }}
-    {{- with $primaryAppValues.networking.istio.responseHeaders }}
+    {{- if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
+    {{- with $primaryIstioConfig.responseHeaders }}
     {{ toYaml . | indent 4 | trim }}
     {{- end }}
     {{- else }}
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
     {{- end }}
-    {{- end }}
-  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  {{- with $primaryIstioConfig.corsPolicy }}
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
-  {{- end }}
   {{- end }}
   {{- end }}
   timeout: {{ default "151s" (dig "service" "timeout" "151s" $primaryAppValues) }}

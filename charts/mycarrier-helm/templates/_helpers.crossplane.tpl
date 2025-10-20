@@ -7,7 +7,10 @@ Generate Azure storage account name (3-24 lowercase alphanumeric characters)
 Usage: {{ include "helm.azure.storage.name" . }}
 */}}
 {{- define "helm.azure.storage.name" -}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+	{{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $appStack := $ctx.defaults.appStack | replace "-" "" | lower -}}
 {{- $envName := $ctx.defaults.environmentName | replace "-" "" | lower -}}
 {{- printf "st%s%s" $appStack $envName -}}
@@ -18,7 +21,10 @@ Generate Azure resource group name (1-90 chars, alphanumeric, hyphens, underscor
 Usage: {{ include "helm.azure.resourceGroup.name" . }}
 */}}
 {{- define "helm.azure.resourceGroup.name" -}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+	{{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- printf "rg-%s-%s" $appStack $envName -}}

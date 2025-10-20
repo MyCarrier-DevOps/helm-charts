@@ -135,12 +135,14 @@ deployment: deployment
 ## @param applications.example-api.service.perTryTimeout - Timeout for each retry
 ## @param applications.example-api.service.istioDisabled - Whether to disable Istio for this service
 ## @param applications.example-api.networking.ingress.type - Ingress type
-## @param applications.example-api.networking.istio.enabled - Enable Istio configuration
+## @param applications.example-api.networking.istio.enabled - Enable Istio configuration (defaults to true when omitted)
 ## @param applications.example-api.networking.istio.hosts [array] - Additional hostnames
 ## @param applications.example-api.networking.istio.redirects [object] - Domain redirects
 ## @param applications.example-api.networking.istio.routes [object] - Custom routes
 ## @param applications.example-api.networking.istio.responseHeaders [object] - Custom response headers
 ## @param applications.example-api.networking.istio.corsPolicy [object] - CORS policy
+## @param applications.example-api.networking.istio.allowedEndpoints [array] - List of allowed endpoints (exact paths or prefix patterns with *)
+## @param applications.example-api.networking.istio.disableDefaultEndpoints - Disable automatic C# default endpoints (/liveness, /health, /api)
 ## @param applications.example-api.serviceAccount.create - Whether to create a service account
 ## @param applications.example-api.updateStrategy.type - Update strategy type: RollingUpdate or Recreate
 ## @param applications.example-api.updateStrategy.rollingUpdate.maxUnavailable - Maximum unavailable pods during rollout
@@ -333,7 +335,13 @@ applications: {}
 #         responseHeaders: {}
 #         # CORS policy
 #         corsPolicy: {}
+#         # List of allowed endpoints (for C# apps, /liveness, /health, and /api are added automatically if app name contains 'api')
+#         # To disable defaults, set disableDefaultEndpoints: true
 #         allowedEndpoints: []
+#         # allowedEndpoints:
+#         #   - "/custom-endpoint"
+#         #   - "/api/v1/*"
+#         # disableDefaultEndpoints: false  # Set to true to disable automatic C# endpoints
     
 #     # Service account configuration
 #     serviceAccount:

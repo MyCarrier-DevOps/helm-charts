@@ -1,0 +1,111 @@
+suite: test allowed endpoints functionality in VirtualService
+templates:
+  - templates/virtualService.yaml
+tests:  
+  - it: should use default timeout and retry values when not specified
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].timeout
+          value: "151s"
+      - equal:
+          path: spec.http[1].retries.retryOn
+          value: "5xx,reset"
+      - equal:
+          path: spec.http[1].retries.attempts
+          value: 3
+      - equal:
+          path: spec.http[1].retries.perTryTimeout
+          value: "50s"
+
+  - it: should render CSharp default allowed endpoints with minimal configuration
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      applications:
+        api-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: api/app
+            tag: latest
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Base rule first
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-app
+      # Default /liveness endpoint
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-api-app-allowed-liveness
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: "/liveness"
+      # Default /health endpoint
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-api-app-allowed-health
+      - equal:
+          path: spec.http[2].match[0].uri.exact
+          value: "/health"
+      # Default /api prefix endpoint
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-api-app-allowed-api
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: "/api"
+      # Forbidden catch-all should follow
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-api-app-forbidden
+
+  - it: should skip allowed endpoints when istio is explicitly disabled
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      applications:
+        api-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: api/app
+            tag: latest
+          networking:
+            istio:
+              enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

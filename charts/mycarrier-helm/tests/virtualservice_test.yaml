@@ -76,3 +76,51 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: .*feature-test.*
+
+  - it: should not render virtual service when istio is explicitly disabled
+    set:
+      environment.name: "dev"
+      applications.disabled-app.deploymentType: deployment
+      applications.disabled-app.isFrontend: false
+      applications.disabled-app.image.registry: "myregistry.example.com"
+      applications.disabled-app.image.repository: "mycarrier/disabled-app"
+      applications.disabled-app.image.tag: "1.0.0"
+      applications.disabled-app.ports.http: 8080
+      applications.disabled-app.networking.ingress.type: "istio"
+      applications.disabled-app.networking.istio.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render virtual service when istio is explicitly enabled
+    set:
+      environment.name: "dev"
+      applications.enabled-app.deploymentType: deployment
+      applications.enabled-app.isFrontend: false
+      applications.enabled-app.image.registry: "myregistry.example.com"
+      applications.enabled-app.image.repository: "mycarrier/enabled-app"
+      applications.enabled-app.image.tag: "1.0.0"
+      applications.enabled-app.ports.http: 8080
+      applications.enabled-app.networking.ingress.type: "istio"
+      applications.enabled-app.networking.istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+
+  - it: should render virtual service when istio enabled is omitted
+    set:
+      environment.name: "dev"
+      applications.implicit-app.deploymentType: deployment
+      applications.implicit-app.isFrontend: false
+      applications.implicit-app.image.registry: "myregistry.example.com"
+      applications.implicit-app.image.repository: "mycarrier/implicit-app"
+      applications.implicit-app.image.tag: "1.0.0"
+      applications.implicit-app.ports.http: 8080
+      applications.implicit-app.networking.ingress.type: "istio"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService

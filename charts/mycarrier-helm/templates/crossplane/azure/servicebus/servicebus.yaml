@@ -1,18 +1,21 @@
 {{- if .Values.infrastructure.azure.servicebus }}
-{{- range $sbIndex, $sbInstance := .Values.infrastructure.azure.servicebus }}
+{{- $root := . -}}
+{{- $cachedLabels := include "helm.labels.standard" $root | fromYaml -}}
+{{- range $sbIndex, $sbInstance := $root.Values.infrastructure.azure.servicebus }}
 {{- if $sbInstance.managementPolicies }}
 {{- if has "Delete" $sbInstance.managementPolicies }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus namespace '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbInstance.name) }}
 {{- end }}
 {{- end }}
+
 ---
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: ServiceBusNamespace
 metadata:
   name: {{ $sbInstance.name | required "Service Bus name is required" }}
-  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
-    {{- include "helm.labels.standard" $ | nindent 4 }}
+    {{- toYaml $cachedLabels | nindent 4 }}
   {{- if $sbInstance.annotations }}
   annotations:
     {{- toYaml $sbInstance.annotations | nindent 4 }}
@@ -37,7 +40,7 @@ spec:
     resourceGroupNameSelector:
       {{- toYaml $sbInstance.resourceGroupNameSelector | nindent 6 }}
     {{- else }}
-    resourceGroupName: {{ printf "rg-%s-%s" $.Values.global.appStack $.Values.environment.name }}
+    resourceGroupName: {{ printf "rg-%s-%s" $root.Values.global.appStack $root.Values.environment.name }}
     {{- end }}
     {{- if $sbInstance.capacity }}
     capacity: {{ $sbInstance.capacity }}
@@ -55,14 +58,15 @@ spec:
 {{- fail (printf "Delete management policy is not allowed for Service Bus topic '%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbInstance.name $topic.name) }}
 {{- end }}
 {{- end }}
+
 ---
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: Topic
 metadata:
   name: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
-  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
-    {{- include "helm.labels.standard" $ | nindent 4 }}
+    {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
     servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
   annotations:
@@ -87,7 +91,7 @@ spec:
     {{- else }}
     namespaceIdSelector:
       matchLabels:
-        {{- include "helm.labels.standard" $ | nindent 8 }}
+        {{- toYaml $cachedLabels | nindent 8 }}
     {{- end }}
     {{- if $topic.maxSizeInMegabytes }}
     maxSizeInMegabytes: {{ $topic.maxSizeInMegabytes }}
@@ -125,14 +129,15 @@ spec:
 {{- fail (printf "Delete management policy is not allowed for Service Bus subscription '%s/%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbInstance.name $topic.name $subscription.name) }}
 {{- end }}
 {{- end }}
+
 ---
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: Subscription
 metadata:
   name: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
-  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
-    {{- include "helm.labels.standard" $ | nindent 4 }}
+    {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
     servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
     servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
@@ -158,7 +163,7 @@ spec:
     {{- else }}
     topicIdSelector:
       matchLabels:
-        {{- include "helm.labels.standard" $ | nindent 8 }}
+        {{- toYaml $cachedLabels | nindent 8 }}
         servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
         servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
     {{- end }}
@@ -197,14 +202,15 @@ spec:
 {{- fail (printf "Delete management policy is not allowed for Service Bus subscription rule '%s/%s/%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbInstance.name $topic.name $subscription.name $rule.name) }}
 {{- end }}
 {{- end }}
+
 ---
 apiVersion: servicebus.azure.upbound.io/v1beta2
 kind: SubscriptionRule
 metadata:
   name: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "rule" $rule.name) }}
-  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
-    {{- include "helm.labels.standard" $ | nindent 4 }}
+    {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
     servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
     servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
@@ -231,7 +237,7 @@ spec:
     {{- else }}
     subscriptionIdSelector:
       matchLabels:
-        {{- include "helm.labels.standard" $ | nindent 8 }}
+        {{- toYaml $cachedLabels | nindent 8 }}
         servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
         servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
         servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
