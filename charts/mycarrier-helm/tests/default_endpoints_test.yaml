@@ -684,6 +684,10 @@ tests:
       - equal:
           path: spec.http[1].name
           value: test-stack-my-api
+      - notExists:
+          path: spec.http[1].fault
+      - notExists:
+          path: spec.http[2]
 
   - it: should add api endpoint when stack name contains api
     set:

@@ -306,6 +306,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- define "helm.virtualservice.allowedEndpoints" -}}
 {{- $fullName := include "helm.fullname" . -}}
 {{- $mergedEndpoints := list -}}
+{{- $istioConfig := dig "networking" "istio" dict $.application -}}
 
 {{/* Add language-specific endpoints first using centralized template */}}
 {{- $contextWithFullName := dict "Values" $.Values "application" $.application "fullName" $fullName }}
@@ -316,12 +317,12 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- end }}
 
 {{/* Add user-defined endpoints */}}
-{{- if and .application.networking .application.networking.istio.allowedEndpoints -}}
-  {{- $mergedEndpoints = concat $mergedEndpoints .application.networking.istio.allowedEndpoints -}}
+{{- if and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints -}}
+  {{- $mergedEndpoints = concat $mergedEndpoints $istioConfig.allowedEndpoints -}}
 {{- end }}
 
 {{/* Exit early if no endpoints to process */}}
-{{- if not $mergedEndpoints -}}
+{{- if lt (len $mergedEndpoints) 1 -}}
 {{- else -}}
 
 {{/* Deduplicate endpoints by kind+normalizedPath AND check for name conflicts */}}
@@ -377,6 +378,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- end -}}
 
 {{/* render HTTP rules using centralized helper */}}
+{{- if gt (len $unique) 0 }}
 {{- range $unique }}
 {{- $ruleContext := dict "kind" .kind "match" .match "ruleType" "allowed" "fullName" $fullName }}
 {{ include "helm.renderEndpointRule" $ruleContext }}
@@ -410,7 +412,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
       weight: 0
     {{- end }}
     {{- end }}
-  {{- with $.application.networking.istio.corsPolicy }}
+  {{- with $istioConfig.corsPolicy }}
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
@@ -438,5 +440,6 @@ This template generates the complete HTTP rules as strings to avoid duplication
       httpStatus: 403
       percentage:
         value: 100
+{{- end }}
 {{- end -}}
 {{- end -}}

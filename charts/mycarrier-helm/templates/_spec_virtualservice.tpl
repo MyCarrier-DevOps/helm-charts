@@ -76,8 +76,11 @@ http:
 {{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim }}
 {{- $hasLangEndpoints := ne $langEndpointsYaml "" }}
 {{- $istioConfig := dig "networking" "istio" dict .application }}
-{{- $hasUserEndpoints := and $istioConfig (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
-{{- $istioEnabled := and .application.networking .application.networking.istio .application.networking.istio.enabled }}
+{{- $istioEnabled := true }}
+{{- if and $istioConfig (hasKey $istioConfig "enabled") }}
+{{- $istioEnabled = $istioConfig.enabled }}
+{{- end }}
+{{- $hasUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
 {{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) }}
 
 {{- if $hasAllowedEndpoints }}
@@ -115,22 +118,18 @@ http:
     weight: 0
   {{- end }}
   {{- end }}
-  {{- if and .application.networking .application.networking.istio }}
-  {{- if .application.networking.istio.enabled }}
+  {{- if $istioEnabled }}
   headers:
-    {{- if .application.networking }}
-    {{- if and .application.networking.istio.responseHeaders }}
-    {{- with .application.networking.istio.responseHeaders }}
+    {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
+    {{- with $istioConfig.responseHeaders }}
     {{ toYaml . | indent 4 | trim }}
     {{- end }}
     {{- else }}
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
     {{- end }}
-    {{- end }}
-  {{- with .application.networking.istio.corsPolicy }}
+  {{- with $istioConfig.corsPolicy }}
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
-  {{- end }}
   {{- end }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}

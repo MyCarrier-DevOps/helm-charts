@@ -1,6 +1,9 @@
 {{- define "helm.domain" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 
 {{- if and .Values.environment (hasKey .Values.environment "domainOverride") (hasKey .Values.environment.domainOverride "enabled") -}}
@@ -16,7 +19,10 @@
 
 {{- define "helm.domain.prefix" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $metaenv := (include "helm.metaEnvironment" . ) -}}
 
@@ -25,7 +31,10 @@
 
 {{- define "helm.namespace" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
@@ -35,7 +44,10 @@
 
 {{- define "helm.fullname" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
@@ -56,7 +68,10 @@
 
 {{- define "helm.basename" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
@@ -72,7 +87,10 @@
 
 {{- define "helm.instance" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
@@ -88,7 +106,10 @@
 {{- end -}}
 
 {{- define "helm.envScaling" -}}
-{{- $ctx := include "helm.context" . | fromJson -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $forceAutoscaling := $ctx.defaults.forceAutoscaling -}}
 

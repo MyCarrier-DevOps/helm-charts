@@ -135,7 +135,7 @@ deployment: deployment
 ## @param applications.example-api.service.perTryTimeout - Timeout for each retry
 ## @param applications.example-api.service.istioDisabled - Whether to disable Istio for this service
 ## @param applications.example-api.networking.ingress.type - Ingress type
-## @param applications.example-api.networking.istio.enabled - Enable Istio configuration
+## @param applications.example-api.networking.istio.enabled - Enable Istio configuration (defaults to true when omitted)
 ## @param applications.example-api.networking.istio.hosts [array] - Additional hostnames
 ## @param applications.example-api.networking.istio.redirects [object] - Domain redirects
 ## @param applications.example-api.networking.istio.routes [object] - Custom routes

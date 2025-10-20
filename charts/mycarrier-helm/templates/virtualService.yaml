@@ -7,6 +7,15 @@
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $metaenv := (include "helm.metaEnvironment" $ ) }}
+{{- $istioConfig := dig "networking" "istio" dict $appValues }}
+{{- $istioEnabled := true }}
+{{- if and $istioConfig (hasKey $istioConfig "enabled") }}
+{{- $istioEnabled = $istioConfig.enabled }}
+{{- end }}
+{{- $appIstioDisabled := dig "istioDisabled" false $appValues }}
+{{- $serviceIstioDisabled := dig "service" "istioDisabled" false $appValues }}
+{{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) }}
+{{- if $renderVirtualService }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -50,5 +59,6 @@ spec:
       - headers:
           Environment:
             exact: {{ $.Values.environment.name }}
+{{- end }}
 {{- end }}
 {{- end }}
