@@ -43,17 +43,8 @@ jobs:
           package_json="${chart_dir}/package.json"
           if [ ! -f "$package_json" ] || [ ! -s "$package_json" ]; then
             echo "package.json missing for ${chart_dir}, generating default metadata."
-            cat <<'EOF' > "$package_json"
-            {
-              "name": "${{ inputs.chart_name }}",
-              "version": "0.0.1",
-              "repository": {
-                "type": "git",
-                "url": "${{ github.repositoryUrl }}"
-              },
-              "homepage": "${{ github.server_url }}/${{ github.repository }}"
-            }
-            EOF
+            printf '{"name": "%s", "version": "0.0.1", "repository": {"type": "git", "url": "%s"}, "homepage": "%s"}\n' \
+              "${{ inputs.chart_name }}" "${{ github.repositoryUrl }}" "${{ github.server_url }}/${{ github.repository }}" > "$package_json"
           fi
 
       - name: Read current appVersion
