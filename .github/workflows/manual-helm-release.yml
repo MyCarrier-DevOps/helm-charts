@@ -1,0 +1,116 @@
+name: Helm-Manual-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to checkout for publishing the chart'
+        required: true
+        default: 'main'
+      chart_name:
+        description: 'Chart directory name under charts/'
+        required: true
+      chart_version:
+        description: 'Optional explicit chart version (leave empty to auto bump patch)'
+        required: false
+        default: ''
+      app_version:
+        description: 'Optional appVersion override'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  manual-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Verify chart directory and ensure package.json
+        run: |
+          chart_dir="charts/${{ inputs.chart_name }}"
+          if [ ! -d "$chart_dir" ]; then
+            echo "::error::Chart directory $chart_dir does not exist."
+            exit 1
+          fi
+          package_json="${chart_dir}/package.json"
+          if [ ! -f "$package_json" ] || [ ! -s "$package_json" ]; then
+            echo "package.json missing for ${chart_dir}, generating default metadata."
+            cat <<'EOF' > "$package_json"
+            {
+              "name": "${{ inputs.chart_name }}",
+              "version": "0.0.1",
+              "repository": {
+                "type": "git",
+                "url": "${{ github.repositoryUrl }}"
+              },
+              "homepage": "${{ github.server_url }}/${{ github.repository }}"
+            }
+            EOF
+          fi
+
+      - name: Read current appVersion
+        id: chart-app
+        uses: KJ002/read-yaml@main
+        with:
+          file: 'charts/${{ inputs.chart_name }}/Chart.yaml'
+          key-path: '["appVersion"]'
+
+      - name: Resolve app version input
+        id: resolved-app-version
+        run: |
+          desired_app_version="${{ inputs.app_version }}"
+          if [ -z "$desired_app_version" ]; then
+            desired_app_version="${{ steps.chart-app.outputs.data }}"
+          fi
+          echo "value=$desired_app_version" >> "$GITHUB_OUTPUT"
+
+      - name: Bump Chart & App version
+        id: version-bump
+        uses: ./.github/actions/chart-version-bumper
+        with:
+          chart_name: ${{ inputs.chart_name }}
+          chart_version: ${{ inputs.chart_version }}
+          app_version: ${{ steps.resolved-app-version.outputs.value }}
+
+      - name: Summarize chart changes
+        run: |
+          {
+            printf '### charts/%s\n\n' "${{ inputs.chart_name }}"
+            printf '%s\n\n' "${{ steps.version-bump.outputs.verboseChangeString }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit bumped chart
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Manual release for ${{ inputs.chart_name }}
+          branch: ${{ inputs.target_branch }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.8.1
+
+      - name: Update Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add mycarrier https://charts.mycarrier.dev || true
+          helm repo update
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CR_SKIP_EXISTING: true

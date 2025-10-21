@@ -143,6 +143,13 @@ jobs:
           chart_name: ${{ matrix.manifest }}
           chart_version: ""
           app_version: ${{ steps.yaml-data.outputs.data }}
+
+      - name: Summarize chart changes
+        run: |
+          {
+            printf '### charts/%s\n\n' "${{ matrix.manifest }}"
+            printf '%s\n\n' "${{ steps.version-bump.outputs.verboseChangeString }}"
+          } >> "$GITHUB_STEP_SUMMARY"
       
       - name: commit the new Charts
         uses: stefanzweifel/git-auto-commit-action@v4
