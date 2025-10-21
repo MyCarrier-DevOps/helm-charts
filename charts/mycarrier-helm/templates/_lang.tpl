@@ -60,8 +60,8 @@
 {{- end }}
 {{- if .Values.global.dependencies.elasticsearch }}
 - name: KeyVault_ElasticSearch
-  value: "ElasticSearchApiKey-{{ .Values.global.appStack | title }}-{{ $metaenv | title }}"
-- name: ElasticSearchApiKey-{{ .Values.global.appStack | title }}-{{ $metaenv | title }}
+  value: "ElasticSearchApiKey_{{ .Values.global.appStack | title }}_{{ $metaenv | title }}"
+- name: ElasticSearchApiKey_{{ .Values.global.appStack | title }}_{{ $metaenv | title }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/elasticsearchapikey-{{ .Values.global.appStack | lower }}-{{ $metaenv }}#value"
 {{- if eq $metaenv "prod" }}
 - name: ElasticSearch_Url
