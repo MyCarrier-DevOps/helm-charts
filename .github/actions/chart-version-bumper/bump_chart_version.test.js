@@ -30,7 +30,7 @@ test("versions are properly quoted when they look like integers", () => {
     const givenYAML = createChart(quoted(oldVersion), quoted(oldVersion));
     const expectedYAML = createChart(quoted(newVersion), quoted(newVersion))
 
-    const {newYAML} = bumpChartVersion(givenYAML, newVersion, newVersion);
+    const {newYAML} = bumpChartVersion(givenYAML, newVersion, newVersion, givenYAML);
 
     expect(newYAML).toEqual(expectedYAML)
 });
@@ -40,7 +40,7 @@ test("bumping to the same version does not give any changes", () => {
 
     const givenYAML = createChart(chartVersion, appVersion);
 
-    const {changes, newYAML} = bumpChartVersion(givenYAML, chartVersion, appVersion);
+    const {changes, newYAML} = bumpChartVersion(givenYAML, chartVersion, appVersion, givenYAML);
 
     expect(changes.length).toBe(0);
     expect(newYAML).toEqual(givenYAML);
@@ -52,7 +52,7 @@ test("changing chartVersion only changes the chartVersion", () => {
     const givenYAML = createChart(oldChartVersion, appVersion);
     const expectedYAML = createChart(quoted(newChartVersion), appVersion);
     
-    const {changes, newYAML} = bumpChartVersion(givenYAML, newChartVersion, appVersion);
+    const {changes, newYAML} = bumpChartVersion(givenYAML, newChartVersion, appVersion, givenYAML);
 
     expect(changes.length).toBe(1);
     expect(newYAML).toEqual(expectedYAML);
@@ -65,7 +65,7 @@ test("changing both chartVersion and appVersion", () => {
     const givenYAML = createChart(oldChartVersion, quoted(oldAppVersion));
     const expectedYAML = createChart(newChartVersion, quoted(newAppVersion));
     
-    const {changes, newYAML} = bumpChartVersion(givenYAML, newChartVersion, newAppVersion);
+    const {changes, newYAML} = bumpChartVersion(givenYAML, newChartVersion, newAppVersion, givenYAML);
 
     expect(changes.length).toBe(2);
     expect(newYAML).toEqual(expectedYAML);
@@ -78,8 +78,38 @@ test("changing appVersion increase chartVersion by 1", () => {
     const givenYAML = createChart(oldChartVersion, quoted(oldAppVersion));
     const expectedYAML = createChart(newChartVersion, quoted(newAppVersion));
     
-    const {changes, newYAML} = bumpChartVersion(givenYAML, '', newAppVersion);
+    const previousYAML = createChart(oldChartVersion, quoted(oldAppVersion));
+    const {changes, newYAML} = bumpChartVersion(givenYAML, '', newAppVersion, previousYAML);
 
     expect(changes.length).toBe(2);
     expect(newYAML).toEqual(expectedYAML);
+});
+
+test("manual chart version changes are respected", () => {
+    const [oldChartVersion, newChartVersion] = ['2.4.9', '3.0.0'];
+    const appVersion = '1.0.0';
+
+    const previousYAML = createChart(oldChartVersion, quoted(appVersion));
+    const givenYAML = createChart(newChartVersion, quoted(appVersion));
+
+    const {changes, newYAML} = bumpChartVersion(givenYAML, '', appVersion, previousYAML);
+
+    expect(changes).toEqual(expect.arrayContaining([
+        { field: 'chartVersion', from: oldChartVersion, to: newChartVersion }
+    ]));
+    expect(newYAML).toEqual(givenYAML);
+});
+
+test("new charts do not get an automatic bump", () => {
+    const chartVersion = '0.1.0';
+    const appVersion = '0.1.0';
+
+    const givenYAML = createChart(chartVersion, quoted(appVersion));
+
+    const {changes, newYAML} = bumpChartVersion(givenYAML, '', appVersion);
+
+    expect(changes).toEqual(expect.arrayContaining([
+        { field: 'chartVersion', from: 'N/A', to: chartVersion }
+    ]));
+    expect(newYAML).toEqual(givenYAML);
 });

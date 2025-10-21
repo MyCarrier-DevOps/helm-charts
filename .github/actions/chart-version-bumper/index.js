@@ -1,6 +1,7 @@
 const core = require('@actions/core');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { bumpChartVersion } = require('./bump_chart_version.js');
 
 function locateChartsDir() {
@@ -8,6 +9,19 @@ function locateChartsDir() {
   // => remove the 3 parts: [.github, actions, chart-version-bumper], add [charts]
   // TODO: fix it, quite ugly
   return path.join(__dirname, '/..', '/..', '/..', 'charts');
+}
+
+function locateRepoRoot() {
+  return path.join(__dirname, '/..', '/..', '/..');
+}
+
+function loadPreviousChartYAML(repoRoot, chartRelativePath) {
+  try {
+    return execSync(`git show HEAD^:${chartRelativePath}`, { encoding: 'utf8', cwd: repoRoot, stdio: ['pipe', 'pipe', 'ignore'] });
+  } catch (error) {
+    console.warn(`Unable to load previous Chart.yaml for ${chartRelativePath}: ${error.message}`);
+    return null;
+  }
 }
 
 // stringifyChanges creates human readable messages from the changes array
@@ -36,8 +50,11 @@ try {
   const chartsDir = locateChartsDir();
   const chartPath =  `${chartsDir}/${chartName}/Chart.yaml`;
   const chartYAML = fs.readFileSync(chartPath, 'utf8');
+  const repoRoot = locateRepoRoot();
+  const chartRelativePath = path.posix.join('charts', chartName, 'Chart.yaml');
+  const previousChartYAML = loadPreviousChartYAML(repoRoot, chartRelativePath);
 
-  const {changes, newYAML} = bumpChartVersion(chartYAML, chartVersion, appVersion);
+  const {changes, newYAML} = bumpChartVersion(chartYAML, chartVersion, appVersion, previousChartYAML);
 
   if (changes.length == 0) {
     // Make sure the pipeline stops if no changes were made
