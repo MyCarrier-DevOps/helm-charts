@@ -66,7 +66,7 @@ template:
               "ContainerTag": "{{ .containerTag }}",
               "TestFilters": {{ .filters | toJson }},
               "TestEnvironmentVariables": {
-                  "EnvironmentName": "{{ $environment }}",
+                  "EnvironmentName": "{{ $namespace }}",
                   "ReleaseId": "{{ $imageTag }}",
                   "SecretId": "{{ .secretId }}",
                   "ServiceAddress": {{ $serviceAddress | quote }},
