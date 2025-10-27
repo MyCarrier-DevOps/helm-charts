@@ -12,7 +12,7 @@ metadata:
   namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "5"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
     {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
     {{ toYaml $appValues.service.annotations | indent 4 | trim }}
     {{- end }}

@@ -26,7 +26,7 @@ metadata:
     {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
     {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
 spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
