@@ -22,7 +22,7 @@ tests:
           of: Deployment
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true"
+          value: "SkipDryRunOnMissingResource=true,Prune=true"
       - notMatchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
           pattern: "Replace=true"
@@ -81,7 +81,7 @@ tests:
           of: Deployment
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
-          value: "SkipDryRunOnMissingResource=true"
+          value: "SkipDryRunOnMissingResource=true,Prune=true"
 
   - it: should work with multiple applications when v2migration is true
     set:
