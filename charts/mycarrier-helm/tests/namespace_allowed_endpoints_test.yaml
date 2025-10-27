@@ -1,0 +1,321 @@
+suite: test allowed endpoints are disabled for dev namespace
+templates:
+  - templates/virtualService.yaml
+tests:
+  - it: should NOT render allowed endpoints in dev namespace
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      namespace: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: dev
+      # Should have the basic route configuration (spec.http[1])
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app
+      # Should have a route section
+      - exists:
+          path: spec.http[1].route
+      # Should NOT have the forbidden endpoint (which would be spec.http[3] if allowedEndpoints were rendered)
+      - notExists:
+          path: spec.http[3]
+
+  - it: should render allowed endpoints in feature20 namespace
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: feature20
+      # Feature namespaces don't have the base http[0] rule (see line 15-26 of _spec_virtualservice.tpl)
+      # C# apps have default endpoints: /liveness, /health, /api
+      # Plus custom endpoints: /api/health, /api/status
+      # Should have allowed endpoint rules starting at http[0]
+      - exists:
+          path: spec.http[0].match[0].uri
+      # Should have multiple http rules
+      - exists:
+          path: spec.http[1]
+
+  - it: should render allowed endpoints in preprod namespace
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: preprod
+      # Should have allowed endpoint rules
+      - exists:
+          path: spec.http[1].match[0].uri
+      # Should have multiple http rules (more than just the basic route)
+      - exists:
+          path: spec.http[2]
+
+  - it: should render allowed endpoints in prod namespace
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: prod
+      # Should have allowed endpoint rules
+      - exists:
+          path: spec.http[1].match[0].uri
+      # Should have multiple http rules (more than just the basic route)
+      - exists:
+          path: spec.http[2]
+
+  - it: dev namespace with language-specific default endpoints should also NOT render allowedEndpoints
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      namespace: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              # No custom allowedEndpoints, but C# has defaults: /liveness, /health, /api
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: dev
+      # Should have the basic route configuration
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app
+      # Should have a route section
+      - exists:
+          path: spec.http[1].route
+      # Should NOT have multiple endpoint rules (just the basic route)
+      - notExists:
+          path: spec.http[3]
+
+  - it: dev namespace without any endpoints should render basic route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      namespace: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              # No allowedEndpoints
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: dev
+      # Should have the basic route configuration
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app
+      # Should have a route section
+      - exists:
+          path: spec.http[1].route
+      # Should have destination host
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: "test-stack-test-app.dev.svc.cluster.local"
+
+  - it: preprod namespace should respect allowedEndpoints when explicitly defined
+    set:
+      global:
+        appStack: insurance
+        language: csharp
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: insurance/api
+            tag: v1.0.0
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/v1/health"
+                - "/api/v1/ready"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: preprod
+      # Should have endpoint matching rules
+      - exists:
+          path: spec.http[1].match[0].uri
+
+  - it: feature20 namespace with no allowedEndpoints but language defaults should render them
+    set:
+      global:
+        appStack: insurance
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: insurance/api
+            tag: v1.0.0
+          networking:
+            istio:
+              enabled: true
+              # C# has default endpoints: /liveness, /health, /api
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: feature20
+      # Should have endpoint matching rules from language defaults (starting at http[0] for feature envs)
+      - exists:
+          path: spec.http[0].match[0].uri

@@ -81,7 +81,7 @@ http:
 {{- $istioEnabled = $istioConfig.enabled }}
 {{- end }}
 {{- $hasUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
-{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) }}
+{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (ne $namespace "dev") }}
 
 {{- if $hasAllowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}

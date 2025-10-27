@@ -45,4 +45,4 @@ tests:
       - isSubset:
           path: spec.http[0].route[0].destination
           content:
-            host: test-stack-minimal-vs-app
+            host: test-stack-minimal-vs-app.dev.svc.cluster.local

@@ -298,13 +298,13 @@ tests:
           value: test-stack-test-api-allowed-liveness
       - equal:
           path: spec.http[1].route[0].destination.host
-          value: test-stack-test-api
+          value: test-stack-test-api.preprod.svc.cluster.local
       - equal:
           path: spec.http[1].route[0].weight
           value: 100
       - equal:
           path: spec.http[1].route[1].destination.host
-          value: test-stack-test-api-preview
+          value: test-stack-test-api-preview.preprod.svc.cluster.local
       - equal:
           path: spec.http[1].route[1].weight
           value: 0

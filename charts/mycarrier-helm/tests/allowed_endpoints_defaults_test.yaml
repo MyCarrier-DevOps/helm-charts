@@ -42,13 +42,14 @@ tests:
           path: spec.http[1].retries.perTryTimeout
           value: "50s"
 
-  - it: should render CSharp default allowed endpoints with minimal configuration
+  - it: should render CSharp default allowed endpoints with minimal configuration in preprod
     set:
       global:
         appStack: test-stack
         language: csharp
       environment:
-        name: dev
+        name: preprod
+      namespace: preprod
       applications:
         api-app:
           deploymentType: deployment
