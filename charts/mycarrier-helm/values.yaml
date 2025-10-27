@@ -455,6 +455,74 @@ jobs: []
   #       cpu: "500m"
   #       memory: "256Mi"
 
+## @section Kubernetes CronJobs
+## Configuration for Kubernetes CronJobs to run on a schedule
+
+## @param cronjobs [array] - List of Kubernetes CronJobs to run
+cronjobs: []
+  # Example cronjob configuration
+  # - name: backup-job
+  #   # Cron schedule (required)
+  #   schedule: "0 2 * * *"  # Run at 2 AM daily
+  #   # Time zone for the cron schedule (optional)
+  #   timeZone: "UTC"
+  #   # Concurrency policy: Allow, Forbid, or Replace (optional)
+  #   concurrencyPolicy: "Forbid"
+  #   # Suspend the cron job (optional)
+  #   suspend: false
+  #   # Number of successful jobs to keep (default: 3)
+  #   successfulJobsHistoryLimit: 3
+  #   # Number of failed jobs to keep (default: 1)
+  #   failedJobsHistoryLimit: 1
+  #   # Deadline in seconds for starting the job if it misses scheduled time (optional)
+  #   startingDeadlineSeconds: 200
+  #   # Custom labels
+  #   labels:
+  #     app.kubernetes.io/component: "cronjob"
+  #   # CronJob-specific annotations
+  #   annotations:
+  #     app.mycarrier.tech/team: "platform"
+  #   # Job timeout (in seconds) - optional
+  #   activeDeadlineSeconds: 600
+  #   # Number of retries
+  #   backoffLimit: 0
+  #   # CronJob container image
+  #   image:
+  #     registry: "myregistry.example.com"
+  #     repository: "mycarrier/backup"
+  #     tag: "1.0.0"
+  #   # Image pull policy
+  #   imagePullPolicy: "IfNotPresent"
+  #   # Image pull secret (default: imagepull)
+  #   imagePullSecret: "imagepull"
+  #   # Restart policy: Never or OnFailure (default: Never)
+  #   restartPolicy: "Never"
+  #   # Command to run
+  #   command: ["/bin/sh", "-c"]
+  #   # Arguments for the command
+  #   args: ["./run-backup.sh"]
+  #   # Environment variables
+  #   env:
+  #     - name: BACKUP_PATH
+  #       value: "/backups"
+  #   # ConfigMap reference (optional)
+  #   # configMapName: "backup-config"
+  #   # Secret reference (optional)
+  #   # secretName: "backup-secrets"
+  #   # Resource limits
+  #   resources:
+  #     requests:
+  #       cpu: "100m"
+  #       memory: "128Mi"
+  #     limits:
+  #       cpu: "500m"
+  #       memory: "512Mi"
+  #   # Volume mounts (optional)
+  #   # volumes:
+  #   #   - name: backup-storage
+  #   #     mountPath: /backups
+  #   #     kind: emptyDir
+
 ## @section Secrets Management
 ## Configuration for secrets from Vault
 

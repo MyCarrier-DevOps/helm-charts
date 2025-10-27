@@ -1,0 +1,364 @@
+suite: CronJob advanced template tests
+templates:
+  - cronjob.yaml
+values:
+  - ../values.yaml
+tests:
+  - it: should create cronjob with all features enabled
+    set:
+      environment.name: "prod"
+      global.appStack: "myapp"
+      cronjobs:
+        - name: comprehensive-job
+          schedule: "0 2 * * *"
+          timeZone: "UTC"
+          concurrencyPolicy: "Forbid"
+          suspend: false
+          successfulJobsHistoryLimit: 5
+          failedJobsHistoryLimit: 2
+          startingDeadlineSeconds: 300
+          activeDeadlineSeconds: 900
+          backoffLimit: 3
+          restartPolicy: "OnFailure"
+          labels:
+            team: "platform"
+            job-type: "comprehensive"
+          annotations:
+            app.mycarrier.tech/description: "Comprehensive test job"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/comprehensive"
+            tag: "3.0.0"
+          imagePullPolicy: "Always"
+          imagePullSecret: "custom-pull-secret"
+          command: ["/usr/local/bin/python"]
+          args: ["-m", "myapp.jobs.comprehensive"]
+          env:
+            - name: ENV_VAR1
+              value: "value1"
+            - name: ENV_VAR2
+              value: "value2"
+          configMapName: "job-config"
+          secretName: "job-secrets"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          volumes:
+            - name: data-volume
+              mountPath: /data
+              kind: emptyDir
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.name
+          value: prod-comprehensive-job-prod
+      - equal:
+          path: spec.schedule
+          value: "0 2 * * *"
+      - equal:
+          path: spec.timeZone
+          value: "UTC"
+      - equal:
+          path: spec.concurrencyPolicy
+          value: "Forbid"
+      - equal:
+          path: spec.suspend
+          value: false
+      - equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 5
+      - equal:
+          path: spec.failedJobsHistoryLimit
+          value: 2
+      - equal:
+          path: spec.startingDeadlineSeconds
+          value: 300
+      - equal:
+          path: spec.jobTemplate.spec.activeDeadlineSeconds
+          value: 900
+      - equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.restartPolicy
+          value: "OnFailure"
+      - equal:
+          path: metadata.labels.team
+          value: "platform"
+      - equal:
+          path: metadata.labels.job-type
+          value: "comprehensive"
+      - equal:
+          path: metadata.annotations["app.mycarrier.tech/description"]
+          value: "Comprehensive test job"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].image
+          value: "myregistry.example.com/mycarrier/comprehensive:3.0.0"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].imagePullPolicy
+          value: "Always"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets[0].name
+          value: "custom-pull-secret"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.cpu
+          value: "500m"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory
+          value: "2Gi"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data-volume
+            mountPath: /data
+
+  - it: should work with different environments
+    set:
+      environment.name: "preprod"
+      global.appStack: "testapp"
+      cronjobs:
+        - name: env-test-job
+          schedule: "*/15 * * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/env-test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.name
+          value: preprod-env-test-job-preprod
+      - equal:
+          path: metadata.namespace
+          value: preprod
+
+  - it: should handle volumes correctly
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: volume-job
+          schedule: "0 4 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/volume-test"
+            tag: "1.0.0"
+          volumes:
+            - name: cache-volume
+              mountPath: /cache
+              kind: emptyDir
+            - name: config-volume
+              mountPath: /config
+              subPath: app.conf
+              kind: emptyDir
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cache-volume
+            mountPath: /cache
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config-volume
+            mountPath: /config
+            subPath: app.conf
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: cache-volume
+            emptyDir: {}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: config-volume
+            emptyDir: {}
+
+  - it: should include tmp-dir volume by default
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: default-volume-job
+          schedule: "0 1 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: tmp-dir
+            emptyDir: {}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tmp-dir
+            mountPath: /tmp
+
+  - it: should set default resources when not specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: default-resources-job
+          schedule: "0 5 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.memory
+          value: "64Mi"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.cpu
+          value: "100m"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory
+          value: "256Mi"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
+          value: "500m"
+
+  - it: should handle multiple environment variables with configMap and secret
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: env-combined-job
+          schedule: "0 6 * * *"
+          env:
+            - name: CUSTOM_VAR
+              value: "custom-value"
+          configMapName: "app-config"
+          secretName: "app-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: "app-config"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: "app-secrets"
+
+  - it: should use default imagePullSecret when not specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: default-pullsecret-job
+          schedule: "0 7 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets[0].name
+          value: "imagepull"
+
+  - it: should set default restartPolicy to Never when not specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: default-restart-job
+          schedule: "0 8 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.restartPolicy
+          value: "Never"
+
+  - it: should set default backoffLimit to 0 when not specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: default-backoff-job
+          schedule: "0 9 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 0
+
+  - it: should handle feature environment with custom appStack
+    set:
+      environment.name: "feature-abc123"
+      global.appStack: "feature-app"
+      cronjobs:
+        - name: feature-job
+          schedule: "*/5 * * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/feature-test"
+            tag: "feature-1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.name
+          value: feature-abc123-feature-job-feature-abc123
+      - equal:
+          path: metadata.namespace
+          value: feature-abc123
+
+  - it: should support cron expressions for different schedules
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: hourly-job
+          schedule: "0 * * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/hourly"
+            tag: "1.0.0"
+        - name: daily-job
+          schedule: "0 0 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/daily"
+            tag: "1.0.0"
+        - name: weekly-job
+          schedule: "0 0 * * 0"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/weekly"
+            tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 3

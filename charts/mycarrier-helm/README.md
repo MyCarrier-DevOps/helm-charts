@@ -63,9 +63,13 @@ mycarrier/
 │   ├── _otel.tpl           # OpenTelemetry integration helpers
 │   ├── _probes.tpl         # Health/readiness probe configurations
 │   ├── _toleration.tpl     # Node tolerations for pods
+│   ├── _spec_job.tpl       # Job spec template definitions
+│   ├── _spec_cronjob.tpl   # CronJob spec template definitions
 │   ├── deployment.yaml     # Standard deployment template
 │   ├── service.yaml        # Service template
 │   ├── statefulset.yaml    # StatefulSet template
+│   ├── jobs.yaml           # Job template
+│   ├── cronjob.yaml        # CronJob template
 │   ├── offloads.yaml       # ApplicationSet generator for offloads
 │   ├── extraObjects.yaml   # Template for custom Kubernetes objects
 │   └── tests/              # Helm test templates
@@ -555,6 +559,18 @@ secrets:
       keyName: "password"
 ```
 
+### Minimal CronJob Configuration
+
+```yaml
+cronjobs:
+  - name: backup-job
+    schedule: "0 2 * * *"  # Run daily at 2 AM
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/backup"
+      tag: "1.0.0"
+```
+
 ### Minimal OpenTelemetry Configuration
 
 To enable OpenTelemetry for a Node.js application:
@@ -756,6 +772,170 @@ applications:
     forceOffload: true  # Force this application to be offloaded
     # ... other app configuration ...
 ```
+
+### Running Scheduled Jobs with CronJobs
+
+The chart supports Kubernetes CronJobs for running scheduled tasks such as backups, cleanup operations, or periodic data processing:
+
+#### Basic CronJob Example
+
+```yaml
+cronjobs:
+  - name: nightly-backup
+    schedule: "0 2 * * *"  # Run daily at 2 AM UTC
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/backup"
+      tag: "1.0.0"
+    command: ["/bin/sh", "-c"]
+    args: ["./backup.sh"]
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+```
+
+#### Advanced CronJob with All Features
+
+```yaml
+cronjobs:
+  - name: data-cleanup
+    schedule: "0 3 * * 0"  # Run weekly on Sunday at 3 AM
+    timeZone: "America/New_York"  # Use specific timezone
+    concurrencyPolicy: "Forbid"  # Don't allow concurrent runs
+    suspend: false  # Set to true to temporarily disable
+    successfulJobsHistoryLimit: 5  # Keep last 5 successful jobs
+    failedJobsHistoryLimit: 3  # Keep last 3 failed jobs
+    startingDeadlineSeconds: 300  # Start within 5 minutes of scheduled time
+    activeDeadlineSeconds: 900  # Kill job if it runs longer than 15 minutes
+    backoffLimit: 2  # Retry up to 2 times on failure
+    restartPolicy: "OnFailure"  # Restart container on failure
+
+    # Custom labels and annotations
+    labels:
+      team: "data-engineering"
+      job-type: "cleanup"
+    annotations:
+      app.mycarrier.tech/description: "Weekly data cleanup job"
+
+    # Container configuration
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/data-cleanup"
+      tag: "2.0.0"
+    imagePullPolicy: "Always"
+    imagePullSecret: "custom-pull-secret"
+
+    # Command and arguments
+    command: ["/usr/local/bin/python"]
+    args: ["-m", "myapp.jobs.cleanup", "--mode=weekly"]
+
+    # Environment variables
+    env:
+      - name: CLEANUP_THRESHOLD_DAYS
+        value: "90"
+      - name: DRY_RUN
+        value: "false"
+
+    # Use ConfigMap and Secrets
+    configMapName: "cleanup-config"
+    secretName: "cleanup-secrets"
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
+
+    # Volume mounts
+    volumes:
+      - name: temp-data
+        mountPath: /tmp/cleanup
+        kind: emptyDir
+```
+
+#### Multiple CronJobs Example
+
+```yaml
+cronjobs:
+  # Daily backup job
+  - name: database-backup
+    schedule: "0 1 * * *"  # Daily at 1 AM
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/backup"
+      tag: "1.0.0"
+    env:
+      - name: BACKUP_TYPE
+        value: "full"
+
+  # Hourly cache cleanup
+  - name: cache-cleanup
+    schedule: "0 * * * *"  # Every hour
+    concurrencyPolicy: "Replace"  # Replace running job if new one starts
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/cache-cleanup"
+      tag: "1.0.0"
+
+  # Weekly report generation
+  - name: weekly-report
+    schedule: "0 9 * * 1"  # Monday at 9 AM
+    timeZone: "America/New_York"
+    image:
+      registry: "mycarrieracr.azurecr.io"
+      repository: "app/reports"
+      tag: "1.0.0"
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "1Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+```
+
+#### CronJob Configuration Options
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `name` | Name of the CronJob (required) | - |
+| `schedule` | Cron schedule expression (required) | - |
+| `timeZone` | Timezone for the schedule | System timezone |
+| `concurrencyPolicy` | How to handle concurrent executions: `Allow`, `Forbid`, or `Replace` | `Forbid` |
+| `suspend` | Suspend all executions | `false` |
+| `successfulJobsHistoryLimit` | Number of successful jobs to keep | `3` |
+| `failedJobsHistoryLimit` | Number of failed jobs to keep | `1` |
+| `startingDeadlineSeconds` | Deadline for starting if missed schedule | None |
+| `activeDeadlineSeconds` | Maximum job execution time | None |
+| `backoffLimit` | Number of retries before marking job as failed | `0` |
+| `restartPolicy` | Pod restart policy: `Never` or `OnFailure` | `Never` |
+| `image` | Container image configuration (required) | - |
+| `imagePullPolicy` | Image pull policy | `IfNotPresent` |
+| `imagePullSecret` | Image pull secret name | `imagepull` |
+| `command` | Container command override | None |
+| `args` | Container arguments | None |
+| `env` | Environment variables array | `[]` |
+| `configMapName` | ConfigMap to load as environment variables | None |
+| `secretName` | Secret to load as environment variables | None |
+| `resources` | CPU and memory resource limits | Defaults set |
+| `volumes` | Volume mounts configuration | `[]` |
+
+#### Cron Schedule Examples
+
+- `"*/5 * * * *"` - Every 5 minutes
+- `"0 * * * *"` - Every hour
+- `"0 0 * * *"` - Daily at midnight
+- `"0 2 * * *"` - Daily at 2 AM
+- `"0 0 * * 0"` - Weekly on Sunday
+- `"0 0 1 * *"` - Monthly on the 1st
+- `"0 9 * * 1-5"` - Weekdays at 9 AM
 
 ## ArgoCD Integration
 
