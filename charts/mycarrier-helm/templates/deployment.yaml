@@ -20,7 +20,7 @@ metadata:
     {{- if $v2migration }}
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Replace=true,Force=true
     {{- else }}
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
     {{- end }}
 spec:
   {{ include "helm.specs.deployment" $appContext | indent 2 | trim }}
