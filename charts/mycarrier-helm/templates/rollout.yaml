@@ -17,7 +17,7 @@ metadata:
     {{ include "helm.labels.version" $appContext | indent 4 | trim }}
   annotations:
     argocd.argoproj.io/sync-wave: "10"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
 spec:
   {{ include "helm.specs.rollout" $appContext | indent 2 | trim }}
 ---

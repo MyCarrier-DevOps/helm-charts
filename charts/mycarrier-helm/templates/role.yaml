@@ -14,7 +14,7 @@ metadata:
   name: {{ $appValues.serviceAccount.name | default (include "helm.fullname" $appContext) }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
 rules:
 {{ toYaml $appValues.serviceAccount.rules | indent 2 }}
 

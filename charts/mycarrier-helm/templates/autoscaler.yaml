@@ -15,7 +15,7 @@ metadata:
   namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "11"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
 spec:
   {{ include "helm.specs.hpa" $appContext | indent 2 | trim }}
 {{- end -}}
