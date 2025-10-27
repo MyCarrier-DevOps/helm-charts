@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["global", "environment", "applications"],
+  "required": ["global", "environment"],
   "properties": {
     "global": {
       "type": "object",
@@ -117,7 +117,6 @@
     },
     "applications": {
       "type": "object",
-      "minProperties": 1,
       "patternProperties": {
         "^[a-z0-9_-]+$": {
           "type": "object",
@@ -1234,6 +1233,229 @@
                 },
                 "custom": {
                   "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "cronjobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "schedule", "image"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the cronjob"
+          },
+          "schedule": {
+            "type": "string",
+            "description": "Cron schedule expression (e.g., '0 2 * * *')"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "Time zone for the cron schedule (e.g., 'UTC', 'America/New_York')"
+          },
+          "concurrencyPolicy": {
+            "type": "string",
+            "enum": ["Allow", "Forbid", "Replace"],
+            "description": "How to handle concurrent job executions",
+            "default": "Forbid"
+          },
+          "suspend": {
+            "type": "boolean",
+            "description": "Whether to suspend the cronjob",
+            "default": false
+          },
+          "successfulJobsHistoryLimit": {
+            "type": "integer",
+            "description": "Number of successful jobs to keep in history",
+            "default": 3
+          },
+          "failedJobsHistoryLimit": {
+            "type": "integer",
+            "description": "Number of failed jobs to keep in history",
+            "default": 1
+          },
+          "startingDeadlineSeconds": {
+            "type": "integer",
+            "description": "Deadline in seconds for starting the job if it misses scheduled time"
+          },
+          "labels": {
+            "type": "object",
+            "description": "Custom labels to add to the cronjob resources",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "description": "Custom annotations to add to the cronjob resources",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "activeDeadlineSeconds": {
+            "type": "integer",
+            "description": "Maximum time for the job to run (seconds)"
+          },
+          "backoffLimit": {
+            "type": "integer",
+            "description": "Number of retries before considering job failed",
+            "default": 0
+          },
+          "restartPolicy": {
+            "type": "string",
+            "enum": ["Never", "OnFailure"],
+            "description": "Restart policy for the job pods",
+            "default": "Never"
+          },
+          "image": {
+            "type": "object",
+            "required": ["registry", "repository", "tag"],
+            "properties": {
+              "registry": {
+                "type": "string",
+                "description": "Docker registry URL"
+              },
+              "repository": {
+                "type": "string",
+                "description": "Docker image repository"
+              },
+              "tag": {
+                "type": "string",
+                "description": "Docker image tag"
+              }
+            }
+          },
+          "imagePullPolicy": {
+            "type": "string",
+            "enum": ["IfNotPresent", "Always", "Never"],
+            "description": "Image pull policy",
+            "default": "IfNotPresent"
+          },
+          "imagePullSecret": {
+            "type": "string",
+            "description": "Name of the image pull secret",
+            "default": "imagepull"
+          },
+          "command": {
+            "type": "array",
+            "description": "Command to run in the container",
+            "items": {
+              "type": "string"
+            }
+          },
+          "args": {
+            "type": "array",
+            "description": "Arguments to pass to the command",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "array",
+            "description": "Environment variables for the cronjob",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "configMapName": {
+            "type": "string",
+            "description": "Name of the ConfigMap to use for environment variables"
+          },
+          "secretName": {
+            "type": "string",
+            "description": "Name of the Secret to use for environment variables"
+          },
+          "resources": {
+            "type": "object",
+            "description": "Resource requests and limits",
+            "properties": {
+              "requests": {
+                "type": "object",
+                "properties": {
+                  "cpu": {
+                    "type": "string",
+                    "default": "100m"
+                  },
+                  "memory": {
+                    "type": "string",
+                    "default": "64Mi"
+                  }
+                }
+              },
+              "limits": {
+                "type": "object",
+                "properties": {
+                  "cpu": {
+                    "type": "string",
+                    "default": "500m"
+                  },
+                  "memory": {
+                    "type": "string",
+                    "default": "256Mi"
+                  }
+                }
+              }
+            }
+          },
+          "volumes": {
+            "type": "array",
+            "description": "Volumes to mount in the cronjob",
+            "items": {
+              "type": "object",
+              "required": ["name", "mountPath"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the volume"
+                },
+                "mountPath": {
+                  "type": "string",
+                  "description": "Path where the volume will be mounted"
+                },
+                "subPath": {
+                  "type": "string",
+                  "description": "Subpath within the volume to mount"
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "Type of volume",
+                  "enum": ["emptyDir", "configMap", "secret"]
+                },
+                "configMapName": {
+                  "type": "string",
+                  "description": "Name of the ConfigMap (if kind is configMap)"
+                },
+                "items": {
+                  "type": "array",
+                  "description": "Items to include from the ConfigMap",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "custom": {
+                  "type": "object",
+                  "description": "Custom volume definition"
                 }
               }
             }

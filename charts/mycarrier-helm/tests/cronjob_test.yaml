@@ -1,0 +1,406 @@
+suite: CronJob template tests
+templates:
+  - cronjob.yaml
+values:
+  - ../values.yaml
+tests:
+  - it: should create a basic cronjob with required fields
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.name
+          value: dev-backup-job-dev
+      - equal:
+          path: spec.schedule
+          value: "0 2 * * *"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].image
+          value: "myregistry.example.com/mycarrier/backup:1.0.0"
+      - equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 3
+      - equal:
+          path: spec.failedJobsHistoryLimit
+          value: 1
+
+  - it: should set timezone when specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          timeZone: "America/New_York"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.timeZone
+          value: "America/New_York"
+
+  - it: should set concurrency policy when specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          concurrencyPolicy: "Replace"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.concurrencyPolicy
+          value: "Replace"
+
+  - it: should suspend cronjob when specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          suspend: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.suspend
+          value: true
+
+  - it: should set custom history limits
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          successfulJobsHistoryLimit: 5
+          failedJobsHistoryLimit: 3
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 5
+      - equal:
+          path: spec.failedJobsHistoryLimit
+          value: 3
+
+  - it: should set starting deadline seconds when specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          startingDeadlineSeconds: 200
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.startingDeadlineSeconds
+          value: 200
+
+  - it: should include custom labels
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          labels:
+            custom-label: "test-value"
+            team: "platform"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.labels.custom-label
+          value: "test-value"
+      - equal:
+          path: metadata.labels.team
+          value: "platform"
+
+  - it: should include custom annotations
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          annotations:
+            app.mycarrier.tech/team: "platform"
+            custom-annotation: "test-value"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.annotations["app.mycarrier.tech/team"]
+          value: "platform"
+      - equal:
+          path: metadata.annotations.custom-annotation
+          value: "test-value"
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "Prune=true"
+
+  - it: should set job deadline and backoff limit
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          activeDeadlineSeconds: 600
+          backoffLimit: 3
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.activeDeadlineSeconds
+          value: 600
+      - equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 3
+
+  - it: should set restart policy
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          restartPolicy: "OnFailure"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.restartPolicy
+          value: "OnFailure"
+
+  - it: should set image pull policy
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          imagePullPolicy: "Always"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].imagePullPolicy
+          value: "Always"
+
+  - it: should set command and args
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          command: ["/bin/sh -c"]
+          args: ["./run-backup.sh"]
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[0]
+          value: "/bin/sh -c"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].args[0]
+          value: "./run-backup.sh"
+
+  - it: should set environment variables
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            - name: BACKUP_PATH
+              value: "/backups"
+            - name: LOG_LEVEL
+              value: "info"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: BACKUP_PATH
+            value: "/backups"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "info"
+
+  - it: should set custom resources
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.cpu
+          value: "200m"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.memory
+          value: "128Mi"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
+          value: "1000m"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory
+          value: "512Mi"
+
+  - it: should create multiple cronjobs
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+        - name: cleanup-job
+          schedule: "0 3 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/cleanup"
+            tag: "2.0.0"
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should not create cronjob when cronjobs is empty
+    set:
+      environment.name: "dev"
+      cronjobs: []
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should include standard labels
+    set:
+      environment.name: "dev"
+      global.appStack: "myapp"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/instance"]
+
+  - it: should set configMapName when specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          configMapName: "backup-config"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: "backup-config"
+
+  - it: should set secretName when specified
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          secretName: "backup-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: "backup-secrets"

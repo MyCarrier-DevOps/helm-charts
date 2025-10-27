@@ -1,0 +1,30 @@
+{{- if hasKey .Values "cronjobs" }}
+{{- $namespace := include "helm.namespace" . }}
+{{- $env := .Values.environment.name -}}
+{{- range .Values.cronjobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  {{/* Create a root context with default values */}}
+  {{- $rootContext := $ -}}
+  {{- $rootContext := fromJson (include "helm.default-context" $rootContext) -}}
+  {{- $_ := set $rootContext "cronjob" . -}}
+  name: {{ $namespace }}-{{ .name | default "cronjob" }}-{{ $env }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" $rootContext | indent 4 | trim }}
+    {{ include "helm.labels.standard" $rootContext | indent 4 | trim }}
+    {{ include "helm.labels.version" $rootContext | indent 4 | trim }}
+    {{- if .labels }}
+    {{ toYaml .labels | indent 4 | trim }}
+    {{- end }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=true
+  {{- with .annotations }}
+    {{ toYaml . | indent 4 | trim }}
+  {{- end }}
+spec:
+  {{ include "helm.specs.cronjob" $rootContext | indent 2 | trim }}
+{{- end }}
+{{- end }}
