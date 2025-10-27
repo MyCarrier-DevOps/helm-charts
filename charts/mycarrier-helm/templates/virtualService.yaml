@@ -52,7 +52,7 @@ spec:
   - name: {{ $fullName }}
     route:
       - destination:
-          host: {{ $fullName }}
+          host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
     match:
