@@ -304,6 +304,7 @@ Helper template to generate VirtualService HTTP rules for language-specific and 
 This template generates the complete HTTP rules as strings to avoid duplication
 */}}
 {{- define "helm.virtualservice.allowedEndpoints" -}}
+{{- $namespace := include "helm.namespace" . }}
 {{- $fullName := include "helm.fullname" . -}}
 {{- $mergedEndpoints := list -}}
 {{- $istioConfig := dig "networking" "istio" dict $.application -}}
