@@ -386,13 +386,13 @@ This template generates the complete HTTP rules as strings to avoid duplication
     {{- if and $.application.service $.application.service.ports }}
     {{- range $.application.service.ports }}
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ .port }}
       weight: 100
     {{- if eq $.application.deploymentType "rollout" }}
     - destination:
-        host: {{ $fullName }}-preview
+        host: "{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ .port }}
       weight: 0
@@ -400,13 +400,13 @@ This template generates the complete HTTP rules as strings to avoid duplication
     {{- end }}
     {{- else }}
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ default 8080 (dig "ports" "http" nil $.application) }}
       weight: 100
     {{- if eq $.application.deploymentType "rollout" }}
     - destination:
-        host: {{ $fullName }}-preview
+        host: "{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ default 8080 (dig "ports" "http" nil $.application) }}
       weight: 0
@@ -428,7 +428,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 - name: {{ $fullName }}-forbidden
   route:
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ default 8080 (dig "ports" "http" nil $.application) }}      
   fault:

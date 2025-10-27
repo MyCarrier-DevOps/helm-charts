@@ -36,13 +36,13 @@ http:
     {{- if and $appValues.service $appValues.service.ports }}
     {{- range $appValues.service.ports }}
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ .port }}
     {{- end }}
     {{- else }}
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
     {{- end }}
@@ -69,13 +69,13 @@ http:
   {{- if and $appValues.service $appValues.service.ports }}
   {{- range $appValues.service.ports }}
   - destination:
-      host: {{ $fullName }}
+      host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
       port:
         number: {{ .port }}
   {{- end }}
   {{- else }}
   - destination:
-      host: {{ $fullName }}
+      host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
       port:
         number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
   {{- end }}
@@ -164,7 +164,7 @@ http:
 - name: {{ $fullName }}-catchall
   route:
   - destination:
-      host: {{ $fullName }}
+      host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
       port:
         number: 80
   match:
@@ -281,13 +281,13 @@ http:
     {{- if and $appValues.service $appValues.service.ports }}
     {{- range $appValues.service.ports }}
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ .port }}
     {{- end }}
     {{- else }}
     - destination:
-        host: {{ $fullName }}
+        host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ default 4200 (dig "ports" "http" nil $appValues) }}
     {{- end }}
