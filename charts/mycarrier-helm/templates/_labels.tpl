@@ -52,6 +52,16 @@ mycarrier.tech/reference: {{ $branchLabel | quote }}
       {{- $version = .job.image | default "" -}}
     {{- end -}}
   {{- end -}}
+{{- else if .cronjob -}}
+  {{- if .cronjob.version -}}
+    {{- $version = .cronjob.version | quote -}}
+  {{- else if .cronjob.image -}}
+    {{- if kindIs "map" .cronjob.image -}}
+      {{- $version = .cronjob.image.tag | quote | default "" -}}
+    {{- else -}}
+      {{- $version = .cronjob.image | quote | default "" -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
 version: {{- printf " %s" $version | trunc 63 | trimSuffix "-" | trimAll "." }}
 mycarrier/service-version: {{ $version }}
