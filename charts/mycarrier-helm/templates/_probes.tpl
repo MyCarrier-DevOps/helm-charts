@@ -1,15 +1,13 @@
 {{- define "helm.defaultReadinessProbe" -}}
-{{- if (ne (.Values.global.language | lower) "csharp" ) }}
 {{- if (dig "ports" (dict) .application) }}
 readinessProbe:
   tcpSocket:
     port: {{- (or (index .application.ports "http") (index .application.ports "healthcheck")) | toString | indent 1 }}
-  initialDelaySeconds: 10
-  periodSeconds: 7
+  initialDelaySeconds: 15
+  periodSeconds: 5
   timeoutSeconds: 1
   successThreshold: 1
-  failureThreshold: 3
-{{- end }}
+  failureThreshold: 30
 {{- end }}
 {{- end -}}
 
