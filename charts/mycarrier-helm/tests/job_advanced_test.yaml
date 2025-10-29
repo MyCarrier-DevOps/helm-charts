@@ -1,0 +1,505 @@
+suite: Job advanced template tests
+templates:
+  - jobs.yaml
+values:
+  - ../values.yaml
+tests:
+  - it: should create job with all features enabled
+    set:
+      environment.name: "prod"
+      global.appStack: "myapp"
+      jobs:
+        - name: comprehensive-job
+          activeDeadlineSeconds: 900
+          backoffLimit: 3
+          restartPolicy: "OnFailure"
+          labels:
+            team: "platform"
+            job-type: "comprehensive"
+          annotations:
+            app.mycarrier.tech/description: "Comprehensive test job"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/comprehensive"
+            tag: "3.0.0"
+          imagePullPolicy: "Always"
+          imagePullSecret: "custom-pull-secret"
+          command: ["/usr/local/bin/python"]
+          args: ["-m", "myapp.jobs.comprehensive"]
+          configMapName: "job-config"
+          secretName: "job-secrets"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          volumes:
+            - name: data-volume
+              mountPath: /data
+              kind: emptyDir
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: prod-myapp-comprehensive-job
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 900
+      - equal:
+          path: spec.backoffLimit
+          value: 3
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: "OnFailure"
+      - equal:
+          path: metadata.labels.team
+          value: "platform"
+      - equal:
+          path: metadata.labels.job-type
+          value: "comprehensive"
+      - equal:
+          path: metadata.annotations["app.mycarrier.tech/description"]
+          value: "Comprehensive test job"
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "myregistry.example.com/mycarrier/comprehensive:3.0.0"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "Always"
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: "custom-pull-secret"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "500m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "2Gi"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data-volume
+            mountPath: /data
+
+  - it: should handle volumes correctly
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: volume-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/volume-test"
+            tag: "1.0.0"
+          volumes:
+            - name: cache-volume
+              mountPath: /cache
+              kind: emptyDir
+            - name: config-volume
+              mountPath: /config
+              subPath: app.conf
+              kind: emptyDir
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cache-volume
+            mountPath: /cache
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config-volume
+            mountPath: /config
+            subPath: app.conf
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cache-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config-volume
+            emptyDir: {}
+
+  - it: should handle configMap and secret
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: env-combined-job
+          configMapName: "app-config"
+          secretName: "app-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: "app-config"
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: "app-secrets"
+
+  - it: should handle feature environment with custom appStack
+    set:
+      environment.name: "feature-abc123"
+      global.appStack: "feature-app"
+      jobs:
+        - name: feature-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/feature-test"
+            tag: "feature-1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: feature-abc123-feature-app-feature-job
+      - equal:
+          path: metadata.namespace
+          value: feature-abc123
+
+  - it: should set pre-deploy ArgoCD hook with default order
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: pre-migration-job
+          timing: "pre-deploy"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          value: "PreSync"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-100"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          value: "BeforeHookCreation"
+
+  - it: should set post-deploy ArgoCD hook with default order
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: post-migration-job
+          timing: "post-deploy"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          value: "PostSync"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "100"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          value: "BeforeHookCreation"
+
+  - it: should set pre-deploy ArgoCD hook with custom order
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: pre-migration-job
+          timing: "pre-deploy"
+          order: 5
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          value: "PreSync"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-95"
+
+  - it: should set post-deploy ArgoCD hook with custom order
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: post-migration-job
+          timing: "post-deploy"
+          order: 10
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          value: "PostSync"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "110"
+
+  - it: should not set ArgoCD hooks when timing is not specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: regular-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/regular"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+
+  - it: should create multiple jobs with different timings
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: pre-job-1
+          timing: "pre-deploy"
+          order: 1
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/pre-1"
+            tag: "1.0.0"
+        - name: pre-job-2
+          timing: "pre-deploy"
+          order: 2
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/pre-2"
+            tag: "1.0.0"
+        - name: post-job-1
+          timing: "post-deploy"
+          order: 1
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/post-1"
+            tag: "1.0.0"
+        - name: regular-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/regular"
+            tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: should handle complex command and args
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: complex-command-job
+          command: ["/bin/bash"]
+          args:
+            - "-c"
+            - |
+              echo "Starting job"
+              ./run-script.sh
+              echo "Job completed"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/complex"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: "/bin/bash"
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: "-c"
+
+  - it: should handle multiple volumes with different configurations
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: multi-volume-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/multi-volume"
+            tag: "1.0.0"
+          volumes:
+            - name: data-volume
+              mountPath: /data
+              kind: emptyDir
+            - name: config-volume
+              mountPath: /config
+              subPath: config.yaml
+              kind: emptyDir
+            - name: logs-volume
+              mountPath: /logs
+              kind: emptyDir
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data-volume
+            mountPath: /data
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config-volume
+            mountPath: /config
+            subPath: config.yaml
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: logs-volume
+            mountPath: /logs
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: logs-volume
+            emptyDir: {}
+
+  - it: should handle jobs with high resource requirements
+    set:
+      environment.name: "prod"
+      jobs:
+        - name: high-resource-job
+          resources:
+            requests:
+              cpu: "4000m"
+              memory: "8Gi"
+            limits:
+              cpu: "8000m"
+              memory: "16Gi"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/high-resource"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "4000m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "8Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "8000m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "16Gi"
+
+  - it: should combine pre-deploy timing with all other features
+    set:
+      environment.name: "prod"
+      global.appStack: "myapp"
+      jobs:
+        - name: comprehensive-pre-deploy-job
+          timing: "pre-deploy"
+          order: 5
+          activeDeadlineSeconds: 600
+          backoffLimit: 2
+          restartPolicy: "OnFailure"
+          labels:
+            job-type: "migration"
+            priority: "high"
+          annotations:
+            description: "Pre-deploy migration job"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "2.0.0"
+          imagePullPolicy: "Always"
+          command: ["/app/migrate"]
+          args: ["--mode", "pre-deploy"]
+          configMapName: "migration-config"
+          secretName: "db-secrets"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          volumes:
+            - name: migration-data
+              mountPath: /migration-data
+              kind: emptyDir
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: prod-myapp-comprehensive-pre-deploy-job
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          value: "PreSync"
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-95"
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+      - equal:
+          path: spec.backoffLimit
+          value: 2
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: "OnFailure"
+      - equal:
+          path: metadata.labels.job-type
+          value: "migration"
+      - equal:
+          path: metadata.labels.priority
+          value: "high"
+
+  - it: should handle zero backoffLimit explicitly
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: no-retry-job
+          backoffLimit: 0
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/no-retry"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.backoffLimit
+          value: 0

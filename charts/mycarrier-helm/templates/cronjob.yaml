@@ -1,5 +1,6 @@
 {{- if hasKey .Values "cronjobs" }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $appStack := .Values.global.appStack }}
 {{- $env := .Values.environment.name -}}
 {{- range .Values.cronjobs }}
 ---
@@ -10,7 +11,7 @@ metadata:
   {{- $rootContext := $ -}}
   {{- $rootContext := fromJson (include "helm.default-context" $rootContext) -}}
   {{- $_ := set $rootContext "cronjob" . -}}
-  name: {{ $namespace }}-{{ .name | default "cronjob" }}-{{ $env }}
+  name: {{ $namespace }}-{{ $appStack }}-{{ .name | default "cronjob" }}
   namespace: {{ $namespace }}
   labels:
     {{ include "helm.labels.dependencies" $rootContext | indent 4 | trim }}

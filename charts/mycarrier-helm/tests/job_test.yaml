@@ -1,0 +1,451 @@
+suite: Job template tests
+templates:
+  - jobs.yaml
+values:
+  - ../values.yaml
+tests:
+  - it: should create a basic job with required fields
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: dev-app-migration-job
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "myregistry.example.com/mycarrier/migration:1.0.0"
+
+  - it: should set activeDeadlineSeconds when specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          activeDeadlineSeconds: 600
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+
+  - it: should set backoffLimit when specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          backoffLimit: 3
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.backoffLimit
+          value: 3
+
+  - it: should set default backoffLimit to 0 when not specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.backoffLimit
+          value: 0
+
+  - it: should set restartPolicy when specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          restartPolicy: "OnFailure"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: "OnFailure"
+
+  - it: should set default restartPolicy to Never when not specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: "Never"
+
+  - it: should include custom labels
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          labels:
+            custom-label: "test-value"
+            team: "platform"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.labels.custom-label
+          value: "test-value"
+      - equal:
+          path: metadata.labels.team
+          value: "platform"
+
+  - it: should include custom annotations
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          annotations:
+            app.mycarrier.tech/team: "platform"
+            custom-annotation: "test-value"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["app.mycarrier.tech/team"]
+          value: "platform"
+      - equal:
+          path: metadata.annotations.custom-annotation
+          value: "test-value"
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "Force=true,Replace=true"
+
+  - it: should set image pull policy
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          imagePullPolicy: "Always"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "Always"
+
+  - it: should set default image pull policy to IfNotPresent when not specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "IfNotPresent"
+
+  - it: should set command and args
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          command: ["/bin/sh", "-c"]
+          args: ["./run-migration.sh"]
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - exists:
+          path: spec.template.spec.containers[0].command
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: "./run-migration.sh"
+
+  - it: should set environment variables
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            - name: MIGRATION_TARGET
+              value: "database"
+            - name: LOG_LEVEL
+              value: "info"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MIGRATION_TARGET
+            value: "database"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "info"
+
+  - it: should set custom resources
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "200m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "128Mi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1000m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "512Mi"
+
+  - it: should set default resources when not specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "64Mi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "100m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "256Mi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "500m"
+
+  - it: should set configMapName when specified with secretName
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          configMapName: "migration-config"
+          secretName: "migration-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: "migration-config"
+
+  - it: should set secretName when specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          secretName: "migration-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: "migration-secrets"
+
+  - it: should create multiple jobs
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+        - name: seeding-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/seeding"
+            tag: "2.0.0"
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should not create job when jobs is empty
+    set:
+      environment.name: "dev"
+      jobs: []
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should include standard labels
+    set:
+      environment.name: "dev"
+      global.appStack: "myapp"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/instance"]
+
+  - it: should use default imagePullSecret when not specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: "imagepull"
+
+  - it: should use custom imagePullSecret when specified
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          imagePullSecret: "custom-pull-secret"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: "custom-pull-secret"
+
+  - it: should work with different environments
+    set:
+      environment.name: "preprod"
+      global.appStack: "testapp"
+      jobs:
+        - name: env-test-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/env-test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: preprod-testapp-env-test-job
+      - equal:
+          path: metadata.namespace
+          value: preprod
+
+  - it: should include tmp-dir volume by default
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: default-volume-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/test"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tmp-dir
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tmp-dir
+            mountPath: /tmp

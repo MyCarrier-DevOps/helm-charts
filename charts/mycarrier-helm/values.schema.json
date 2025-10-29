@@ -1156,7 +1156,7 @@
             }
           },
           "env": {
-            "type": "object",
+            "type": "array",
             "description": "Environment variables as key-value pairs",
             "additionalProperties": {
               "type": "string"
