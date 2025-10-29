@@ -19,7 +19,7 @@ tests:
           of: CronJob
       - equal:
           path: metadata.name
-          value: dev-backup-job-dev
+          value: dev-app-backup-job
       - equal:
           path: spec.schedule
           value: "0 2 * * *"

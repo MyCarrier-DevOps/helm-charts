@@ -1,5 +1,6 @@
 {{- if hasKey .Values "jobs" }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $appStack := .Values.global.appStack }}
 {{- $env := .Values.environment.name -}}
 {{- range .Values.jobs }}
 ---
@@ -10,7 +11,7 @@ metadata:
   {{- $rootContext := $ -}}
   {{- $rootContext := fromJson (include "helm.default-context" $rootContext) -}}
   {{- $_ := set $rootContext "job" . -}}
-  name: {{ $namespace }}-{{ .name | default "job" }}-{{ $env }}
+  name: {{ $namespace }}-{{ $appStack }}-{{ .name | default "job" }}
   namespace: {{ $namespace }}
   labels:
     {{ include "helm.labels.dependencies" $rootContext | indent 4 | trim }}
