@@ -121,6 +121,34 @@
 {{- end -}}
 {{- end -}}
 
+{{/*
+Determines if HPA should be created for an application
+This is a partial that sets up the shouldCreateHPA check but doesn't return a value
+It's meant to be used as an include that evaluates the condition inline
+*/}}
+{{- define "helm.hpaCondition" -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
+{{- $envScaling := include "helm.envScaling" . }}
+{{- $appForceAutoscaling := dig "autoscaling" "forceAutoscaling" nil .application }}
+{{/* 1. Explicit app-level enable always wins */}}
+{{- if dig "autoscaling" "enabled" false .application }}true
+{{/* 2. App-level forceAutoscaling true creates HPA (even for migrations) */}}
+{{- else if eq $appForceAutoscaling true }}true
+{{/* 3. App-level forceAutoscaling false explicitly disables HPA */}}
+{{- else if eq $appForceAutoscaling false }}false
+{{/* 4. Global override (forceAutoscaling: false) blocks automatic scaling */}}
+{{- else if eq $globalForceAutoscaling false }}false
+{{/* 5. Global force or automatic prod scaling (but NOT for migrations) */}}
+{{- else if and (not (contains "migration" .appName)) (or (eq $globalForceAutoscaling true) (eq $envScaling "1")) }}true
+{{/* 6. Default: no HPA */}}
+{{- else }}false
+{{- end -}}
+{{- end -}}
+
 {{- define "helm.annotations.istio" -}}
 {{- if .application.istioDisabled }}
 sidecar.istio.io/inject: 'false'

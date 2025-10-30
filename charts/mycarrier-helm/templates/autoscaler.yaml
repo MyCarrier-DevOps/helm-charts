@@ -2,9 +2,7 @@
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
-{{- $globalForceAutoscaling := $globalCtx.defaults.forceAutoscaling }}
-{{- if (or (dig "autoscaling" "enabled" false $appValues) $globalForceAutoscaling) }}
-{{- $envScaling := include "helm.envScaling" $ }}
+{{- if eq "true" (include "helm.hpaCondition" $appContext | trim) }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 ---

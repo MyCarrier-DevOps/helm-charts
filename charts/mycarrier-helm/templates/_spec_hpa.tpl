@@ -1,7 +1,7 @@
 {{- define "helm.specs.hpa" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
-maxReplicas: {{ dig "autoscaling" "maxReplicas" 5 .application }}
+maxReplicas: {{ dig "autoscaling" "maxReplicas" 10 .application }}
 minReplicas: {{ dig "autoscaling" "minReplicas" 2 .application }}
 metrics:
 - type: Resource

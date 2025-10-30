@@ -2,12 +2,7 @@
 {{- $fullName := include "helm.fullname" . }}
 {{- $envScaling := include "helm.envScaling" . }}
 {{- $namespace := include "helm.namespace" . }}
-{{- $ctx := .ctx -}}
-{{- if not $ctx -}}
-  {{- $ctx = include "helm.context" . | fromJson -}}
-{{- end -}}
-{{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
-{{- if not (or (dig "autoscaling" "enabled" false .application) $globalForceAutoscaling) }}
+{{- if ne "true" (include "helm.hpaCondition" . | trim) }}
 {{- if eq "0" $envScaling }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
 {{- if not (kindIs "invalid" .application.replicas) }}

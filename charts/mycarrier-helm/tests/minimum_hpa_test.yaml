@@ -39,7 +39,7 @@ tests:
           value: 2
       - equal:
           path: spec.maxReplicas
-          value: 5
+          value: 10
       # Verify at least one metric is configured
       - exists:
           path: spec.metrics

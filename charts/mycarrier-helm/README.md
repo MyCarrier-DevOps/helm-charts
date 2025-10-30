@@ -194,7 +194,7 @@ applications:
       tag: "1.0.0"                         # Docker image tag
       pullPolicy: "IfNotPresent"           # Image pull policy
       pullSecrets: []                      # Image pull secrets
-    replicaCount: 1                        # Number of replicas
+    replicas: 1                        # Number of replicas
     ports:
       http: 8080                           # HTTP port
       metrics: 9090                        # Metrics port
@@ -258,49 +258,139 @@ applications:
 
 ### Autoscaling Configuration
 
-The chart provides flexible autoscaling capabilities through two configuration options:
+The chart provides intelligent autoscaling with multiple configuration levels. See [AUTOSCALING.md](AUTOSCALING.md) for comprehensive documentation.
 
-1. **Per-Application Autoscaling** (`applications.<app>.autoscaling.enabled`): Enable autoscaling for individual applications
-2. **Global Force Autoscaling** (`global.forceAutoscaling`): Force autoscaling on ALL applications regardless of environment
+#### Configuration Options
 
-#### Autoscaling Behavior
+**Global Level:**
+```yaml
+global:
+  forceAutoscaling: true | false | not set
+```
 
-Autoscaling is enabled when either:
-- The application's `autoscaling.enabled` is set to `true`, OR
-- The global `forceAutoscaling` is set to `true`
+- **`not set`** (default): Allows automatic production autoscaling for non-migration apps
+- **`false`**: Disables all automatic autoscaling (override mechanism)
+- **`true`**: Forces HPA creation for all non-migration apps in any environment
+
+**Application Level:**
+```yaml
+applications:
+  <app-name>:
+    autoscaling:
+      enabled: true | false
+      forceAutoscaling: true | false
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+```
+
+- **`enabled: true`**: Always creates HPA (highest precedence)
+- **`forceAutoscaling: true`**: Creates HPA even for migration apps, overrides global settings
+
+#### HPA Creation Logic
+
+A HorizontalPodAutoscaler (HPA) is created when:
+
+1. `autoscaling.enabled: true` (highest precedence), OR
+2. `autoscaling.forceAutoscaling: true` (app-level force), OR
+3. UNLESS `global.forceAutoscaling: false` (override blocks auto-scaling), THEN:
+   - `global.forceAutoscaling: true` AND app is NOT a migration app, OR
+   - Environment is production (envScaling=1) AND app is NOT a migration app
+
+**Migration App Protection:** Apps with "migration" in their name are excluded from global force and automatic production autoscaling. Use app-level `autoscaling.enabled` or `autoscaling.forceAutoscaling` to enable HPA for migrations.
 
 When autoscaling is **enabled**:
 - A HorizontalPodAutoscaler (HPA) resource is created
 - The `replicas` field is removed from the Deployment to allow HPA control
 - The HPA manages scaling based on CPU/memory utilization
+- **Default HPA values** (if not explicitly set):
+  - `minReplicas`: **2**
+  - `maxReplicas`: **10**
+  - `targetCPUUtilizationPercentage`: **80**
 
 When autoscaling is **disabled**:
 - No HPA resource is created
 - The `replicas` field is set on the Deployment with environment-specific defaults:
   - Feature environments (`feature-*`): Default 1 replica
-  - Other environments (dev, preprod, prod): Default 2 replicas (or specified value)
+  - Other environments (dev, preprod): Default 2 replicas
+  - Production with migration apps: Default 2 replicas
 
 #### Example Configuration
 
+**Example 1: Default Production (Auto-scaling)**
+
+```yaml
+environment:
+  name: "prod"              # Production environment (envScaling=1)
+
+applications:
+  api:
+    # HPA automatically created in production
+    # No autoscaling config needed
+    autoscaling:
+      minReplicas: 2        # Optional: customize min/max
+      maxReplicas: 10
+
+  db-migration:
+    # Migration apps excluded from auto-scaling
+    replicas: 1             # Uses static replicas
+```
+
+**Example 2: Disable Production Auto-scaling (Override)**
+
 ```yaml
 global:
-  forceAutoscaling: true    # Force autoscaling on ALL applications
+  forceAutoscaling: false   # Override: disable auto-scaling
+
+environment:
+  name: "prod"
+
+applications:
+  api:
+    replicas: 3             # Uses static replicas (no HPA)
+```
+
+**Example 3: Force Autoscaling in Dev**
+
+```yaml
+global:
+  forceAutoscaling: true    # Force HPA in any environment
+
+environment:
+  name: "dev"
 
 applications:
   api:
     autoscaling:
-      enabled: false        # Individual app setting (overridden by global.forceAutoscaling)
-      minReplicas: 2
-      maxReplicas: 10
-      targetCPUUtilizationPercentage: 80
-  worker:
-    autoscaling:
-      enabled: true         # Individual app setting
       minReplicas: 1
       maxReplicas: 5
+
+  db-migration:
+    # Global force does NOT apply to migrations
+    replicas: 1
 ```
 
-In the above example, both `api` and `worker` would have autoscaling enabled due to `global.forceAutoscaling: true`.
+**Example 4: App-level Override**
+
+```yaml
+global:
+  forceAutoscaling: false   # Override global
+
+environment:
+  name: "prod"
+
+applications:
+  api:
+    autoscaling:
+      enabled: true         # Explicit enable overrides global
+      minReplicas: 3
+      maxReplicas: 15
+
+  worker:
+    replicas: 2             # Static replicas
+```
+
+For more examples and use cases, see [AUTOSCALING.md](AUTOSCALING.md).
 
 ### Networking Configuration
 
@@ -662,7 +752,7 @@ metadata:
   labels:
     {{- include "helm.labels.standard" . | nindent 4 }}
 spec:
-  replicas: {{ $app.replicaCount }}
+  replicas: {{ $app.replicas }}
   selector:
     matchLabels:
       {{- include "helm.labels.selector" . | nindent 6 }}
@@ -746,7 +836,7 @@ secrets:
 applications:
   database:
     deploymentType: "statefulset"
-    replicaCount: 3
+    replicas: 3
     updateStrategy:
       type: RollingUpdate
       rollingUpdate:
