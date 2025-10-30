@@ -194,7 +194,7 @@ applications:
       tag: "1.0.0"                         # Docker image tag
       pullPolicy: "IfNotPresent"           # Image pull policy
       pullSecrets: []                      # Image pull secrets
-    replicaCount: 1                        # Number of replicas
+    replicas: 1                        # Number of replicas
     ports:
       http: 8080                           # HTTP port
       metrics: 9090                        # Metrics port
@@ -258,21 +258,27 @@ applications:
 
 ### Autoscaling Configuration
 
-The chart provides flexible autoscaling capabilities through two configuration options:
+The chart provides flexible autoscaling capabilities through multiple configuration options:
 
 1. **Per-Application Autoscaling** (`applications.<app>.autoscaling.enabled`): Enable autoscaling for individual applications
 2. **Global Force Autoscaling** (`global.forceAutoscaling`): Force autoscaling on ALL applications regardless of environment
+3. **Automatic Production Autoscaling**: In production-like environments (envScaling=1), autoscaling is automatically enabled for all apps EXCEPT those with "migration" in their name
 
 #### Autoscaling Behavior
 
-Autoscaling is enabled when either:
+A HorizontalPodAutoscaler (HPA) is created when **any** of the following conditions are met:
 - The application's `autoscaling.enabled` is set to `true`, OR
-- The global `forceAutoscaling` is set to `true`
+- The global `forceAutoscaling` is set to `true`, OR
+- The environment is production-like (envScaling=1) AND the application name does NOT contain "migration"
 
 When autoscaling is **enabled**:
 - A HorizontalPodAutoscaler (HPA) resource is created
 - The `replicas` field is removed from the Deployment to allow HPA control
 - The HPA manages scaling based on CPU/memory utilization
+- **Default HPA values** (if not explicitly set):
+  - `minReplicas`: **2**
+  - `maxReplicas`: **10**
+  - `targetCPUUtilizationPercentage`: **80**
 
 When autoscaling is **disabled**:
 - No HPA resource is created
@@ -280,27 +286,65 @@ When autoscaling is **disabled**:
   - Feature environments (`feature-*`): Default 1 replica
   - Other environments (dev, preprod, prod): Default 2 replicas (or specified value)
 
+#### Migration Apps Exception
+
+Applications with "migration" in their name (e.g., `db-migration`, `schema-migration-worker`) are excluded from automatic production autoscaling to ensure predictable behavior for one-time or periodic migration tasks. However, you can still enable autoscaling for migration apps by:
+- Setting `autoscaling.enabled: true` for the specific migration app, OR
+- Setting `global.forceAutoscaling: true` to enable autoscaling for all apps including migrations
+
 #### Example Configuration
+
+**Production Environment (envScaling=1) - Automatic Autoscaling:**
+
+```yaml
+environment:
+  name: "prod"              # Production environment (envScaling=1)
+
+applications:
+  api:
+    # In production, HPA is automatically created even without explicit config
+    autoscaling:
+      enabled: false        # Still gets HPA due to automatic production autoscaling
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+
+  db-migration:
+    # Migration apps are excluded from automatic production autoscaling
+    autoscaling:
+      enabled: false        # No HPA created - migration apps are excluded
+      minReplicas: 1
+      maxReplicas: 1
+```
+
+In the above example:
+- `api` gets HPA automatically in production (envScaling=1)
+- `db-migration` does NOT get HPA (migration apps are excluded)
+
+**Force Autoscaling for All Apps:**
 
 ```yaml
 global:
   forceAutoscaling: true    # Force autoscaling on ALL applications
 
+environment:
+  name: "dev"               # Even in dev environment
+
 applications:
   api:
     autoscaling:
-      enabled: false        # Individual app setting (overridden by global.forceAutoscaling)
+      enabled: false        # Overridden by global.forceAutoscaling
       minReplicas: 2
       maxReplicas: 10
-      targetCPUUtilizationPercentage: 80
-  worker:
+
+  db-migration:
     autoscaling:
-      enabled: true         # Individual app setting
+      enabled: false        # Overridden by global.forceAutoscaling
       minReplicas: 1
-      maxReplicas: 5
+      maxReplicas: 3
 ```
 
-In the above example, both `api` and `worker` would have autoscaling enabled due to `global.forceAutoscaling: true`.
+In the above example, both `api` and `db-migration` have autoscaling enabled due to `global.forceAutoscaling: true`, including migration apps.
 
 ### Networking Configuration
 
@@ -662,7 +706,7 @@ metadata:
   labels:
     {{- include "helm.labels.standard" . | nindent 4 }}
 spec:
-  replicas: {{ $app.replicaCount }}
+  replicas: {{ $app.replicas }}
   selector:
     matchLabels:
       {{- include "helm.labels.selector" . | nindent 6 }}
@@ -746,7 +790,7 @@ secrets:
 applications:
   database:
     deploymentType: "statefulset"
-    replicaCount: 3
+    replicas: 3
     updateStrategy:
       type: RollingUpdate
       rollingUpdate:

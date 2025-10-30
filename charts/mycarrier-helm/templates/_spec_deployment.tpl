@@ -7,7 +7,7 @@
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
 {{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
-{{- if not (or (dig "autoscaling" "enabled" false .application) $globalForceAutoscaling) }}
+{{- if not (or (dig "autoscaling" "enabled" false .application) $globalForceAutoscaling (and (eq $envScaling "1") (not (contains "migration" .appName))) ) }}
 {{- if eq "0" $envScaling }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
 {{- if not (kindIs "invalid" .application.replicas) }}

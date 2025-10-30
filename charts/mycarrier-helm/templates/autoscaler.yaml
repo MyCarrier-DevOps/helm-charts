@@ -3,8 +3,8 @@
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- $globalForceAutoscaling := $globalCtx.defaults.forceAutoscaling }}
-{{- if (or (dig "autoscaling" "enabled" false $appValues) $globalForceAutoscaling) }}
 {{- $envScaling := include "helm.envScaling" $ }}
+{{- if (or (dig "autoscaling" "enabled" false $appValues) $globalForceAutoscaling (and (eq $envScaling "1") (not (contains "migration" $appName))) ) }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 ---
