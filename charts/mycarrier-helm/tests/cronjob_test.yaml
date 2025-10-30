@@ -263,10 +263,8 @@ tests:
         - name: backup-job
           schedule: "0 2 * * *"
           env:
-            - name: BACKUP_PATH
-              value: "/backups"
-            - name: LOG_LEVEL
-              value: "info"
+            BACKUP_PATH: "/backups"
+            LOG_LEVEL: "info"
           image:
             registry: "myregistry.example.com"
             repository: "mycarrier/backup"
@@ -284,6 +282,325 @@ tests:
           content:
             name: LOG_LEVEL
             value: "info"
+
+  - it: should set environment variables from secret using secretKeyRef
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            S3_ACCESS_KEY:
+              secretKeyRef:
+                name: "s3-credentials"
+                key: "access-key"
+            S3_SECRET_KEY:
+              secretKeyRef:
+                name: "s3-credentials"
+                key: "secret-key"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "s3-credentials"
+                key: "access-key"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "s3-credentials"
+                key: "secret-key"
+
+  - it: should set environment variables from configMap using configMapKeyRef
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            BACKUP_CONFIG:
+              configMapKeyRef:
+                name: "backup-config"
+                key: "settings.json"
+            RETENTION_POLICY:
+              configMapKeyRef:
+                name: "backup-config"
+                key: "retention"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: BACKUP_CONFIG
+            valueFrom:
+              configMapKeyRef:
+                name: "backup-config"
+                key: "settings.json"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RETENTION_POLICY
+            valueFrom:
+              configMapKeyRef:
+                name: "backup-config"
+                key: "retention"
+
+  - it: should set environment variables from field references
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            POD_NAME:
+              fieldRef:
+                fieldPath: "metadata.name"
+            POD_NAMESPACE:
+              fieldRef:
+                fieldPath: "metadata.namespace"
+            POD_IP:
+              fieldRef:
+                fieldPath: "status.podIP"
+            NODE_NAME:
+              fieldRef:
+                fieldPath: "spec.nodeName"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.name"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.namespace"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: "status.podIP"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "spec.nodeName"
+
+  - it: should set environment variables from resource field references
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            MEMORY_LIMIT:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "limits.memory"
+            CPU_REQUEST:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "requests.cpu"
+            MEMORY_REQUEST:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "requests.memory"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: MEMORY_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "limits.memory"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CPU_REQUEST
+            valueFrom:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "requests.cpu"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: MEMORY_REQUEST
+            valueFrom:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "requests.memory"
+
+  - it: should support mixed environment variable types
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            PLAIN_VALUE: "simple-string"
+            NUMERIC_VALUE: "12345"
+            BACKUP_BUCKET: "s3://my-backups"
+            S3_SECRET_KEY:
+              secretKeyRef:
+                name: "s3-credentials"
+                key: "secret-key"
+            RETENTION_DAYS:
+              configMapKeyRef:
+                name: "backup-config"
+                key: "retention"
+            POD_NAME:
+              fieldRef:
+                fieldPath: "metadata.name"
+            MEMORY_LIMIT:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "limits.memory"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: PLAIN_VALUE
+            value: "simple-string"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: NUMERIC_VALUE
+            value: "12345"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: BACKUP_BUCKET
+            value: "s3://my-backups"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "s3-credentials"
+                key: "secret-key"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RETENTION_DAYS
+            valueFrom:
+              configMapKeyRef:
+                name: "backup-config"
+                key: "retention"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.name"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: MEMORY_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: "backup-job"
+                resource: "limits.memory"
+
+  - it: should combine env with both configMapName and secretName
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env:
+            CUSTOM_VAR: "custom-value"
+            OVERRIDE_VALUE: "override"
+          configMapName: "backup-config"
+          secretName: "backup-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: OVERRIDE_VALUE
+            value: "override"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: "backup-config"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: "backup-secrets"
+
+  - it: should handle empty env object
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          env: {}
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - exists:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
 
   - it: should set custom resources
     set:

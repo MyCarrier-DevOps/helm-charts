@@ -1156,10 +1156,46 @@
             }
           },
           "env": {
-            "type": "array",
-            "description": "Environment variables as key-value pairs",
+            "type": "object",
+            "description": "Environment variables as key-value pairs or references",
             "additionalProperties": {
-              "type": "string"
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "secretKeyRef": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "key": { "type": "string" }
+                      }
+                    },
+                    "configMapKeyRef": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "key": { "type": "string" }
+                      }
+                    },
+                    "fieldRef": {
+                      "type": "object",
+                      "properties": {
+                        "fieldPath": { "type": "string" }
+                      }
+                    },
+                    "resourceFieldRef": {
+                      "type": "object",
+                      "properties": {
+                        "containerName": { "type": "string" },
+                        "resource": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              ]
             }
           },
           "configMapName": {
@@ -1356,18 +1392,46 @@
             }
           },
           "env": {
-            "type": "array",
-            "description": "Environment variables for the cronjob",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
+            "type": "object",
+            "description": "Environment variables as key-value pairs or references",
+            "additionalProperties": {
+              "oneOf": [
+                {
                   "type": "string"
                 },
-                "value": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "properties": {
+                    "secretKeyRef": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "key": { "type": "string" }
+                      }
+                    },
+                    "configMapKeyRef": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "key": { "type": "string" }
+                      }
+                    },
+                    "fieldRef": {
+                      "type": "object",
+                      "properties": {
+                        "fieldPath": { "type": "string" }
+                      }
+                    },
+                    "resourceFieldRef": {
+                      "type": "object",
+                      "properties": {
+                        "containerName": { "type": "string" },
+                        "resource": { "type": "string" }
+                      }
+                    }
+                  }
                 }
-              }
+              ]
             }
           },
           "configMapName": {

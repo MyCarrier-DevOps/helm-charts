@@ -34,10 +34,8 @@ tests:
           command: ["/usr/local/bin/python"]
           args: ["-m", "myapp.jobs.comprehensive"]
           env:
-            - name: ENV_VAR1
-              value: "value1"
-            - name: ENV_VAR2
-              value: "value2"
+            ENV_VAR1: "value1"
+            ENV_VAR2: "value2"
           configMapName: "job-config"
           secretName: "job-secrets"
           resources:
@@ -238,8 +236,7 @@ tests:
         - name: env-combined-job
           schedule: "0 6 * * *"
           env:
-            - name: CUSTOM_VAR
-              value: "custom-value"
+            CUSTOM_VAR: "custom-value"
           configMapName: "app-config"
           secretName: "app-secrets"
           image:

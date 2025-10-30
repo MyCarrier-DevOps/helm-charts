@@ -212,10 +212,8 @@ tests:
       jobs:
         - name: migration-job
           env:
-            - name: MIGRATION_TARGET
-              value: "database"
-            - name: LOG_LEVEL
-              value: "info"
+            MIGRATION_TARGET: "database"
+            LOG_LEVEL: "info"
           image:
             registry: "myregistry.example.com"
             repository: "mycarrier/migration"
@@ -233,6 +231,272 @@ tests:
           content:
             name: LOG_LEVEL
             value: "info"
+
+  - it: should set environment variables from secret using secretKeyRef
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            DB_PASSWORD:
+              secretKeyRef:
+                name: "db-credentials"
+                key: "password"
+            API_KEY:
+              secretKeyRef:
+                name: "api-secrets"
+                key: "key"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "db-credentials"
+                key: "password"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "api-secrets"
+                key: "key"
+
+  - it: should set environment variables from configMap using configMapKeyRef
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            APP_CONFIG:
+              configMapKeyRef:
+                name: "app-config"
+                key: "config.json"
+            DATABASE_URL:
+              configMapKeyRef:
+                name: "db-config"
+                key: "url"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_CONFIG
+            valueFrom:
+              configMapKeyRef:
+                name: "app-config"
+                key: "config.json"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            valueFrom:
+              configMapKeyRef:
+                name: "db-config"
+                key: "url"
+
+  - it: should set environment variables from field references
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            POD_NAME:
+              fieldRef:
+                fieldPath: "metadata.name"
+            POD_NAMESPACE:
+              fieldRef:
+                fieldPath: "metadata.namespace"
+            POD_IP:
+              fieldRef:
+                fieldPath: "status.podIP"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.name"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.namespace"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: "status.podIP"
+
+  - it: should set environment variables from resource field references
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            MEMORY_LIMIT:
+              resourceFieldRef:
+                containerName: "migration-job"
+                resource: "limits.memory"
+            CPU_REQUEST:
+              resourceFieldRef:
+                containerName: "migration-job"
+                resource: "requests.cpu"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MEMORY_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: "migration-job"
+                resource: "limits.memory"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CPU_REQUEST
+            valueFrom:
+              resourceFieldRef:
+                containerName: "migration-job"
+                resource: "requests.cpu"
+
+  - it: should support mixed environment variable types
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            PLAIN_VALUE: "simple-string"
+            NUMERIC_VALUE: "12345"
+            DB_PASSWORD:
+              secretKeyRef:
+                name: "db-credentials"
+                key: "password"
+            CONFIG_PATH:
+              configMapKeyRef:
+                name: "app-config"
+                key: "path"
+            NODE_NAME:
+              fieldRef:
+                fieldPath: "spec.nodeName"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PLAIN_VALUE
+            value: "simple-string"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NUMERIC_VALUE
+            value: "12345"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "db-credentials"
+                key: "password"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CONFIG_PATH
+            valueFrom:
+              configMapKeyRef:
+                name: "app-config"
+                key: "path"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "spec.nodeName"
+
+  - it: should combine env with both configMapName and secretName
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env:
+            CUSTOM_VAR: "custom-value"
+          configMapName: "migration-config"
+          secretName: "migration-secrets"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: "migration-config"
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: "migration-secrets"
+
+  - it: should handle empty env object
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          env: {}
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - exists:
+          path: spec.template.spec.containers[0].env
 
   - it: should set custom resources
     set:

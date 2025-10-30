@@ -61,9 +61,15 @@ jobTemplate:
               {{- if hasKey $ "helm.otel.language" }}
               {{ include "helm.otel.language" $ | indent 14 | trim }}
               {{- end }}
-            {{- with .cronjob.env }}
-              {{ toYaml . | indent 14 | trim }}
-            {{- end }}
+              {{- range $key, $value := $.cronjob.env }}
+              - name: "{{ $key }}"
+                {{- if kindIs "map" $value }}
+                valueFrom:
+                  {{- toYaml $value | nindent 18 }}
+                {{- else }}
+                value: "{{ tpl (toString $value) $ }}"
+                {{- end }}
+              {{- end }}
             {{- if or $.Values.configmap $.Values.useSecret .cronjob.secretName .cronjob.configMapName }}
             envFrom:
               {{- if $.Values.configmap }}

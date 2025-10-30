@@ -1,6 +1,6 @@
 {{- define "helm.specs.job" -}}
 {{- $fullName := include "helm.fullname" . }}
-activeDeadlineSeconds: {{ .job.activeDeadlineSeconds }}
+activeDeadlineSeconds: {{ .job.activeDeadlineSeconds | default 600 }}
 backoffLimit: {{ .job.backoffLimit | default 0 }}
 template:
   metadata:
@@ -46,9 +46,15 @@ template:
           {{- if hasKey $ "helm.otel.language" }}
           {{ include "helm.otel.language" $ | indent 10 | trim }}
           {{- end }}
-        {{- with .job.env }}
-          {{ toYaml . | indent 10 | trim }}
-        {{- end }}
+          {{- range $key, $value := .job.env }}
+          - name: "{{ $key }}"
+            {{- if kindIs "map" $value }}
+            valueFrom:
+              {{- toYaml $value | nindent 14 }}
+            {{- else }}
+            value: "{{ tpl (toString $value) $ }}"
+            {{- end }}
+          {{- end }}
         {{- if or $.Values.configmap $.Values.useSecret .job.secretName }}
         envFrom:
           {{- if $.Values.configmap }}
