@@ -7,9 +7,11 @@ This document explains how replica counts are determined in the MyCarrier Helm c
 The chart automatically manages replica counts based on:
 - **Environment type** (dev, preprod, prod, feature*)
 - **envScaling value** (0 or 1)
-- **Autoscaling configuration** (individual or global)
+- **Autoscaling configuration** (per-app and global levels)
 - **Application name** (migration apps are special-cased)
 - **Explicit replica values** (user-defined overrides)
+
+For comprehensive autoscaling logic and examples, see [AUTOSCALING.md](AUTOSCALING.md).
 
 ## envScaling Determination
 
@@ -18,12 +20,14 @@ The `envScaling` label is a key factor in determining behavior:
 ### envScaling = 0
 When the environment is in "development mode":
 - Environment is `dev`, `preprod`, or `feature-*`
-- **AND** `global.forceAutoscaling` is `false`
+- **AND** `global.forceAutoscaling` is NOT `true`
 
 ### envScaling = 1
 When the environment is in "production mode":
 - Environment is `prod`, **OR**
 - `global.forceAutoscaling` is `true` (any environment)
+
+**Note:** envScaling determines whether automatic HPA creation happens, but can be overridden by `global.forceAutoscaling: false`.
 
 ## Default Replica Values Matrix
 
