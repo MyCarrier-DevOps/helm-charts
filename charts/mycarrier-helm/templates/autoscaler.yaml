@@ -11,6 +11,10 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: {{ $fullName }}
   namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.version" $appContext | indent 4 | trim }}
   annotations:
     argocd.argoproj.io/sync-wave: "11"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true

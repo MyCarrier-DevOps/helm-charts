@@ -1,4 +1,6 @@
 {{- if hasKey .Values "jobs" }}
+{{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- $namespace := include "helm.namespace" . }}
 {{- $appStack := .Values.global.appStack }}
 {{- $env := .Values.environment.name -}}
@@ -7,10 +9,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  {{/* Create a root context with default values */}}
-  {{- $rootContext := $ -}}
-  {{- $rootContext := fromJson (include "helm.default-context" $rootContext) -}}
-  {{- $_ := set $rootContext "job" . -}}
+  {{- $rootContext := (merge (dict "job" . "ctx" $globalCtx) $) }}
   name: {{ $namespace }}-{{ $appStack }}-{{ .name | default "job" }}
   namespace: {{ $namespace }}
   labels:

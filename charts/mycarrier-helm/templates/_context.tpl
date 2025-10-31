@@ -31,7 +31,7 @@ The cached version should be used in loops to avoid recomputation.
 {{- end -}}
 
 {{/* Get deployed commit if available, otherwise use default */}}
-{{- if and .Values .Values.global (hasKey .Values.global "commitDeployed") -}}
+{{- if and .Values .Values.global .Values.global.commitDeployed -}}
   {{- $_ := set $defaults "commitDeployed" .Values.global.commitDeployed -}}
 {{- end -}}
 
