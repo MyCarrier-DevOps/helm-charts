@@ -12,7 +12,7 @@
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 {{- $branchLabel := $ctx.defaults.branchLabel -}}
-{{- $commitDeployed := $ctx.defaults.commitDeployed | default "" -}}
+{{- $commitDeployed := $ctx.defaults.commitDeployed -}}
 
 {{/* Get app name - first try .appName, then from application if present */}}
 {{- $appName := .appName | default "" -}}
