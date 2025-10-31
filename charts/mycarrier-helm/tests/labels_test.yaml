@@ -1,0 +1,389 @@
+suite: Labels template tests
+templates:
+  - deployment.yaml
+tests:
+  # Test standard labels
+  - it: should include all standard labels on deployment
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: "abc123def456"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: test-stack-test-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: test-stack-test-app-dev
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: test-stack
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "test-app"
+      - equal:
+          path: metadata.labels["app"]
+          value: test-stack-test-app
+      - equal:
+          path: metadata.labels["mycarrier.tech/environment"]
+          value: dev
+      - equal:
+          path: metadata.labels["mycarrier.tech/envscaling"]
+          value: "0"
+      - equal:
+          path: metadata.labels["mycarrier.tech/envType"]
+          value: "standard"
+      - equal:
+          path: metadata.labels["mycarrier.tech/service-namespace"]
+          value: dev
+      - equal:
+          path: metadata.labels["mycarrier.tech/reference"]
+          value: "main"
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: abc123def456
+
+  # Test commitDeployed label with empty value
+  - it: should set empty commitDeployed when not provided
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: ""
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - isNullOrEmpty:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+
+  # Test commitDeployed label truncation at 63 characters
+  - it: should truncate commitDeployed to 63 characters
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: "this-is-a-very-long-commit-sha-that-exceeds-sixty-three-characters-and-should-be-truncated"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: "this-is-a-very-long-commit-sha-that-exceeds-sixty-three-charact"
+
+  # Test labels on preprod environment
+  - it: should include standard labels on preprod environment
+    set:
+      environment.name: "preprod"
+      global.appStack: "test-stack"
+      global.branchlabel: "feature-123"
+      global.commitDeployed: "xyz789"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: test-stack-test-app
+      - equal:
+          path: metadata.labels["mycarrier.tech/environment"]
+          value: preprod
+      - equal:
+          path: metadata.labels["mycarrier.tech/envscaling"]
+          value: "0"
+      - equal:
+          path: metadata.labels["mycarrier.tech/reference"]
+          value: "feature-123"
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: xyz789
+
+  # Test selector labels
+  - it: should include selector labels on deployment
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: test-stack-test-app
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: test-stack-test-app-dev
+
+  # Test version labels on deployment
+  - it: should include version labels when version is set
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "2.5.3"
+      applications.test-app.version: "2.5.3"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["version"]
+          value: 2.5.3
+      - equal:
+          path: metadata.labels["mycarrier/service-version"]
+          value: 2.5.3
+
+  # Test dependency labels with azservicebus
+  - it: should include dependency labels for azure servicebus
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.dependencies.azservicebus: true
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.azservicebus"]
+          value: "true"
+
+  # Test dependency labels with mongodb
+  - it: should include dependency labels for mongodb
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.dependencies.mongodb: true
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.mongo"]
+          value: "true"
+
+  # Test dependency labels with redis
+  - it: should include dependency labels for redis
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.dependencies.redis: true
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.redis"]
+          value: "true"
+
+  # Test dependency labels with postgres
+  - it: should include dependency labels for postgres
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.dependencies.postgres: true
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.postgres"]
+          value: "true"
+
+  # Test dependency labels with multiple dependencies
+  - it: should include multiple dependency labels
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.dependencies.mongodb: true
+      global.dependencies.redis: true
+      global.dependencies.elasticsearch: true
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.mongo"]
+          value: "true"
+      - equal:
+          path: metadata.labels["dependency.redis"]
+          value: "true"
+      - equal:
+          path: metadata.labels["dependency.elasticsearch"]
+          value: "true"
+
+  # Test dependency labels detected from secrets
+  - it: should detect dependencies from secret environment variables
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+      secrets.individual:
+        - envVarName: "MONGO_CONNECTION_STRING"
+          path: "secret/data/mongo"
+        - envVarName: "REDIS_HOST"
+          path: "secret/data/redis"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.mongo"]
+          value: "true"
+      - equal:
+          path: metadata.labels["dependency.redis"]
+          value: "true"
+
+  # Test dependency labels detected from application env vars
+  - it: should detect dependencies from application environment variables
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env:
+        SERVICEBUS_CONNECTION: "Endpoint=sb://..."
+        P44_API_KEY: "secret"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["dependency.azservicebus"]
+          value: "true"
+      - equal:
+          path: metadata.labels["dependency.p44"]
+          value: "true"
+
+  # Test envscaling label for different environments
+  - it: should set envscaling label correctly for dev environment
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/envscaling"]
+          value: "0"
+
+  # Test envscaling label for production
+  - it: should set envscaling label correctly for prod environment
+    set:
+      environment.name: "prod"
+      global.appStack: "test-stack"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/envscaling"]
+          value: "1"
+
+  # Test component label is set from appName
+  - it: should set component label when appName is provided
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      applications.test-app-backend.deploymentType: deployment
+      applications.test-app-backend.isFrontend: false
+      applications.test-app-backend.image.registry: "myregistry.example.com"
+      applications.test-app-backend.image.repository: "mycarrier/test-app"
+      applications.test-app-backend.image.tag: "1.0.0"
+      applications.test-app-backend.ports.http: 8080
+      applications.test-app-backend.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "test-app-backend"

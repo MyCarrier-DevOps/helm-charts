@@ -12,10 +12,10 @@
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 {{- $branchLabel := $ctx.defaults.branchLabel -}}
+{{- $commitDeployed := $ctx.defaults.commitDeployed -}}
 
 {{/* Get app name - first try .appName, then from application if present */}}
 {{- $appName := .appName | default "" -}}
-
 app.kubernetes.io/name: {{ include "helm.fullname" . | trunc 63 }}
 app.kubernetes.io/instance: {{ $instance | trunc 63 }}
 app.kubernetes.io/part-of: {{ $appStack }}
@@ -25,7 +25,8 @@ mycarrier.tech/environment: {{ $envName }}
 mycarrier.tech/envscaling: {{ $envScaling | quote }}
 mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
-mycarrier.tech/reference: {{ $branchLabel | quote }}
+mycarrier.tech/reference: {{ $branchLabel | trunc 63 | quote }}
+mycarrier.tech/commitDeployed: {{ $commitDeployed | trunc 63 | quote }}
 {{- end -}}
 
 {{- define "helm.labels.version" }}

@@ -1,4 +1,4 @@
-suite: test allowed endpoints edge cases
+suite: Allowed endpoints edge cases
 templates:
   - templates/virtualService.yaml
 tests:
