@@ -10,6 +10,7 @@ The cached version should be used in loops to avoid recomputation.
 {{- $_ := set $defaults "environmentName" "dev" -}}
 {{- $_ := set $defaults "appStack" "app" -}}
 {{- $_ := set $defaults "branchLabel" "" -}}
+{{- $_ := set $defaults "commitDeployed" "" -}}
 {{/* forceAutoscaling has no default - nil means "not set" and allows prod auto-scaling */}}
 
 {{- $context := deepCopy . -}}
@@ -27,6 +28,11 @@ The cached version should be used in loops to avoid recomputation.
 {{/* Get branch label if available, otherwise use default */}}
 {{- if and .Values .Values.global .Values.global.branchlabel -}}
   {{- $_ := set $defaults "branchLabel" .Values.global.branchlabel -}}
+{{- end -}}
+
+{{/* Get deployed commit if available, otherwise use default */}}
+{{- if and .Values .Values.global (hasKey .Values.global "commitDeployed") -}}
+  {{- $_ := set $defaults "commitDeployed" .Values.global.commitDeployed -}}
 {{- end -}}
 
 {{/* Get force autoscaling if available, otherwise use default */}}

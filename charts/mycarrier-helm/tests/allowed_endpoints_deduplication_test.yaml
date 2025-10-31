@@ -1,4 +1,4 @@
-suite: test endpoint deduplication logic
+suite: Allowed endpoint deduplication logic
 templates:
   - templates/virtualService.yaml
 tests:

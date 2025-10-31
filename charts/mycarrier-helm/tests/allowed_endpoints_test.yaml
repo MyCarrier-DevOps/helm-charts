@@ -1,4 +1,4 @@
-suite: test allowed endpoints functionality in VirtualService
+suite: Allowed endpoints functionality in VirtualService
 templates:
   - templates/virtualService.yaml
 tests:

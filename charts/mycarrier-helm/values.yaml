@@ -23,6 +23,9 @@ global:
 
   # Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
   v2migration: false
+
+  # Label for the deployed commit (used for tracking deployments)
+  commitDeployed: ""
   
   env: {}
   dependencies:
