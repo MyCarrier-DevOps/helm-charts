@@ -45,7 +45,7 @@ tests:
       - notExists:
           path: spec.http[3]
 
-  - it: should render allowed endpoints in feature20 namespace
+  - it: should not render allowed endpoints in feature20 namespace
     set:
       global:
         appStack: test-stack
@@ -81,11 +81,11 @@ tests:
       # Feature namespaces don't have the base http[0] rule (see line 15-26 of _spec_virtualservice.tpl)
       # C# apps have default endpoints: /liveness, /health, /api
       # Plus custom endpoints: /api/health, /api/status
-      # Should have allowed endpoint rules starting at http[0]
-      - exists:
+      # Should not have allowed endpoint rules starting at http[0]
+      - notExists:
           path: spec.http[0].match[0].uri
-      # Should have multiple http rules
-      - exists:
+      # Should not have multiple http rules
+      - notExists:
           path: spec.http[1]
 
   - it: should render allowed endpoints in preprod namespace
@@ -285,7 +285,7 @@ tests:
       - exists:
           path: spec.http[1].match[0].uri
 
-  - it: feature20 namespace with no allowedEndpoints but language defaults should render them
+  - it: feature20 namespace with no allowedEndpoints
     set:
       global:
         appStack: insurance
@@ -316,6 +316,6 @@ tests:
       - equal:
           path: metadata.namespace
           value: feature20
-      # Should have endpoint matching rules from language defaults (starting at http[0] for feature envs)
-      - exists:
+      # Shoul NOT have endpoint matching rules from language defaults (starting at http[0] for feature envs)
+      - notExists:
           path: spec.http[0].match[0].uri
