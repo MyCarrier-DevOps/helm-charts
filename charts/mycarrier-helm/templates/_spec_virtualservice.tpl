@@ -3,6 +3,7 @@
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
+{{ $metaenv := (include "helm.metaEnvironment" $ ) }}
 hosts:
 - {{ $fullName }}
 {{ if hasPrefix "feature" $.Values.environment.name }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
@@ -81,7 +82,7 @@ http:
 {{- $istioEnabled = $istioConfig.enabled }}
 {{- end }}
 {{- $hasUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
-{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (ne $namespace "dev") }}
+{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (ne $metaenv "dev") }}
 
 {{- if $hasAllowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}
