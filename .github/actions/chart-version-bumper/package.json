@@ -16,6 +16,6 @@
     "yaml": "^1.9.2"
   },
   "devDependencies": {
-    "jest": "^26.0.1"
+    "jest": "^30.2.0"
   }
 }
