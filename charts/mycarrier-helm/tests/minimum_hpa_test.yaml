@@ -33,13 +33,13 @@ tests:
       - equal:
           path: spec.scaleTargetRef.name
           value: test-stack-minimal-hpa-app
-      # Verify default values are applied
+      # Verify default values are applied (minReplicas defaults to replicas which defaults to 2, maxReplicas defaults to 3x minReplicas = 6)
       - equal:
           path: spec.minReplicas
           value: 2
       - equal:
           path: spec.maxReplicas
-          value: 10
+          value: 6
       # Verify at least one metric is configured
       - exists:
           path: spec.metrics
