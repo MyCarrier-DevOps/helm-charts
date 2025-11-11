@@ -12,11 +12,13 @@ resourcePolicy:
   - containerName: {{ .appName | default $fullName | lower | trunc 63 }}
     controlledValues: {{ dig "vpa" "controlledValues" "RequestsOnly" .application }}
     minAllowed:
-      cpu: 0m
-      memory: 0Mi
+      cpu: {{ dig "resources" "limits" "cpu" "100m" .application }}
+      memory: {{ dig "resources" "limits" "memory" "128Mi" .application }}
     maxAllowed:
       cpu: {{ dig "resources" "limits" "cpu" "1000m" .application }}
       memory: {{ dig "resources" "limits" "memory" "1Gi" .application }}
   - containerName: istio-proxy
+    mode: "Off"
+  - containerName: vault-agent
     mode: "Off"
 {{- end -}}
