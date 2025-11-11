@@ -22,11 +22,11 @@ app.kubernetes.io/part-of: {{ $appStack }}
 app.kubernetes.io/component: {{ $appName | quote | default "" }}
 app: {{ include "helm.fullname" . | trunc 63 | trimSuffix "-" }}
 mycarrier.tech/environment: {{ $envName }}
-mycarrier.tech/envscaling: {{ $envScaling | quote }}
+mycarrier.tech/envscaling: {{ $envScaling | toString | quote }}
 mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
-mycarrier.tech/reference: {{ $branchLabel | trunc 63 | quote }}
-mycarrier.tech/commitDeployed: {{ $commitDeployed | trunc 63 | quote }}
+mycarrier.tech/reference: {{ $branchLabel | toString | trunc 63 | quote }}
+mycarrier.tech/commitDeployed: {{ $commitDeployed | toString | trunc 63 | quote }}
 {{- end -}}
 
 {{- define "helm.labels.version" }}
