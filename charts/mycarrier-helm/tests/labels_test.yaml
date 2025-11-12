@@ -94,6 +94,96 @@ tests:
           path: metadata.labels["mycarrier.tech/commitDeployed"]
           value: "this-is-a-very-long-commit-sha-that-exceeds-sixty-three-charact"
 
+  # Test commitDeployed with numeric-only string (Git short SHA scenario)
+  - it: should handle numeric-only commitDeployed as string without scientific notation
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: "1234567"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: "1234567"
+      - notMatchRegex:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          pattern: ".*e[+-]?[0-9]+.*"  # Should not contain scientific notation
+
+  # Test commitDeployed with large numeric value
+  - it: should handle large numeric commitDeployed without scientific notation
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: 9876543210
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: "9876543210"
+      - notMatchRegex:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          pattern: ".*e[+-]?[0-9]+.*"  # Should not contain scientific notation
+
+  # Test commitDeployed with alphanumeric commit hash
+  - it: should handle alphanumeric commitDeployed correctly
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: "abc123def456"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: abc123def456
+
+  # Test commitDeployed with short numeric value
+  - it: should handle short numeric commitDeployed
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.commitDeployed: 123
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/commitDeployed"]
+          value: "123"
+
   # Test labels on preprod environment
   - it: should include standard labels on preprod environment
     set:
