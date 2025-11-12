@@ -167,6 +167,8 @@
   value: "StrivacityInviteClientId_{{ $metaenv }}"
 - name: StrivacityInviteClientId_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityinviteclientid-{{ $metaenv }}#value"
+- name: KeyVault_AllowAnonymousKey
+  value: "allowanonymouskey_{{ $metaenv }}"
 - name: allowanonymouskey_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/allowanonymouskey-{{ $metaenv }}#value"
 - name: SplitCommonUser
