@@ -26,7 +26,7 @@ mycarrier.tech/envscaling: {{ $envScaling | toString | quote }}
 mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
 mycarrier.tech/reference: {{ $branchLabel | toString | trunc 63 | quote }}
-mycarrier.tech/commitDeployed: "{{ printf \"%s\" $commitDeployed | trunc 63 | quote }}"
+mycarrier.tech/commitDeployed: {{ $commitDeployed | toString | trunc 63 | quote }}
 {{- end -}}
 
 {{- define "helm.labels.version" }}
