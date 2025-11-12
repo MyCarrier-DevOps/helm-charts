@@ -225,7 +225,7 @@
                       },
                       "memory": {
                         "type": "string",
-                        "default": "64Mi"
+                        "default": "128Mi"
                       }
                     }
                   },
@@ -476,7 +476,7 @@
                   },
                   "memory": {
                     "type": "string",
-                    "default": "64Mi"
+                    "default": "128Mi"
                   }
                 }
               },
@@ -1216,7 +1216,7 @@
                   },
                   "memory": {
                     "type": "string",
-                    "default": "64Mi"
+                    "default": "128Mi"
                   }
                 }
               },
@@ -1455,7 +1455,7 @@
                   },
                   "memory": {
                     "type": "string",
-                    "default": "64Mi"
+                    "default": "128Mi"
                   }
                 }
               },

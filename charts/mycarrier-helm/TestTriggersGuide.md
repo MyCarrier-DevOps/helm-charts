@@ -63,7 +63,7 @@ applications:
 ```yaml
 resources:
   requests:
-    memory: "64Mi"
+    memory: "128Mi"
     cpu: "100m"
   limits:
     memory: "256Mi"
@@ -211,7 +211,7 @@ Explanation: This configuration will create test jobs for both the `api` and `in
 
 4. **Application-Specific Tests**: Each application in your deployment can have its own `testtrigger` configuration, allowing for application-specific tests.
 
-5. **Resource Configuration**: You can specify custom resources for the test job pods. If not specified, default values (64Mi memory request, 100m CPU request, 256Mi memory limit, 500m CPU limit) will be used.
+5. **Resource Configuration**: You can specify custom resources for the test job pods. If not specified, default values (128Mi memory request, 100m CPU request, 256Mi memory limit, 500m CPU limit) will be used.
 
 6. **Service Address**: By default, the service address will be constructed as `<fullname>.<namespace>.svc.cluster.local:<httpPort>`. You can override this for specific test definitions by providing the `serviceAddress` parameter.
 

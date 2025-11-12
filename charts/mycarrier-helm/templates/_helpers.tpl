@@ -177,7 +177,7 @@ response:
 resources:
   requests:
     cpu: 50m
-    memory: {{ dig "resources" "requests" "memory" "64Mi" .application }}
+    memory: {{ dig "resources" "requests" "memory" "128Mi" .application }}
   limits:
     cpu: {{ dig "resources" "limits" "cpu" "2000m" .application }}
     memory: {{ dig "resources" "limits" "memory" "2048Mi" .application }}

@@ -5,28 +5,31 @@
 ## @section Global Settings
 ## Global settings used across all applications
 
-## @param global.appStack - Application stack name, used for naming resources and grouping applications
-## @param global.gitbranch - Name of the git branch (used for feature branches)
-## @param global.branchlabel - Label for the branch, used for reference label
+## @param global.appStack Application stack name, used for naming resources and grouping applications
+## @param global.gitbranch Name of the git branch (used for feature branches)
+## @param global.branchlabel Label for the branch, used for reference label
+## @param global.language Default programming language for applications (can be overridden at application level)
+## @param global.v2migration Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
+## @param global.commitDeployed Label for the deployed commit (used for tracking deployments)
+## @param global.env [object] Global environment variables shared across all applications
+## @extra global.dependencies Dependency flags to control infrastructure resources
+## @param global.dependencies.mongodb Enable MongoDB dependency
+## @param global.dependencies.elasticsearch Enable Elasticsearch dependency
+## @param global.dependencies.redis Enable Redis dependency
+## @param global.dependencies.postgres Enable PostgreSQL dependency
+## @param global.dependencies.sqlserver Enable SQL Server dependency
+## @param global.dependencies.clickhouse Enable ClickHouse dependency
+## @param global.dependencies.azureservicebus Enable Azure Service Bus dependency
+## @param global.dependencies.redpanda Enable Redpanda dependency
+## @param global.dependencies.loadsure Enable Loadsure dependency
+## @param global.dependencies.chargify Enable Chargify dependency
 global:
-  # Application stack name, used for naming resources and grouping applications
   appStack: "app"
-  
-  # Name of the git branch (used for feature branches)
   gitbranch: ""
-  
-  # Label for the branch, used for reference label
   branchlabel: ""
-
-  # Use application-level language configuration to override
   language: "csharp"
-
-  # Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
   v2migration: false
-
-  # Label for the deployed commit (used for tracking deployments)
   commitDeployed: ""
-  
   env: {}
   dependencies:
     mongodb: false
@@ -43,510 +46,463 @@ global:
 ## @section Environment Settings
 ## Environment-specific settings
 
-## @param environment.name - Environment name (dev, preprod, prod, or feature-*)
-## @param environment.dependencyenv - Environment name for dependencies
-## @param environment.domainOverride.enabled - Whether to override the default domain
-## @param environment.domainOverride.domain - Domain to use when override is enabled
+## @param environment.name Environment name (dev, preprod, prod, or feature-*)
+## @param environment.dependencyenv Environment name for dependencies
+## @extra environment.domainOverride Domain override configuration
+## @param environment.domainOverride.enabled Whether to override the default domain (default domains: mycarrier.dev for non-prod, mycarriertms.com for prod)
+## @param environment.domainOverride.domain Domain to use when override is enabled
 environment:
-  # Environment name (dev, preprod, prod, or feature-*)
   name: "dev"
-  
-  # Environment name for dependencies
   dependencyenv: "dev"
-  
-  # Domain override settings
   domainOverride:
-    # Whether to override the default domain
-    # Default domains are: mycarrier.dev for non-prod, mycarriertms.com for prod
     enabled: false
-    
-    # Domain to use when override is enabled
     domain: "example.com"
 
 ## @section Platform Settings
 ## Platform-wide settings
 
-## @param enableVaultCA - Enable Vault CA certificate download during pod startup
-## @param disableOtelAutoinstrumentation - Disable OpenTelemetry automatic instrumentation
-## @param tolerations - Default tolerations for all applications
-# Enable Vault CA certificate download during pod startup
+## @param enableVaultCA Enable Vault CA certificate download during pod startup
+## @param disableOtelAutoinstrumentation Disable OpenTelemetry automatic instrumentation (set to false to enable)
+## @param tolerations [array] Default tolerations for all applications
+## @param deployment Deployment folder name (should match the subfolder containing the specific deployment)
 enableVaultCA: false
-
-# Disable OpenTelemetry automatic instrumentation
-# Set to false to enable OpenTelemetry instrumentation
 disableOtelAutoinstrumentation: true
-
-# Default tolerations for all applications
 tolerations: []
-  # - key: "key"
-  #   operator: "Equal"
-  #   value: "value"
-  #   effect: "NoSchedule"
-
-# This should match the name of the subfolder containing the specific deployment.
 deployment: deployment
 
 ## @section Applications
 ## Configuration for application deployments
+##
+## Each application is defined as a key-value pair where the key is the application name.
+## See the comprehensive example configuration below for all available options.
+##
+## **Basic Settings**: enableDebugMode, isFrontend, language, forceOffload, staticHostname, deploymentType, version, replicas
+## **Container**: image.registry, image.repository, image.tag, pullPolicy, pullSecret
+## **Resources**: resources.requests.cpu/memory, resources.limits.cpu/memory
+## **Health Probes**: probes.enableLiveness, probes.enableReadiness, probes.enableStartup, custom probe configurations
+## **Service**: service.type, service.ports, service.annotations, service.timeout, service.retryOn
+## **Networking**: networking.ingress.type, networking.istio.enabled/hosts/routes/corsPolicy/allowedEndpoints
+## **Autoscaling**: HPA (autoscaling.minReplicas/maxReplicas/targetCPU/targetMemory), VPA (vpa.enabled/updateMode/resources)
+## **Monitoring**: serviceMonitor.enabled/path/interval/scheme
+## **Testing**: testtrigger configuration for automated test jobs
 
-## @extra applications Map of application definitions where the key is the application name
-## @param applications.example-api.isFrontend - Whether this is a frontend application
-## @param applications.example-api.testtrigger [object] - Configuration for automated test jobs
-## @param applications.example-api.testtrigger.ttlSecondsAfterFinished - Time to keep test job resources after completion (seconds)
-## @param applications.example-api.testtrigger.activeDeadlineSeconds - Maximum time for the test job to run (seconds)
-## @param applications.example-api.testtrigger.backoffLimit - Number of retries for the test job
-## @param applications.example-api.testtrigger.testdefinitions [array] - Test definitions to run
-## @param applications.example-api.testtrigger.testdefinitions.name - Name of the test suite
-## @param applications.example-api.testtrigger.testdefinitions.containerImage - Container image to use for running tests
-## @param applications.example-api.testtrigger.testdefinitions.containerTag - Tag of the container image
-## @param applications.example-api.testtrigger.testdefinitions.secretId - Reference to secrets needed for tests
-## @param applications.example-api.testtrigger.testdefinitions.filters [array] - Test filters to select which tests to run
-## @param applications.example-api.language - What language is the application written in
-## @param applications.example-api.forceOffload - Whether to force offloading
-## @param applications.example-api.staticHostname - Static hostname for the application
-## @param applications.example-api.labels [object] - Custom labels to add to the application resources
-## @param applications.example-api.annotations [object] - Custom annotations to add to the application resources
-## @param applications.example-api.deploymentType - Type of deployment: deployment, statefulset, or rollout
-## @param applications.example-api.migratingToRollouts - Whether the application is migrating to Argo Rollouts
-## @param applications.example-api.version - Application version
-## @param applications.example-api.image.registry - Docker registry URL
-## @param applications.example-api.image.repository - Docker image repository
-## @param applications.example-api.image.tag - Docker image tag
-## @param applications.example-api.pullPolicy - Image pull policy: IfNotPresent, Always, or Never
-## @param applications.example-api.pullSecret - Name of the pull secret
-## @param applications.example-api.env [object] - Environment variables for the application
-## @param applications.example-api.ports [object] - Ports to expose
-## @param applications.example-api.resources.requests.cpu - CPU resource requests
-## @param applications.example-api.resources.requests.memory - Memory resource requests
-## @param applications.example-api.resources.limits.cpu - CPU resource limits
-## @param applications.example-api.resources.limits.memory - Memory resource limits
-## @param applications.example-api.securityContext.readOnlyRootFilesystem - Whether the root filesystem should be read-only
-## @param applications.example-api.replicas - Number of pod replicas
-## @param applications.example-api.probes.enableLiveness - Enable liveness probe
-## @param applications.example-api.probes.enableReadiness - Enable readiness probe
-## @param applications.example-api.probes.enableStartup - Enable startup probe
-## @param applications.example-api.probes.livenessProbe [object] - Custom liveness probe configuration
-## @param applications.example-api.probes.readinessProbe [object] - Custom readiness probe configuration
-## @param applications.example-api.probes.startupProbe [object] - Custom startup probe configuration
-## @param applications.example-api.service.type - Service type: ClusterIP, NodePort, or LoadBalancer
-## @param applications.example-api.service.headless - Whether the service is headless
-## @param applications.example-api.service.ports [array] - Service port definitions
-## @param applications.example-api.service.annotations [object] - Custom service annotations
-## @param applications.example-api.service.timeout - Service timeout setting
-## @param applications.example-api.service.retryOn - Retry conditions
-## @param applications.example-api.service.attempts - Number of retry attempts
-## @param applications.example-api.service.perTryTimeout - Timeout for each retry
-## @param applications.example-api.service.istioDisabled - Whether to disable Istio for this service
-## @param applications.example-api.networking.ingress.type - Ingress type
-## @param applications.example-api.networking.istio.enabled - Enable Istio configuration (defaults to true when omitted)
-## @param applications.example-api.networking.istio.hosts [array] - Additional hostnames
-## @param applications.example-api.networking.istio.redirects [object] - Domain redirects
-## @param applications.example-api.networking.istio.routes [object] - Custom routes
-## @param applications.example-api.networking.istio.responseHeaders [object] - Custom response headers
-## @param applications.example-api.networking.istio.corsPolicy [object] - CORS policy
-## @param applications.example-api.networking.istio.allowedEndpoints [array] - List of allowed endpoints (exact paths or prefix patterns with *)
-## @param applications.example-api.networking.istio.disableDefaultEndpoints - Disable automatic C# default endpoints (/liveness, /health, /api)
-## @param applications.example-api.serviceAccount.create - Whether to create a service account
-## @param applications.example-api.updateStrategy.type - Update strategy type: RollingUpdate or Recreate
-## @param applications.example-api.updateStrategy.rollingUpdate.maxUnavailable - Maximum unavailable pods during rollout
-## @param applications.example-api.updateStrategy.rollingUpdate.maxSurge - Maximum extra pods during rollout
-## @param applications.example-api.serviceMonitor.enabled - Enable Prometheus ServiceMonitor
-## @param applications.example-api.serviceMonitor.interval - Scrape interval
-## @param applications.example-api.serviceMonitor.scrapeTimeout - Scrape timeout
-## @param applications.example-api.serviceMonitor.scheme - Scrape scheme
-## @param applications.example-api.vpa.enabled - Enable Vertical Pod Autoscaler
-## @param applications.example-api.vpa.controlledValues - Values controlled by VPA: RequestsOnly or RequestsAndLimits
-## @param applications.example-api.vpa.updateMode - VPA update mode: Off, Initial, Auto
-## @param applications.example-api.autoscaling.forceAutoscaling - Force autoscaling to be enabled regardless of environment
+## @param applications [object] Map of application definitions where the key is the application name
+
 applications: {}
-#       # Example application configuration
-#   example-api:
-#     enableDebugMode: false
-#     # Whether this is a frontend application
-#     isFrontend: false
 
-#       # The testtrigger section allows you to configure automated test jobs that run against 
-#       # your deployed application.
-#     testtrigger:
-#       ttlSecondsAfterFinished: "300"  # Time to keep test job resources after completion (seconds)
-#       activeDeadlineSeconds: "600"  # Maximum time for the test job to run (seconds)
-#       backoffLimit: 0  # Number of retries for the test job
-#       apikey: "vault:Secrets/data/testengine#apikey"
-#       webhook_url: "vault:Secrets/data/testengine#webhook_url"
-#       resources:
-#         requests:
-#            cpu: "50m"
-#            memory: "64Mi"
-#         limits:
-#           cpu: "500m"
-#           memory: "512Mi"
-#       testdefinitions: # Test definitions to run
-#         - name: "apitests"  # Name of the test suite
-#           containerImage: "myregistry.example.com/image/name"  # Container image to use for running tests
-#           containerTag: "1.10.2"  # Tag of the container image
-#           secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
-#           additionalEnvVars: "key1=value1;key2=value2" # Additional environment variables for the test
-#           filters:  # Test filters to select which tests to run
-#             - "TestCategory=coretests"
-#             - "TestCategory=othercoretests"
-#           serviceAddress: "custom-address.dev-exampletestapp.svc.cluster.local" # Custom service address for the test
-#         - name: "somedependencytest"
-#           containerImage: "myregistry.example.com/image/name"
-#           containerTag: "1.10.2"
-#           secretId: "vault:Secrets/data/app_authentication#SecretId" # Reference to secrets needed for tests
-#           filters:
-#             - "TestCategory=otherdomaintests"
-#             - "TestCategory=somedependencytests"
-    
-#       # Whether to force offloading
-#     forceOffload: false
-      
-#       # Static hostname for the application (optional)
-#       # staticHostname: "api.example.com"
-      
-#       # Custom labels to add to the application resources
-#     labels:
-#       app.kubernetes.io/component: "api"
-      
-#       # Custom annotations to add to the application resources
-#     annotations:
-#       app.mycarrier.tech/team: "platform"
-      
-#       # Type of deployment: deployment, statefulset, or rollout
-#     deploymentType: "deployment"
-      
-#       # Whether the application is migrating to Argo Rollouts
-#     migratingToRollouts: false
-    
-#       # Application version
-#     version: "1.0.0"
-    
-#       # Container image settings
-#     image:
-#       registry: "myregistry.example.com"
-#       repository: "mycarrier/example-api"
-#       tag: "1.0.0"
-    
-#       # Image pull policy: IfNotPresent, Always, or Never
-#     pullPolicy: "IfNotPresent"
-    
-#       # Name of the pull secret
-#     pullSecret: "imagepull"
-    
-#       # Environment variables for the application
-#     env:
-#       NODE_ENV: "development"
-#       LOG_LEVEL: "info"
-#       # Example of valueFrom usage:
-#       # DB_PASSWORD:
-#       #   valueFrom:
-#       #     secretKeyRef:
-#       #       name: db-secrets
-#       #       key: password
-    
-#       # Ports to expose
-#       # Can be defined as a map with custom names:
+# ============================================================================
+# EXAMPLE APPLICATION CONFIGURATION
+# ============================================================================
+# Below is a comprehensive example showing all available configuration options.
+# Uncomment and customize as needed for your applications.
+# ============================================================================
+#
+# example-api:
+#   # ----------------------------------------------------------------------------
+#   # Basic Application Settings
+#   # ----------------------------------------------------------------------------
+#   enableDebugMode: false
+#   isFrontend: false
+#   forceOffload: false
+#   deploymentType: "deployment"  # Options: deployment, statefulset, rollout
+#   migratingToRollouts: false
+#   version: "1.0.0"
+#   replicas: 1
+#   
+#   # Optional: Static hostname for the application
+#   # staticHostname: "api.example.com"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Custom Labels and Annotations
+#   # ----------------------------------------------------------------------------
+#   labels:
+#     app.kubernetes.io/component: "api"
+#   
+#   annotations:
+#     app.mycarrier.tech/team: "platform"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Container Image Configuration
+#   # ----------------------------------------------------------------------------
+#   image:
+#     registry: "myregistry.example.com"
+#     repository: "mycarrier/example-api"
+#     tag: "1.0.0"
+#   
+#   pullPolicy: "IfNotPresent"  # Options: IfNotPresent, Always, Never
+#   pullSecret: "imagepull"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Environment Variables
+#   # ----------------------------------------------------------------------------
+#   env:
+#     NODE_ENV: "development"
+#     LOG_LEVEL: "info"
+#     # Example of valueFrom usage:
+#     # DB_PASSWORD:
+#     #   valueFrom:
+#     #     secretKeyRef:
+#     #       name: db-secrets
+#     #       key: password
+#   
+#   # ----------------------------------------------------------------------------
+#   # Port Configuration
+#   # ----------------------------------------------------------------------------
+#   ports:
+#     http: 8080
+#     metrics: 9090
+#   
+#   # ----------------------------------------------------------------------------
+#   # Resource Configuration
+#   # ----------------------------------------------------------------------------
+#   resources:
+#     requests:
+#       cpu: "50m"
+#       memory: "128Mi"
+#     limits:
+#       cpu: "500m"
+#       memory: "512Mi"
+#   
+#   securityContext:
+#     readOnlyRootFilesystem: false
+#   
+#   # ----------------------------------------------------------------------------
+#   # Health Probes
+#   # ----------------------------------------------------------------------------
+#   probes:
+#     enableLiveness: true
+#     enableReadiness: true
+#     enableStartup: false
+#     # Custom probe configuration:
+#     # livenessProbe:
+#     #   httpGet:
+#     #     path: /health/live
+#     #     port: http
+#     #   initialDelaySeconds: 30
+#     #   periodSeconds: 15
+#     # readinessProbe:
+#     #   httpGet:
+#     #     path: /health/ready
+#     #     port: http
+#     #   initialDelaySeconds: 10
+#     #   periodSeconds: 7
+#   
+#   # ----------------------------------------------------------------------------
+#   # Service Configuration
+#   # ----------------------------------------------------------------------------
+#   service:
+#     type: "ClusterIP"  # Options: ClusterIP, NodePort, LoadBalancer
+#     headless: false
+#     istioDisabled: false
+#     
+#     # Port definitions (if not provided, uses 'ports' field above)
 #     ports:
-#       http: 8080
-#       metrics: 9090
-    
-#       # Resource requests and limits
+#       - name: http
+#         port: 80
+#         targetPort: 8080
+#         protocol: TCP
+#       - name: metrics
+#         port: 9090
+#         targetPort: 9090
+#     
+#     annotations:
+#       prometheus.io/scrape: "true"
+#       prometheus.io/port: "9090"
+#     
+#     # Timeout and retry settings
+#     timeout: "151s"
+#     retryOn: "5xx,reset"
+#     attempts: 3
+#     perTryTimeout: "50s"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Networking and Ingress
+#   # ----------------------------------------------------------------------------
+#   networking:
+#     ingress:
+#       type: "istio"
+#     
+#     istio:
+#       enabled: true
+#       hosts: []
+#       redirects: {}
+#       routes: {}
+#       responseHeaders: {}
+#       corsPolicy: {}
+#       
+#       # Allowed endpoints (C# apps auto-add /liveness, /health, /api if name contains 'api')
+#       allowedEndpoints: []
+#       # allowedEndpoints:
+#       #   - "/custom-endpoint"
+#       #   - "/api/v1/*"
+#       # disableDefaultEndpoints: false  # Set true to disable auto C# endpoints
+#   
+#   # ----------------------------------------------------------------------------
+#   # Service Account
+#   # ----------------------------------------------------------------------------
+#   serviceAccount:
+#     create: false
+#   
+#   # ----------------------------------------------------------------------------
+#   # Scheduling Configuration
+#   # ----------------------------------------------------------------------------
+#   # nodeSelector:
+#   #   disktype: ssd
+#   # priorityClassName: "high-priority"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Update Strategy
+#   # ----------------------------------------------------------------------------
+#   updateStrategy:
+#     type: "RollingUpdate"
+#     rollingUpdate:
+#       maxUnavailable: 0
+#       maxSurge: 2
+#     
+#     # For Argo Rollouts:
+#     # canary:
+#     #   steps:
+#     #     - setWeight: 25
+#     #     - analysis:
+#     #         templates:
+#     #           - templateName: load-test
+#     #     - setWeight: 50
+#     #     - analysis:
+#     #         templates:
+#     #           - templateName: load-test
+#     #     - setWeight: 100
+#     #   scaleDownDelaySeconds: 30
+#     #   scaleDownDelayRevisionLimit: 5
+#     #   abortScaleDownDelaySeconds: 30
+#   
+#   # ----------------------------------------------------------------------------
+#   # Monitoring and Observability
+#   # ----------------------------------------------------------------------------
+#   serviceMonitor:
+#     enabled: false
+#     interval: "30s"
+#     scrapeTimeout: "10s"
+#     scheme: "http"
+#     # relabelings: []
+#     # metricRelabelings: []
+#     # tlsConfig: {}
+#   
+#   # ----------------------------------------------------------------------------
+#   # Lifecycle Hooks
+#   # ----------------------------------------------------------------------------
+#   # lifecycle:
+#   #   postStart: "echo 'Container started'"
+#   #   preStop: "sleep 10 && pkill node"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Vertical Pod Autoscaler (VPA)
+#   # ----------------------------------------------------------------------------
+#   vpa:
+#     enabled: false
+#     controlledValues: "RequestsOnly"  # Options: RequestsOnly, RequestsAndLimits
+#     updateMode: "Auto"  # Options: Off, Initial, Auto
+#     #   - Off: VPA does not automatically change resource requirements
+#     #   - Initial: VPA only assigns resource requests on pod creation
+#     #   - Auto: VPA updates resource requests at any time
+#     
+#     # Optional: Resource boundaries (defaults: min=requests, max=limits×3)
+#     resources:
+#       cpu:
+#         minimum: "100m"    # Examples: "100m", "0.5", "1"
+#         maximum: "3000m"   # Examples: "2000m", "2", "4"
+#       memory:
+#         minimum: "128Mi"   # Examples: "128Mi", "256Mi", "1Gi"
+#         maximum: "3Gi"     # Examples: "2Gi", "4Gi", "8Gi"
+#   
+#   # ----------------------------------------------------------------------------
+#   # Horizontal Pod Autoscaler (HPA)
+#   # ----------------------------------------------------------------------------
+#   autoscaling:
+#     enabled: false
+#     minReplicas: 2         # Default: application replicas (min 2)
+#     maxReplicas: 6         # Default: minReplicas × 3
+#     targetCPUUtilizationPercentage: 80
+#     targetMemoryUtilizationPercentage: 80
+#     forceAutoscaling: false  # Force HPA even if replicas=1
+#   
+#   # ----------------------------------------------------------------------------
+#   # Automated Testing Configuration
+#   # ----------------------------------------------------------------------------
+#   # Configure automated test jobs that run against your deployed application
+#   testtrigger:
+#     ttlSecondsAfterFinished: "300"
+#     activeDeadlineSeconds: "600"
+#     backoffLimit: 0
+#     apikey: "vault:Secrets/data/testengine#apikey"
+#     webhook_url: "vault:Secrets/data/testengine#webhook_url"
+#     
 #     resources:
 #       requests:
 #         cpu: "50m"
-#         memory: "64Mi"
+#         memory: "128Mi"
 #       limits:
 #         cpu: "500m"
 #         memory: "512Mi"
-    
-#       # Security context settings
-#     securityContext:
-#       readOnlyRootFilesystem: false
-    
-#       # Number of pod replicas
-#     replicas: 1
-    
-#       # Probe settings
-#     probes:
-#       enableLiveness: true
-#       enableReadiness: true
-#       enableStartup: false
-#       # Customize probes if needed:
-#       # livenessProbe:
-#       #   httpGet:
-#       #     path: /health/live
-#       #     port: http
-#       #   initialDelaySeconds: 30
-#       #   periodSeconds: 15
-#       # readinessProbe:
-#       #   httpGet:
-#       #     path: /health/ready
-#       #     port: http
-#       #   initialDelaySeconds: 10
-#       #   periodSeconds: 7
-    
-#       # Service configuration
-#     service:
-#       # Service type: ClusterIP, NodePort, or LoadBalancer
-#       type: "ClusterIP"
-      
-#       # Whether the service is headless
-#       headless: false
-      
-#       # Service port definitions
-#       # If not provided, ports from the 'ports' field will be used
-#       ports:
-#         - name: http
-#           port: 80
-#           targetPort: 8080
-#           protocol: TCP
-#         - name: metrics
-#           port: 9090
-#           targetPort: 9090
-      
-#       # Custom service annotations
-#       annotations:
-#         prometheus.io/scrape: "true"
-#         prometheus.io/port: "9090"
-      
-#       # Service timeout settings
-#       timeout: "151s"
-#       retryOn: "5xx,reset"
-#       attempts: 3
-#       perTryTimeout: "50s"
-      
-#       # Whether to disable Istio for this service
-#       istioDisabled: false
-    
-#       # Networking configuration
-#     networking:
-#       # Ingress configuration
-#       ingress:
-#         type: "istio"
-      
-#       # Istio configuration
-#       istio:
-#         enabled: true
-#         # Additional hostnames
-#         hosts: []
-#         # Domain redirects
-#         redirects: {}
-#         # Custom routes
-#         routes: {}
-#         # Custom response headers
-#         # If not provided, default security headers will be used
-#         responseHeaders: {}
-#         # CORS policy
-#         corsPolicy: {}
-#         # List of allowed endpoints (for C# apps, /liveness, /health, and /api are added automatically if app name contains 'api')
-#         # To disable defaults, set disableDefaultEndpoints: true
-#         allowedEndpoints: []
-#         # allowedEndpoints:
-#         #   - "/custom-endpoint"
-#         #   - "/api/v1/*"
-#         # disableDefaultEndpoints: false  # Set to true to disable automatic C# endpoints
-    
-#     # Service account configuration
-#     serviceAccount:
-#       create: false
-    
-#     # Node selector for pod scheduling
-#     # nodeSelector:
-#     #   disktype: ssd
-    
-#     # Priority class name for pod scheduling
-#     # priorityClassName: "high-priority"
-    
-#     # Update strategy configuration
-#     updateStrategy:
-#       # For standard deployments
-#       type: "RollingUpdate"
-#       rollingUpdate:
-#         maxUnavailable: 0
-#         maxSurge: 2
-      
-#       # For Argo Rollouts deployments
-#       # canary:
-#       #   steps:
-#       #     - setWeight: 25
-#       #     - analysis:
-#       #         templates:
-#       #           - templateName: load-test
-#       #     - setWeight: 50
-#       #     - analysis:
-#       #         templates:
-#       #           - templateName: load-test
-#       #     - setWeight: 100
-#       #   scaleDownDelaySeconds: 30
-#       #   scaleDownDelayRevisionLimit: 5
-#       #   abortScaleDownDelaySeconds: 30
-    
-#     # Prometheus ServiceMonitor configuration
-#     serviceMonitor:
-#       enabled: false
-#       interval: "30s"
-#       scrapeTimeout: "10s"
-#       scheme: "http"
-#       # relabelings: []
-#       # metricRelabelings: []
-#       # tlsConfig: {}
-    
-#     # Container lifecycle hooks
-#     # lifecycle:
-#     #   postStart: "echo 'Container started'"
-#     #   preStop: "sleep 10 && pkill node"
-    
-#     # Vertical Pod Autoscaler configuration
-#     vpa:
-#       enabled: false
-#       controlledValues: "RequestsOnly"
-#       # VPA update mode: Off, Initial, Auto
-#       updateMode: "Auto"
-#     # Horizontal Pod Autoscaler configuration
-#     autoscaling:
-#       enabled: false
-#       minReplicas: 2
-#       maxReplicas: 5
-#       targetCPUUtilizationPercentage: 80
-#       forceAutoscaling: false
-#       # targetMemoryUtilizationPercentage: 80
+#     
+#     testdefinitions:
+#       - name: "apitests"
+#         containerImage: "myregistry.example.com/image/name"
+#         containerTag: "1.10.2"
+#         secretId: "vault:Secrets/data/app_authentication#SecretId"
+#         additionalEnvVars: "key1=value1;key2=value2"
+#         filters:
+#           - "TestCategory=coretests"
+#           - "TestCategory=othercoretests"
+#         # Optional: Custom service address
+#         serviceAddress: "custom-address.dev-exampletestapp.svc.cluster.local"
+#       
+#       - name: "somedependencytest"
+#         containerImage: "myregistry.example.com/image/name"
+#         containerTag: "1.10.2"
+#         secretId: "vault:Secrets/data/app_authentication#SecretId"
+#         filters:
+#           - "TestCategory=otherdomaintests"
+#           - "TestCategory=somedependencytests"
 
 ## @section Kubernetes Jobs
 ## Configuration for Kubernetes Jobs to run
+##
+## Each job supports: name, timing (pre-deploy/post-deploy), order, ttlSecondsAfterFinished,
+## activeDeadlineSeconds, backoffLimit, labels, annotations, image (registry/repository/tag),
+## imagePullPolicy, command, args, env, resources (requests/limits for cpu/memory)
+## 
+## See the example configuration below for complete job specification details.
 
-## @param jobs [array] - List of Kubernetes Jobs to run
+## @param jobs [array] List of Kubernetes Jobs to run
 jobs: []
-  # Example job configuration
-  # - name: db-migration
-  #   # When to run: pre-deploy or post-deploy
-  #   timing: "pre-deploy"
-  #   # Order within the timing group
-  #   order: 0
-  #   # Custom labels
-  #   labels:
-  #     app.kubernetes.io/component: "job"
-  #   # Job-specific annotations
-  #   annotations:
-  #     app.mycarrier.tech/team: "platform"
-  #   # TTL after job completion (in seconds)
-  #   ttlSecondsAfterFinished: 300
-  #   # Job timeout (in seconds)
-  #   activeDeadlineSeconds: 600
-  #   # Number of retries
-  #   backoffLimit: 0
-  #   # Job container image
-  #   image:
-  #     registry: "myregistry.example.com"
-  #     repository: "mycarrier/db-migration"
-  #     tag: "1.0.0"
-  #   # Image pull policy
-  #   imagePullPolicy: "IfNotPresent"
-  #   # Command to run
-  #   command: ["/bin/sh", "-c"]
-  #   # Arguments for the command
-  #   args: ["./run-migration.sh"]
-  #   # Environment variables
-  #   env:
-  #     - name: DB_NAME
-  #       value: "mydb"
-  #   # Resource limits
-  #   resources:
-  #     requests:
-  #       cpu: "100m"
-  #       memory: "64Mi"
-  #     limits:
-  #       cpu: "500m"
-  #       memory: "256Mi"
+
+# ============================================================================
+# EXAMPLE JOB CONFIGURATION
+# ============================================================================
+# - name: db-migration
+#   timing: "pre-deploy"           # Options: pre-deploy, post-deploy
+#   order: 0                        # Execution order within timing group
+#   ttlSecondsAfterFinished: 300    # Cleanup after completion (seconds)
+#   activeDeadlineSeconds: 600      # Job timeout (seconds)
+#   backoffLimit: 0                 # Number of retries
+#   
+#   labels:
+#     app.kubernetes.io/component: "job"
+#   
+#   annotations:
+#     app.mycarrier.tech/team: "platform"
+#   
+#   image:
+#     registry: "myregistry.example.com"
+#     repository: "mycarrier/db-migration"
+#     tag: "1.0.0"
+#   
+#   imagePullPolicy: "IfNotPresent"
+#   command: ["/bin/sh", "-c"]
+#   args: ["./run-migration.sh"]
+#   
+#   env:
+#     - name: DB_NAME
+#       value: "mydb"
+#   
+#   resources:
+#     requests:
+#       cpu: "100m"
+#       memory: "128Mi"
+#     limits:
+#       cpu: "500m"
+#       memory: "256Mi"
 
 ## @section Kubernetes CronJobs
 ## Configuration for Kubernetes CronJobs to run on a schedule
+##
+## Each cronjob supports: name, schedule (required), timeZone, concurrencyPolicy, suspend,
+## successfulJobsHistoryLimit, failedJobsHistoryLimit, startingDeadlineSeconds, activeDeadlineSeconds,
+## backoffLimit, restartPolicy, labels, annotations, image (registry/repository/tag), imagePullPolicy,
+## imagePullSecret, command, args, env, configMapName, secretName, resources (requests/limits), volumes
+##
+## See the example configuration below for complete cronjob specification details.
 
-## @param cronjobs [array] - List of Kubernetes CronJobs to run
+## @param cronjobs [array] List of Kubernetes CronJobs to run
 cronjobs: []
-  # Example cronjob configuration
-  # - name: backup-job
-  #   # Cron schedule (required)
-  #   schedule: "0 2 * * *"  # Run at 2 AM daily
-  #   # Time zone for the cron schedule (optional)
-  #   timeZone: "UTC"
-  #   # Concurrency policy: Allow, Forbid, or Replace (optional)
-  #   concurrencyPolicy: "Forbid"
-  #   # Suspend the cron job (optional)
-  #   suspend: false
-  #   # Number of successful jobs to keep (default: 3)
-  #   successfulJobsHistoryLimit: 3
-  #   # Number of failed jobs to keep (default: 1)
-  #   failedJobsHistoryLimit: 1
-  #   # Deadline in seconds for starting the job if it misses scheduled time (optional)
-  #   startingDeadlineSeconds: 200
-  #   # Custom labels
-  #   labels:
-  #     app.kubernetes.io/component: "cronjob"
-  #   # CronJob-specific annotations
-  #   annotations:
-  #     app.mycarrier.tech/team: "platform"
-  #   # Job timeout (in seconds) - optional
-  #   activeDeadlineSeconds: 600
-  #   # Number of retries
-  #   backoffLimit: 0
-  #   # CronJob container image
-  #   image:
-  #     registry: "myregistry.example.com"
-  #     repository: "mycarrier/backup"
-  #     tag: "1.0.0"
-  #   # Image pull policy
-  #   imagePullPolicy: "IfNotPresent"
-  #   # Image pull secret (default: imagepull)
-  #   imagePullSecret: "imagepull"
-  #   # Restart policy: Never or OnFailure (default: Never)
-  #   restartPolicy: "Never"
-  #   # Command to run
-  #   command: ["/bin/sh", "-c"]
-  #   # Arguments for the command
-  #   args: ["./run-backup.sh"]
-  #   # Environment variables
-  #   env:
-  #     - name: BACKUP_PATH
-  #       value: "/backups"
-  #   # ConfigMap reference (optional)
-  #   # configMapName: "backup-config"
-  #   # Secret reference (optional)
-  #   # secretName: "backup-secrets"
-  #   # Resource limits
-  #   resources:
-  #     requests:
-  #       cpu: "100m"
-  #       memory: "128Mi"
-  #     limits:
-  #       cpu: "500m"
-  #       memory: "512Mi"
-  #   # Volume mounts (optional)
-  #   # volumes:
-  #   #   - name: backup-storage
-  #   #     mountPath: /backups
-  #   #     kind: emptyDir
+
+# ============================================================================
+# EXAMPLE CRONJOB CONFIGURATION
+# ============================================================================
+# - name: backup-job
+#   schedule: "0 2 * * *"           # REQUIRED: Cron schedule (runs at 2 AM daily)
+#   timeZone: "UTC"
+#   concurrencyPolicy: "Forbid"     # Options: Allow, Forbid, Replace
+#   suspend: false
+#   successfulJobsHistoryLimit: 3
+#   failedJobsHistoryLimit: 1
+#   startingDeadlineSeconds: 200
+#   activeDeadlineSeconds: 600
+#   backoffLimit: 0
+#   restartPolicy: "Never"          # Options: Never, OnFailure
+#   
+#   labels:
+#     app.kubernetes.io/component: "cronjob"
+#   
+#   annotations:
+#     app.mycarrier.tech/team: "platform"
+#   
+#   image:
+#     registry: "myregistry.example.com"
+#     repository: "mycarrier/backup"
+#     tag: "1.0.0"
+#   
+#   imagePullPolicy: "IfNotPresent"
+#   imagePullSecret: "imagepull"
+#   command: ["/bin/sh", "-c"]
+#   args: ["./run-backup.sh"]
+#   
+#   env:
+#     - name: BACKUP_PATH
+#       value: "/backups"
+#   
+#   # Optional: ConfigMap and Secret references
+#   # configMapName: "backup-config"
+#   # secretName: "backup-secrets"
+#   
+#   resources:
+#     requests:
+#       cpu: "100m"
+#       memory: "128Mi"
+#     limits:
+#       cpu: "500m"
+#       memory: "512Mi"
+#   
+#   # Optional: Volume mounts
+#   # volumes:
+#   #   - name: backup-storage
+#   #     mountPath: /backups
+#   #     kind: emptyDir
 
 ## @section Secrets Management
 ## Configuration for secrets from Vault
+##
+## **Bulk secrets**: secrets.bulk.path - retrieves all keys from a Vault path as environment variables
+## **Individual secrets**: secrets.individual[] - array of {envVarName, path, keyName} for specific env vars
+## **Mounted secrets**: secrets.mounted[] - array of {name, mountedFileName, vault.path, vault.property, mount.path, mount.subPath}
+##
+## See the example configuration below for complete secrets specification details.
 
-## @param secrets.bulk.path - Path to secrets in Vault for bulk retrieval
-## @param secrets.individual [array] - Individual environment variables from Vault
-## @param secrets.mounted [array] - File-mounted secrets from Vault
+## @extra secrets Secret configuration
+## @param secrets.bulk [object] Bulk secret retrieval from a single Vault path
+## @param secrets.individual [array] Individual environment variables from Vault
+## @param secrets.mounted [array] File-mounted secrets from Vault
+
 secrets:
-  # Bulk secrets from Vault path
-  bulk:
+  bulk: {}
     # path: "secrets/data/dev/app"
   
-  # Individual environment variables from Vault
   individual: []
-    # Example of an individual secret
     # - envVarName: DB_PASSWORD
     #   path: secrets/data/dev/app/db
     #   keyName: password
   
-  # File-mounted secrets from Vault
   mounted: []
-    # Example of a mounted secret
     # - name: certificate
     #   mountedFileName: cert.pem
     #   vault:
@@ -558,56 +514,31 @@ secrets:
 
 ## @section Infrastructure Resources
 ## Infrastructure resources provisioned via Crossplane
+##
+## **Resource Groups**: infrastructure.azure.resourceGroup[] - name, location, managementPolicies, tags, namespace
+## **Storage Accounts**: infrastructure.azure.storage.accounts[] - resource groups, storage accounts, containers, tags
+## **Service Bus**: infrastructure.azure.servicebus[] - namespace, SKU, topics, subscriptions, rules, management policies
+##
+## All resources support managementPolicies for lifecycle management (default: ["Observe"] for safe imports).
+## "Delete" policy is blocked to prevent accidental resource deletion.
+##
+## See the comprehensive example configuration below for all available options and detailed documentation.
 
-## @param infrastructure.azure.resourceGroup [array] - Azure Resource Group configurations
-## @param infrastructure.azure.resourceGroup[].name - Name of the Resource Group
-## @param infrastructure.azure.resourceGroup[].location - Azure region for the Resource Group
-## @param infrastructure.azure.resourceGroup[].managementPolicies [array] - Crossplane management policies
-## @param infrastructure.azure.resourceGroup[].managedBy - ID of the resource or application that manages this Resource Group
-## @param infrastructure.azure.resourceGroup[].tags [object] - Resource tags
-## @param infrastructure.azure.resourceGroup[].namespace - Kubernetes namespace for the resource
-## @param infrastructure.azure.resourceGroup[].annotations [object] - Custom annotations for the resource
-## @param infrastructure.azure.storage.accounts [array] - Azure storage account configurations
-## @param infrastructure.azure.storage.accounts[].existingResourceGroup.name - Name of existing resource group to use
-## @param infrastructure.azure.storage.accounts[].newResourceGroup.name - Name for new resource group to create
-## @param infrastructure.azure.storage.accounts[].existingStorageAccount.name - Name of existing storage account to use
-## @param infrastructure.azure.storage.accounts[].newStorageAccount.name - Name for new storage account to create
-## @param infrastructure.azure.storage.accounts[].newStorageAccount.location - Azure region for the storage account
-## @param infrastructure.azure.storage.accounts[].newStorageAccount.accountTier - Storage account tier: Standard or Premium
-## @param infrastructure.azure.storage.accounts[].newStorageAccount.accountReplicationType - Replication type: LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS
-## @param infrastructure.azure.storage.accounts[].newStorageAccount.accessTier - Access tier: Cool, Hot, Archive
-## @param infrastructure.azure.storage.accounts[].containers [array] - Blob containers to create
-## @param infrastructure.azure.storage.accounts[].containers[].name - Container name
-## @param infrastructure.azure.storage.accounts[].containers[].accessType - Container access type: private, blob, container
-## @param infrastructure.azure.storage.accounts[].containers[].metadata [object] - Container metadata
-## @param infrastructure.azure.storage.accounts[].tags [object] - Resource tags
-## @param infrastructure.azure.storage.accounts[].namespace - Kubernetes namespace for the resource
-## @param infrastructure.azure.storage.accounts[].annotations [object] - Custom annotations for the resource
-## @param infrastructure.azure.servicebus [array] - Azure Service Bus configurations
-## @param infrastructure.azure.servicebus[].name - Name of the Service Bus namespace
-## @param infrastructure.azure.servicebus[].namespace - Kubernetes namespace for the resource
-## @param infrastructure.azure.servicebus[].location - Azure region for the Service Bus namespace
-## @param infrastructure.azure.servicebus[].sku - Service Bus SKU: Basic, Standard, or Premium
-## @param infrastructure.azure.servicebus[].resourceGroupName - Name of the resource group
-## @param infrastructure.azure.servicebus[].capacity - Messaging units for Premium SKU (1, 2, 4, 8, or 16)
-## @param infrastructure.azure.servicebus[].managementPolicies [array] - Crossplane management policies (e.g., ["Observe"] for import)
-## @param infrastructure.azure.servicebus[].tags [object] - Resource tags
-## @param infrastructure.azure.servicebus[].annotations [object] - Custom annotations for the resource
-## @param infrastructure.azure.servicebus[].topics [array] - Service Bus topics
-## @param infrastructure.azure.servicebus[].topics[].name - Topic name
-## @param infrastructure.azure.servicebus[].topics[].managementPolicies [array] - Crossplane management policies for topic
-## @param infrastructure.azure.servicebus[].topics[].annotations [object] - Custom annotations for the topic
-## @param infrastructure.azure.servicebus[].topics[].subscriptions [array] - Topic subscriptions (required)
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].name - Subscription name
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].managementPolicies [array] - Crossplane management policies for subscription
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].maxDeliveryCount - Maximum delivery attempts
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].lockDuration - Lock duration (ISO 8601 format)
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].annotations [object] - Custom annotations for the subscription
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules [array] - Subscription rules (optional)
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].name - Rule name
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].filterType - Filter type: SqlFilter or CorrelationFilter
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].sqlFilter - SQL filter expression
-## @param infrastructure.azure.servicebus[].topics[].subscriptions[].rules[].managementPolicies [array] - Crossplane management policies for rule
+# ============================================================================
+# INFRASTRUCTURE CONFIGURATION
+# ============================================================================
+# The following sections configure Azure infrastructure resources managed
+# through Crossplane. These resources are provisioned and managed as part
+# of your Kubernetes deployment.
+# ============================================================================
+
+## @extra infrastructure Infrastructure configuration
+## @extra infrastructure.azure Azure infrastructure resources
+## @param infrastructure.azure.resourceGroup [array] Azure Resource Group configurations
+## @extra infrastructure.azure.storage Azure Storage configuration
+## @param infrastructure.azure.storage.accounts [array] Azure storage account configurations
+## @param infrastructure.azure.servicebus [array] Azure Service Bus namespace configurations
+
 infrastructure:
   azure:
     # Azure Resource Group configurations
@@ -781,4 +712,13 @@ infrastructure:
       #       subscriptions:
       #         - name: "email-sender"
       #           maxDeliveryCount: 5                    # Fewer retries for notifications
+
+# ============================================================================
+# DEPLOYMENT SETTINGS
+# ============================================================================
+
+## @section Deployment Settings
+## Configuration for deployment behavior
+
+## @param isEnvironmentDeploy Whether this is an environment-level deployment (affects resource naming and behavior)
 isEnvironmentDeploy: false
