@@ -84,7 +84,7 @@ tests:
             memory: "2048Mi"
           requests:
             cpu: "50m"
-            memory: "64Mi"
+            memory: "128Mi"
     asserts:
       - isKind:
           of: Deployment
@@ -99,4 +99,4 @@ tests:
           value: 50m
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: 64Mi
+          value: 128Mi

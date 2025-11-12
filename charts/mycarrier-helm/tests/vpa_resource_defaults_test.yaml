@@ -1,0 +1,316 @@
+suite: VPA Resource Defaults Tests
+templates:
+  - vpa.yaml
+tests:
+  - it: should use resources.limits × 3 for maxAllowed when not configured
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          vpa:
+            enabled: true
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.cpu
+          value: "100m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.memory
+          value: "128Mi"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "1500m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "1536Mi"
+
+  - it: should use configured vpa.resources.cpu.maximum when provided
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          vpa:
+            enabled: true
+            resources:
+              cpu:
+                maximum: "2000m"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "2000m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "1536Mi"
+
+  - it: should use configured vpa.resources.memory.maximum when provided
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          vpa:
+            enabled: true
+            resources:
+              memory:
+                maximum: "2Gi"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "1500m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "2Gi"
+
+  - it: should use both configured maximums when both are provided
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          vpa:
+            enabled: true
+            resources:
+              cpu:
+                maximum: "2000m"
+              memory:
+                maximum: "2Gi"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "2000m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "2Gi"
+
+  - it: should use configured minimums when provided
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          vpa:
+            enabled: true
+            resources:
+              cpu:
+                minimum: "100m"
+              memory:
+                minimum: "128Mi"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.cpu
+          value: "100m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.memory
+          value: "128Mi"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "1500m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "1536Mi"
+
+  - it: should handle CPU in cores format (1 core)
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          vpa:
+            enabled: true
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "3"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "3Gi"
+
+  - it: should handle fractional CPU cores
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "512Mi"
+          vpa:
+            enabled: true
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "1.5"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "1536Mi"
+
+  - it: should handle large memory values in Gi
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          vpa:
+            enabled: true
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "6000m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "12Gi"
+
+  - it: should default minimum to resources.requests
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          vpa:
+            enabled: true
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.cpu
+          value: "250m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.memory
+          value: "256Mi"
+
+  - it: should work with all custom values
+    set:
+      environment.name: "dev"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "myregistry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          vpa:
+            enabled: true
+            resources:
+              cpu:
+                minimum: "200m"
+                maximum: "4000m"
+              memory:
+                minimum: "512Mi"
+                maximum: "8Gi"
+    asserts:
+      - isKind:
+          of: VerticalPodAutoscaler
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.cpu
+          value: "200m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.memory
+          value: "512Mi"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "4000m"
+      - equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "8Gi"

@@ -544,7 +544,7 @@ tests:
           of: Job
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "64Mi"
+          value: "128Mi"
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
           value: "100m"

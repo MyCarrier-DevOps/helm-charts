@@ -75,7 +75,7 @@ template:
           {{ toYaml .job.resources | indent 10 | trim }}
           {{- else }}
           requests:
-            memory: "64Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
             memory: "256Mi"

@@ -1085,6 +1085,94 @@ When contributing to this chart, please follow the coding standards defined in t
 4. Run tests
 5. Submit a pull request
 
+## Parameters
+
+### Global Settings
+
+| Name                                  | Description                                                                            | Value    |
+| ------------------------------------- | -------------------------------------------------------------------------------------- | -------- |
+| `global.appStack`                     | Application stack name, used for naming resources and grouping applications            | `app`    |
+| `global.gitbranch`                    | Name of the git branch (used for feature branches)                                     | `""`     |
+| `global.branchlabel`                  | Label for the branch, used for reference label                                         | `""`     |
+| `global.language`                     | Default programming language for applications (can be overridden at application level) | `csharp` |
+| `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)       | `false`  |
+| `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                          | `""`     |
+| `global.env`                          | Global environment variables shared across all applications                            | `{}`     |
+| `global.dependencies`                 | Dependency flags to control infrastructure resources                                   |          |
+| `global.dependencies.mongodb`         | Enable MongoDB dependency                                                              | `false`  |
+| `global.dependencies.elasticsearch`   | Enable Elasticsearch dependency                                                        | `false`  |
+| `global.dependencies.redis`           | Enable Redis dependency                                                                | `false`  |
+| `global.dependencies.postgres`        | Enable PostgreSQL dependency                                                           | `false`  |
+| `global.dependencies.sqlserver`       | Enable SQL Server dependency                                                           | `false`  |
+| `global.dependencies.clickhouse`      | Enable ClickHouse dependency                                                           | `false`  |
+| `global.dependencies.azureservicebus` | Enable Azure Service Bus dependency                                                    | `false`  |
+| `global.dependencies.redpanda`        | Enable Redpanda dependency                                                             | `false`  |
+| `global.dependencies.loadsure`        | Enable Loadsure dependency                                                             | `false`  |
+| `global.dependencies.chargify`        | Enable Chargify dependency                                                             | `false`  |
+
+### Environment Settings
+
+| Name                                 | Description                                                                                                     | Value         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------- |
+| `environment.name`                   | Environment name (dev, preprod, prod, or feature-*)                                                             | `dev`         |
+| `environment.dependencyenv`          | Environment name for dependencies                                                                               | `dev`         |
+| `environment.domainOverride`         | Domain override configuration                                                                                   |               |
+| `environment.domainOverride.enabled` | Whether to override the default domain (default domains: mycarrier.dev for non-prod, mycarriertms.com for prod) | `false`       |
+| `environment.domainOverride.domain`  | Domain to use when override is enabled                                                                          | `example.com` |
+
+### Platform Settings
+
+| Name                             | Description                                                                            | Value        |
+| -------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
+| `enableVaultCA`                  | Enable Vault CA certificate download during pod startup                                | `false`      |
+| `disableOtelAutoinstrumentation` | Disable OpenTelemetry automatic instrumentation (set to false to enable)               | `true`       |
+| `tolerations`                    | Default tolerations for all applications                                               | `[]`         |
+| `deployment`                     | Deployment folder name (should match the subfolder containing the specific deployment) | `deployment` |
+
+### Applications
+
+| Name           | Description                                                          | Value |
+| -------------- | -------------------------------------------------------------------- | ----- |
+| `applications` | Map of application definitions where the key is the application name | `{}`  |
+
+### Kubernetes Jobs
+
+| Name   | Description                    | Value |
+| ------ | ------------------------------ | ----- |
+| `jobs` | List of Kubernetes Jobs to run | `[]`  |
+
+### Kubernetes CronJobs
+
+| Name       | Description                        | Value |
+| ---------- | ---------------------------------- | ----- |
+| `cronjobs` | List of Kubernetes CronJobs to run | `[]`  |
+
+### Secrets Management
+
+| Name                 | Description                                    | Value |
+| -------------------- | ---------------------------------------------- | ----- |
+| `secrets`            | Secret configuration                           |       |
+| `secrets.bulk`       | Bulk secret retrieval from a single Vault path | `{}`  |
+| `secrets.individual` | Individual environment variables from Vault    | `[]`  |
+| `secrets.mounted`    | File-mounted secrets from Vault                | `[]`  |
+
+### Infrastructure Resources
+
+| Name                                    | Description                                | Value |
+| --------------------------------------- | ------------------------------------------ | ----- |
+| `infrastructure`                        | Infrastructure configuration               |       |
+| `infrastructure.azure`                  | Azure infrastructure resources             |       |
+| `infrastructure.azure.resourceGroup`    | Azure Resource Group configurations        | `[]`  |
+| `infrastructure.azure.storage`          | Azure Storage configuration                |       |
+| `infrastructure.azure.storage.accounts` | Azure storage account configurations       | `[]`  |
+| `infrastructure.azure.servicebus`       | Azure Service Bus namespace configurations | `[]`  |
+
+### Deployment Settings
+
+| Name                  | Description                                                                            | Value   |
+| --------------------- | -------------------------------------------------------------------------------------- | ------- |
+| `isEnvironmentDeploy` | Whether this is an environment-level deployment (affects resource naming and behavior) | `false` |
+
 ## License
 
 This chart is licensed under the Apache 2.0 License - see the LICENSE file for details.

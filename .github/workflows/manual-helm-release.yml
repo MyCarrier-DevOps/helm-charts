@@ -90,15 +90,50 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Install Helm
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v4
         with:
-          version: v3.8.1
+          version: v3.16.2
 
       - name: Update Helm repositories
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add mycarrier https://charts.mycarrier.dev || true
           helm repo update
+
+      - name: Checkout readme-generator-for-helm
+        uses: actions/checkout@v4
+        with:
+          repository: 'bitnami/readme-generator-for-helm'
+          ref: '2.7.2'
+          path: readme-generator-for-helm
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: readme-generator-for-helm/package-lock.json
+
+      - name: Install readme-generator dependencies
+        run: cd readme-generator-for-helm && npm install
+
+      - name: Generate README for chart
+        run: |
+          chart_dir="charts/${{ inputs.chart_name }}"
+          if [ -f "${chart_dir}/values.yaml" ]; then
+            echo "Generating README.md for ${chart_dir}"
+            readme-generator-for-helm/bin/index.js \
+              --values "${chart_dir}/values.yaml" \
+              --readme "${chart_dir}/README.md" \
+              --schema "/tmp/schema.json"
+          fi
+
+      - name: Commit updated README
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Update README.md for ${{ inputs.chart_name }}"
+          file_pattern: "charts/${{ inputs.chart_name }}/README.md"
+          branch: ${{ inputs.target_branch }}
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
