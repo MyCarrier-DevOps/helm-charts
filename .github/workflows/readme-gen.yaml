@@ -8,59 +8,75 @@ on:
     paths:
       - 'charts/*/values.yaml'
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   update-readme-metadata:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout bitnami-labs/readme-generator-for-helm
+      - name: Checkout readme-generator-for-helm
         uses: actions/checkout@v4
         with:
-          repository: 'bitnami-labs/readme-generator-for-helm'
-          ref: '1af12881436b1f58f0643d733fd5196b4a11caa8'
+          repository: 'bitnami/readme-generator-for-helm'
+          ref: '2.7.2'
           path: readme-generator-for-helm
 
-      - name: Cache node modules
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-node-modules
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          # npm cache files are stored in `~/.npm` on Linux/macOS
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('readme-generator-for-helm/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: readme-generator-for-helm/package-lock.json
 
-      - name: Install readme-generator-for-helm dependencies
+      - name: Install readme-generator dependencies
         run: cd readme-generator-for-helm && npm install
 
-      - name: Checkout repo
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           path: charts
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Execute readme-generator-for-helm
+      - name: Get changed files
+        id: changed-files
         run: |
-          # Using the Github API to detect the files changed as git merge-base stops working when the branch is behind
-          # and jitterbit/get-changed-files does not support pull_request_target
           URL="https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files"
           files_changed_data=$(curl -s --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' -X GET -G "$URL")
-          files_changed="$(echo $files_changed_data | jq -r '.[] | .filename')"
-          # Adding || true to avoid "Process exited with code 1" errors
+          files_changed="$(echo "$files_changed_data" | jq -r '.[] | .filename')"
           charts_dirs_changed="$(echo "$files_changed" | xargs dirname | grep -o "charts/[^/]*" | sort | uniq || true)"
-          for chart in ${charts_dirs_changed}; do
-            echo "Updating README.md for ${chart}"
-            readme-generator-for-helm/bin/index.js --values "charts/${chart}/values.yaml" --readme "charts/${chart}/README.md" --schema "/tmp/schema.json"
-          done
-      - name: Push changes
+          echo "charts_changed<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$charts_dirs_changed" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Generate README files
         run: |
-          # Push all the changes
+          charts_changed="${{ steps.changed-files.outputs.charts_changed }}"
+          if [ -n "$charts_changed" ]; then
+            for chart in ${charts_changed}; do
+              echo "Updating README.md for ${chart}"
+              readme-generator-for-helm/bin/index.js \
+                --values "charts/${chart}/values.yaml" \
+                --readme "charts/${chart}/README.md" \
+                --schema "/tmp/schema.json"
+            done
+          else
+            echo "No charts changed"
+          fi
+
+      - name: Commit and push README changes
+        run: |
           cd charts
-          if git status -s | grep bitnami; then
+          if git status --porcelain | grep -q "README.md"; then
             git config user.name "$GITHUB_ACTOR"
             git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-            git add . && git commit -am "Update README.md with readme-generator-for-helm" --signoff && git push
+            git add **/README.md
+            git commit -m "Update README.md with readme-generator-for-helm" --signoff
+            git push
+          else
+            echo "No README.md changes to commit"
           fi

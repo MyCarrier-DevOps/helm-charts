@@ -20,6 +20,9 @@ on:
       - '!charts/**/*test*.yaml'
       - '!charts/**/*test*.yml'
 
+permissions:
+  contents: write
+
 jobs:
   prep:
     runs-on: ubuntu-latest
@@ -79,9 +82,8 @@ jobs:
               fi
               done
           done
-          echo "::set-output name=matrix::$(printf "%s" "$var" | jq -Rrsc 'split("\\n") | unique')"
+          echo "matrix=$(printf "%s" "$var" | jq -Rrsc 'split("\\n") | unique')" >> "$GITHUB_OUTPUT"
 
-        ## Make sure the heredoc is indented with tabs. NOT SPACES.
       - name: get all charts & create package.json if it does not exist
         id: packages
         run: |
@@ -91,18 +93,9 @@ jobs:
             package="${charthome}/package.json"
             if [ ! -f "${charthome}/package.json" ] || [ ! -s "${charthome}/package.json" ]; then 
             echo "${charthome}/package.json does not exist or is empty"
-            echo "::set-output name=commitpackages::true"
-            cat <<- EOF > ${charthome}/package.json 
-            {
-                "name": "$(basename $charthome)",
-                "version": "0.0.1",
-                "repository": {
-                    "type": "git",
-                    "url": "${{ github.repositoryUrl }}"
-                },
-                "homepage": "${{ github.server_url }}/${{ github.repository }}"
-            }
-            EOF
+            echo "commitpackages=true" >> "$GITHUB_OUTPUT"
+            printf '{\n  "name": "%s",\n  "version": "0.0.1",\n  "repository": {\n    "type": "git",\n    "url": "%s"\n  },\n  "homepage": "%s"\n}\n' \
+              "$(basename $charthome)" "${{ github.repositoryUrl }}" "${{ github.server_url }}/${{ github.repository }}" > "${charthome}/package.json"
             fi
             done
 
@@ -162,13 +155,49 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Install Helm
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v4
         with:
-          version: v3.8.1
-      - run: |
+          version: v3.16.2
+
+      - name: Update Helm repositories
+        run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add mycarrier https://charts.mycarrier.dev || true
           helm repo update
+
+      - name: Checkout readme-generator-for-helm
+        uses: actions/checkout@v4
+        with:
+          repository: 'bitnami/readme-generator-for-helm'
+          ref: '2.7.2'
+          path: readme-generator-for-helm
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: readme-generator-for-helm/package-lock.json
+
+      - name: Install readme-generator dependencies
+        run: cd readme-generator-for-helm && npm install
+
+      - name: Generate README for chart
+        run: |
+          chart_dir="charts/${{ matrix.manifest }}"
+          if [ -f "${chart_dir}/values.yaml" ]; then
+            echo "Generating README.md for ${chart_dir}"
+            readme-generator-for-helm/bin/index.js \
+              --values "${chart_dir}/values.yaml" \
+              --readme "${chart_dir}/README.md" \
+              --schema "/tmp/schema.json"
+          fi
+
+      - name: Commit updated README
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Update README.md for ${{ matrix.manifest }}"
+          file_pattern: "charts/${{ matrix.manifest }}/README.md"
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
