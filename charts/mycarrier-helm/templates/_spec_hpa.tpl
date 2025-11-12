@@ -1,8 +1,13 @@
 {{- define "helm.specs.hpa" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
-maxReplicas: {{ dig "autoscaling" "maxReplicas" 10 .application }}
-minReplicas: {{ dig "autoscaling" "minReplicas" 2 .application }}
+{{- $replicas := dig "replicas" 2 .application }}
+{{- $configuredMinReplicas := dig "autoscaling" "minReplicas" nil .application }}
+{{- $minReplicas := $configuredMinReplicas | default $replicas }}
+{{- $configuredMaxReplicas := dig "autoscaling" "maxReplicas" nil .application }}
+{{- $maxReplicas := $configuredMaxReplicas | default (mul $minReplicas 3) }}
+maxReplicas: {{ $maxReplicas }}
+minReplicas: {{ $minReplicas }}
 metrics:
 - type: Resource
   resource:
@@ -10,14 +15,12 @@ metrics:
     target:
       type: Utilization
       averageUtilization: {{ dig "autoscaling" "targetCPUUtilizationPercentage" 80 .application }}
-{{- if dig "autoscaling" "targetMemoryUtilizationPercentage" false .application }}
 - type: Resource
   resource:
     name: memory
     target:
       type: Utilization
       averageUtilization: {{ dig "autoscaling" "targetMemoryUtilizationPercentage" 80 .application }}
-{{- end }}
 scaleTargetRef:
   {{- if (ne .application.deploymentType "rollout")  }}
   apiVersion: apps/v1

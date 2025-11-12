@@ -1,0 +1,325 @@
+suite: HPA Defaults from Replicas Tests
+templates:
+  - autoscaler.yaml
+tests:
+  - it: should set minReplicas to application replicas when autoscaling minReplicas is not configured
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 5
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 5
+      - equal:
+          path: spec.maxReplicas
+          value: 15
+
+  - it: should set maxReplicas to 3x minReplicas when autoscaling maxReplicas is not configured
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 4
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 4
+      - equal:
+          path: spec.maxReplicas
+          value: 12
+
+  - it: should use explicit minReplicas when configured even if different from replicas
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 5
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+            minReplicas: 3
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 3
+      - equal:
+          path: spec.maxReplicas
+          value: 9
+
+  - it: should use explicit maxReplicas when configured
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 5
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+            maxReplicas: 20
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 5
+      - equal:
+          path: spec.maxReplicas
+          value: 20
+
+  - it: should use both explicit min and max replicas when both are configured
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 10
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+            minReplicas: 2
+            maxReplicas: 8
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 8
+
+  - it: should default to 2 replicas minimum and maxReplicas 6 when replicas is not specified
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 6
+
+  - it: should calculate correctly for high replica count
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 10
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 10
+      - equal:
+          path: spec.maxReplicas
+          value: 30
+
+  - it: should work with statefulset deployment type
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: statefulset
+          replicas: 3
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 3
+      - equal:
+          path: spec.maxReplicas
+          value: 9
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: StatefulSet
+
+  - it: should work with rollout deployment type
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: rollout
+          replicas: 2
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 6
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Rollout
+
+  - it: should prioritize minReplicas over replicas when both are set
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 10
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+            minReplicas: 4
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 4
+      - equal:
+          path: spec.maxReplicas
+          value: 12
+
+  - it: should calculate maxReplicas as 3x minReplicas when replicas and minReplicas differ and maxReplicas is not set
+    set:
+      global:
+        appStack: "test-stack"
+        language: "nodejs"
+        forceAutoscaling: true
+      environment:
+        name: "prod"
+      applications:
+        test-app:
+          deploymentType: deployment
+          replicas: 8
+          image:
+            registry: "registry.example.com"
+            repository: "test-app"
+            tag: "1.0.0"
+          autoscaling:
+            enabled: true
+            minReplicas: 3
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 3
+      - equal:
+          path: spec.maxReplicas
+          value: 9
+      - matchRegex:
+          path: metadata.name
+          pattern: ^test-stack-test-app$
