@@ -71,7 +71,7 @@ spec:
   sessionAffinity: ClientIP
   sessionAffinityConfig:
     clientIP:
-      timeoutSeconds: {{ default $serviceDefaults.sessionAffinityTimeoutSeconds $appValues.service.affinityTimeoutSeconds }}
+      timeoutSeconds: {{ dig "service" "affinityTimeoutSeconds" $serviceDefaults.sessionAffinityTimeoutSeconds $appValues }}
   {{ end }}
 {{- end }}
 {{- end }}
