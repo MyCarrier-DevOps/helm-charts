@@ -2,6 +2,11 @@
 {{- $fullName := include "helm.fullname" . }}
 {{- $envScaling := include "helm.envScaling" . }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $imagePullSecret := $ctx.chartDefaults.imagePullSecret -}}
 replicas: {{ if and (not (kindIs "invalid" .application.replicas)) (or (eq "1" $envScaling) (and (eq "0" $envScaling) (eq "0" (default "0" .application.replicas | toString)))) }}{{ .application.replicas }}{{ else }}{{ 1 }}{{ end }}
 serviceName: {{ $fullName }}
 {{- if .application.updateStrategy }}
@@ -169,5 +174,5 @@ template:
       {{- end }}
     {{- end }}
     imagePullSecrets:
-      - name: {{ .application.pullSecret | default "imagepull" }}
+      - name: {{ .application.pullSecret | default $imagePullSecret }}
 {{- end -}}

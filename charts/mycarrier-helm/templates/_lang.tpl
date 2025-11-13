@@ -308,6 +308,11 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- define "helm.virtualservice.allowedEndpoints" -}}
 {{- $namespace := include "helm.namespace" . }}
 {{- $fullName := include "helm.fullname" . -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $serviceDefaults := $ctx.chartDefaults.service -}}
 {{- $mergedEndpoints := list -}}
 {{- $istioConfig := dig "networking" "istio" dict $.application -}}
 
@@ -420,11 +425,11 @@ This template generates the complete HTTP rules as strings to avoid duplication
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
-  timeout: {{ default "151s" (dig "service" "timeout" "151s" $.application) }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $.application }}
   retries:
-    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $.application) }}
-    attempts: {{ default 3 (dig "service" "attempts" 3 $.application) }}
-    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $.application) }}
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn $.application }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts $.application }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout $.application }}
 {{- end }}
 
 

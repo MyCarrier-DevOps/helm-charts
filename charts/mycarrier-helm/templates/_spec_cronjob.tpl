@@ -1,5 +1,15 @@
 {{- define "helm.specs.cronjob" -}}
 {{- $fullName := include "helm.fullname" . }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $chartDefaults := $ctx.chartDefaults -}}
+{{- $cronjobDefaults := $chartDefaults.cronjob -}}
+{{- $jobDefaults := $chartDefaults.job -}}
+{{- $resourceDefaults := $chartDefaults.resources.cronjob -}}
+{{- $imagePullSecret := $chartDefaults.imagePullSecret -}}
+{{- $restartPolicy := $chartDefaults.restartPolicy -}}
 schedule: {{ .cronjob.schedule | quote }}
 {{- if hasKey .cronjob "timeZone" }}
 timeZone: {{ .cronjob.timeZone | quote }}
@@ -13,12 +23,12 @@ suspend: {{ .cronjob.suspend }}
 {{- if hasKey .cronjob "successfulJobsHistoryLimit" }}
 successfulJobsHistoryLimit: {{ .cronjob.successfulJobsHistoryLimit }}
 {{- else }}
-successfulJobsHistoryLimit: 3
+successfulJobsHistoryLimit: {{ dig "successfulJobsHistoryLimit" $cronjobDefaults.successfulJobsHistoryLimit .cronjob }}
 {{- end }}
 {{- if hasKey .cronjob "failedJobsHistoryLimit" }}
 failedJobsHistoryLimit: {{ .cronjob.failedJobsHistoryLimit }}
 {{- else }}
-failedJobsHistoryLimit: 1
+failedJobsHistoryLimit: {{ dig "failedJobsHistoryLimit" $cronjobDefaults.failedJobsHistoryLimit .cronjob }}
 {{- end }}
 {{- if hasKey .cronjob "startingDeadlineSeconds" }}
 startingDeadlineSeconds: {{ .cronjob.startingDeadlineSeconds }}
@@ -28,7 +38,7 @@ jobTemplate:
     {{- if hasKey .cronjob "activeDeadlineSeconds" }}
     activeDeadlineSeconds: {{ .cronjob.activeDeadlineSeconds }}
     {{- end }}
-    backoffLimit: {{ .cronjob.backoffLimit | default 0 }}
+    backoffLimit: {{ .cronjob.backoffLimit | default $jobDefaults.backoffLimit }}
     template:
       metadata:
         labels:
@@ -42,8 +52,8 @@ jobTemplate:
         {{ include "helm.podSecurityContext" . | indent 8 | trim }}
         serviceAccountName: default
         imagePullSecrets:
-          - name: {{ .cronjob.imagePullSecret | default "imagepull" }}
-        restartPolicy: {{ .cronjob.restartPolicy | default "Never" }}
+          - name: {{ .cronjob.imagePullSecret | default $imagePullSecret }}
+        restartPolicy: {{ .cronjob.restartPolicy | default $restartPolicy }}
         containers:
           - image: "{{ .cronjob.image.registry }}/{{ .cronjob.image.repository }}:{{ .cronjob.image.tag }}"
             imagePullPolicy: {{ .cronjob.imagePullPolicy | default "IfNotPresent"}}
@@ -90,11 +100,11 @@ jobTemplate:
               {{ toYaml .cronjob.resources | indent 14 | trim }}
               {{- else }}
               requests:
-                memory: "128Mi"
-                cpu: "100m"
+                memory: {{ quote $resourceDefaults.requests.memory }}
+                cpu: {{ quote $resourceDefaults.requests.cpu }}
               limits:
-                memory: "256Mi"
-                cpu: "500m"
+                memory: {{ quote $resourceDefaults.limits.memory }}
+                cpu: {{ quote $resourceDefaults.limits.cpu }}
               {{- end }}
             {{ include "helm.containerSecurityContext" . | indent 12 | trim }}
             volumeMounts:

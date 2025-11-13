@@ -1,7 +1,16 @@
 {{- define "helm.specs.job" -}}
 {{- $fullName := include "helm.fullname" . }}
-activeDeadlineSeconds: {{ .job.activeDeadlineSeconds | default 600 }}
-backoffLimit: {{ .job.backoffLimit | default 0 }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $chartDefaults := $ctx.chartDefaults -}}
+{{- $jobDefaults := $chartDefaults.job -}}
+{{- $resourceDefaults := $chartDefaults.resources.job -}}
+{{- $imagePullSecret := $chartDefaults.imagePullSecret -}}
+{{- $restartPolicy := $chartDefaults.restartPolicy -}}
+activeDeadlineSeconds: {{ .job.activeDeadlineSeconds | default $jobDefaults.activeDeadlineSeconds }}
+backoffLimit: {{ .job.backoffLimit | default $jobDefaults.backoffLimit }}
 template:
   metadata:
     labels:
@@ -27,8 +36,8 @@ template:
     {{ include "helm.podSecurityContext" . | indent 4 | trim }}
     serviceAccountName: default
     imagePullSecrets:
-      - name: {{ .job.imagePullSecret | default "imagepull" }}
-    restartPolicy: {{ .job.restartPolicy | default "Never" }}
+      - name: {{ .job.imagePullSecret | default $imagePullSecret }}
+    restartPolicy: {{ .job.restartPolicy | default $restartPolicy }}
     containers:
       - image: "{{ .job.image.registry }}/{{ .job.image.repository }}:{{ .job.image.tag }}"
         imagePullPolicy: {{ .job.imagePullPolicy | default "IfNotPresent"}}
@@ -75,11 +84,11 @@ template:
           {{ toYaml .job.resources | indent 10 | trim }}
           {{- else }}
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: {{ quote $resourceDefaults.requests.memory }}
+            cpu: {{ quote $resourceDefaults.requests.cpu }}
           limits:
-            memory: "256Mi"
-            cpu: "500m"
+            memory: {{ quote $resourceDefaults.limits.memory }}
+            cpu: {{ quote $resourceDefaults.limits.cpu }}
           {{- end }}
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
         volumeMounts:

@@ -2,6 +2,11 @@
 {{- $fullName := include "helm.fullname" . }}
 {{- $envScaling := include "helm.envScaling" . }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $imagePullSecret := $ctx.chartDefaults.imagePullSecret -}}
 {{- if ne "true" (include "helm.hpaCondition" . | trim) }}
 {{- if eq "0" $envScaling }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
@@ -197,5 +202,5 @@ template:
       {{- end }}
     {{- end }}
     imagePullSecrets:
-      - name: {{ .application.pullSecret | default "imagepull"}}
+      - name: {{ .application.pullSecret | default $imagePullSecret }}
 {{- end -}}

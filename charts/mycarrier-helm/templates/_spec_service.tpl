@@ -1,6 +1,11 @@
 {{- define "helm.specs.service" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $serviceDefaults := $ctx.chartDefaults.service -}}
 type: {{ dig "service" "type" "ClusterIP" .application }}
 {{- if (dig "service" "headless" false .application) }}
 clusterIP: None
@@ -25,6 +30,6 @@ selector:
 sessionAffinity: ClientIP
 sessionAffinityConfig:
   clientIP:
-    timeoutSeconds: {{ dig "service" "affinityTimeoutSeconds" 600 .application }}
+    timeoutSeconds: {{ dig "service" "affinityTimeoutSeconds" $serviceDefaults.sessionAffinityTimeoutSeconds .application }}
 {{ end }}
 {{- end -}}
