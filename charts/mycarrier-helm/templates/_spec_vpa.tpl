@@ -1,10 +1,15 @@
 {{- define "helm.specs.vpa" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
-{{- $cpuRequest := dig "resources" "requests" "cpu" "100m" .application }}
-{{- $memoryRequest := dig "resources" "requests" "memory" "128Mi" .application }}
-{{- $cpuLimit := dig "resources" "limits" "cpu" "1000m" .application }}
-{{- $memoryLimit := dig "resources" "limits" "memory" "1Gi" .application }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $vpaDefaults := $ctx.chartDefaults.vpa -}}
+{{- $cpuRequest := dig "resources" "requests" "cpu" $vpaDefaults.defaultRequestCpu .application }}
+{{- $memoryRequest := dig "resources" "requests" "memory" $vpaDefaults.defaultRequestMemory .application }}
+{{- $cpuLimit := dig "resources" "limits" "cpu" $vpaDefaults.defaultLimitCpu .application }}
+{{- $memoryLimit := dig "resources" "limits" "memory" $vpaDefaults.defaultLimitMemory .application }}
 {{- $configuredMinCpu := dig "vpa" "resources" "cpu" "minimum" nil .application }}
 {{- $configuredMinMemory := dig "vpa" "resources" "memory" "minimum" nil .application }}
 {{- $configuredMaxCpu := dig "vpa" "resources" "cpu" "maximum" nil .application }}
@@ -16,23 +21,23 @@
 {{- if $configuredMaxCpu }}
   {{- $maxCpu = $configuredMaxCpu }}
 {{- else }}
-  {{- $maxCpu = include "helm.vpa.multiplyResource" (dict "value" $cpuLimit "multiplier" 3) }}
+  {{- $maxCpu = include "helm.vpa.multiplyResource" (dict "value" $cpuLimit "multiplier" $vpaDefaults.resourceMultiplier) }}
 {{- end }}
 {{- if $configuredMaxMemory }}
   {{- $maxMemory = $configuredMaxMemory }}
 {{- else }}
-  {{- $maxMemory = include "helm.vpa.multiplyResource" (dict "value" $memoryLimit "multiplier" 3) }}
+  {{- $maxMemory = include "helm.vpa.multiplyResource" (dict "value" $memoryLimit "multiplier" $vpaDefaults.resourceMultiplier) }}
 {{- end }}
 targetRef:
   apiVersion: "apps/v1"
   kind: {{ if (eq .application.deploymentType "deployment") }}Deployment{{ else if (eq .application.deploymentType "statefulset") }}StatefulSet{{ end }}
   name: {{ $fullName }}
 updatePolicy:
-  updateMode: {{ dig "vpa" "updateMode" "Initial" .application }}
+  updateMode: {{ dig "vpa" "updateMode" $vpaDefaults.updateMode .application }}
 resourcePolicy:
   containerPolicies:
   - containerName: {{ .appName | default $fullName | lower | trunc 63 }}
-    controlledValues: {{ dig "vpa" "controlledValues" "RequestsOnly" .application }}
+    controlledValues: {{ dig "vpa" "controlledValues" $vpaDefaults.controlledValues .application }}
     minAllowed:
       cpu: {{ $minCpu | quote }}
       memory: {{ $minMemory | quote }}

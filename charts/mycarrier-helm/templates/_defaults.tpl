@@ -1,138 +1,74 @@
 {{/*
-Defaults helper functions to provide consistent default values across all resources.
-This file centralizes default value definitions to ensure consistent behavior.
+Centralized chart defaults for MyCarrier Helm chart.
+Provides a single source of truth for reusable default values
+that can be referenced across templates to avoid scattered literals.
 */}}
+{{- define "helm.chartDefaults.raw" -}}
+{{- $defaults := dict -}}
 
-{{/*
-Default values for container resources
-*/}}
-{{- define "helm.defaults.resources" -}}
-requests:
-  cpu: {{ default "100m" .cpu }}
-  memory: {{ default "128Mi" .memory }}
-limits:
-  cpu: {{ default "500m" .cpu }}
-  memory: {{ default "512Mi" .memory }}
+{{- $applicationResources := dict -}}
+{{- $_ := set $applicationResources "requests" (dict "cpu" "50m" "memory" "512Mi") -}}
+{{- $_ := set $applicationResources "limits" (dict "cpu" "2000m" "memory" "2048Mi") -}}
+
+{{- $jobResources := dict -}}
+{{- $_ := set $jobResources "requests" (dict "cpu" "100m" "memory" "128Mi") -}}
+{{- $_ := set $jobResources "limits" (dict "cpu" "500m" "memory" "256Mi") -}}
+
+{{- $resources := dict -}}
+{{- $_ := set $resources "application" $applicationResources -}}
+{{- $_ := set $resources "job" $jobResources -}}
+{{- $_ := set $resources "cronjob" $jobResources -}}
+{{- $_ := set $resources "testTrigger" $jobResources -}}
+{{- $_ := set $defaults "resources" $resources -}}
+
+{{- $service := dict -}}
+{{- $_ := set $service "timeout" "151s" -}}
+{{- $_ := set $service "retryOn" "5xx,reset" -}}
+{{- $_ := set $service "attempts" 3 -}}
+{{- $_ := set $service "perTryTimeout" "50s" -}}
+{{- $_ := set $service "sessionAffinityTimeoutSeconds" 600 -}}
+{{- $_ := set $defaults "service" $service -}}
+
+{{- $autoscaling := dict -}}
+{{- $_ := set $autoscaling "targetCPUUtilizationPercentage" 80 -}}
+{{- $_ := set $autoscaling "targetMemoryUtilizationPercentage" 80 -}}
+{{- $_ := set $autoscaling "maxReplicasMultiplier" 3 -}}
+{{- $_ := set $defaults "autoscaling" $autoscaling -}}
+
+{{- $vpa := dict -}}
+{{- $_ := set $vpa "updateMode" "Initial" -}}
+{{- $_ := set $vpa "controlledValues" "RequestsOnly" -}}
+{{- $_ := set $vpa "defaultRequestCpu" "100m" -}}
+{{- $_ := set $vpa "defaultRequestMemory" "128Mi" -}}
+{{- $_ := set $vpa "defaultLimitCpu" "1000m" -}}
+{{- $_ := set $vpa "defaultLimitMemory" "1Gi" -}}
+{{- $_ := set $vpa "resourceMultiplier" 3 -}}
+{{- $_ := set $defaults "vpa" $vpa -}}
+
+{{- $cronjob := dict -}}
+{{- $_ := set $cronjob "successfulJobsHistoryLimit" 3 -}}
+{{- $_ := set $cronjob "failedJobsHistoryLimit" 1 -}}
+{{- $_ := set $defaults "cronjob" $cronjob -}}
+
+{{- $job := dict -}}
+{{- $_ := set $job "activeDeadlineSeconds" 600 -}}
+{{- $_ := set $job "backoffLimit" 0 -}}
+{{- $_ := set $defaults "job" $job -}}
+
+{{- $_ := set $defaults "imagePullSecret" "imagepull" -}}
+{{- $_ := set $defaults "restartPolicy" "Never" -}}
+
+{{- $defaults | toJson -}}
 {{- end -}}
 
 {{/*
-Default values for probes
+Returns the cached chart defaults dictionary. This helper should be used
+by templates to retrieve default values without recomputing the map.
 */}}
-{{- define "helm.defaults.probes" -}}
-livenessProbe:
-  httpGet:
-    path: {{ default "/health" .path }}
-    port: {{ default "http" .port }}
-  initialDelaySeconds: {{ default 30 .initialDelaySeconds }}
-  periodSeconds: {{ default 10 .periodSeconds }}
-  timeoutSeconds: {{ default 5 .timeoutSeconds }}
-  successThreshold: {{ default 1 .successThreshold }}
-  failureThreshold: {{ default 3 .failureThreshold }}
-readinessProbe:
-  httpGet:
-    path: {{ default "/health" .path }}
-    port: {{ default "http" .port }}
-  initialDelaySeconds: {{ default 5 .initialDelaySeconds }}
-  periodSeconds: {{ default 10 .periodSeconds }}
-  timeoutSeconds: {{ default 5 .timeoutSeconds }}
-  successThreshold: {{ default 1 .successThreshold }}
-  failureThreshold: {{ default 3 .failureThreshold }}
-startupProbe:
-  httpGet:
-    path: {{ default "/health" .path }}
-    port: {{ default "http" .port }}
-  initialDelaySeconds: {{ default 5 .initialDelaySeconds }}
-  periodSeconds: {{ default 10 .periodSeconds }}
-  timeoutSeconds: {{ default 5 .timeoutSeconds }}
-  successThreshold: {{ default 1 .successThreshold }}
-  failureThreshold: {{ default 30 .failureThreshold }}
+{{- define "helm.chartDefaults" -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
-
-{{/*
-Default values for update strategies
-*/}}
-{{- define "helm.defaults.updateStrategy" -}}
-{{- if eq .kind "Deployment" }}
-type: RollingUpdate
-rollingUpdate:
-  maxUnavailable: 0
-  maxSurge: 1
-{{- else if eq .kind "StatefulSet" }}
-type: RollingUpdate
-rollingUpdate:
-  partition: 0
-{{- else if eq .kind "DaemonSet" }}
-type: RollingUpdate
-rollingUpdate:
-  maxUnavailable: 1
-{{- end }}
-{{- end -}}
-
-{{/*
-Default values for autoscaling
-*/}}
-{{- define "helm.defaults.autoscaling" -}}
-enabled: {{ default false .enabled }}
-minReplicas: {{ default 2 .minReplicas }}
-maxReplicas: {{ default 5 .maxReplicas }}
-targetCPUUtilizationPercentage: {{ default 80 .targetCPUUtilizationPercentage }}
-{{- if .targetMemoryUtilizationPercentage }}
-targetMemoryUtilizationPercentage: {{ .targetMemoryUtilizationPercentage }}
-{{- end }}
-{{- end -}}
-
-{{/*
-Default values for service
-*/}}
-{{- define "helm.defaults.service" -}}
-type: {{ default "ClusterIP" .type }}
-{{- if .ports }}
-ports:
-{{- range .ports }}
-- name: {{ .name | default "http" }}
-  port: {{ .port }}
-  targetPort: {{ .targetPort | default .port }}
-  protocol: {{ .protocol | default "TCP" }}
-{{- end }}
-{{- else }}
-ports:
-- name: http
-  port: 80
-  targetPort: 8080
-  protocol: TCP
-{{- end }}
-{{- if .headless }}
-clusterIP: None
-{{- end }}
-{{- if not .disableAffinity }}
-sessionAffinity: ClientIP
-sessionAffinityConfig:
-  clientIP:
-    timeoutSeconds: {{ .affinityTimeoutSeconds | default 600 }}
-{{- end }}
-{{- end -}}
-
-{{/*
-Default values for security contexts
-*/}}
-{{- define "helm.defaults.securityContext" -}}
-runAsUser: {{ default 1000 .runAsUser }}
-runAsGroup: {{ default 1000 .runAsGroup }}
-fsGroup: {{ default 1000 .fsGroup }}
-fsGroupChangePolicy: OnRootMismatch
-seccompProfile:
-  type: RuntimeDefault
-{{- end -}}
-
-{{/*
-Default values for container security context
-*/}}
-{{- define "helm.defaults.containerSecurityContext" -}}
-runAsNonRoot: true
-allowPrivilegeEscalation: false
-capabilities:
-  drop:
-  - ALL
-seccompProfile:
-  type: RuntimeDefault
+{{- $ctx.chartDefaults | toJson -}}
 {{- end -}}

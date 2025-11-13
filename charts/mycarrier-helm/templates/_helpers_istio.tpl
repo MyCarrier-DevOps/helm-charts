@@ -57,11 +57,19 @@ allowCredentials: true
 Default timeout settings for Istio routes
 */}}
 {{- define "helm.istio.timeouts" -}}
-timeout: {{ default "151s" .timeout }}
+{{- $serviceDefaults := dict -}}
+{{- if and .root .root.ctx -}}
+  {{- $serviceDefaults = .root.ctx.chartDefaults.service -}}
+{{- else if .ctx -}}
+  {{- $serviceDefaults = .ctx.chartDefaults.service -}}
+{{- else -}}
+  {{- $serviceDefaults = (include "helm.chartDefaults.raw" . | fromJson).service -}}
+{{- end -}}
+timeout: {{ default $serviceDefaults.timeout .timeout }}
 retries:
-  retryOn: {{ default "5xx,reset" .retryOn }}
-  attempts: {{ default 3 .attempts }}
-  perTryTimeout: {{ default "50s" .perTryTimeout }}
+  retryOn: {{ default $serviceDefaults.retryOn .retryOn }}
+  attempts: {{ default $serviceDefaults.attempts .attempts }}
+  perTryTimeout: {{ default $serviceDefaults.perTryTimeout .perTryTimeout }}
 {{- end -}}
 
 {{/*

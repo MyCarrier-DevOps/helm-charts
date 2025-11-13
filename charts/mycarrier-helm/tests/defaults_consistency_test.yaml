@@ -1,0 +1,481 @@
+suite: Chart Defaults Consistency Tests
+templates:
+  - deployment.yaml
+  - statefulset.yaml
+  - rollout.yaml
+  - service.yaml
+  - virtualService.yaml
+  - frontendVirtualService.yaml
+  - autoscaler.yaml
+  - vpa.yaml
+  - jobs.yaml
+  - cronjob.yaml
+  - triggertestengine.yaml
+values:
+  - ../values.yaml
+tests:
+  - it: should apply centralized defaults to deployments and related network resources
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        defaults-app:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: defaults-app
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - template: deployment.yaml
+        isKind:
+          of: Deployment
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 2000m
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2048Mi
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: imagepull
+      - template: service.yaml
+        isKind:
+          of: Service
+      - template: service.yaml
+        equal:
+          path: spec.sessionAffinity
+          value: ClientIP
+      - template: service.yaml
+        equal:
+          path: spec.sessionAffinityConfig.clientIP.timeoutSeconds
+          value: 600
+      - template: virtualService.yaml
+        isKind:
+          of: VirtualService
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[1].timeout
+          value: "151s"
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[1].retries.retryOn
+          value: "5xx,reset"
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[1].retries.attempts
+          value: 3
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[1].retries.perTryTimeout
+          value: "50s"
+
+  - it: should apply centralized defaults to statefulsets
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        stateful-app:
+          deploymentType: statefulset
+          image:
+            registry: registry.example.com
+            repository: stateful-app
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - template: statefulset.yaml
+        isKind:
+          of: StatefulSet
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 2000m
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2048Mi
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: imagepull
+
+  - it: should apply centralized defaults to rollouts
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        rollout-app:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: rollout-app
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - template: rollout.yaml
+        isKind:
+          of: Rollout
+      - template: rollout.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - template: rollout.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - template: rollout.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 2000m
+      - template: rollout.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2048Mi
+      - template: rollout.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: imagepull
+
+  - it: should apply centralized defaults to jobs
+    set:
+      environment:
+        name: dev
+      jobs:
+        - name: defaults-job
+          image:
+            registry: registry.example.com
+            repository: defaults-job
+            tag: "1.0.0"
+    asserts:
+      - template: jobs.yaml
+        isKind:
+          of: Job
+      - template: jobs.yaml
+        equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+      - template: jobs.yaml
+        equal:
+          path: spec.backoffLimit
+          value: 0
+      - template: jobs.yaml
+        equal:
+          path: spec.template.spec.restartPolicy
+          value: "Never"
+      - template: jobs.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "100m"
+      - template: jobs.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "128Mi"
+      - template: jobs.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "500m"
+      - template: jobs.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "256Mi"
+      - template: jobs.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: "imagepull"
+
+  - it: should apply centralized defaults to cronjobs
+    set:
+      environment:
+        name: dev
+      cronjobs:
+        - name: nightly-backup
+          schedule: "0 2 * * *"
+          image:
+            registry: registry.example.com
+            repository: nightly-backup
+            tag: "1.0.0"
+    asserts:
+      - template: cronjob.yaml
+        isKind:
+          of: CronJob
+      - template: cronjob.yaml
+        equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 3
+      - template: cronjob.yaml
+        equal:
+          path: spec.failedJobsHistoryLimit
+          value: 1
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 0
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.template.spec.restartPolicy
+          value: "Never"
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.cpu
+          value: "100m"
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.memory
+          value: "128Mi"
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
+          value: "500m"
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory
+          value: "256Mi"
+      - template: cronjob.yaml
+        equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets[0].name
+          value: "imagepull"
+
+  - it: should apply centralized defaults to test trigger jobs
+    set:
+      global:
+        appStack: test-stack
+      environment:
+        name: dev
+      applications:
+        defaults-app:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: defaults-app
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: test-api-key
+            webhook_url: https://example.test/hook
+            testdefinitions:
+              - name: smoke
+                containerImage: registry.example.com/test-engine
+                containerTag: latest
+                secretId: smoke-secret
+                filters: []
+    asserts:
+      - template: triggertestengine.yaml
+        isKind:
+          of: Job
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 3600
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.activeDeadlineSeconds
+          value: 300
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.backoffLimit
+          value: 0
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.template.spec.restartPolicy
+          value: "Never"
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "100m"
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "128Mi"
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "500m"
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "256Mi"
+      - template: triggertestengine.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: "imagepull"
+
+  - it: should apply centralized defaults to HPAs
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        forceAutoscaling: true
+      environment:
+        name: prod
+      applications:
+        autoscaled-app:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: autoscaled-app
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          autoscaling:
+            enabled: true
+    asserts:
+      - template: autoscaler.yaml
+        isKind:
+          of: HorizontalPodAutoscaler
+      - template: autoscaler.yaml
+        equal:
+          path: spec.minReplicas
+          value: 2
+      - template: autoscaler.yaml
+        equal:
+          path: spec.maxReplicas
+          value: 6
+      - template: autoscaler.yaml
+        equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 80
+      - template: autoscaler.yaml
+        equal:
+          path: spec.metrics[1].resource.target.averageUtilization
+          value: 80
+
+  - it: should apply centralized defaults to VPAs
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        vpa-app:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: vpa-app
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          vpa:
+            enabled: true
+    asserts:
+      - template: vpa.yaml
+        isKind:
+          of: VerticalPodAutoscaler
+      - template: vpa.yaml
+        equal:
+          path: spec.updatePolicy.updateMode
+          value: Initial
+      - template: vpa.yaml
+        equal:
+          path: spec.resourcePolicy.containerPolicies[0].controlledValues
+          value: RequestsOnly
+      - template: vpa.yaml
+        equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.cpu
+          value: "100m"
+      - template: vpa.yaml
+        equal:
+          path: spec.resourcePolicy.containerPolicies[0].minAllowed.memory
+          value: "128Mi"
+      - template: vpa.yaml
+        equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.cpu
+          value: "3000m"
+      - template: vpa.yaml
+        equal:
+          path: spec.resourcePolicy.containerPolicies[0].maxAllowed.memory
+          value: "3Gi"
+
+  - it: should apply centralized defaults to frontend virtual services
+    set:
+      global:
+        appStack: test-stack
+      environment:
+        name: dev
+      applications:
+        main-app:
+          deploymentType: deployment
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: registry.example.com
+            repository: main-app
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+        admin-app:
+          deploymentType: deployment
+          isFrontend: true
+          isPrimary: false
+          routePrefix: "/admin"
+          image:
+            registry: registry.example.com
+            repository: admin-app
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - template: frontendVirtualService.yaml
+        hasDocuments:
+          count: 1
+      - template: frontendVirtualService.yaml
+        equal:
+          path: spec.http[3].name
+          value: test-stack-main-app-catchall
+      - template: frontendVirtualService.yaml
+        equal:
+          path: spec.http[3].timeout
+          value: "151s"
+      - template: frontendVirtualService.yaml
+        equal:
+          path: spec.http[3].retries.retryOn
+          value: "5xx,reset"
+      - template: frontendVirtualService.yaml
+        equal:
+          path: spec.http[3].retries.attempts
+          value: 3
+      - template: frontendVirtualService.yaml
+        equal:
+          path: spec.http[3].retries.perTryTimeout
+          value: "50s"

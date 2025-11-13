@@ -174,13 +174,18 @@ response:
 {{- end -}}
 
 {{- define "helm.resources" -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $defaults := $ctx.chartDefaults.resources.application -}}
 resources:
   requests:
-    cpu: 50m
-    memory: {{ dig "resources" "requests" "memory" "128Mi" .application }}
+    cpu: {{ dig "resources" "requests" "cpu" $defaults.requests.cpu .application }}
+    memory: {{ dig "resources" "requests" "memory" $defaults.requests.memory .application }}
   limits:
-    cpu: {{ dig "resources" "limits" "cpu" "2000m" .application }}
-    memory: {{ dig "resources" "limits" "memory" "2048Mi" .application }}
+    cpu: {{ dig "resources" "limits" "cpu" $defaults.limits.cpu .application }}
+    memory: {{ dig "resources" "limits" "memory" $defaults.limits.memory .application }}
 {{- end -}}
 
 {{- define "helm.podDefaultNodeSelector" -}}

@@ -1,5 +1,6 @@
 {{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
+{{- $serviceDefaults := $globalCtx.chartDefaults.service -}}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- $namespace := include "helm.namespace" $ }}
@@ -70,7 +71,7 @@ spec:
   sessionAffinity: ClientIP
   sessionAffinityConfig:
     clientIP:
-      timeoutSeconds: {{ default "600" $appValues.service.affinityTimeoutSeconds }}
+      timeoutSeconds: {{ dig "service" "affinityTimeoutSeconds" $serviceDefaults.sessionAffinityTimeoutSeconds $appValues }}
   {{ end }}
 {{- end }}
 {{- end }}

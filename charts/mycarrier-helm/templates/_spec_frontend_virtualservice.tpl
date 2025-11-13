@@ -4,6 +4,11 @@
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $serviceDefaults := $ctx.chartDefaults.service -}}
 
 hosts:
 {{/* Generate hosts from primary frontend app */}}
@@ -88,11 +93,11 @@ http:
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
-  timeout: {{ default "151s" (dig "service" "timeout" "151s" $appValues) }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
   retries:
-    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $appValues) }}
-    attempts: {{ default 3 (dig "service" "attempts" 3 $appValues) }}
-    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $appValues) }}
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn $appValues }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts $appValues }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout $appValues }}
 {{- end }}
 {{- end }}
 
@@ -119,11 +124,11 @@ http:
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
-  timeout: {{ default "151s" (dig "service" "timeout" "151s" $appValues) }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
   retries:
-    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $appValues) }}
-    attempts: {{ default 3 (dig "service" "attempts" 3 $appValues) }}
-    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $appValues) }}
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn $appValues }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts $appValues }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout $appValues }}
 {{- end }}
 {{- end }}
 {{- end }}
@@ -176,11 +181,11 @@ http:
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
-  timeout: {{ default "151s" (dig "service" "timeout" nil $primaryAppValues) }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
   retries:
-    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" nil $primaryAppValues) }}
-    attempts: {{ default 3 (dig "service" "attempts" nil $primaryAppValues) }}
-    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" nil $primaryAppValues) }}
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn $primaryAppValues }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts $primaryAppValues }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout $primaryAppValues }}
 {{- end }}
 
 {{/* Default/root route (primary frontend app) - must come last */}}
@@ -242,11 +247,11 @@ http:
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
   {{- end }}
-  timeout: {{ default "151s" (dig "service" "timeout" "151s" $primaryAppValues) }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
   retries:
-    retryOn: {{ default "5xx,reset" (dig "service" "retryOn" "5xx,reset" $primaryAppValues) }}
-    attempts: {{ default 3 (dig "service" "attempts" 3 $primaryAppValues) }}
-    perTryTimeout: {{ default "50s" (dig "service" "perTryTimeout" "50s" $primaryAppValues) }}
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn $primaryAppValues }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts $primaryAppValues }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout $primaryAppValues }}
 {{- end }}
 {{- end -}}
 

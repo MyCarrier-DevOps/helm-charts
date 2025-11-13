@@ -2,6 +2,14 @@
 {{- $fullName := include "helm.fullname" . }}
 {{- $baseName := include "helm.basename" . }}
 {{- $namespace := include "helm.namespace" . }}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $chartDefaults := $ctx.chartDefaults -}}
+{{- $resourceDefaults := $chartDefaults.resources.testTrigger -}}
+{{- $imagePullSecret := $chartDefaults.imagePullSecret -}}
+{{- $restartPolicy := $chartDefaults.restartPolicy -}}
 {{- $httpPort := 8080 }}
 {{- $environment := $.Values.environment.name }}
 {{- $gitBranch := $.Values.global.gitbranch}}
@@ -27,8 +35,8 @@ template:
     {{ include "helm.podSecurityContext" . | indent 4 | trim }}
     serviceAccountName: default
     imagePullSecrets:
-      - name: {{ dig "testtrigger" "imagePullSecret" "imagepull" .application | quote }}
-    restartPolicy: {{ dig "testtrigger" "restartPolicy" "Never" .application | quote  }}
+      - name: {{ dig "testtrigger" "imagePullSecret" $imagePullSecret .application | quote }}
+    restartPolicy: {{ dig "testtrigger" "restartPolicy" $restartPolicy .application | quote  }}
     containers:
       - image: "alpine/curl:latest"
         imagePullPolicy: {{ dig "testtrigger" "imagePullPolicy" "IfNotPresent" .application | quote }}
@@ -43,11 +51,11 @@ template:
           {{ toYaml .application.testtrigger.resources | indent 10 | trim }}
           {{- else }}
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: {{ quote $resourceDefaults.requests.memory }}
+            cpu: {{ quote $resourceDefaults.requests.cpu }}
           limits:
-            memory: "256Mi"
-            cpu: "500m"
+            memory: {{ quote $resourceDefaults.limits.memory }}
+            cpu: {{ quote $resourceDefaults.limits.cpu }}
           {{- end }}
         command:
           - /bin/sh

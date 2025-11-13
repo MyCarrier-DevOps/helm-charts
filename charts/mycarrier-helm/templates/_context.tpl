@@ -41,7 +41,9 @@ The cached version should be used in loops to avoid recomputation.
 {{- end -}}
 
 {{/* Add defaults to context */}}
+{{- $chartDefaults := include "helm.chartDefaults.raw" . | fromJson -}}
 {{- $_ := set $context "defaults" $defaults -}}
+{{- $_ := set $context "chartDefaults" $chartDefaults -}}
 
 {{- $context | toJson -}}
 {{- end -}}
