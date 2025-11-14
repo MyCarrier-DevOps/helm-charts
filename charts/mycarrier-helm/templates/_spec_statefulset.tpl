@@ -126,8 +126,12 @@ template:
           {{- range $key, $value := .application.env }}
           - name: "{{ $key }}"
             {{- if kindIs "map" $value }}
+            {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
+            {{ toYaml $value | indent 12 | trim }}
+            {{- else }}
             valueFrom: 
               {{ toYaml $value | indent 14 | trim}}
+            {{- end }}
             {{- else }}
             value: "{{ tpl (toString $value) $ }}"
             {{- end }}
