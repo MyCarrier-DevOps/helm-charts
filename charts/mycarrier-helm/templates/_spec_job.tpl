@@ -58,8 +58,12 @@ template:
           {{- range $key, $value := .job.env }}
           - name: "{{ $key }}"
             {{- if kindIs "map" $value }}
+            {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
+            {{ toYaml $value | indent 10 | trim }}
+            {{- else }}
             valueFrom:
               {{- toYaml $value | nindent 14 }}
+            {{- end }}
             {{- else }}
             value: "{{ tpl (toString $value) $ }}"
             {{- end }}

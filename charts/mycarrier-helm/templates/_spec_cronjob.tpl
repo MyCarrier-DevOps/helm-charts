@@ -74,8 +74,12 @@ jobTemplate:
               {{- range $key, $value := $.cronjob.env }}
               - name: "{{ $key }}"
                 {{- if kindIs "map" $value }}
+                {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
+                {{ toYaml $value | indent 14 | trim }}
+                {{- else }}
                 valueFrom:
                   {{- toYaml $value | nindent 18 }}
+                {{- end }}
                 {{- else }}
                 value: "{{ tpl (toString $value) $ }}"
                 {{- end }}
