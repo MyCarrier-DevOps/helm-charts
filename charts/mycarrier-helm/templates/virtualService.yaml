@@ -43,6 +43,9 @@ metadata:
     {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
 spec:
   hosts:
+  - {{ $fullName }}
+  - {{ $fullName }}.{{ $namespace }}.svc
+  - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
   {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
   {{- if $appValues.staticHostname }}- {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
   gateways:

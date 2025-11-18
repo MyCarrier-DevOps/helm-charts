@@ -265,6 +265,10 @@ http:
 {{- $primaryFullName := .primaryFullName }}
 
 hosts:
+{{- /* allow both internal and external hostnames */}}
+- {{ $primaryFullName }}
+- {{ $primaryFullName }}.{{ $namespace }}.svc
+- {{ $primaryFullName }}.{{ $namespace }}.svc.cluster.local
 {{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{- if $primaryAppValues.staticHostname }}- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
 gateways:
