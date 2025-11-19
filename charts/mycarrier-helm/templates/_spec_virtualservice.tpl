@@ -27,7 +27,7 @@ http:
           number: {{ default 8080 (dig "ports" "http" nil .application) }}
   match:
     - headers:
-        Environment:
+        environment:
           exact: {{ $.Values.environment.name }}
 {{- end }}
 {{- if and .application.networking .application.networking.istio .application.networking.istio.redirects }}
@@ -94,6 +94,9 @@ http:
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 {{- else }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
+  match:
+    - withoutHeaders:
+        environment: {}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}

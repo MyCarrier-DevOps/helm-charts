@@ -53,7 +53,7 @@ http:
     {{- end }}
   match:
     - headers:
-        Environment:
+        environment:
           exact: {{ $.Values.environment.name }}
 {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") }}
       uri:
@@ -67,9 +67,10 @@ http:
 {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") (not $appValues.isPrimary) }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
 - name: {{ $appName }}-path-route
+  {{- $pathMatch := dict "uri" (dict "prefix" $appValues.routePrefix) }}
+  {{- $_ := set $pathMatch "withoutHeaders" (dict "environment" (dict)) }}
   match:
-  - uri:
-      prefix: {{ $appValues.routePrefix }}
+    - {{- toYaml $pathMatch | nindent 6 }}
   route:
   {{- if and $appValues.service $appValues.service.ports }}
   {{- range $appValues.service.ports }}
@@ -172,9 +173,10 @@ http:
       host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
       port:
         number: 80
+  {{- $catchallMatch := dict "uri" (dict "exact" "/") }}
+  {{- $_ := set $catchallMatch "withoutHeaders" (dict "environment" (dict)) }}
   match:
-  - uri:
-      exact: /
+    - {{- toYaml $catchallMatch | nindent 6 }}
   headers:
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
@@ -198,11 +200,12 @@ http:
 {{- $primaryIstioEnabled = $primaryIstioConfig.enabled }}
 {{- end }}
 - name: {{ if (eq $primaryAppValues.deploymentType "rollout") }}canary{{ else }}{{ $primaryApp }}-default{{ end }}
+  {{- $defaultMatch := dict "withoutHeaders" (dict "environment" (dict)) }}
   {{- if not (eq $primaryAppValues.routePrefix "/") }}
-  match:
-  - uri:
-      prefix: {{ default "/" $primaryAppValues.routePrefix }}
+    {{- $_ := set $defaultMatch "uri" (dict "prefix" (default "/" $primaryAppValues.routePrefix)) }}
   {{- end }}
+  match:
+    - {{- toYaml $defaultMatch | nindent 6 }}
   route:
   {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
   {{- range $primaryAppValues.service.ports }}
@@ -287,7 +290,7 @@ http:
 - name: {{ $appName }}-offload-route
   match:
   - headers:
-      Environment:
+      environment:
         exact: {{ .Values.environment.name }}
     uri:
       prefix: {{ $appValues.routePrefix }}
@@ -325,6 +328,6 @@ http:
     {{- end }}
   match:
     - headers:
-        Environment:
+        environment:
           exact: {{ .Values.environment.name }}
 {{- end -}}

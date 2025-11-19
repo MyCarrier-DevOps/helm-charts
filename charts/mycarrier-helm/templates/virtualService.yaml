@@ -65,7 +65,7 @@ spec:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
     match:
       - headers:
-          Environment:
+          environment:
             exact: {{ $.Values.environment.name }}
 {{- end }}
 {{- end }}
