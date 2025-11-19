@@ -42,10 +42,15 @@ metadata:
   annotations:
     {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
 spec:
+  {{- $baseFullName := include "helm.basename" $appContext }}
+  {{- $metaNamespace := include "helm.metaEnvironment" $ }}
   hosts:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
+  - {{ $baseFullName }}
+  - {{ $baseFullName }}.{{ $metaNamespace }}.svc
+  - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
   {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
   {{- if $appValues.staticHostname }}- {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
   gateways:

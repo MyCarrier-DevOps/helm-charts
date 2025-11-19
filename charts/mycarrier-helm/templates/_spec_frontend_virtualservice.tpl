@@ -263,12 +263,17 @@ http:
 {{- $namespace := include "helm.namespace" $ }}
 {{- $primaryAppValues := .primaryAppValues }}
 {{- $primaryFullName := .primaryFullName }}
+{{- $primaryBaseFullName := (list (.Values.global.appStack) ($primaryApp)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
+{{- $metaNamespace := include "helm.metaEnvironment" $ }}
 
 hosts:
 {{- /* allow both internal and external hostnames */}}
 - {{ $primaryFullName }}
 - {{ $primaryFullName }}.{{ $namespace }}.svc
 - {{ $primaryFullName }}.{{ $namespace }}.svc.cluster.local
+- {{ $primaryBaseFullName }}
+- {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc
+- {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
 {{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{- if $primaryAppValues.staticHostname }}- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
 gateways:
