@@ -28,11 +28,17 @@ tests:
           path: spec.hosts
           content: app-test-app-api.dev.mycarrier.dev
       - contains:
+          path: spec.hosts
+          content: app-test-app-api.dev.internal
+      - contains:
           path: spec.gateways
           content: istio-system/default
       - equal:
           path: spec.http[0].name
           value: app-test-app-api
+      - equal:
+          path: spec.http[1].match[1].headers.environment.regex
+          value: "^feature-[a-z0-9-]+$"
 
   - it: should add custom hosts and routes when specified
     set:

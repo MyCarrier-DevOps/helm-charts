@@ -4,6 +4,9 @@
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
+{{- $metaenv := include "helm.metaEnvironment" $ }}
+{{- $envName := $.Values.environment.name -}}
+{{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 {{- $ctx := .ctx -}}
 {{- if not $ctx -}}
   {{- $ctx = include "helm.context" . | fromJson -}}
@@ -15,14 +18,18 @@ hosts:
 {{- if $primaryApp }}
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+{{- $baseFullName := include "helm.basename" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
 - {{ $fullName }}
-{{- if hasPrefix "feature" $.Values.environment.name }}
+{{- if $metaenv }}
+- {{ $baseFullName }}.{{ $metaenv }}.internal
+{{- end }}
+{{- if $isFeatureEnv }}
 - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
 {{- end }}
-{{- if and (not $primaryAppValues.staticHostname) (not (hasPrefix "feature" $.Values.environment.name)) }}
+{{- if and (not $primaryAppValues.staticHostname) (not $isFeatureEnv) }}
 - {{ (list ($.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
 {{- end }}
-{{- if and ($primaryAppValues.staticHostname) (not (hasPrefix "feature" $.Values.environment.name)) }}
+{{- if and ($primaryAppValues.staticHostname) (not $isFeatureEnv) }}
 - {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}
 {{- end }}
 {{- end }}
@@ -32,7 +39,7 @@ gateways:
 - istio-system/default
 
 http:
-{{- if not (hasPrefix "feature" $.Values.environment.name) }}
+{{- if not $isFeatureEnv }}
 {{/* Environment header matching for non-feature environments */}}
 {{- range $appName, $appValues := $frontendApps }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
@@ -54,7 +61,7 @@ http:
   match:
     - headers:
         environment:
-          exact: {{ $.Values.environment.name }}
+          exact: {{ $envName }}
 {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") }}
       uri:
         prefix: {{ $appValues.routePrefix }}
@@ -177,6 +184,11 @@ http:
   {{- $_ := set $catchallMatch "withoutHeaders" (dict "environment" (dict)) }}
   match:
     - {{- toYaml $catchallMatch | nindent 6 }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "^feature-[a-z0-9-]+$"
+    {{- end }}
   headers:
     {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
@@ -206,6 +218,11 @@ http:
   {{- end }}
   match:
     - {{- toYaml $defaultMatch | nindent 6 }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "^feature-[a-z0-9-]+$"
+    {{- end }}
   route:
   {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
   {{- range $primaryAppValues.service.ports }}
@@ -269,12 +286,16 @@ http:
 {{- $primaryBaseFullName := (list (.Values.global.appStack) ($primaryApp)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
 {{- $metaNamespace := include "helm.metaEnvironment" $ }}
 
+exportTo:
+- .
+- {{ $metaNamespace }}
 hosts:
 {{- /* allow both internal and external hostnames */}}
 - {{ $primaryFullName }}
 - {{ $primaryFullName }}.{{ $namespace }}.svc
 - {{ $primaryFullName }}.{{ $namespace }}.svc.cluster.local
 - {{ $primaryBaseFullName }}
+- {{ $primaryBaseFullName }}.{{ $metaNamespace }}.internal
 - {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc
 - {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
 {{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}

@@ -99,3 +99,6 @@ tests:
       - equal:
           path: metadata.name
           value: test-stack-main-app-multifrontend
+      - contains:
+          path: spec.hosts
+          content: test-stack-main-app.dev.internal

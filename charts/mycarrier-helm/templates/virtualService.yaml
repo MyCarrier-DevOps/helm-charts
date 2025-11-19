@@ -44,11 +44,15 @@ metadata:
 spec:
   {{- $baseFullName := include "helm.basename" $appContext }}
   {{- $metaNamespace := include "helm.metaEnvironment" $ }}
+  exportTo:
+  - .
+  - {{ $metaNamespace }}
   hosts:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
   - {{ $baseFullName }}
+  - {{ $baseFullName }}.{{ $metaNamespace }}.internal
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
   {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
