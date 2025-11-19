@@ -13,12 +13,12 @@
 {{- end }}
 {{- $appIstioDisabled := dig "istioDisabled" false $appValues }}
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $appValues }}
-{{- $renderServiceEntry := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) $metaenv (not (hasPrefix "feature" $envName)) }}
+{{- $renderServiceEntry := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) $metaenv }}
 {{- if $renderServiceEntry }}
 {{- $internalHost := printf "%s.%s.internal" $baseFullName $metaenv }}
 {{- $httpPort := default 8080 (dig "ports" "http" nil $appValues) }}
 ---
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1alpha3
 kind: ServiceEntry
 metadata:
   name: {{ $fullName }}-internal
