@@ -285,6 +285,7 @@ http:
 {{- $primaryFullName := .primaryFullName }}
 {{- $primaryBaseFullName := (list (.Values.global.appStack) ($primaryApp)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
 {{- $metaNamespace := include "helm.metaEnvironment" $ }}
+{{- $isFeatureEnv := hasPrefix "feature" $.Values.environment.name -}}
 
 exportTo:
 - .
@@ -295,7 +296,9 @@ hosts:
 - {{ $primaryFullName }}.{{ $namespace }}.svc
 - {{ $primaryFullName }}.{{ $namespace }}.svc.cluster.local
 - {{ $primaryBaseFullName }}
+{{- if not $isFeatureEnv }}
 - {{ $primaryBaseFullName }}.{{ $metaNamespace }}.internal
+{{- end }}
 - {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc
 - {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
 {{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}

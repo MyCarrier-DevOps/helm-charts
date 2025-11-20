@@ -82,12 +82,46 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: .*feature-test.*
-      - contains:
-          path: spec.hosts
-          content: app-test-app-api-feature-test.dev.mycarrier.dev
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app-api-feature-test
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[1]
+          value: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 0
       - notMatchRegex:
           path: spec.hosts[0]
           pattern: internal
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app-api-feature-test
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[1]
+          value: app-test-app-api-feature-test.feature-test.svc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[2]
+          value: app-test-app-api-feature-test.feature-test.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[3]
+          value: app-test-app-api
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[4]
+          value: app-test-app-api.dev.svc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[5]
+          value: app-test-app-api.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[6]
+          value: app-test-app-api.dev.mycarrier.dev
+        documentIndex: 1
 
   - it: should not render virtual service when istio is explicitly disabled
     set:

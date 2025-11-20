@@ -136,10 +136,44 @@ tests:
               enabled: true
     asserts:
       - hasDocuments:
-          count: 1
+          count: 2
       - notMatchRegex:
           path: spec.hosts[0]
           pattern: internal
-      - contains:
-          path: spec.hosts
-          content: test-stack-main-app-feature-abc.dev.mycarrier.dev
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[0]
+          value: test-stack-main-app-feature-abc
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[1]
+          value: test-stack-main-app-feature-abc.dev.mycarrier.dev
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[0]
+          value: test-stack-main-app-feature-abc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[1]
+          value: test-stack-main-app-feature-abc.feature-abc.svc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[2]
+          value: test-stack-main-app-feature-abc.feature-abc.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[3]
+          value: test-stack-main-app
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[4]
+          value: test-stack-main-app.dev.svc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[5]
+          value: test-stack-main-app.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[6]
+          value: test-stack-frontend.dev.mycarrier.dev
+        documentIndex: 1

@@ -7,6 +7,7 @@
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $metaenv := (include "helm.metaEnvironment" $ ) }}
+{{- $isFeatureEnv := hasPrefix "feature" $.Values.environment.name -}}
 {{- $istioConfig := dig "networking" "istio" dict $appValues }}
 {{- $istioEnabled := true }}
 {{- if and $istioConfig (hasKey $istioConfig "enabled") }}
@@ -52,6 +53,9 @@ spec:
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
   - {{ $baseFullName }}
+  {{- if not $isFeatureEnv }}
+  - {{ $baseFullName }}.{{ $metaNamespace }}.internal
+  {{- end }}
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
   {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
