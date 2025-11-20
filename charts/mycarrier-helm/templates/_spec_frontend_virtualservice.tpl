@@ -94,11 +94,10 @@ http:
   {{- end }}
   rewrite:
     uri: /
-  headers:
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
+  headers:{{ printf "\n%s" ($headersBlock | indent 4) }}
   {{- with $appValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
@@ -120,17 +119,15 @@ http:
       host: {{ $key }}
       port:
         number: 80
-  headers:
-    {{- if and $appValues.networking.istio.responseHeaders }}
+  {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
+  {{- if and $appValues.networking.istio.responseHeaders }}
     {{- with $appValues.networking.istio.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
+      {{- $headersBlock = toYaml . }}
     {{- end }}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+  {{- end }}
+  headers:{{ printf "\n%s" ($headersBlock | indent 4) }}
   {{- with $appValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
   retries:
@@ -189,11 +186,10 @@ http:
         environment:
           regex: "^feature-[a-z0-9-]+$"
     {{- end }}
-  headers:
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{ $catchallHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  headers:{{ printf "\n%s" ($catchallHeaders | indent 4) }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
   retries:
@@ -254,17 +250,15 @@ http:
   {{- end }}
   {{- end }}
   {{- if $primaryIstioEnabled }}
-  headers:
-    {{- if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
+  {{ $defaultHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  {{- if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
     {{- with $primaryIstioConfig.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
+      {{- $defaultHeaders = toYaml . }}
     {{- end }}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+  {{- end }}
+  headers:{{ printf "\n%s" ($defaultHeaders | indent 4) }}
   {{- with $primaryIstioConfig.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
@@ -370,11 +364,10 @@ http:
       port:
         number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
   {{- end }}
-  headers:
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{ $featureFallbackHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  headers:{{ printf "\n%s" ($featureFallbackHeaders | indent 4) }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
 {{/* Fallback to shared environment to avoid host conflicts when this virtual service is selected */}}
 - name: {{ $primaryApp }}-offload-dev-fallback
@@ -398,10 +391,9 @@ http:
       port:
         number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
   {{- end }}
-  headers:
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{ $devFallbackHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  headers:{{ printf "\n%s" ($devFallbackHeaders | indent 4) }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
 {{- end -}}

@@ -54,17 +54,15 @@ http:
       host: {{ $key }}
       port:
         number: 80
-  headers:
-    {{- if and $.application.networking.istio.responseHeaders -}}
+  {{ $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  {{- if and $.application.networking.istio.responseHeaders -}}
     {{- with $.application.networking.istio.responseHeaders -}}
-    {{ toYaml . | indent 4 | trim -}}
+      {{- $routeHeaders = toYaml . }}
     {{- end -}}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+  {{- end }}
+  headers:{{ printf "\n%s" ($routeHeaders | indent 4) }}
   {{- with $.application.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml $ | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml $ | indent 4) }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $.application }}
@@ -137,17 +135,15 @@ http:
   {{- end }}
   {{- end }}
   {{- if $istioEnabled }}
-  headers:
-    {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
+  {{ $defaultHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
     {{- with $istioConfig.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
+      {{- $defaultHeaders = toYaml . }}
     {{- end }}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+  {{- end }}
+  headers:{{ printf "\n%s" ($defaultHeaders | indent 4) }}
   {{- with $istioConfig.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}

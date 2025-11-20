@@ -194,6 +194,10 @@ tests:
           value: test-stack-main-app.dev.svc.cluster.local
         documentIndex: 1
       - equal:
+          path: spec.http[1].headers.response.set["X-Frame-Options"]
+          value: "DENY"
+        documentIndex: 1
+      - equal:
           path: spec.http[2].match[0].withoutHeaders.environment
           value: {}
         documentIndex: 1
@@ -204,4 +208,8 @@ tests:
       - equal:
           path: spec.http[2].route[0].destination.host
           value: test-stack-main-app.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.http[2].headers.response.set["Strict-Transport-Security"]
+          value: "max-age=7884000; includeSubDomains; preload"
         documentIndex: 1
