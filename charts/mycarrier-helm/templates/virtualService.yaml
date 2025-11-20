@@ -71,6 +71,20 @@ spec:
       - headers:
           environment:
             exact: {{ $.Values.environment.name }}
+  - name: {{ $baseFullName }}-dev-fallback
+    match:
+      - withoutHeaders:
+          environment: {}
+      - headers:
+          environment:
+            exact: {{ $metaNamespace }}
+    route:
+      - destination:
+          host: "{{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local"
+          port:
+            number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
+    headers:
+      {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
 {{- end }}
 {{- end }}
 {{- end }}

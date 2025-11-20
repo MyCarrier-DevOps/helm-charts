@@ -351,4 +351,32 @@ http:
     - headers:
         environment:
           exact: {{ .Values.environment.name }}
+{{/* Fallback to shared environment to avoid host conflicts when this virtual service is selected */}}
+- name: {{ $primaryApp }}-offload-dev-fallback
+  match:
+    - withoutHeaders:
+        environment: {}
+    - headers:
+        environment:
+          exact: {{ $metaNamespace }}
+  route:
+  {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
+  {{- range $primaryAppValues.service.ports }}
+  - destination:
+      host: {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
+      port:
+        number: {{ .port }}
+  {{- end }}
+  {{- else }}
+  - destination:
+      host: {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
+      port:
+        number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
+  {{- end }}
+  headers:
+    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  corsPolicy:
+    {{ toYaml . | indent 4 | trim }}
+  {{- end }}
 {{- end -}}

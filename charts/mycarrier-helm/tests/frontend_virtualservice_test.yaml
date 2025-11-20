@@ -181,3 +181,19 @@ tests:
           path: spec.hosts[7]
           value: test-stack-frontend.dev.mycarrier.dev
         documentIndex: 1
+      - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: feature-abc
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].match[0].withoutHeaders.environment
+          value: {}
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: dev
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: test-stack-main-app.dev.svc.cluster.local
+        documentIndex: 1

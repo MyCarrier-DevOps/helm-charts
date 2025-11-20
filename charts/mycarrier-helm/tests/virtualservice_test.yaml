@@ -87,6 +87,22 @@ tests:
           value: app-test-app-api-feature-test
         documentIndex: 0
       - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: feature-test
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].match[0].withoutHeaders.environment
+          value: {}
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: dev
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: app-test-app-api.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
           path: spec.hosts[1]
           value: app-test-app-api-feature-test.dev.mycarrier.dev
         documentIndex: 0
