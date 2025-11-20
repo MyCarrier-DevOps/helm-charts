@@ -28,7 +28,7 @@ tests:
           path: spec.workloadSelector.labels
           content:
             app.kubernetes.io/instance: app-test-app-dev
-  - it: should render internal service entry for feature namespaces
+  - it: should not render internal service entry for feature namespaces
     set:
       environment.name: feature-my-branch
       applications.test-app.deploymentType: deployment
@@ -38,15 +38,5 @@ tests:
       applications.test-app.image.repository: mycarrier/test-app
       applications.test-app.image.tag: "1.0.0"
     asserts:
-      - isKind:
-          of: ServiceEntry
-      - equal:
-          path: metadata.name
-          value: app-test-app-feature-my-branch-internal
-      - equal:
-          path: spec.hosts[0]
-          value: app-test-app.dev.internal
-      - isSubset:
-          path: spec.workloadSelector.labels
-          content:
-            app.kubernetes.io/instance: app-test-app-feature-my-branch
+      - hasDocuments:
+          count: 0
