@@ -20,7 +20,7 @@ hosts:
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
 {{- $baseFullName := include "helm.basename" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
 - {{ $fullName }}
-{{- if $metaenv }}
+{{- if and $metaenv (not $isFeatureEnv) }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
 {{- end }}
 {{- if $isFeatureEnv }}

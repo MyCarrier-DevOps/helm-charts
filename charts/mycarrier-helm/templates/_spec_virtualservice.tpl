@@ -14,7 +14,7 @@
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 hosts:
 - {{ $fullName }}
-{{- if $metaenv }}
+{{- if and $metaenv (not $isFeatureEnv) }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
 {{- end }}
 {{ if $isFeatureEnv }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}

@@ -82,6 +82,12 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: .*feature-test.*
+      - contains:
+          path: spec.hosts
+          content: app-test-app-api-feature-test.dev.mycarrier.dev
+      - notMatchRegex:
+          path: spec.hosts[0]
+          pattern: internal
 
   - it: should not render virtual service when istio is explicitly disabled
     set:

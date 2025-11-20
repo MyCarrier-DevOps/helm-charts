@@ -102,3 +102,44 @@ tests:
       - contains:
           path: spec.hosts
           content: test-stack-main-app.dev.internal
+
+  - it: should omit internal host for feature frontend environments
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "feature-abc"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notMatchRegex:
+          path: spec.hosts[0]
+          pattern: internal
+      - contains:
+          path: spec.hosts
+          content: test-stack-main-app-feature-abc.dev.mycarrier.dev
