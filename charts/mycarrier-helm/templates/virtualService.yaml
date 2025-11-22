@@ -75,13 +75,17 @@ spec:
     match:
       - headers:
           environment:
-            regex: "^feature-[a-z0-9-]+$"
+            regex: "(?i)^feature.+$"
     route:
       - destination:
           host: "{{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local"
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
-    headers:{{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
+    headers:
+      request:
+        set:
+          environment: {{ $metaNamespace }}
+{{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
   - name: {{ $baseFullName }}-dev-fallback
     match:
       - withoutHeaders:
@@ -94,7 +98,11 @@ spec:
           host: "{{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local"
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
-    headers:{{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
+    headers:
+      request:
+        set:
+          environment: {{ $metaNamespace }}
+{{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
 {{- end }}
 {{- end }}
 {{- end }}

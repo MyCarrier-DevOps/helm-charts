@@ -184,10 +184,13 @@ http:
     {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
     - headers:
         environment:
-          regex: "^feature-[a-z0-9-]+$"
+          regex: "(?i)^feature.+$"
     {{- end }}
-  {{ $catchallHeaders := include "helm.istioIngress.responseHeaders" $ }}
-  headers:{{ printf "\n%s" ($catchallHeaders | indent 4) }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaenv }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
@@ -217,7 +220,7 @@ http:
     {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
     - headers:
         environment:
-          regex: "^feature-[a-z0-9-]+$"
+          regex: "(?i)^feature.+$"
     {{- end }}
   route:
   {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
@@ -250,13 +253,17 @@ http:
   {{- end }}
   {{- end }}
   {{- if $primaryIstioEnabled }}
-  {{ $defaultHeaders := include "helm.istioIngress.responseHeaders" $ }}
-  {{- if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
-    {{- with $primaryIstioConfig.responseHeaders }}
-      {{- $defaultHeaders = toYaml . }}
-    {{- end }}
-  {{- end }}
-  headers:{{ printf "\n%s" ($defaultHeaders | indent 4) }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaenv }}
+  {{ if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
+    {{ with $primaryIstioConfig.responseHeaders }}
+{{ toYaml . | indent 4 }}
+    {{ end }}
+  {{ else }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
+  {{ end }}
   {{- with $primaryIstioConfig.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
@@ -349,7 +356,7 @@ http:
   match:
     - headers:
         environment:
-          regex: "^feature-[a-z0-9-]+$"
+          regex: "(?i)^feature.+$"
   route:
   {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
   {{- range $primaryAppValues.service.ports }}
@@ -364,8 +371,11 @@ http:
       port:
         number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
   {{- end }}
-  {{ $featureFallbackHeaders := include "helm.istioIngress.responseHeaders" $ }}
-  headers:{{ printf "\n%s" ($featureFallbackHeaders | indent 4) }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaNamespace }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
@@ -391,8 +401,11 @@ http:
       port:
         number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
   {{- end }}
-  {{ $devFallbackHeaders := include "helm.istioIngress.responseHeaders" $ }}
-  headers:{{ printf "\n%s" ($devFallbackHeaders | indent 4) }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaNamespace }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}

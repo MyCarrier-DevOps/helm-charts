@@ -56,3 +56,4 @@ charts/trino/charts-main/charts/trino/templates/serviceaccount.yaml
 .DS_Store
 __snapshot__
 .vscode
+.debug

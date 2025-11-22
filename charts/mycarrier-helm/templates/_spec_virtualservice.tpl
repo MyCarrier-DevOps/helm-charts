@@ -102,7 +102,7 @@ http:
     {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
     - headers:
         environment:
-          regex: "^feature-[a-z0-9-]+$"
+          regex: "(?i)^feature.+$"
     {{- end }}
   route:
   {{- if and .application.service .application.service.ports }}
@@ -135,13 +135,17 @@ http:
   {{- end }}
   {{- end }}
   {{- if $istioEnabled }}
-  {{ $defaultHeaders := include "helm.istioIngress.responseHeaders" $ }}
-  {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
-    {{- with $istioConfig.responseHeaders }}
-      {{- $defaultHeaders = toYaml . }}
-    {{- end }}
-  {{- end }}
-  headers:{{ printf "\n%s" ($defaultHeaders | indent 4) }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaenv }}
+  {{ if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
+    {{ with $istioConfig.responseHeaders }}
+{{ toYaml . | indent 4 }}
+    {{ end }}
+  {{ else }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
+  {{ end }}
   {{- with $istioConfig.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
