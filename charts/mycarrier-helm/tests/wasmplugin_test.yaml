@@ -1,0 +1,69 @@
+suite: WasmPlugin template tests
+templates:
+  - internal-wasmplugin.yaml
+tests:
+  - it: should render wasm plugin when service entry conditions are met
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.ingress.type: "istio"
+      applications.test-app-api.networking.istio.enabled: true
+    asserts:
+      - isKind:
+          of: WasmPlugin
+      - equal:
+          path: metadata.name
+          value: app-test-app-api-envoy-wasm
+      - equal:
+          path: metadata.namespace
+          value: dev
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: app-test-app-api
+      - equal:
+          path: spec.pluginName
+          value: envoy_dev_fallback
+      - equal:
+          path: spec.url
+          value: "oci://mycarrieracr.azurecr.io/utilities/envoy_dev_fallback:0.1.4"
+      - equal:
+          path: spec.imagePullSecret
+          value: imagepull
+      - equal:
+          path: spec.pluginConfig.configuration
+          value: ""
+
+  - it: should not render wasm plugin for prod environment
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.ingress.type: "istio"
+      applications.test-app-api.networking.istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render wasm plugin for feature environment
+    set:
+      environment.name: "feature-123"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.ingress.type: "istio"
+      applications.test-app-api.networking.istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0

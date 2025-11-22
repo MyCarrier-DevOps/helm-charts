@@ -637,6 +637,17 @@ applications:
           - "api.mycarrier.dev"
 ```
 
+#### Internal mesh hostnames
+
+When Istio ingress is enabled, the chart also advertises mesh-internal DNS entries for every application using the pattern `{{ appStack }}-{{ application }}.{{ environment }}.internal`. These names allow workloads in any namespace to target a stable service address for each environment:
+
+- `*.dev.internal` accepts an optional `environment` request header. If a feature namespace exists with a matching header value (for example `feature-my-branch`), traffic is routed to that namespace. When the feature workload is absent, the request automatically falls back to the `dev` deployment.
+- `*.preprod.internal` and `*.prod.internal` always resolve to the pre-production and production services respectively, providing consistent URLs for cross-environment smoke tests.
+
+Every Istio-enabled application receives a matching `ServiceEntry` so that these internal hostnames are resolvable within the mesh. Feature namespaces are included, which means preview workloads can expose `*.dev.internal` endpoints for collaborative testing without additional DNS changes.
+
+Set the `environment` header to the desired feature namespace when calling the `dev` endpoint to exercise preview deployments without touching DNS records.
+
 ### Minimal Secret Configuration
 
 ```yaml

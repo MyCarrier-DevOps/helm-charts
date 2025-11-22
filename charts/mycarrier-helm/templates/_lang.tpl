@@ -280,12 +280,18 @@ Centralized match rendering for all kinds
 {{- if eq .kind "regex" -}}
 - uri:
     regex: {{ .match | quote }}
+  withoutHeaders:
+    environment: {}
 {{- else if eq .kind "prefix" -}}
 - uri:
     prefix: {{ include "helm.processPrefixPath" .match | quote }}
+  withoutHeaders:
+    environment: {}
 {{- else -}}
 - uri:
     exact: {{ .match | quote }}
+  withoutHeaders:
+    environment: {}
 {{- end -}}
 {{- end -}}
 

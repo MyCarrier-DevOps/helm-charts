@@ -1,0 +1,42 @@
+suite: Internal ServiceEntry template tests
+templates:
+  - internal-serviceentry.yaml
+tests:
+  - it: should render internal service entry for shared environments
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 9090
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: ServiceEntry
+      - equal:
+          path: metadata.name
+          value: app-test-app-internal
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app.dev.internal
+      - equal:
+          path: spec.ports[0].number
+          value: 9090
+      - isSubset:
+          path: spec.workloadSelector.labels
+          content:
+            app.kubernetes.io/instance: app-test-app-dev
+  - it: should not render internal service entry for feature namespaces
+    set:
+      environment.name: feature-my-branch
+      applications.test-app.deploymentType: deployment
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 0
