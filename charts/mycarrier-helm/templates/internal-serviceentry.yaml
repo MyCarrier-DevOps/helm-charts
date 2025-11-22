@@ -18,7 +18,7 @@
 {{- $internalHost := printf "%s.%s.internal" $baseFullName $metaenv }}
 {{- $httpPort := default 8080 (dig "ports" "http" nil $appValues) }}
 ---
-apiVersion: networking.istio.io/v1alpha3
+apiVersion: networking.istio.io/v1
 kind: ServiceEntry
 metadata:
   name: {{ $fullName }}-internal

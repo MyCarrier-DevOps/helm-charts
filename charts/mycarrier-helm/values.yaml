@@ -138,6 +138,22 @@ applications: {}
 #   env:
 #     NODE_ENV: "development"
 #     LOG_LEVEL: "info"
+#       # Optional WasmPlugin configuration applied when internal ServiceEntry renders
+#       wasmPlugin:
+#         name: "envoy-dev-fallback"         # Optional override for metadata.name
+#         namespace: "istio-system"          # Optional override for metadata.namespace
+#         pluginName: "envoy_dev_fallback"   # Name reported inside Envoy (defaults to <release>-wasm-plugin)
+#         url: "oci://myregistry/utilities/envoy_dev_fallback:0.1.4"
+#         imagePullSecret: "imagepull"       # Optional secret for pulling Wasm module
+#         phase: "AUTHN"                     # Defaults to AUTHN when omitted
+#         priority: 0                         # Defaults to 0 when omitted
+#         failOpen: false                     # Optional fail-open behaviour
+#         pluginConfig:
+#           configuration: ""                # Arbitrary plugin configuration passed to the module
+#         # config:
+#         #   inline_string: ""              # Optional top-level configuration block
+#         # vmConfig:
+#         #   runtime: envoy.wasm.runtime.v8  # Optional advanced VM configuration
 #     # Example of valueFrom usage:
 #     # DB_PASSWORD:
 #     #   valueFrom:
