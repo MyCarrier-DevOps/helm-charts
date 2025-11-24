@@ -7,6 +7,8 @@
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
 {{- $imagePullSecret := $ctx.chartDefaults.imagePullSecret -}}
+{{- $rawEnvironmentName := $.Values.environment.name | default "dev" -}}
+{{- $computedEnvironmentName := ternary "uat" $rawEnvironmentName (eq $rawEnvironmentName "preprod") -}}
 {{- if ne "true" (include "helm.hpaCondition" . | trim) }}
 {{- if eq "0" $envScaling }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
@@ -133,7 +135,7 @@ template:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
           - name: "ComputedEnvironmentName"
-            value: "{{ $.Values.environment.name | default "dev" }}"
+            value: "{{ $computedEnvironmentName }}"
           {{- range $key, $value := $.Values.global.env }}
           - name: "{{ $key }}"
             {{- if kindIs "map" $value }}
