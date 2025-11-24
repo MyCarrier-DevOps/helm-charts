@@ -95,15 +95,69 @@ http:
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 {{- else }}
+{{- $responseHeadersYaml := "" -}}
+{{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders -}}
+  {{- $responseHeadersYaml = toYaml $istioConfig.responseHeaders | trim -}}
+{{- else -}}
+  {{- $responseHeadersYaml = include "helm.istioIngress.responseHeaders" $ | trim -}}
+{{- end -}}
+{{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+- name: {{ $fullName }}-feature-routing
+  match:
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+  route:
+  {{- if and .application.service .application.service.ports }}
+  {{- range .application.service.ports }}
+  - destination:
+      host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
+      port:
+        number: {{ .port }}
+    weight: 100
+  {{- if (eq $.application.deploymentType "rollout")  }}
+  - destination:
+      host: "{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local"
+      port:
+        number: {{ .port }}
+    weight: 0
+  {{- end }}
+  {{- end }}
+  {{- else }}
+  - destination:
+      host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
+      port:
+        number: {{ default 8080 (dig "ports" "http" nil .application) }}
+    weight: 100
+  {{- if (eq .application.deploymentType "rollout")  }}
+  - destination:
+      host: "{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local"
+      port:
+        number: {{ default 8080 (dig "ports" "http" nil .application) }}
+    weight: 0
+  {{- end }}
+  {{- end }}
+  {{- if $istioEnabled }}
+  headers:
+{{ $responseHeadersYaml | indent 4 }}
+  {{- with $istioConfig.corsPolicy }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
+  {{- end }}
+  {{- end }}
+  {{/* Safely access service properties with default values if not defined */}}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout .application }}
+  retries:
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn .application }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts .application }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout .application }}
+{{- end }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   match:
     - withoutHeaders:
         environment: {}
-    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
     - headers:
         environment:
-          regex: "(?i)^feature.+$"
-    {{- end }}
+          exact: {{ $metaenv }}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}
@@ -139,13 +193,7 @@ http:
     request:
       set:
         environment: {{ $metaenv }}
-  {{ if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
-    {{ with $istioConfig.responseHeaders }}
-{{ toYaml . | indent 4 }}
-    {{ end }}
-  {{ else }}
-{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
-  {{ end }}
+{{ $responseHeadersYaml | indent 4 }}
   {{- with $istioConfig.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}

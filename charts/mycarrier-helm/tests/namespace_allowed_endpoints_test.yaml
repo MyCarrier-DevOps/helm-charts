@@ -37,10 +37,13 @@ tests:
       # Should have the basic route configuration (spec.http[1])
       - equal:
           path: spec.http[1].name
+          value: test-stack-test-app-feature-routing
+      - equal:
+          path: spec.http[2].name
           value: test-stack-test-app
       # Should have a route section
       - exists:
-          path: spec.http[1].route
+          path: spec.http[2].route
       # Should NOT have the forbidden endpoint (which would be spec.http[3] if allowedEndpoints were rendered)
       - notExists:
           path: spec.http[3]
@@ -199,10 +202,13 @@ tests:
       # Should have the basic route configuration
       - equal:
           path: spec.http[1].name
+          value: test-stack-test-app-feature-routing
+      - equal:
+          path: spec.http[2].name
           value: test-stack-test-app
       # Should have a route section
       - exists:
-          path: spec.http[1].route
+          path: spec.http[2].route
       # Should NOT have multiple endpoint rules (just the basic route)
       - notExists:
           path: spec.http[3]
@@ -240,13 +246,16 @@ tests:
       # Should have the basic route configuration
       - equal:
           path: spec.http[1].name
+          value: test-stack-test-app-feature-routing
+      - equal:
+          path: spec.http[2].name
           value: test-stack-test-app
       # Should have a route section
       - exists:
-          path: spec.http[1].route
+          path: spec.http[2].route
       # Should have destination host
       - equal:
-          path: spec.http[1].route[0].destination.host
+          path: spec.http[2].route[0].destination.host
           value: "test-stack-test-app.dev.svc.cluster.local"
 
   - it: preprod namespace should respect allowedEndpoints when explicitly defined

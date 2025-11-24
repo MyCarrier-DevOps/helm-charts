@@ -37,10 +37,20 @@ tests:
           path: spec.http[0].name
           value: app-test-app-api
       - equal:
-          path: spec.http[1].match[1].headers.environment.regex
+          path: spec.http[1].match[0].headers.environment.regex
           value: "(?i)^feature.+$"
+      - notExists:
+          path: spec.http[1].headers.request
       - equal:
-          path: spec.http[1].headers.request.set.environment
+          path: spec.http[2].match[0].withoutHeaders.environment
+          value: {}
+        documentIndex: 0
+      - equal:
+          path: spec.http[2].match[1].headers.environment.exact
+          value: dev
+        documentIndex: 0
+      - equal:
+          path: spec.http[2].headers.request.set.environment
           value: dev
         documentIndex: 0
 
