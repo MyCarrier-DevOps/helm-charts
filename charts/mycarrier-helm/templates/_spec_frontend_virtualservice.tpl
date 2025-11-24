@@ -4,6 +4,9 @@
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
+{{- $metaenv := include "helm.metaEnvironment" $ }}
+{{- $envName := $.Values.environment.name -}}
+{{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 {{- $ctx := .ctx -}}
 {{- if not $ctx -}}
   {{- $ctx = include "helm.context" . | fromJson -}}
@@ -15,14 +18,18 @@ hosts:
 {{- if $primaryApp }}
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+{{- $baseFullName := include "helm.basename" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
 - {{ $fullName }}
-{{- if hasPrefix "feature" $.Values.environment.name }}
+{{- if and $metaenv (not $isFeatureEnv) }}
+- {{ $baseFullName }}.{{ $metaenv }}.internal
+{{- end }}
+{{- if $isFeatureEnv }}
 - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
 {{- end }}
-{{- if and (not $primaryAppValues.staticHostname) (not (hasPrefix "feature" $.Values.environment.name)) }}
+{{- if and (not $primaryAppValues.staticHostname) (not $isFeatureEnv) }}
 - {{ (list ($.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
 {{- end }}
-{{- if and ($primaryAppValues.staticHostname) (not (hasPrefix "feature" $.Values.environment.name)) }}
+{{- if and ($primaryAppValues.staticHostname) (not $isFeatureEnv) }}
 - {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}
 {{- end }}
 {{- end }}
@@ -32,7 +39,7 @@ gateways:
 - istio-system/default
 
 http:
-{{- if not (hasPrefix "feature" $.Values.environment.name) }}
+{{- if not $isFeatureEnv }}
 {{/* Environment header matching for non-feature environments */}}
 {{- range $appName, $appValues := $frontendApps }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
@@ -53,8 +60,8 @@ http:
     {{- end }}
   match:
     - headers:
-        Environment:
-          exact: {{ $.Values.environment.name }}
+        environment:
+          exact: {{ $envName }}
 {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") }}
       uri:
         prefix: {{ $appValues.routePrefix }}
@@ -67,9 +74,10 @@ http:
 {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") (not $appValues.isPrimary) }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
 - name: {{ $appName }}-path-route
+  {{- $pathMatch := dict "uri" (dict "prefix" $appValues.routePrefix) }}
+  {{- $_ := set $pathMatch "withoutHeaders" (dict "environment" (dict)) }}
   match:
-  - uri:
-      prefix: {{ $appValues.routePrefix }}
+    - {{- toYaml $pathMatch | nindent 6 }}
   route:
   {{- if and $appValues.service $appValues.service.ports }}
   {{- range $appValues.service.ports }}
@@ -86,11 +94,10 @@ http:
   {{- end }}
   rewrite:
     uri: /
-  headers:
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+  {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
+  headers:{{ printf "\n%s" ($headersBlock | indent 4) }}
   {{- with $appValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
@@ -112,17 +119,15 @@ http:
       host: {{ $key }}
       port:
         number: 80
-  headers:
-    {{- if and $appValues.networking.istio.responseHeaders }}
+  {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
+  {{- if and $appValues.networking.istio.responseHeaders }}
     {{- with $appValues.networking.istio.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
+      {{- $headersBlock = toYaml . }}
     {{- end }}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+  {{- end }}
+  headers:{{ printf "\n%s" ($headersBlock | indent 4) }}
   {{- with $appValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
   retries:
@@ -172,14 +177,22 @@ http:
       host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
       port:
         number: 80
+  {{- $catchallMatch := dict "uri" (dict "exact" "/") }}
+  {{- $_ := set $catchallMatch "withoutHeaders" (dict "environment" (dict)) }}
   match:
-  - uri:
-      exact: /
+    - {{- toYaml $catchallMatch | nindent 6 }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+    {{- end }}
   headers:
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
+    request:
+      set:
+        environment: {{ $metaenv }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
   retries:
@@ -198,11 +211,17 @@ http:
 {{- $primaryIstioEnabled = $primaryIstioConfig.enabled }}
 {{- end }}
 - name: {{ if (eq $primaryAppValues.deploymentType "rollout") }}canary{{ else }}{{ $primaryApp }}-default{{ end }}
+  {{- $defaultMatch := dict "withoutHeaders" (dict "environment" (dict)) }}
   {{- if not (eq $primaryAppValues.routePrefix "/") }}
-  match:
-  - uri:
-      prefix: {{ default "/" $primaryAppValues.routePrefix }}
+    {{- $_ := set $defaultMatch "uri" (dict "prefix" (default "/" $primaryAppValues.routePrefix)) }}
   {{- end }}
+  match:
+    - {{- toYaml $defaultMatch | nindent 6 }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+    {{- end }}
   route:
   {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
   {{- range $primaryAppValues.service.ports }}
@@ -235,16 +254,18 @@ http:
   {{- end }}
   {{- if $primaryIstioEnabled }}
   headers:
-    {{- if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
-    {{- with $primaryIstioConfig.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
-    {{- end }}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+    request:
+      set:
+        environment: {{ $metaenv }}
+  {{ if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
+    {{ with $primaryIstioConfig.responseHeaders }}
+{{ toYaml . | indent 4 }}
+    {{ end }}
+  {{ else }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
+  {{ end }}
   {{- with $primaryIstioConfig.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
@@ -263,8 +284,21 @@ http:
 {{- $namespace := include "helm.namespace" $ }}
 {{- $primaryAppValues := .primaryAppValues }}
 {{- $primaryFullName := .primaryFullName }}
+{{- $primaryBaseFullName := (list (.Values.global.appStack) ($primaryApp)) | join "-" | lower | trunc 63 | trimSuffix "-" }}
+{{- $metaNamespace := include "helm.metaEnvironment" $ }}
 
+exportTo:
+- .
+- {{ $metaNamespace }}
 hosts:
+{{- /* allow both internal and external hostnames */}}
+- {{ $primaryFullName }}
+- {{ $primaryFullName }}.{{ $namespace }}.svc
+- {{ $primaryFullName }}.{{ $namespace }}.svc.cluster.local
+- {{ $primaryBaseFullName }}
+- {{ $primaryBaseFullName }}.{{ $metaNamespace }}.internal
+- {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc
+- {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
 {{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{- if $primaryAppValues.staticHostname }}- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
 gateways:
@@ -278,7 +312,7 @@ http:
 - name: {{ $appName }}-offload-route
   match:
   - headers:
-      Environment:
+      environment:
         exact: {{ .Values.environment.name }}
     uri:
       prefix: {{ $appValues.routePrefix }}
@@ -316,6 +350,63 @@ http:
     {{- end }}
   match:
     - headers:
-        Environment:
+        environment:
           exact: {{ .Values.environment.name }}
+- name: {{ $primaryApp }}-offload-feature-fallback
+  match:
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+  route:
+  {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
+  {{- range $primaryAppValues.service.ports }}
+  - destination:
+      host: {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
+      port:
+        number: {{ .port }}
+  {{- end }}
+  {{- else }}
+  - destination:
+      host: {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
+      port:
+        number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
+  {{- end }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaNamespace }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
+  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
+  {{- end }}
+{{/* Fallback to shared environment to avoid host conflicts when this virtual service is selected */}}
+- name: {{ $primaryApp }}-offload-dev-fallback
+  match:
+    - withoutHeaders:
+        environment: {}
+    - headers:
+        environment:
+          exact: {{ $metaNamespace }}
+  route:
+  {{- if and $primaryAppValues.service $primaryAppValues.service.ports }}
+  {{- range $primaryAppValues.service.ports }}
+  - destination:
+      host: {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
+      port:
+        number: {{ .port }}
+  {{- end }}
+  {{- else }}
+  - destination:
+      host: {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
+      port:
+        number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
+  {{- end }}
+  headers:
+    request:
+      set:
+        environment: {{ $metaNamespace }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
+  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
+  {{- end }}
 {{- end -}}

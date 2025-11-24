@@ -28,11 +28,21 @@ tests:
           path: spec.hosts
           content: app-test-app-api.dev.mycarrier.dev
       - contains:
+          path: spec.hosts
+          content: app-test-app-api.dev.internal
+      - contains:
           path: spec.gateways
           content: istio-system/default
       - equal:
           path: spec.http[0].name
           value: app-test-app-api
+      - equal:
+          path: spec.http[1].match[1].headers.environment.regex
+          value: "(?i)^feature.+$"
+      - equal:
+          path: spec.http[1].headers.request.set.environment
+          value: dev
+        documentIndex: 0
 
   - it: should add custom hosts and routes when specified
     set:
@@ -76,6 +86,90 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: .*feature-test.*
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app-api-feature-test
+        documentIndex: 0
+      - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: feature-test
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].match[0].headers.environment.regex
+          value: "(?i)^feature.+$"
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].headers.request.set.environment
+          value: dev
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: app-test-app-api.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.http[1].headers.response.set["X-Frame-Options"]
+          value: "DENY"
+        documentIndex: 1
+      - equal:
+          path: spec.http[2].match[0].withoutHeaders.environment
+          value: {}
+        documentIndex: 1
+      - equal:
+          path: spec.http[2].match[1].headers.environment.exact
+          value: dev
+        documentIndex: 1
+      - equal:
+          path: spec.http[2].route[0].destination.host
+          value: app-test-app-api.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.http[2].headers.request.set.environment
+          value: dev
+        documentIndex: 1
+      - equal:
+          path: spec.http[2].headers.response.set["Strict-Transport-Security"]
+          value: "max-age=7884000; includeSubDomains; preload"
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[1]
+          value: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 0
+      - notMatchRegex:
+          path: spec.hosts[0]
+          pattern: internal
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app-api-feature-test
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[1]
+          value: app-test-app-api-feature-test.feature-test.svc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[2]
+          value: app-test-app-api-feature-test.feature-test.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[3]
+          value: app-test-app-api
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[4]
+          value: app-test-app-api.dev.internal
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[5]
+          value: app-test-app-api.dev.svc
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[6]
+          value: app-test-app-api.dev.svc.cluster.local
+        documentIndex: 1
+      - equal:
+          path: spec.hosts[7]
+          value: app-test-app-api.dev.mycarrier.dev
+        documentIndex: 1
 
   - it: should not render virtual service when istio is explicitly disabled
     set:

@@ -1,5 +1,6 @@
 {{- define "helm.specs.virtualservice" -}}
 {{- $fullName := include "helm.fullname" . }}
+{{- $baseFullName := include "helm.basename" . }}
 {{- $domain := include "helm.domain" $ }}
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
@@ -9,16 +10,20 @@
 {{- end -}}
 {{- $serviceDefaults := $ctx.chartDefaults.service -}}
 {{ $metaenv := (include "helm.metaEnvironment" $ ) }}
+{{- $envName := $.Values.environment.name -}}
+{{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 hosts:
 - {{ $fullName }}
-{{ if hasPrefix "feature" $.Values.environment.name }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-{{ if and (not .application.staticHostname) (not (hasPrefix "feature" $.Values.environment.name))}}- {{ (list ($.Values.global.appStack) (.appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-{{ if and (.application.staticHostname) (not (hasPrefix "feature" $.Values.environment.name)) }}- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end }}
+{{- if and $metaenv (not $isFeatureEnv) }}
+- {{ $baseFullName }}.{{ $metaenv }}.internal
+{{- end }}
+{{ if $isFeatureEnv }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+{{ if and (not .application.staticHostname) (not $isFeatureEnv)}}- {{ (list ($.Values.global.appStack) (.appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
+{{ if and (.application.staticHostname) (not $isFeatureEnv) }}- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end }}
 gateways:
 - mesh
 - istio-system/default
 http:
-{{- if not (hasPrefix "feature" $.Values.environment.name) }}
 - name: {{ $fullName }}
   route:
     - destination:
@@ -27,9 +32,8 @@ http:
           number: {{ default 8080 (dig "ports" "http" nil .application) }}
   match:
     - headers:
-        Environment:
-          exact: {{ $.Values.environment.name }}
-{{- end }}
+        environment:
+          exact: {{ $envName }}
 {{- if and .application.networking .application.networking.istio .application.networking.istio.redirects }}
 {{- range $key, $value := .application.networking.istio.redirects }}
 - name: {{ $key }}
@@ -50,17 +54,15 @@ http:
       host: {{ $key }}
       port:
         number: 80
-  headers:
-    {{- if and $.application.networking.istio.responseHeaders -}}
+  {{ $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  {{- if and $.application.networking.istio.responseHeaders -}}
     {{- with $.application.networking.istio.responseHeaders -}}
-    {{ toYaml . | indent 4 | trim -}}
+      {{- $routeHeaders = toYaml . }}
     {{- end -}}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+  {{- end }}
+  headers:{{ printf "\n%s" ($routeHeaders | indent 4) }}
   {{- with $.application.networking.istio.corsPolicy }}
-  corsPolicy:
-    {{ toYaml $ | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml $ | indent 4) }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $.application }}
@@ -94,6 +96,14 @@ http:
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 {{- else }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
+  match:
+    - withoutHeaders:
+        environment: {}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+    {{- end }}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}
@@ -126,16 +136,18 @@ http:
   {{- end }}
   {{- if $istioEnabled }}
   headers:
-    {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
-    {{- with $istioConfig.responseHeaders }}
-    {{ toYaml . | indent 4 | trim }}
-    {{- end }}
-    {{- else }}
-    {{ include "helm.istioIngress.responseHeaders" $ | indent 4 | trim }}
-    {{- end }}
+    request:
+      set:
+        environment: {{ $metaenv }}
+  {{ if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
+    {{ with $istioConfig.responseHeaders }}
+{{ toYaml . | indent 4 }}
+    {{ end }}
+  {{ else }}
+{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
+  {{ end }}
   {{- with $istioConfig.corsPolicy }}
-  corsPolicy:
-    {{ toYaml . | indent 4 | trim }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}

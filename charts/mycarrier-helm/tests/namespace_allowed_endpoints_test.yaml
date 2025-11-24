@@ -78,15 +78,15 @@ tests:
       - equal:
           path: metadata.namespace
           value: feature20
-      # Feature namespaces don't have the base http[0] rule (see line 15-26 of _spec_virtualservice.tpl)
-      # C# apps have default endpoints: /liveness, /health, /api
-      # Plus custom endpoints: /api/health, /api/status
-      # Should not have allowed endpoint rules starting at http[0]
+      # Feature namespaces expose an exact header match for their branch and a single default fallback route
+      - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: feature20
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+      # No additional allowed-endpoint rules should be rendered beyond the fallback route
       - notExists:
-          path: spec.http[0].match[0].uri
-      # Should not have multiple http rules
-      - notExists:
-          path: spec.http[1]
+          path: spec.http[2]
 
   - it: should render allowed endpoints in preprod namespace
     set:

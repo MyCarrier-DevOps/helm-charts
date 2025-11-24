@@ -192,3 +192,22 @@ tests:
                 name: app-secrets
                 key: password
                 optional: true
+
+  - it: should map preprod environment to uat computed name
+    set:
+      environment.name: "preprod"
+      applications.preprod-env-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "preprod-env-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ComputedEnvironmentName
+            value: "uat"
