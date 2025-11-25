@@ -45,6 +45,9 @@ tests:
       - equal:
           path: spec.http[1].match[1].headers.environment.exact
           value: dev
+      - equal:
+          path: spec.http[1].match[2].headers.environment.regex
+          value: "(?i)^feature.+$"
       - notExists:
           path: spec.http[1].headers.request
 

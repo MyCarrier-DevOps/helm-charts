@@ -108,6 +108,11 @@ http:
     - headers:
         environment:
           exact: {{ $metaenv }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+    {{- end }}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}
