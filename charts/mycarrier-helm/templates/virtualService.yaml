@@ -47,6 +47,7 @@ spec:
   exportTo:
   - .
   - {{ $metaNamespace }}
+  - istio-system
   hosts:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
