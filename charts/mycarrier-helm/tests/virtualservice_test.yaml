@@ -37,12 +37,19 @@ tests:
           path: spec.http[0].name
           value: app-test-app-api
       - equal:
-          path: spec.http[1].match[1].headers.environment.regex
-          value: "(?i)^feature.+$"
-      - equal:
-          path: spec.http[1].headers.request.set.environment
+          path: spec.http[0].match[0].headers.environment.exact
           value: dev
-        documentIndex: 0
+      - equal:
+          path: spec.http[1].match[0].withoutHeaders.environment
+          value: {}
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: dev
+      - equal:
+          path: spec.http[1].match[2].headers.environment.regex
+          value: "(?i)^feature.+$"
+      - notExists:
+          path: spec.http[1].headers.request
 
   - it: should add custom hosts and routes when specified
     set:
@@ -98,9 +105,8 @@ tests:
           path: spec.http[1].match[0].headers.environment.regex
           value: "(?i)^feature.+$"
         documentIndex: 1
-      - equal:
-          path: spec.http[1].headers.request.set.environment
-          value: dev
+      - notExists:
+          path: spec.http[1].headers.request
         documentIndex: 1
       - equal:
           path: spec.http[1].route[0].destination.host
@@ -122,9 +128,8 @@ tests:
           path: spec.http[2].route[0].destination.host
           value: app-test-app-api.dev.svc.cluster.local
         documentIndex: 1
-      - equal:
-          path: spec.http[2].headers.request.set.environment
-          value: dev
+      - notExists:
+          path: spec.http[2].headers.request
         documentIndex: 1
       - equal:
           path: spec.http[2].headers.response.set["Strict-Transport-Security"]

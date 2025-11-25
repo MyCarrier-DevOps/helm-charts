@@ -187,9 +187,6 @@ http:
           regex: "(?i)^feature.+$"
     {{- end }}
   headers:
-    request:
-      set:
-        environment: {{ $metaenv }}
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
@@ -254,9 +251,6 @@ http:
   {{- end }}
   {{- if $primaryIstioEnabled }}
   headers:
-    request:
-      set:
-        environment: {{ $metaenv }}
   {{ if and (hasKey $primaryIstioConfig "responseHeaders") $primaryIstioConfig.responseHeaders }}
     {{ with $primaryIstioConfig.responseHeaders }}
 {{ toYaml . | indent 4 }}
@@ -372,9 +366,6 @@ http:
         number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
   {{- end }}
   headers:
-    request:
-      set:
-        environment: {{ $metaNamespace }}
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
@@ -402,9 +393,6 @@ http:
         number: {{ default 4200 (dig "ports" "http" nil $primaryAppValues) }}
   {{- end }}
   headers:
-    request:
-      set:
-        environment: {{ $metaNamespace }}
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
   {{- with $primaryAppValues.networking.istio.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}

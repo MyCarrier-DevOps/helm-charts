@@ -95,10 +95,19 @@ http:
 {{/* Use centralized helper template for endpoint rules generation */}}
 {{ include "helm.virtualservice.allowedEndpoints" . }}
 {{- else }}
+{{- $responseHeadersYaml := "" -}}
+{{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders -}}
+  {{- $responseHeadersYaml = toYaml $istioConfig.responseHeaders | trim -}}
+{{- else -}}
+  {{- $responseHeadersYaml = include "helm.istioIngress.responseHeaders" $ | trim -}}
+{{- end -}}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   match:
     - withoutHeaders:
         environment: {}
+    - headers:
+        environment:
+          exact: {{ $metaenv }}
     {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
     - headers:
         environment:
@@ -136,16 +145,7 @@ http:
   {{- end }}
   {{- if $istioEnabled }}
   headers:
-    request:
-      set:
-        environment: {{ $metaenv }}
-  {{ if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
-    {{ with $istioConfig.responseHeaders }}
-{{ toYaml . | indent 4 }}
-    {{ end }}
-  {{ else }}
-{{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
-  {{ end }}
+{{ $responseHeadersYaml | indent 4 }}
   {{- with $istioConfig.corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
