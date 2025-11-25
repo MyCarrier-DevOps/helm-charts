@@ -82,9 +82,6 @@ spec:
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
     headers:
-      request:
-        set:
-          environment: {{ $metaNamespace }}
 {{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
   - name: {{ $baseFullName }}-dev-fallback
     match:
@@ -99,9 +96,6 @@ spec:
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
     headers:
-      request:
-        set:
-          environment: {{ $metaNamespace }}
 {{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
 {{- end }}
 {{- end }}

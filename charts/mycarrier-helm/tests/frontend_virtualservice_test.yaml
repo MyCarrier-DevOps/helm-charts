@@ -189,9 +189,8 @@ tests:
           path: spec.http[1].match[0].headers.environment.regex
           value: "(?i)^feature.+$"
         documentIndex: 1
-      - equal:
-          path: spec.http[1].headers.request.set.environment
-          value: dev
+      - notExists:
+          path: spec.http[1].headers.request
         documentIndex: 1
       - equal:
           path: spec.http[1].route[0].destination.host
@@ -213,9 +212,8 @@ tests:
           path: spec.http[2].route[0].destination.host
           value: test-stack-main-app.dev.svc.cluster.local
         documentIndex: 1
-      - equal:
-          path: spec.http[2].headers.request.set.environment
-          value: dev
+      - notExists:
+          path: spec.http[2].headers.request
         documentIndex: 1
       - equal:
           path: spec.http[2].headers.response.set["Strict-Transport-Security"]
