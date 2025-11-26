@@ -103,8 +103,11 @@ http:
 {{- end -}}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   match:
+    {{- /* withoutHeaders only applies to dev environment - allows requests without environment header to reach dev */ -}}
+    {{- if eq $metaenv "dev" }}
     - withoutHeaders:
         environment: {}
+    {{- end }}
     - headers:
         environment:
           exact: {{ $metaenv }}

@@ -1,0 +1,247 @@
+suite: withoutHeaders rules should only apply to dev environments
+templates:
+  - templates/virtualService.yaml
+tests:
+  # ==========================================
+  # DEV ENVIRONMENT - should HAVE withoutHeaders
+  # ==========================================
+  - it: should include withoutHeaders in dev environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      namespace: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: dev
+      # Dev environment SHOULD have withoutHeaders in the default route (http[1] is main route)
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+
+  # ==========================================
+  # PREPROD ENVIRONMENT - should NOT have withoutHeaders
+  # ==========================================
+  - it: should NOT include withoutHeaders in preprod environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: preprod
+      # Preprod environment should NOT have withoutHeaders anywhere
+      - notExists:
+          path: spec.http[0].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+
+  - it: should NOT include withoutHeaders in preprod allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: preprod
+      # Preprod allowed endpoints should NOT have withoutHeaders
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+
+  # ==========================================
+  # PROD ENVIRONMENT - should NOT have withoutHeaders
+  # ==========================================
+  - it: should NOT include withoutHeaders in prod environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: prod
+      # Prod environment should NOT have withoutHeaders anywhere
+      - notExists:
+          path: spec.http[0].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+
+  - it: should NOT include withoutHeaders in prod allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: prod
+      # Prod allowed endpoints should NOT have withoutHeaders
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+
+  # ==========================================
+  # FEATURE ENVIRONMENT - withoutHeaders only in offload VS targeting dev
+  # ==========================================
+  - it: should include withoutHeaders in feature environment offload virtualservice dev fallback
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature-abc
+      namespace: feature-abc
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: test-stack-test-app-feature-abc-offload
+      # Feature offload VS should have withoutHeaders in dev-fallback route (http[2] is dev-fallback in offload VS)
+      - exists:
+          path: spec.http[2].match[0].withoutHeaders.environment
+
+  - it: should NOT include withoutHeaders in feature environment primary virtualservice
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature-abc
+      namespace: feature-abc
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: test-stack-test-app-feature-abc
+      # Primary feature VS should have withoutHeaders since metaenv is dev
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment

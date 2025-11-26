@@ -67,21 +67,29 @@ Centralized endpoint name generation for all kinds
 Centralized match rendering for all endpoint kinds
 */}}
 {{- define "helm.renderEndpointMatch" -}}
+{{- $metaenv := default "" .metaenv -}}
+{{- $isDevEnv := eq $metaenv "dev" -}}
 {{- if eq .kind "regex" -}}
 - uri:
     regex: {{ .match | quote }}
+  {{- if $isDevEnv }}
   withoutHeaders:
     environment: {}
+  {{- end }}
 {{- else if eq .kind "prefix" -}}
 - uri:
     prefix: {{ include "helm.processPrefixPath" .match | quote }}
+  {{- if $isDevEnv }}
   withoutHeaders:
     environment: {}
+  {{- end }}
 {{- else -}}
 - uri:
     exact: {{ .match | quote }}
+  {{- if $isDevEnv }}
   withoutHeaders:
     environment: {}
+  {{- end }}
 {{- end -}}
 {{- end -}}
 
@@ -104,6 +112,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{- define "helm.virtualservice.allowedEndpoints" -}}
 {{- $namespace := include "helm.namespace" . }}
 {{- $fullName := include "helm.fullname" . -}}
+{{- $metaenv := include "helm.metaEnvironment" . -}}
 {{- $ctx := .ctx -}}
 {{- if not $ctx -}}
   {{- $ctx = include "helm.context" . | fromJson -}}
@@ -184,7 +193,7 @@ This template generates the complete HTTP rules as strings to avoid duplication
 {{/* render HTTP rules using centralized helper */}}
 {{- if gt (len $unique) 0 }}
 {{- range $unique }}
-{{- $ruleContext := dict "kind" .kind "match" .match "ruleType" "allowed" "fullName" $fullName }}
+{{- $ruleContext := dict "kind" .kind "match" .match "ruleType" "allowed" "fullName" $fullName "metaenv" $metaenv }}
 {{ include "helm.renderEndpointRule" $ruleContext }}
   route:
     {{- if and $.application.service $.application.service.ports }}
