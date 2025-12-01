@@ -54,15 +54,17 @@ http:
       host: {{ $key }}
       port:
         number: 80
-  {{ $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  {{- $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
   {{- if and $.application.networking.istio.responseHeaders -}}
     {{- with $.application.networking.istio.responseHeaders -}}
       {{- $routeHeaders = toYaml . }}
     {{- end -}}
   {{- end }}
-  headers:{{ printf "\n%s" ($routeHeaders | indent 4) }}
+  headers:
+{{ $routeHeaders | indent 4 }}
   {{- with $.application.networking.istio.corsPolicy }}
-  corsPolicy:{{ printf "\n%s" (toYaml $ | indent 4) }}
+  corsPolicy:
+{{ toYaml . | indent 4 }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $.application }}
@@ -116,10 +118,6 @@ http:
           regex: "(?i)^feature.+$"
   route:
   - destination:
-      {{- /* Route to the internal ServiceEntry hostname (*.dev.internal) which:
-             1. Triggers the EnvoyDevFallback WASM plugin (parses .dev.internal hosts)
-             2. WASM plugin reads Environment header and attempts feature routing
-             3. On 404/503, WASM preserves ALL headers for fallback to dev */ -}}
       host: "{{ $baseFullName }}.{{ $metaenv }}.internal"
       port:
         number: {{ default 8080 (dig "ports" "http" nil .application) }}
@@ -127,7 +125,8 @@ http:
   headers:
 {{ $responseHeadersYaml | indent 4 }}
   {{- with $istioConfig.corsPolicy }}
-  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
+  corsPolicy:
+{{ toYaml . | indent 4 }}
   {{- end }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout .application }}
@@ -180,7 +179,8 @@ http:
   headers:
 {{ $responseHeadersYaml | indent 4 }}
   {{- with $istioConfig.corsPolicy }}
-  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
+  corsPolicy:
+{{ toYaml . | indent 4 }}
   {{- end }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
