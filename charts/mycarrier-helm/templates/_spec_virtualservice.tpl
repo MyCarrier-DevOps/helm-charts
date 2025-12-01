@@ -101,6 +101,41 @@ http:
 {{- else -}}
   {{- $responseHeadersYaml = include "helm.istioIngress.responseHeaders" $ | trim -}}
 {{- end -}}
+{{- /* Feature environment routing - routes feature-header requests to the internal ServiceEntry 
+       hostname (*.dev.internal). This allows the EnvoyDevFallback WASM plugin to intercept
+       404/503 responses and perform fallback with ALL headers preserved (including Authorization).
+       
+       Flow: Ingress → VirtualService → *.dev.internal → WASM plugin intercepts → 
+             If feature env has service: routes to feature env
+             If 404/503: WASM creates fallback to dev with original headers */ -}}
+{{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+- name: {{ $fullName }}-feature-routing
+  match:
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+  route:
+  - destination:
+      {{- /* Route to the internal ServiceEntry hostname (*.dev.internal) which:
+             1. Triggers the EnvoyDevFallback WASM plugin (parses .dev.internal hosts)
+             2. WASM plugin reads Environment header and attempts feature routing
+             3. On 404/503, WASM preserves ALL headers for fallback to dev */ -}}
+      host: "{{ $baseFullName }}.{{ $metaenv }}.internal"
+      port:
+        number: {{ default 8080 (dig "ports" "http" nil .application) }}
+  {{- if $istioEnabled }}
+  headers:
+{{ $responseHeadersYaml | indent 4 }}
+  {{- with $istioConfig.corsPolicy }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
+  {{- end }}
+  {{- end }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout .application }}
+  retries:
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn .application }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts .application }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout .application }}
+{{- end }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   match:
     {{- /* withoutHeaders only applies to dev environment - allows requests without environment header to reach dev */ -}}
@@ -111,11 +146,6 @@ http:
     - headers:
         environment:
           exact: {{ $metaenv }}
-    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
-    - headers:
-        environment:
-          regex: "(?i)^feature.+$"
-    {{- end }}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}
