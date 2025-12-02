@@ -18,7 +18,7 @@
 {{- $pluginName := printf "%s-envoy-wasm" $fullName }}
 {{- $global := (get $.Values "global") | default (dict) }}
 {{- $globalWasm := (get $global "wasmPlugin") | default (dict) }}
-{{- $wasmDefaults := merge (dict "repository" "oci://mycarrieracr.azurecr.io/utilities/envoy_dev_fallback" "tag" "0.1.4" "imagePullSecret" "imagepull") $globalWasm }}
+{{- $wasmDefaults := merge (dict "repository" "oci://mycarrieracr.azurecr.io/utilities/envoy_dev_fallback" "tag" "0.1.6" "imagePullSecret" "imagepull") $globalWasm }}
 {{- $wasmRepo := $wasmDefaults.repository | default "oci://mycarrieracr.azurecr.io/utilities/envoy_dev_fallback" }}
 {{- $wasmTag := $wasmDefaults.tag | default "" }}
 {{- $wasmURL := $wasmRepo }}
