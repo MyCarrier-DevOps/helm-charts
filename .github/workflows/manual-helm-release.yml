@@ -63,12 +63,24 @@ jobs:
           fi
           echo "value=$desired_app_version" >> "$GITHUB_OUTPUT"
 
+      - name: Determine chart version metadata
+        id: chart-version-meta
+        env:
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          CHART_NAME: ${{ inputs.chart_name }}
+          USER_CHART_VERSION: ${{ inputs.chart_version }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/chart_version_metadata.py
+
       - name: Bump Chart & App version
         id: version-bump
         uses: ./.github/actions/chart-version-bumper
         with:
           chart_name: ${{ inputs.chart_name }}
-          chart_version: ${{ inputs.chart_version }}
+          chart_version: ${{ steps.chart-version-meta.outputs.chart_version_for_bumper }}
           app_version: ${{ steps.resolved-app-version.outputs.value }}
 
       - name: Summarize chart changes
@@ -76,6 +88,10 @@ jobs:
           {
             printf '### charts/%s\n\n' "${{ inputs.chart_name }}"
             printf '%s\n\n' "${{ steps.version-bump.outputs.verboseChangeString }}"
+            if [ "${{ steps.chart-version-meta.outputs.is_prerelease }}" = "true" ]; then
+              printf '> Base version: `%s`\n\n' "${{ steps.chart-version-meta.outputs.base_version }}"
+              printf '> Prerelease identifier: `%s`\n\n' "${{ steps.chart-version-meta.outputs.prerelease_identifier }}"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit bumped chart
