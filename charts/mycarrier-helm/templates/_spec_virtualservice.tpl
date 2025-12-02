@@ -54,17 +54,15 @@ http:
       host: {{ $key }}
       port:
         number: 80
-  {{- $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
+  {{ $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
   {{- if and $.application.networking.istio.responseHeaders -}}
     {{- with $.application.networking.istio.responseHeaders -}}
       {{- $routeHeaders = toYaml . }}
     {{- end -}}
   {{- end }}
-  headers:
-{{ $routeHeaders | indent 4 }}
+  headers:{{ printf "\n%s" ($routeHeaders | indent 4) }}
   {{- with $.application.networking.istio.corsPolicy }}
-  corsPolicy:
-{{ toYaml . | indent 4 }}
+  corsPolicy:{{ printf "\n%s" (toYaml $ | indent 4) }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $.application }}
@@ -103,38 +101,6 @@ http:
 {{- else -}}
   {{- $responseHeadersYaml = include "helm.istioIngress.responseHeaders" $ | trim -}}
 {{- end -}}
-{{- /* Feature environment routing - routes feature-header requests to the internal ServiceEntry 
-       hostname (*.dev.internal). This allows the EnvoyDevFallback WASM plugin to intercept
-       404/503 responses and perform fallback with ALL headers preserved (including Authorization).
-       
-       Flow: Ingress → VirtualService → *.dev.internal → WASM plugin intercepts → 
-             If feature env has service: routes to feature env
-             If 404/503: WASM creates fallback to dev with original headers */ -}}
-{{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
-- name: {{ $fullName }}-feature-routing
-  match:
-    - headers:
-        environment:
-          regex: "(?i)^feature.+$"
-  route:
-  - destination:
-      host: "{{ $baseFullName }}.{{ $metaenv }}.internal"
-      port:
-        number: {{ default 8080 (dig "ports" "http" nil .application) }}
-  {{- if $istioEnabled }}
-  headers:
-{{ $responseHeadersYaml | indent 4 }}
-  {{- with $istioConfig.corsPolicy }}
-  corsPolicy:
-{{ toYaml . | indent 4 }}
-  {{- end }}
-  {{- end }}
-  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout .application }}
-  retries:
-    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn .application }}
-    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts .application }}
-    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout .application }}
-{{- end }}
 - name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
   match:
     {{- /* withoutHeaders only applies to dev environment - allows requests without environment header to reach dev */ -}}
@@ -145,6 +111,11 @@ http:
     - headers:
         environment:
           exact: {{ $metaenv }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+    {{- end }}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}
@@ -179,8 +150,7 @@ http:
   headers:
 {{ $responseHeadersYaml | indent 4 }}
   {{- with $istioConfig.corsPolicy }}
-  corsPolicy:
-{{ toYaml . | indent 4 }}
+  corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
