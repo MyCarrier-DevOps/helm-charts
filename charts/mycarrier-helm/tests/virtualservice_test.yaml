@@ -40,16 +40,24 @@ tests:
           path: spec.http[0].match[0].headers.environment.exact
           value: dev
       - equal:
-          path: spec.http[1].match[0].withoutHeaders.environment
-          value: {}
-      - equal:
-          path: spec.http[1].match[1].headers.environment.exact
-          value: dev
-      - equal:
-          path: spec.http[1].match[2].headers.environment.regex
+          path: spec.http[1].match[0].headers.environment.regex
           value: "(?i)^feature.+$"
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: app-test-app-api.dev.internal
       - notExists:
           path: spec.http[1].headers.request
+      - equal:
+          path: spec.http[2].match[0].withoutHeaders.environment
+          value: {}
+      - equal:
+          path: spec.http[2].match[1].headers.environment.exact
+          value: dev
+      - equal:
+          path: spec.http[2].route[0].destination.host
+          value: app-test-app-api.dev.svc.cluster.local
+      - notExists:
+          path: spec.http[2].headers.request
 
   - it: should add custom hosts and routes when specified
     set:
@@ -102,37 +110,22 @@ tests:
           value: feature-test
         documentIndex: 1
       - equal:
-          path: spec.http[1].match[0].headers.environment.regex
-          value: "(?i)^feature.+$"
+          path: spec.http[1].match[0].withoutHeaders.environment
+          value: {}
         documentIndex: 1
-      - notExists:
-          path: spec.http[1].headers.request
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: dev
         documentIndex: 1
       - equal:
           path: spec.http[1].route[0].destination.host
           value: app-test-app-api.dev.svc.cluster.local
         documentIndex: 1
-      - equal:
-          path: spec.http[1].headers.response.set["X-Frame-Options"]
-          value: "DENY"
-        documentIndex: 1
-      - equal:
-          path: spec.http[2].match[0].withoutHeaders.environment
-          value: {}
-        documentIndex: 1
-      - equal:
-          path: spec.http[2].match[1].headers.environment.exact
-          value: dev
-        documentIndex: 1
-      - equal:
-          path: spec.http[2].route[0].destination.host
-          value: app-test-app-api.dev.svc.cluster.local
-        documentIndex: 1
       - notExists:
-          path: spec.http[2].headers.request
+          path: spec.http[1].headers.request
         documentIndex: 1
       - equal:
-          path: spec.http[2].headers.response.set["Strict-Transport-Security"]
+          path: spec.http[1].headers.response.set["Strict-Transport-Security"]
           value: "max-age=7884000; includeSubDomains; preload"
         documentIndex: 1
       - equal:
