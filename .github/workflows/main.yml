@@ -1,14 +1,6 @@
 name: Helm-Release
 
 on:
-  push:
-    branches: 
-      - 'main'
-    paths:
-      - charts/**
-      - '!charts/**/tests/**'
-      - '!charts/**/*test*.yaml'
-      - '!charts/**/*test*.yml'
   pull_request:
     types:
       - closed
