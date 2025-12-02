@@ -33,7 +33,7 @@ tests:
           value: dev
       # Dev environment SHOULD have withoutHeaders in the default route (http[1] is main route)
       - exists:
-          path: spec.http[1].match[0].withoutHeaders.environment
+          path: spec.http[2].match[0].withoutHeaders.environment
 
   # ==========================================
   # PREPROD ENVIRONMENT - should NOT have withoutHeaders
@@ -213,7 +213,7 @@ tests:
           value: test-stack-test-app-feature-abc-offload
       # Feature offload VS should have withoutHeaders in dev-fallback route (http[2] is dev-fallback in offload VS)
       - exists:
-          path: spec.http[2].match[0].withoutHeaders.environment
+          path: spec.http[1].match[0].withoutHeaders.environment
 
   - it: should NOT include withoutHeaders in feature environment primary virtualservice
     set:
