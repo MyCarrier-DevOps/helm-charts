@@ -72,18 +72,6 @@ spec:
       - headers:
           environment:
             exact: {{ $.Values.environment.name }}
-  - name: {{ $baseFullName }}-feature-fallback
-    match:
-      - headers:
-          environment:
-            regex: "(?i)^feature.+$"
-    route:
-      - destination:
-          host: "{{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local"
-          port:
-            number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
-    headers:
-{{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
   - name: {{ $baseFullName }}-dev-fallback
     match:
       - withoutHeaders:

@@ -30,7 +30,7 @@ tests:
           value: envoy_dev_fallback
       - equal:
           path: spec.url
-          value: "oci://mycarrieracr.azurecr.io/utilities/envoy_dev_fallback:0.1.4"
+          value: "oci://mycarrieracr.azurecr.io/utilities/envoy_dev_fallback:0.1.6"
       - equal:
           path: spec.imagePullSecret
           value: imagepull
