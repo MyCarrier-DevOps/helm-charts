@@ -379,7 +379,7 @@ tests:
       # Should not have allowed endpoints or forbidden rule for non-csharp without allowedEndpoints
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-api
+          value: test-stack-test-api-default
       - notExists:
           path: spec.http[1].fault
 
@@ -683,7 +683,7 @@ tests:
           value: test-stack-my-api
       - equal:
           path: spec.http[1].name
-          value: test-stack-my-api
+          value: test-stack-my-api-default
       - notExists:
           path: spec.http[1].fault
       - notExists:
