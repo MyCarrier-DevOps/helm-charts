@@ -9,7 +9,10 @@
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
 {{- $serviceDefaults := $ctx.chartDefaults.service -}}
-{{ $metaenv := (include "helm.metaEnvironment" $ ) }}
+{{- $metaenv := include "helm.metaEnvironment" $ -}}
+{{- $envHeaderValue := include "helm.environmentHeaderValue" $ -}}
+{{- $envHeaderIsRegex := eq (include "helm.environmentHeaderIsRegex" $) "true" -}}
+{{- $isSimpleEnv := eq (include "helm.isSimpleEnvironment" $) "true" -}}
 {{- $envName := $.Values.environment.name -}}
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 hosts:
@@ -24,6 +27,7 @@ gateways:
 - mesh
 - istio-system/default
 http:
+{{/* First route: explicit header match - routes traffic with environment header */}}
 - name: {{ $fullName }}
   route:
     - destination:
@@ -33,7 +37,11 @@ http:
   match:
     - headers:
         environment:
-          exact: {{ $envName }}
+          {{- if $envHeaderIsRegex }}
+          regex: {{ $envHeaderValue }}
+          {{- else }}
+          exact: {{ $envHeaderValue }}
+          {{- end }}
 {{- if and .application.networking .application.networking.istio .application.networking.istio.redirects }}
 {{- range $key, $value := .application.networking.istio.redirects }}
 - name: {{ $key }}
@@ -135,7 +143,10 @@ http:
     attempts: {{ dig "service" "attempts" $serviceDefaults.attempts .application }}
     perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout .application }}
 {{- end }}
-- name: {{ if (eq .application.deploymentType "rollout")  }}canary{{ else }}{{ $fullName }}{{- end }}
+{{/* Default route: for simple environments (prod/preprod) this is a catch-all without match conditions.
+     For dev/feature environments, it uses complex routing with withoutHeaders fallback. */}}
+- name: {{ if (eq .application.deploymentType "rollout") }}canary{{ else }}{{ $fullName }}-default{{ end }}
+{{- if not $isSimpleEnv }}
   match:
     {{- /* withoutHeaders only applies to dev environment - allows requests without environment header to reach dev */ -}}
     {{- if eq $metaenv "dev" }}
@@ -144,7 +155,13 @@ http:
     {{- end }}
     - headers:
         environment:
-          exact: {{ $metaenv }}
+          exact: {{ $envHeaderValue }}
+    {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    - headers:
+        environment:
+          regex: "(?i)^feature.+$"
+    {{- end }}
+{{- end }}
   route:
   {{- if and .application.service .application.service.ports }}
   {{- range .application.service.ports }}
