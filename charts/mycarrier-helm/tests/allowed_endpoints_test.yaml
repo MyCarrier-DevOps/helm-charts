@@ -329,10 +329,10 @@ tests:
     asserts:
       - isKind:
           of: VirtualService
-      # Should not have allowed endpoints or forbidden rule
+      # Should not have allowed endpoints or forbidden rule - just the default route
       - equal:
           path: spec.http[1].name
-          value: test-stack-test-app
+          value: test-stack-test-app-default
       - notExists:
           path: spec.http[1].fault
 

@@ -43,7 +43,7 @@ tests:
           value: test-stack-test-app-feature-routing
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app
+          value: test-stack-test-app-default
       # Should have a route section
       - exists:
           path: spec.http[2].route
@@ -211,7 +211,7 @@ tests:
           value: test-stack-test-app-feature-routing
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app
+          value: test-stack-test-app-default
       # Should have a route section
       - exists:
           path: spec.http[2].route
@@ -258,7 +258,7 @@ tests:
           value: test-stack-test-app-feature-routing
       - equal:
           path: spec.http[2].name
-          value: test-stack-test-app
+          value: test-stack-test-app-default
       # Should have a route section
       - exists:
           path: spec.http[2].route
