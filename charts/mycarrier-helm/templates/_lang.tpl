@@ -167,6 +167,8 @@
   value: "StrivacityInviteClientId_{{ $metaenv }}"
 - name: StrivacityInviteClientId_{{ $metaenv }}
   value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityinviteclientid-{{ $metaenv }}#value"
+- name: Auth_StrivacityJwtIssuer
+  value: "vault:secrets/data/{{ $metaenv }}/shared/strivacityjwtissuer#value"
 - name: KeyVault_AllowAnonymousKey
   value: "allowanonymouskey_{{ $metaenv }}"
 - name: allowanonymouskey_{{ $metaenv }}
