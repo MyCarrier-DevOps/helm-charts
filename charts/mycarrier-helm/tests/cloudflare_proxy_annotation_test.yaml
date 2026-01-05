@@ -1,0 +1,187 @@
+suite: Cloudflare Proxy Annotation Tests
+templates:
+  - virtualService.yaml
+tests:
+  - it: should set cloudflare-proxied annotation to true by default
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        test-api:
+          image:
+            registry: "registry.example.com"
+            repository: "test-api"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+
+  - it: should set cloudflare-proxied annotation to true when explicitly enabled at application level
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        test-api:
+          image:
+            registry: "registry.example.com"
+            repository: "test-api"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: true
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+
+  - it: should set cloudflare-proxied annotation to false when disabled at application level
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        test-api:
+          image:
+            registry: "registry.example.com"
+            repository: "test-api"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: false
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"
+
+  - it: should include cloudflare-proxied annotation on feature branch offload virtualservice
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "feature-test"
+      applications:
+        test-api:
+          image:
+            registry: "registry.example.com"
+            repository: "test-api"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      # First VirtualService (main)
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+        documentIndex: 0
+      # Second VirtualService (offload)
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+        documentIndex: 1
+
+  - it: should set cloudflare-proxied to false on feature branch when disabled at application level
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "feature-test"
+      applications:
+        test-api:
+          image:
+            registry: "registry.example.com"
+            repository: "test-api"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      # Both VirtualServices should have cloudflare-proxied set to false
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"
+        documentIndex: 1
+
+  - it: should allow different cloudflareProxied settings per application
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        api-proxied:
+          image:
+            registry: "registry.example.com"
+            repository: "api-proxied"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: true
+        api-not-proxied:
+          image:
+            registry: "registry.example.com"
+            repository: "api-not-proxied"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      # First application should have cloudflare-proxied set to true
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api-proxied
+      # Second application should have cloudflare-proxied set to false
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api-not-proxied

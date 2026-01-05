@@ -204,3 +204,82 @@ tests:
           path: spec.http[1].headers.response.set["Strict-Transport-Security"]
           value: "max-age=7884000; includeSubDomains; preload"
         documentIndex: 1
+
+  - it: should set cloudflare-proxied to true by default on frontend virtualservice
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+
+  - it: should use primary apps cloudflareProxied setting for frontend virtualservice
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: false
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              cloudflareProxied: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      # Uses primary app (main-app) setting which is false
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"

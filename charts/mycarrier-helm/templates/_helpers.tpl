@@ -159,7 +159,12 @@ sidecar.istio.io/inject: 'true'
 {{- end -}}
 
 {{- define "helm.annotations.virtualservice" -}}
-external-dns.alpha.kubernetes.io/cloudflare-proxied: 'false'
+{{- /* Get cloudflareProxied from application's networking.istio.cloudflareProxied (default: true) */ -}}
+{{- $cloudflareProxied := true -}}
+{{- if .application -}}
+  {{- $cloudflareProxied = dig "networking" "istio" "cloudflareProxied" true .application -}}
+{{- end -}}
+external-dns.alpha.kubernetes.io/cloudflare-proxied: '{{ $cloudflareProxied }}'
 {{- end -}}
 
 {{- define "helm.istioIngress.responseHeaders" -}}

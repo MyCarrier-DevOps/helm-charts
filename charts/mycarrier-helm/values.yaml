@@ -224,6 +224,7 @@ applications: {}
 #     
 #     istio:
 #       enabled: true
+#       cloudflareProxied: true  # Enable Cloudflare proxy for VirtualService DNS records (external-dns annotation, default: true)
 #       hosts: []
 #       redirects: {}
 #       routes: {}

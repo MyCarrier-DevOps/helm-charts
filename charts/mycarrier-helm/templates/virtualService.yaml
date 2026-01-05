@@ -27,7 +27,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
-    {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
+    {{ include "helm.annotations.virtualservice" $appContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
@@ -40,7 +40,7 @@ metadata:
   labels:
     {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
   annotations:
-    {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
+    {{ include "helm.annotations.virtualservice" $appContext | indent 4 | trim }}
 spec:
   {{- $baseFullName := include "helm.basename" $appContext }}
   {{- $metaNamespace := include "helm.metaEnvironment" $ }}
