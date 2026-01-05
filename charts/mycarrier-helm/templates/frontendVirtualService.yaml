@@ -23,6 +23,7 @@
 {{- $domainPrefix := include "helm.domain.prefix" $ }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $multiFrontendContext := (merge (dict "frontendApps" $frontendApps "primaryApp" $primaryApp "primaryAppValues" $primaryAppValues "primaryFullName" $primaryFullName) $) }}
+{{- $primaryAppContext := (merge (dict "appName" $primaryApp "application" $primaryAppValues "ctx" $globalCtx) $) }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -36,7 +37,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
-    {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
+    {{ include "helm.annotations.virtualservice" $primaryAppContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.multifrontend.virtualservice" $multiFrontendContext | indent 2 | trim }}
 
@@ -52,7 +53,7 @@ metadata:
     {{- $_ := set $labels "app.kubernetes.io/component" "multifrontend-offload" }}
     {{ toYaml $labels | indent 4 | trim }}
   annotations:
-    {{ include "helm.annotations.virtualservice" $ | indent 4 | trim }}
+    {{ include "helm.annotations.virtualservice" $primaryAppContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.multifrontend.offload.virtualservice" $multiFrontendContext | indent 2 | trim }}
 {{- end }}
