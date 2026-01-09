@@ -45,9 +45,11 @@ spec:
                         enabled: {{ .Values.environment.domainOverride.enabled }}
                         domain: {{ .Values.environment.domainOverride.domain }}
                     deployment: {{ $deployment }}
-                    applications: {{- with .Values.applications -}}
-                    {{- . | toYaml | nindent 22 }}
-                    {{- end }}
+                    applications:
+                      {{- range $appName, $appConfig := .Values.applications }}
+                      {{ $appName }}:
+                        {{- omit $appConfig "env" | toYaml | nindent 24 }}
+                      {{- end }}
                     jobs: {{- with .Values.jobs }}
                     {{- . | toYaml | nindent 22 }}
                     {{- end }}
