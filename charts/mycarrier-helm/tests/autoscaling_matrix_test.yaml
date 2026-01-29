@@ -24,7 +24,7 @@ tests:
       - template: deployment.yaml
         equal:
           path: spec.replicas
-          value: 2  # Default for dev when envScaling=0
+          value: 1  # Default for dev when envScaling=0
 
   - it: feature env - no force, no autoscaling, default replicas (envScaling=0)
     set:

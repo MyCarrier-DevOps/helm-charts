@@ -17,6 +17,12 @@ replicas: {{ .application.replicas }}
 {{- else }}
 replicas: 1
 {{- end }}
+{{- else if eq "dev" $.Values.environment.name }}
+{{- if not (kindIs "invalid" .application.replicas) }}
+replicas: {{ .application.replicas }}
+{{- else }}
+replicas: 1
+{{- end }}
 {{- else }}
 {{- if not (kindIs "invalid" .application.replicas) }}
 replicas: {{ .application.replicas }}
@@ -26,6 +32,8 @@ replicas: 2
 {{- end }}
 {{- else }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
+replicas: {{ .application.replicas | default 1 }}
+{{- else if eq "dev" $.Values.environment.name }}
 replicas: {{ .application.replicas | default 1 }}
 {{- else if not (kindIs "invalid" .application.replicas) }}
 replicas: {{ .application.replicas }}
