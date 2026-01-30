@@ -31,7 +31,7 @@ tests:
       mongodb.uri: "mongodb://localhost:27017/test"
       autoscaling.enabled: true
     asserts:
-      - isNull:
+      - notExists:
           path: spec.replicas
 
   - it: should include pool tuning parameters in MongoDB URI
@@ -78,9 +78,9 @@ tests:
       health.enabled: true
       health.port: 8080
     asserts:
-      - isNotNull:
+      - exists:
           path: spec.template.spec.containers[0].livenessProbe
-      - isNotNull:
+      - exists:
           path: spec.template.spec.containers[0].readinessProbe
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.port
@@ -119,7 +119,7 @@ tests:
       topologySpreadConstraints.maxSkew: 1
       topologySpreadConstraints.topologyKey: "topology.kubernetes.io/zone"
     asserts:
-      - isNotNull:
+      - exists:
           path: spec.template.spec.topologySpreadConstraints
       - equal:
           path: spec.template.spec.topologySpreadConstraints[0].maxSkew
