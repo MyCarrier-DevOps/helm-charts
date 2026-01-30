@@ -116,12 +116,12 @@ jobs:
           helm repo add mycarrier https://charts.mycarrier.dev || true
           helm repo update
 
-      - name: Checkout readme-generator-for-helm
-        uses: actions/checkout@v4
-        with:
-          repository: 'bitnami/readme-generator-for-helm'
-          ref: '2.7.2'
-          path: readme-generator-for-helm
+      # - name: Checkout readme-generator-for-helm
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: 'bitnami/readme-generator-for-helm'
+      #     ref: '2.7.2'
+      #     path: readme-generator-for-helm
 
       # - name: Setup Node.js
       #   uses: actions/setup-node@v4
