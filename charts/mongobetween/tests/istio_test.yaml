@@ -74,7 +74,7 @@ tests:
       - equal:
           path: spec.hosts[0]
           value: "preprod.hpp8s.mongodb.net"
-      - isNotNull:
+      - exists:
           path: spec.tcp
 
   - it: should set VirtualService exportTo to target namespace only
