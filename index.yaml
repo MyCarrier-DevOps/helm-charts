@@ -668,6 +668,35 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mc-environment-0.1.2/mc-environment-0.1.2.tgz
     version: 0.1.2
+  mongobetween:
+  - annotations:
+      category: Database
+    apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-01-30T19:16:07.840493899Z"
+    description: A Helm chart for mongobetween - a lightweight MongoDB connection
+      proxy with distributed caching via Dragonfly
+    digest: b156f07da375136a40b38fe526acd1ad2e75eff798914dbe3edfa6701c6e3d96
+    home: https://github.com/coinbase/mongobetween
+    keywords:
+    - mongodb
+    - proxy
+    - connection-pooling
+    - dragonfly
+    - redis
+    - istio
+    - keda
+    - autoscaling
+    maintainers:
+    - email: devops@mycarrier.io
+      name: MyCarrier DevOps
+    name: mongobetween
+    sources:
+    - https://github.com/coinbase/mongobetween
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mongobetween-1.0.1/mongobetween-1.0.1.tgz
+    version: 1.0.1
   myc-generic:
   - apiVersion: v2
     appVersion: 1.0.0
@@ -3559,4 +3588,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-01-29T21:47:48.716543828Z"
+generated: "2026-01-30T19:16:07.840885009Z"
