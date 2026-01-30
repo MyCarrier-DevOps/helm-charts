@@ -1,0 +1,49 @@
+suite: service test
+templates:
+  - service.yaml
+tests:
+  - it: should create service with correct ports
+    set:
+      service.port: 27017
+      service.healthPort: 8080
+      health.enabled: true
+    asserts:
+      - isKind:
+          of: Service
+      - contains:
+          path: spec.ports
+          content:
+            port: 27017
+            targetPort: mongo
+            protocol: TCP
+            name: mongo
+      - contains:
+          path: spec.ports
+          content:
+            port: 8080
+            targetPort: health
+            protocol: TCP
+            name: health
+
+  - it: should use ClusterIP type by default
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should set custom service type
+    set:
+      service.type: LoadBalancer
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: should include service annotations
+    set:
+      service.annotations:
+        service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-internal"]
+          value: "true"

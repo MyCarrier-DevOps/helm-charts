@@ -1,0 +1,74 @@
+{{- if and .Values.istio.enabled .Values.istio.interceptHost .Values.istio.targetNamespace }}
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: {{ include "mongobetween.fullname" . }}-mongodb-intercept
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+    app.kubernetes.io/component: istio-intercept
+spec:
+  # Limit visibility to only the target namespace and this namespace
+  exportTo:
+    - "{{ .Values.istio.targetNamespace }}"
+    - "{{ .Release.Namespace }}"
+  
+  # Define the external MongoDB as a mesh service
+  hosts:
+    - {{ .Values.istio.interceptHost | quote }}
+    {{- range .Values.istio.additionalHosts }}
+    - {{ . | quote }}
+    {{- end }}
+  
+  # External service location
+  location: {{ .Values.istio.location }}
+  
+  # Port configuration
+  ports:
+    - number: {{ .Values.istio.interceptPort }}
+      name: mongo
+      protocol: TCP
+    # MongoDB Atlas also uses 27016 and 27015 for SRV records sometimes
+    - number: 27016
+      name: mongo-srv-1
+      protocol: TCP
+    - number: 27015
+      name: mongo-srv-2
+      protocol: TCP
+  
+  # DNS resolution for the external service
+  resolution: {{ .Values.istio.resolution }}
+---
+# ServiceEntry for the mongobetween service itself
+# This allows the VirtualService to route to it
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: {{ include "mongobetween.fullname" . }}-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+    app.kubernetes.io/component: istio-intercept
+spec:
+  # Limit visibility to only the target namespace
+  exportTo:
+    - "{{ .Values.istio.targetNamespace }}"
+    - "{{ .Release.Namespace }}"
+  
+  hosts:
+    - {{ include "mongobetween.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  
+  location: MESH_INTERNAL
+  
+  ports:
+    - number: {{ .Values.service.port }}
+      name: mongo
+      protocol: TCP
+  
+  resolution: DNS
+  
+  endpoints:
+    - address: {{ include "mongobetween.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+      ports:
+        mongo: {{ .Values.service.port }}
+{{- end }}

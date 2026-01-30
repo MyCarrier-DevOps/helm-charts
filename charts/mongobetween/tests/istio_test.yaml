@@ -1,0 +1,126 @@
+suite: istio integration test
+templates:
+  - istio-serviceentry.yaml
+  - istio-virtualservice.yaml
+  - istio-destinationrule.yaml
+tests:
+  - it: should create ServiceEntry when istio is enabled with required values
+    template: istio-serviceentry.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: "dev"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ServiceEntry
+        documentIndex: 0
+      - equal:
+          path: spec.hosts[0]
+          value: "preprod.hpp8s.mongodb.net"
+        documentIndex: 0
+
+  - it: should not create ServiceEntry when istio is disabled
+    template: istio-serviceentry.yaml
+    set:
+      istio.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create ServiceEntry when interceptHost is missing
+    template: istio-serviceentry.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: ""
+      istio.targetNamespace: "dev"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create ServiceEntry when targetNamespace is missing
+    template: istio-serviceentry.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: ""
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should set exportTo to limit visibility to target namespace
+    template: istio-serviceentry.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: "dev"
+    asserts:
+      - contains:
+          path: spec.exportTo
+          content: "dev"
+        documentIndex: 0
+
+  - it: should create VirtualService with TCP routing
+    template: istio-virtualservice.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: "dev"
+      istio.interceptPort: 27017
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.hosts[0]
+          value: "preprod.hpp8s.mongodb.net"
+      - isNotNull:
+          path: spec.tcp
+
+  - it: should set VirtualService exportTo to target namespace only
+    template: istio-virtualservice.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: "dev"
+    asserts:
+      - equal:
+          path: spec.exportTo[0]
+          value: "dev"
+
+  - it: should create DestinationRule with TLS settings
+    template: istio-destinationrule.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: "dev"
+      istio.tlsMode: "SIMPLE"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: DestinationRule
+        documentIndex: 0
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: "SIMPLE"
+        documentIndex: 0
+
+  - it: should include additional hosts when specified
+    template: istio-serviceentry.yaml
+    set:
+      istio.enabled: true
+      istio.interceptHost: "preprod.hpp8s.mongodb.net"
+      istio.targetNamespace: "dev"
+      istio.additionalHosts:
+        - "preprod-shard-00-00.hpp8s.mongodb.net"
+        - "preprod-shard-00-01.hpp8s.mongodb.net"
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: "preprod-shard-00-00.hpp8s.mongodb.net"
+        documentIndex: 0
+      - contains:
+          path: spec.hosts
+          content: "preprod-shard-00-01.hpp8s.mongodb.net"
+        documentIndex: 0

@@ -1,0 +1,69 @@
+{{- if and .Values.istio.enabled .Values.istio.interceptHost .Values.istio.targetNamespace }}
+{{- if ne .Values.istio.tlsMode "DISABLE" }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "mongobetween.fullname" . }}-mongodb-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+    app.kubernetes.io/component: istio-intercept
+spec:
+  # Limit visibility to only the target namespace
+  exportTo:
+    - "{{ .Values.istio.targetNamespace }}"
+    - "{{ .Release.Namespace }}"
+  
+  # Apply to the external MongoDB host
+  host: {{ .Values.istio.interceptHost | quote }}
+  
+  trafficPolicy:
+    # Connection pool settings for high throughput
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+        connectTimeout: 10s
+        tcpKeepalive:
+          time: 300s
+          interval: 75s
+          probes: 9
+    
+    # TLS settings for upstream MongoDB connection
+    tls:
+      mode: {{ .Values.istio.tlsMode }}
+      {{- if eq .Values.istio.tlsMode "SIMPLE" }}
+      # For MongoDB Atlas, use SIMPLE TLS (server cert validation)
+      sni: {{ .Values.istio.interceptHost | quote }}
+      {{- end }}
+---
+# DestinationRule for mongobetween service (mesh-internal)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "mongobetween.fullname" . }}-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+    app.kubernetes.io/component: istio-intercept
+spec:
+  exportTo:
+    - "{{ .Values.istio.targetNamespace }}"
+    - "{{ .Release.Namespace }}"
+  
+  host: {{ include "mongobetween.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 10000
+        connectTimeout: 5s
+        tcpKeepalive:
+          time: 300s
+          interval: 75s
+          probes: 9
+    
+    # Load balancing across mongobetween replicas
+    loadBalancer:
+      simple: LEAST_REQUEST
+{{- end }}
+{{- end }}

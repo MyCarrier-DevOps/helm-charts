@@ -1,0 +1,341 @@
+# Default values for mongobetween
+# Optimized for 10,000 ops/sec without scaling
+
+# -- Number of replicas (before autoscaling kicks in)
+replicaCount: 2
+
+image:
+  # -- mongobetween image repository
+  repository: ghcr.io/mycarrier-devops/mongobetween
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to chart appVersion)
+  tag: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full name
+fullnameOverride: ""
+
+# MongoDB connection configuration
+mongodb:
+  # -- MongoDB connection URI (required)
+  # Example: mongodb+srv://user:pass@cluster.mongodb.net/database
+  uri: ""
+  # -- Use existing secret for MongoDB URI
+  existingSecret: ""
+  # -- Key in existing secret containing the URI
+  existingSecretKey: "mongodb-uri"
+  # -- Ping MongoDB on startup to verify connectivity
+  ping: true
+  # -- Network type (tcp, tcp4, tcp6, unix)
+  network: "tcp4"
+  # -- Enable SDAM (Server Discovery and Monitoring) metrics
+  enableSdamMetrics: true
+  # -- Enable SDAM logging
+  enableSdamLogging: false
+
+# Pool tuning for high throughput (10k+ ops/sec)
+# These settings control mongobetween -> MongoDB backend connections
+poolTuning:
+  # -- Minimum connections to keep warm in pool
+  # Higher = faster burst response, more memory
+  minPoolSize: 50
+  # -- Maximum connections in pool
+  # This is the PRIMARY lever for concurrent operation capacity
+  maxPoolSize: 500
+  # -- Max concurrent connection establishments
+  maxConnecting: 8
+  # -- Connection idle timeout in milliseconds (5 minutes)
+  maxIdleTimeMS: 300000
+  # -- Connection timeout in milliseconds
+  connectTimeoutMS: 10000
+  # -- Server selection timeout in milliseconds
+  serverSelectionTimeoutMS: 30000
+  # -- Socket timeout in milliseconds (0 = no timeout)
+  socketTimeoutMS: 0
+  # -- Heartbeat interval in milliseconds
+  heartbeatFrequencyMS: 10000
+
+# Proxy listener configuration
+proxy:
+  # -- Listen address for the proxy
+  address: "0.0.0.0"
+  # -- Listen port for the proxy
+  port: 27017
+  # -- Additional proxy arguments
+  extraArgs: []
+
+# Health check configuration
+health:
+  # -- Enable health check server
+  enabled: true
+  # -- Health check server port
+  port: 8080
+
+# OpenTelemetry configuration
+telemetry:
+  # -- Enable OpenTelemetry metrics export
+  enabled: true
+  # -- OTLP endpoint for metrics
+  otlpEndpoint: ""
+  # -- Use existing secret for OTLP endpoint
+  existingSecret: ""
+  # -- Key in existing secret
+  existingSecretKey: "otlp-endpoint"
+
+# Dragonfly distributed cache configuration
+dragonfly:
+  # -- Enable Dragonfly for distributed cursor/transaction caching
+  enabled: true
+  # -- Number of Dragonfly replicas
+  replicas: 2
+  # -- Dragonfly image (uses operator default if empty)
+  image: ""
+  # -- Dragonfly resource configuration
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  # -- Dragonfly persistence
+  persistence:
+    enabled: false
+    size: "1Gi"
+    storageClass: ""
+  # -- Additional Dragonfly arguments
+  args: []
+  # -- Dragonfly authentication
+  auth:
+    enabled: false
+    existingSecret: ""
+    existingSecretKey: "password"
+
+serviceAccount:
+  # -- Create service account
+  create: true
+  # -- Annotations for service account
+  annotations: {}
+  # -- Service account name (generated if not set)
+  name: ""
+
+# -- Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+# -- Pod labels
+podLabels: {}
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Service configuration
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 27017
+  # -- Health check port
+  healthPort: 8080
+  # -- Additional service annotations
+  annotations: {}
+
+# Generous resource configuration for 10k ops/sec
+resources:
+  requests:
+    # -- CPU request (1 full core)
+    cpu: "1"
+    # -- Memory request
+    memory: "512Mi"
+  limits:
+    # -- CPU limit (2 cores for burst)
+    cpu: "2"
+    # -- Memory limit
+    memory: "1Gi"
+
+# Standard Kubernetes HPA autoscaling
+autoscaling:
+  # -- Enable standard Kubernetes HPA
+  enabled: true
+  # -- Minimum replicas
+  minReplicas: 2
+  # -- Maximum replicas
+  maxReplicas: 20
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 70
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+  # -- Custom metrics for HPA (requires metrics adapter)
+  customMetrics: []
+  # -- HPA behavior configuration
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+
+  # KEDA autoscaling configuration
+  keda:
+    # -- Enable KEDA ScaledObject (disables standard HPA)
+    enabled: false
+    # -- Polling interval in seconds
+    pollingInterval: 15
+    # -- Cooldown period in seconds
+    cooldownPeriod: 300
+    # -- Idle replica count (0 to scale to zero)
+    idleReplicaCount: 2
+    # -- Minimum replicas
+    minReplicaCount: 2
+    # -- Maximum replicas
+    maxReplicaCount: 20
+    # -- Saturation threshold percentage for scaling (empirically tested: 10%)
+    saturationThreshold: "10"
+    # -- Prometheus server URL for KEDA metrics
+    prometheusServerAddress: "http://prometheus-server.monitoring.svc.cluster.local"
+    # -- Include CPU scaling in KEDA
+    includeCpuScaling: true
+    # -- CPU threshold for KEDA
+    cpuThreshold: "70"
+    # -- Include memory scaling in KEDA
+    includeMemoryScaling: true
+    # -- Memory threshold for KEDA
+    memoryThreshold: "80"
+    # -- Advanced KEDA trigger configuration
+    advanced:
+      horizontalPodAutoscalerConfig:
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 300
+            policies:
+              - type: Percent
+                value: 10
+                periodSeconds: 60
+          scaleUp:
+            stabilizationWindowSeconds: 0
+            policies:
+              - type: Percent
+                value: 100
+                periodSeconds: 15
+              - type: Pods
+                value: 4
+                periodSeconds: 15
+            selectPolicy: Max
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  # -- Enable PDB
+  enabled: true
+  # -- Minimum available pods
+  minAvailable: 1
+  # -- Maximum unavailable pods (alternative to minAvailable)
+  # maxUnavailable: 1
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
+
+# Pod topology spread constraints
+topologySpreadConstraints:
+  # -- Enable topology spread constraints
+  enabled: true
+  # -- Maximum skew
+  maxSkew: 1
+  # -- Topology key
+  topologyKey: "topology.kubernetes.io/zone"
+  # -- When unsatisfiable
+  whenUnsatisfiable: "ScheduleAnyway"
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  # -- Enable ServiceMonitor
+  enabled: false
+  # -- ServiceMonitor namespace (defaults to release namespace)
+  namespace: ""
+  # -- Additional labels
+  labels: {}
+  # -- Scrape interval
+  interval: "30s"
+  # -- Scrape timeout
+  scrapeTimeout: "10s"
+  # -- Metric relabelings
+  metricRelabelings: []
+  # -- Relabelings
+  relabelings: []
+
+# Istio traffic interception configuration
+istio:
+  # -- Enable Istio ServiceEntry and VirtualService for traffic interception
+  enabled: false
+  # -- MongoDB host to intercept (e.g., preprod.hpp8s.mongodb.net)
+  interceptHost: ""
+  # -- MongoDB port to intercept
+  interceptPort: 27017
+  # -- Target namespace for traffic interception
+  # Traffic from pods in this namespace will be routed to mongobetween
+  targetNamespace: ""
+  # -- TLS mode for upstream MongoDB connection (SIMPLE, MUTUAL, ISTIO_MUTUAL)
+  tlsMode: "SIMPLE"
+  # -- Additional hosts to intercept (for SRV records)
+  additionalHosts: []
+  # -- Resolution mode (DNS, STATIC, NONE)
+  resolution: "DNS"
+  # -- Service Entry location (MESH_EXTERNAL, MESH_INTERNAL)
+  location: "MESH_EXTERNAL"
+
+# Network Policy
+networkPolicy:
+  # -- Enable network policy
+  enabled: false
+  # -- Ingress rules
+  ingress: []
+  # -- Egress rules
+  egress: []
+
+# Extra environment variables
+extraEnv: []
+# - name: MY_VAR
+#   value: "my-value"
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Extra volumes
+extraVolumes: []
+
+# -- Extra manifests to deploy
+extraManifests: []

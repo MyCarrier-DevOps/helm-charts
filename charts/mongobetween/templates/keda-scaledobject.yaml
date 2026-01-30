@@ -1,0 +1,65 @@
+{{- if .Values.autoscaling.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "mongobetween.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "mongobetween.fullname" . }}
+  pollingInterval: {{ .Values.autoscaling.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.autoscaling.keda.cooldownPeriod }}
+  {{- if .Values.autoscaling.keda.idleReplicaCount }}
+  idleReplicaCount: {{ .Values.autoscaling.keda.idleReplicaCount }}
+  {{- end }}
+  minReplicaCount: {{ .Values.autoscaling.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.autoscaling.keda.maxReplicaCount }}
+  {{- if .Values.autoscaling.keda.advanced }}
+  advanced:
+    {{- toYaml .Values.autoscaling.keda.advanced | nindent 4 }}
+  {{- end }}
+  triggers:
+    # Primary scaling metric: mongobetween saturation (empirically tested)
+    # Scale when saturation > 10% to prevent latency degradation
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.autoscaling.keda.prometheusServerAddress }}
+        metricName: mongobetween_saturation
+        query: |
+          avg(mongobetween_saturation{namespace="{{ .Release.Namespace }}", pod=~"{{ include "mongobetween.fullname" . }}.*"})
+        threshold: {{ .Values.autoscaling.keda.saturationThreshold | quote }}
+        activationThreshold: "0"
+    
+    {{- if .Values.autoscaling.keda.includeCpuScaling }}
+    # CPU scaling (standard Kubernetes metric)
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: {{ .Values.autoscaling.keda.cpuThreshold | quote }}
+    {{- end }}
+    
+    {{- if .Values.autoscaling.keda.includeMemoryScaling }}
+    # Memory scaling (standard Kubernetes metric)
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: {{ .Values.autoscaling.keda.memoryThreshold | quote }}
+    {{- end }}
+---
+# TriggerAuthentication for Prometheus (if needed)
+# Uncomment if your Prometheus requires authentication
+# apiVersion: keda.sh/v1alpha1
+# kind: TriggerAuthentication
+# metadata:
+#   name: {{ include "mongobetween.fullname" . }}-prometheus-auth
+#   namespace: {{ .Release.Namespace }}
+# spec:
+#   secretTargetRef:
+#     - parameter: bearerToken
+#       name: prometheus-token
+#       key: token
+{{- end }}

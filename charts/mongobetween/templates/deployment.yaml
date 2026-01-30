@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mongobetween.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mongobetween.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mongobetween.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mongobetween.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "mongobetween.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "-network"
+            - "{{ .Values.mongodb.network }}"
+            {{- if .Values.mongodb.ping }}
+            - "-ping"
+            {{- end }}
+            {{- if .Values.mongodb.enableSdamMetrics }}
+            - "-enable-sdam-metrics"
+            {{- end }}
+            {{- if .Values.mongodb.enableSdamLogging }}
+            - "-enable-sdam-logging"
+            {{- end }}
+            {{- if .Values.health.enabled }}
+            - "-health-addr"
+            - {{ include "mongobetween.healthAddress" . | quote }}
+            {{- end }}
+            {{- range .Values.proxy.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+            # Address mapping: listen_address=mongodb_uri
+            - "{{ include "mongobetween.proxyAddress" . }}=$(MONGODB_URI)"
+          env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mongobetween.mongodbSecretName" . }}
+                  key: {{ include "mongobetween.mongodbSecretKey" . }}
+            {{- if .Values.dragonfly.enabled }}
+            - name: REDIS_URL
+              value: "redis://{{ include "mongobetween.dragonflyUrl" . }}"
+            {{- end }}
+            {{- if .Values.telemetry.enabled }}
+            {{- if .Values.telemetry.otlpEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.telemetry.otlpEndpoint | quote }}
+            {{- else if .Values.telemetry.existingSecret }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.telemetry.existingSecret }}
+                  key: {{ .Values.telemetry.existingSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: mongo
+              containerPort: {{ .Values.proxy.port }}
+              protocol: TCP
+            {{- if .Values.health.enabled }}
+            - name: health
+              containerPort: {{ .Values.health.port }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.health.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

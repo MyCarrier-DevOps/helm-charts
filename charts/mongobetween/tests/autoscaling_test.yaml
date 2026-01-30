@@ -1,0 +1,99 @@
+suite: autoscaling test
+templates:
+  - hpa.yaml
+  - keda-scaledobject.yaml
+tests:
+  - it: should create HPA when autoscaling is enabled and keda is disabled
+    template: hpa.yaml
+    set:
+      autoscaling.enabled: true
+      autoscaling.keda.enabled: false
+      autoscaling.minReplicas: 2
+      autoscaling.maxReplicas: 20
+      autoscaling.targetCPUUtilizationPercentage: 70
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 20
+
+  - it: should not create HPA when keda is enabled
+    template: hpa.yaml
+    set:
+      autoscaling.enabled: true
+      autoscaling.keda.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create KEDA ScaledObject when enabled
+    template: keda-scaledobject.yaml
+    set:
+      autoscaling.keda.enabled: true
+      autoscaling.keda.minReplicaCount: 2
+      autoscaling.keda.maxReplicaCount: 20
+      autoscaling.keda.saturationThreshold: "10"
+    asserts:
+      - isKind:
+          of: ScaledObject
+      - equal:
+          path: spec.minReplicaCount
+          value: 2
+      - equal:
+          path: spec.maxReplicaCount
+          value: 20
+
+  - it: should not create KEDA ScaledObject when disabled
+    template: keda-scaledobject.yaml
+    set:
+      autoscaling.keda.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should include CPU trigger when includeCpuScaling is true
+    template: keda-scaledobject.yaml
+    set:
+      autoscaling.keda.enabled: true
+      autoscaling.keda.includeCpuScaling: true
+      autoscaling.keda.cpuThreshold: "70"
+    asserts:
+      - contains:
+          path: spec.triggers
+          content:
+            type: cpu
+            metricType: Utilization
+            metadata:
+              value: "70"
+
+  - it: should include memory trigger when includeMemoryScaling is true
+    template: keda-scaledobject.yaml
+    set:
+      autoscaling.keda.enabled: true
+      autoscaling.keda.includeMemoryScaling: true
+      autoscaling.keda.memoryThreshold: "80"
+    asserts:
+      - contains:
+          path: spec.triggers
+          content:
+            type: memory
+            metricType: Utilization
+            metadata:
+              value: "80"
+
+  - it: should set HPA behavior for scale down stabilization
+    template: hpa.yaml
+    set:
+      autoscaling.enabled: true
+      autoscaling.keda.enabled: false
+      autoscaling.behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+    asserts:
+      - equal:
+          path: spec.behavior.scaleDown.stabilizationWindowSeconds
+          value: 300

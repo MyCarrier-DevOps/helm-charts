@@ -1,0 +1,54 @@
+{{- if and .Values.istio.enabled .Values.istio.interceptHost .Values.istio.targetNamespace }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "mongobetween.fullname" . }}-mongodb-intercept
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+    app.kubernetes.io/component: istio-intercept
+spec:
+  # Limit visibility to only the target namespace
+  # This ensures only pods in the target namespace have their traffic intercepted
+  exportTo:
+    - "{{ .Values.istio.targetNamespace }}"
+  
+  # Match traffic destined for the MongoDB host
+  hosts:
+    - {{ .Values.istio.interceptHost | quote }}
+    {{- range .Values.istio.additionalHosts }}
+    - {{ . | quote }}
+    {{- end }}
+  
+  # TCP routing to redirect MongoDB traffic to mongobetween
+  tcp:
+    # Route for standard MongoDB port
+    - match:
+        - port: {{ .Values.istio.interceptPort }}
+      route:
+        - destination:
+            host: {{ include "mongobetween.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+          weight: 100
+    
+    # Route for MongoDB SRV port 27016
+    - match:
+        - port: 27016
+      route:
+        - destination:
+            host: {{ include "mongobetween.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+          weight: 100
+    
+    # Route for MongoDB SRV port 27015
+    - match:
+        - port: 27015
+      route:
+        - destination:
+            host: {{ include "mongobetween.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+          weight: 100
+{{- end }}

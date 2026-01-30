@@ -1,0 +1,71 @@
+suite: dragonfly test
+templates:
+  - dragonfly.yaml
+tests:
+  - it: should create Dragonfly CRD when enabled
+    set:
+      dragonfly.enabled: true
+      dragonfly.replicas: 2
+    asserts:
+      - isKind:
+          of: Dragonfly
+      - equal:
+          path: apiVersion
+          value: dragonflydb.io/v1alpha1
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: should not create Dragonfly CRD when disabled
+    set:
+      dragonfly.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should set resource limits for Dragonfly
+    set:
+      dragonfly.enabled: true
+      dragonfly.resources:
+        requests:
+          cpu: "100m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+    asserts:
+      - equal:
+          path: spec.resources.requests.cpu
+          value: "100m"
+      - equal:
+          path: spec.resources.requests.memory
+          value: "512Mi"
+      - equal:
+          path: spec.resources.limits.cpu
+          value: "1"
+      - equal:
+          path: spec.resources.limits.memory
+          value: "1Gi"
+
+  - it: should set custom image when specified
+    set:
+      dragonfly.enabled: true
+      dragonfly.image: "docker.dragonflydb.io/dragonflydb/dragonfly:v1.0.0"
+    asserts:
+      - equal:
+          path: spec.image
+          value: "docker.dragonflydb.io/dragonflydb/dragonfly:v1.0.0"
+
+  - it: should include additional args when specified
+    set:
+      dragonfly.enabled: true
+      dragonfly.args:
+        - "--maxmemory"
+        - "512mb"
+    asserts:
+      - equal:
+          path: spec.args[0]
+          value: "--maxmemory"
+      - equal:
+          path: spec.args[1]
+          value: "512mb"

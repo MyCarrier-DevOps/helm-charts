@@ -1,0 +1,44 @@
+{{- if .Values.dragonfly.enabled }}
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  name: {{ include "mongobetween.dragonflyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mongobetween.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cache
+spec:
+  # Number of Dragonfly replicas for high availability
+  replicas: {{ .Values.dragonfly.replicas }}
+  
+  {{- if .Values.dragonfly.image }}
+  image: {{ .Values.dragonfly.image }}
+  {{- end }}
+  
+  # Resource configuration
+  resources:
+    {{- toYaml .Values.dragonfly.resources | nindent 4 }}
+  
+  {{- if .Values.dragonfly.args }}
+  # Additional Dragonfly arguments
+  args:
+    {{- toYaml .Values.dragonfly.args | nindent 4 }}
+  {{- end }}
+  
+  {{- if .Values.dragonfly.auth.enabled }}
+  # Authentication configuration
+  authentication:
+    {{- if .Values.dragonfly.auth.existingSecret }}
+    passwordFromSecret:
+      name: {{ .Values.dragonfly.auth.existingSecret }}
+      key: {{ .Values.dragonfly.auth.existingSecretKey | default "password" }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.dragonfly.persistence.enabled }}
+  # Persistence configuration for snapshots
+  snapshot:
+    # Dragonfly snapshot configuration
+    dir: /data
+  {{- end }}
+{{- end }}

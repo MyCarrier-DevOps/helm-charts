@@ -1,0 +1,23 @@
+apiVersion: v2
+name: mongobetween
+description: A Helm chart for mongobetween - a lightweight MongoDB connection proxy with distributed caching via Dragonfly
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - mongodb
+  - proxy
+  - connection-pooling
+  - dragonfly
+  - redis
+  - istio
+  - keda
+  - autoscaling
+home: https://github.com/coinbase/mongobetween
+sources:
+  - https://github.com/coinbase/mongobetween
+maintainers:
+  - name: MyCarrier DevOps
+    email: devops@mycarrier.io
+annotations:
+  category: Database
