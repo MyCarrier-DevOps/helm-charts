@@ -71,7 +71,9 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.networking.ingress.type: "istio"
       applications.test-app-api.networking.istio.enabled: true
-      applications.test-app-api.networking.istio.hosts[0]: "custom-host.example.com"
+      applications.test-app-api.networking.istio.hosts:
+        - "custom-host.example.com"
+        - "another-custom-host.example.com"
       applications.test-app-api.networking.istio.routes.external.prefix: "/external"
       applications.test-app-api.networking.istio.routes.external.destination.host: "external-service"
       applications.test-app-api.networking.istio.routes.external.destination.port: 80
@@ -81,6 +83,13 @@ tests:
       - contains:
           path: spec.hosts
           content: api.custom.domain.mycarrier.dev
+      # Verify custom hosts from networking.istio.hosts are included
+      - contains:
+          path: spec.hosts
+          content: custom-host.example.com
+      - contains:
+          path: spec.hosts
+          content: another-custom-host.example.com
       - equal:
           path: spec.http[1].name
           value: external
@@ -216,3 +225,232 @@ tests:
           count: 1
       - isKind:
           of: VirtualService
+
+  - it: should configure redirects when networking.istio.redirects is specified
+    set:
+      environment.name: "dev"
+      applications.redirect-app.deploymentType: deployment
+      applications.redirect-app.isFrontend: false
+      applications.redirect-app.image.registry: "myregistry.example.com"
+      applications.redirect-app.image.repository: "mycarrier/redirect-app"
+      applications.redirect-app.image.tag: "1.0.0"
+      applications.redirect-app.ports.http: 8080
+      applications.redirect-app.networking.ingress.type: "istio"
+      applications.redirect-app.networking.istio.enabled: true
+      applications.redirect-app.networking.istio.redirects:
+        old-domain: new-domain
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify redirect rule is created
+      - equal:
+          path: spec.http[1].name
+          value: old-domain
+      - equal:
+          path: spec.http[1].match[0].authority.prefix
+          value: dev-old-domain.mycarrier.dev
+      - equal:
+          path: spec.http[1].redirect.uri
+          value: /
+      - equal:
+          path: spec.http[1].redirect.authority
+          value: dev-new-domain.mycarrier.dev
+
+  - it: should configure custom routes when networking.istio.routes is specified
+    set:
+      environment.name: "dev"
+      applications.routes-app.deploymentType: deployment
+      applications.routes-app.isFrontend: false
+      applications.routes-app.image.registry: "myregistry.example.com"
+      applications.routes-app.image.repository: "mycarrier/routes-app"
+      applications.routes-app.image.tag: "1.0.0"
+      applications.routes-app.ports.http: 8080
+      applications.routes-app.networking.ingress.type: "istio"
+      applications.routes-app.networking.istio.enabled: true
+      applications.routes-app.networking.istio.routes:
+        external-svc:
+          match:
+            - uri:
+                prefix: /external
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify custom route is created
+      - equal:
+          path: spec.http[1].name
+          value: external-svc
+      - equal:
+          path: spec.http[1].match[0].uri.prefix
+          value: /external
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: external-svc
+      - equal:
+          path: spec.http[1].route[0].destination.port.number
+          value: 80
+
+  - it: should configure custom response headers when networking.istio.responseHeaders is specified
+    set:
+      environment.name: "dev"
+      applications.headers-app.deploymentType: deployment
+      applications.headers-app.isFrontend: false
+      applications.headers-app.image.registry: "myregistry.example.com"
+      applications.headers-app.image.repository: "mycarrier/headers-app"
+      applications.headers-app.image.tag: "1.0.0"
+      applications.headers-app.ports.http: 8080
+      applications.headers-app.networking.ingress.type: "istio"
+      applications.headers-app.networking.istio.enabled: true
+      applications.headers-app.networking.istio.responseHeaders:
+        response:
+          set:
+            X-Custom-Header: "custom-value"
+            X-Another-Header: "another-value"
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify custom response headers are applied to the default route (index 2 in dev env: 0=header-match, 1=feature-routing, 2=default)
+      - equal:
+          path: spec.http[2].name
+          value: app-headers-app-default
+      - equal:
+          path: spec.http[2].headers.response.set.X-Custom-Header
+          value: custom-value
+      - equal:
+          path: spec.http[2].headers.response.set.X-Another-Header
+          value: another-value
+      # Also verify headers are applied to feature-routing route
+      - equal:
+          path: spec.http[1].name
+          value: app-headers-app-feature-routing
+      - equal:
+          path: spec.http[1].headers.response.set.X-Custom-Header
+          value: custom-value
+
+  - it: should configure CORS policy when networking.istio.corsPolicy is specified
+    set:
+      environment.name: "dev"
+      applications.cors-app.deploymentType: deployment
+      applications.cors-app.isFrontend: false
+      applications.cors-app.image.registry: "myregistry.example.com"
+      applications.cors-app.image.repository: "mycarrier/cors-app"
+      applications.cors-app.image.tag: "1.0.0"
+      applications.cors-app.ports.http: 8080
+      applications.cors-app.networking.ingress.type: "istio"
+      applications.cors-app.networking.istio.enabled: true
+      applications.cors-app.networking.istio.corsPolicy:
+        allowOrigins:
+          - exact: "https://example.com"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+        allowHeaders:
+          - Authorization
+          - Content-Type
+        maxAge: "24h"
+        allowCredentials: true
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify CORS policy is applied to the default route (index 2 in dev env)
+      - equal:
+          path: spec.http[2].name
+          value: app-cors-app-default
+      - contains:
+          path: spec.http[2].corsPolicy.allowOrigins
+          content:
+            exact: "https://example.com"
+      - contains:
+          path: spec.http[2].corsPolicy.allowMethods
+          content: GET
+      - contains:
+          path: spec.http[2].corsPolicy.allowMethods
+          content: POST
+      - contains:
+          path: spec.http[2].corsPolicy.allowMethods
+          content: PUT
+      - contains:
+          path: spec.http[2].corsPolicy.allowHeaders
+          content: Authorization
+      - contains:
+          path: spec.http[2].corsPolicy.allowHeaders
+          content: Content-Type
+      - equal:
+          path: spec.http[2].corsPolicy.maxAge
+          value: "24h"
+      - equal:
+          path: spec.http[2].corsPolicy.allowCredentials
+          value: true
+
+  - it: should configure all Istio networking features together
+    set:
+      environment.name: "dev"
+      applications.full-istio-app.deploymentType: deployment
+      applications.full-istio-app.isFrontend: false
+      applications.full-istio-app.image.registry: "myregistry.example.com"
+      applications.full-istio-app.image.repository: "mycarrier/full-istio-app"
+      applications.full-istio-app.image.tag: "1.0.0"
+      applications.full-istio-app.ports.http: 8080
+      applications.full-istio-app.networking.ingress.type: "istio"
+      applications.full-istio-app.networking.istio.enabled: true
+      applications.full-istio-app.networking.istio.hosts:
+        - "custom.example.com"
+      applications.full-istio-app.networking.istio.redirects:
+        legacy-api: new-api
+      applications.full-istio-app.networking.istio.routes:
+        external-service:
+          match:
+            - uri:
+                prefix: /proxy
+      applications.full-istio-app.networking.istio.responseHeaders:
+        response:
+          set:
+            X-Frame-Options: "DENY"
+      applications.full-istio-app.networking.istio.corsPolicy:
+        allowOrigins:
+          - exact: "https://app.example.com"
+        allowMethods:
+          - GET
+          - POST
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify custom hosts
+      - contains:
+          path: spec.hosts
+          content: custom.example.com
+      # Verify redirect rule exists (index 1: after header-match route)
+      - equal:
+          path: spec.http[1].name
+          value: legacy-api
+      - equal:
+          path: spec.http[1].redirect.authority
+          value: dev-new-api.mycarrier.dev
+      # Verify custom route exists (index 2: after redirects)
+      - equal:
+          path: spec.http[2].name
+          value: external-service
+      - equal:
+          path: spec.http[2].match[0].uri.prefix
+          value: /proxy
+      # Verify response headers on custom route (routes get headers/cors)
+      - equal:
+          path: spec.http[2].headers.response.set.X-Frame-Options
+          value: DENY
+      # Verify CORS policy on custom route
+      - contains:
+          path: spec.http[2].corsPolicy.allowOrigins
+          content:
+            exact: "https://app.example.com"
+      # Verify response headers on default route (index 4 in dev: 0=header-match, 1=redirect, 2=route, 3=feature-routing, 4=default)
+      - equal:
+          path: spec.http[4].name
+          value: app-full-istio-app-default
+      - equal:
+          path: spec.http[4].headers.response.set.X-Frame-Options
+          value: DENY
+      # Verify CORS policy on default route
+      - contains:
+          path: spec.http[4].corsPolicy.allowOrigins
+          content:
+            exact: "https://app.example.com"

@@ -23,6 +23,13 @@ hosts:
 {{ if $isFeatureEnv }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{ if and (not .application.staticHostname) (not $isFeatureEnv)}}- {{ (list ($.Values.global.appStack) (.appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{ if and (.application.staticHostname) (not $isFeatureEnv) }}- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end }}
+{{- /* Include additional custom hosts from networking.istio.hosts */ -}}
+{{- $istioConfig := dig "networking" "istio" dict .application -}}
+{{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts }}
+{{- range $istioConfig.hosts }}
+- {{ . }}
+{{- end }}
+{{- end }}
 gateways:
 - mesh
 - istio-system/default

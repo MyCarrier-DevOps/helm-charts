@@ -229,6 +229,15 @@ This template generates the complete HTTP rules as strings to avoid duplication
   corsPolicy:
     {{ toYaml . | indent 4 | trim }}
   {{- end }}
+  {{/* Apply response headers - use custom if defined, otherwise use defaults */}}
+  {{- $responseHeadersYaml := "" -}}
+  {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders -}}
+    {{- $responseHeadersYaml = toYaml $istioConfig.responseHeaders | trim -}}
+  {{- else -}}
+    {{- $responseHeadersYaml = include "helm.istioIngress.responseHeaders" $ | trim -}}
+  {{- end -}}
+  headers:
+{{ $responseHeadersYaml | indent 4 }}
   {{/* Safely access service properties with default values if not defined */}}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $.application }}
   retries:

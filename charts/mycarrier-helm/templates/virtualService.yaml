@@ -58,6 +58,13 @@ spec:
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
   {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
   {{- if $appValues.staticHostname }}- {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+  {{- /* Include additional custom hosts from networking.istio.hosts */ -}}
+  {{- $istioConfig := dig "networking" "istio" dict $appValues -}}
+  {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
+  {{- range $istioConfig.hosts }}
+  - {{ . }}
+  {{- end -}}
+  {{- end }}
   gateways:
   - mesh
   - istio-system/default

@@ -32,6 +32,13 @@ hosts:
 {{- if and ($primaryAppValues.staticHostname) (not $isFeatureEnv) }}
 - {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}
 {{- end }}
+{{- /* Include additional custom hosts from primary app's networking.istio.hosts */ -}}
+{{- $istioConfig := dig "networking" "istio" dict $primaryAppValues -}}
+{{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
+{{- range $istioConfig.hosts }}
+- {{ . }}
+{{- end -}}
+{{- end -}}
 {{- end }}
 
 gateways:
@@ -96,7 +103,8 @@ http:
     uri: /
   {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
   headers:{{ printf "\n%s" ($headersBlock | indent 4) }}
-  {{- with $appValues.networking.istio.corsPolicy }}
+  {{- $corsPolicy := dig "networking" "istio" "corsPolicy" nil $appValues -}}
+  {{- with $corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   {{/* Safely access service properties with default values if not defined */}}
@@ -120,13 +128,15 @@ http:
       port:
         number: 80
   {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
-  {{- if and $appValues.networking.istio.responseHeaders }}
-    {{- with $appValues.networking.istio.responseHeaders }}
+  {{- $responseHeaders := dig "networking" "istio" "responseHeaders" nil $appValues -}}
+  {{- if $responseHeaders }}
+    {{- with $responseHeaders }}
       {{- $headersBlock = toYaml . }}
     {{- end }}
   {{- end }}
   headers:{{ printf "\n%s" ($headersBlock | indent 4) }}
-  {{- with $appValues.networking.istio.corsPolicy }}
+  {{- $corsPolicy := dig "networking" "istio" "corsPolicy" nil $appValues -}}
+  {{- with $corsPolicy }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
@@ -295,6 +305,13 @@ hosts:
 - {{ $primaryBaseFullName }}.{{ $metaNamespace }}.svc.cluster.local
 {{ if (not $primaryAppValues.staticHostname)}}- {{ (list (.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
 {{- if $primaryAppValues.staticHostname }}- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+{{- /* Include additional custom hosts from primary app's networking.istio.hosts */ -}}
+{{- $istioConfig := dig "networking" "istio" dict $primaryAppValues -}}
+{{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
+{{- range $istioConfig.hosts }}
+- {{ . }}
+{{- end -}}
+{{- end }}
 gateways:
 - mesh
 - istio-system/default

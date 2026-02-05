@@ -379,3 +379,238 @@ tests:
       - equal:
           path: spec.http[1].retries.perTryTimeout
           value: "60s"
+
+  - it: should apply custom responseHeaders to allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+              responseHeaders:
+                response:
+                  set:
+                    X-Custom-Header: "custom-value"
+                    X-Another-Header: "another-value"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify custom response headers are applied to first allowed endpoint (index 1 after header-match)
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed-api-health
+      - equal:
+          path: spec.http[1].headers.response.set.X-Custom-Header
+          value: custom-value
+      - equal:
+          path: spec.http[1].headers.response.set.X-Another-Header
+          value: another-value
+      # Verify custom headers on second user-defined endpoint
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed-api-status
+      - equal:
+          path: spec.http[2].headers.response.set.X-Custom-Header
+          value: custom-value
+
+  - it: should apply corsPolicy to allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+              corsPolicy:
+                allowOrigins:
+                  - exact: "https://example.com"
+                allowMethods:
+                  - GET
+                  - POST
+                allowHeaders:
+                  - Authorization
+                maxAge: "24h"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify CORS policy is applied to first allowed endpoint
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed-api-health
+      - contains:
+          path: spec.http[1].corsPolicy.allowOrigins
+          content:
+            exact: "https://example.com"
+      - contains:
+          path: spec.http[1].corsPolicy.allowMethods
+          content: GET
+      - contains:
+          path: spec.http[1].corsPolicy.allowHeaders
+          content: Authorization
+      - equal:
+          path: spec.http[1].corsPolicy.maxAge
+          value: "24h"
+      # Verify CORS on second user-defined endpoint
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed-api-status
+      - contains:
+          path: spec.http[2].corsPolicy.allowOrigins
+          content:
+            exact: "https://example.com"
+
+  - it: should apply both responseHeaders and corsPolicy to allowed endpoints together
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/v1/*"
+                - "/api/health"
+              responseHeaders:
+                response:
+                  set:
+                    X-Frame-Options: "DENY"
+                    X-Content-Type-Options: "nosniff"
+              corsPolicy:
+                allowOrigins:
+                  - exact: "https://app.example.com"
+                  - prefix: "https://dev."
+                allowMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                allowCredentials: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify both headers and CORS on prefix endpoint (wildcard converts to prefix with -wildcard suffix)
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed-api-v1-wildcard
+      - equal:
+          path: spec.http[1].match[0].uri.prefix
+          value: /api/v1/
+      - equal:
+          path: spec.http[1].headers.response.set.X-Frame-Options
+          value: DENY
+      - equal:
+          path: spec.http[1].headers.response.set.X-Content-Type-Options
+          value: nosniff
+      - contains:
+          path: spec.http[1].corsPolicy.allowOrigins
+          content:
+            exact: "https://app.example.com"
+      - equal:
+          path: spec.http[1].corsPolicy.allowCredentials
+          value: true
+      - contains:
+          path: spec.http[1].corsPolicy.allowMethods
+          content: DELETE
+      # Verify both headers and CORS on exact match endpoint
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-test-app-allowed-api-health
+      - equal:
+          path: spec.http[2].headers.response.set.X-Frame-Options
+          value: DENY
+      - contains:
+          path: spec.http[2].corsPolicy.allowMethods
+          content: GET
+
+  - it: should use default responseHeaders when custom headers not specified with allowedEndpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify default response headers are applied when custom not specified
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed-api-health
+      # Default headers include X-Frame-Options
+      - equal:
+          path: spec.http[1].headers.response.set.X-Frame-Options
+          value: DENY
+      # Default headers include X-XSS-Protection
+      - equal:
+          path: spec.http[1].headers.response.set.X-XSS-Protection
+          value: "1; mode=block"
+      # Default headers include Strict-Transport-Security
+      - equal:
+          path: spec.http[1].headers.response.set.Strict-Transport-Security
+          value: "max-age=7884000; includeSubDomains; preload"
