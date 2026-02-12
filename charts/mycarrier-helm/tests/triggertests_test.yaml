@@ -252,6 +252,102 @@ tests:
       - exists:
           path: spec
           
+  - it: should include CorrelationId in test engine payload
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.correlationId: "test-correlation-123"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"CorrelationId":\s*"test-correlation-123"'
+
+  - it: should include empty CorrelationId when not set
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.correlationId: ""
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"CorrelationId":\s*""'
+
+  - it: should include correlationId label on trigger job
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.correlationId: "deploy-corr-id-789"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+          value: "deploy-corr-id-789"
+
   - it: should handle no filters in test definition correctly
     set:
       fullnameOverride: app

@@ -11,6 +11,7 @@ The cached version should be used in loops to avoid recomputation.
 {{- $_ := set $defaults "appStack" "app" -}}
 {{- $_ := set $defaults "branchLabel" "" -}}
 {{- $_ := set $defaults "commitDeployed" "" -}}
+{{- $_ := set $defaults "correlationId" "" -}}
 {{/* forceAutoscaling has no default - nil means "not set" and allows prod auto-scaling */}}
 
 {{- $context := deepCopy . -}}
@@ -33,6 +34,11 @@ The cached version should be used in loops to avoid recomputation.
 {{/* Get deployed commit if available, otherwise use default */}}
 {{- if and .Values .Values.global .Values.global.commitDeployed -}}
   {{- $_ := set $defaults "commitDeployed" .Values.global.commitDeployed -}}
+{{- end -}}
+
+{{/* Get correlation ID if available, otherwise use default */}}
+{{- if and .Values .Values.global .Values.global.correlationId -}}
+  {{- $_ := set $defaults "correlationId" .Values.global.correlationId -}}
 {{- end -}}
 
 {{/* Get force autoscaling if available, otherwise use default */}}
