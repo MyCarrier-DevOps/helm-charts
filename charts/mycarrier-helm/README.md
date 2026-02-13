@@ -1108,6 +1108,7 @@ When contributing to this chart, please follow the coding standards defined in t
 | `global.language`                     | Default programming language for applications (can be overridden at application level) | `csharp` |
 | `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)       | `false`  |
 | `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                          | `""`     |
+| `global.correlationId`                | Correlation ID for tracking deployments across systems                                 | `""`     |
 | `global.env`                          | Global environment variables shared across all applications                            | `{}`     |
 | `global.dependencies`                 | Dependency flags to control infrastructure resources                                   |          |
 | `global.dependencies.mongodb`         | Enable MongoDB dependency                                                              | `false`  |
