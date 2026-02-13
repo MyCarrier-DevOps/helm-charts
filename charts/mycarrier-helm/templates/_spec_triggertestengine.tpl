@@ -14,6 +14,7 @@
 {{- $environment := $.Values.environment.name }}
 {{- $gitBranch := $.Values.global.gitbranch}}
 {{- $stackname := $.Values.global.appStack }}
+{{- $correlationId := $.Values.global.correlationId }}
 {{- if not (dig "service" "ports" false .application) }}
 {{- range $key, $value := .application.ports }}
   {{- if eq ($key | lower) "http" }}
@@ -80,7 +81,8 @@ template:
                   "ServiceAddress": {{ $serviceAddress | quote }},
                   "ReleaseDefinitionName": "{{ .releaseDefinitionName | default $baseName }}",
                   "BranchName": "{{ $gitBranch }}",
-                  "AdditionalEnvVars": "{{ .additionalEnvVars}}"
+                  "AdditionalEnvVars": "{{ .additionalEnvVars}}",
+                  "CorrelationId": "{{ $correlationId }}"
                 }
               }' "$TESTENGINEHOOK_URL";
           {{- end }}

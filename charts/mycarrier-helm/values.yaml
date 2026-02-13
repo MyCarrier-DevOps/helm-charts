@@ -11,6 +11,7 @@
 ## @param global.language Default programming language for applications (can be overridden at application level)
 ## @param global.v2migration Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
 ## @param global.commitDeployed Label for the deployed commit (used for tracking deployments)
+## @param global.correlationId Correlation ID for tracking deployments across systems
 ## @param global.env [object] Global environment variables shared across all applications
 ## @extra global.dependencies Dependency flags to control infrastructure resources
 ## @param global.dependencies.mongodb Enable MongoDB dependency
@@ -24,12 +25,13 @@
 ## @param global.dependencies.loadsure Enable Loadsure dependency
 ## @param global.dependencies.chargify Enable Chargify dependency
 global:
-  appStack: "app"
-  gitbranch: ""
-  branchlabel: ""
-  language: "csharp"
-  v2migration: false
-  commitDeployed: ""
+  appStack: "app" # Application stack name (e.g., "app", "billing", "users" - used for naming resources and grouping applications)
+  gitbranch: "" # Git branch name (e.g., "main" or "feature/xyz")
+  branchlabel: "" # Used for reference label (e.g., "main" or "feature-xyz")
+  language: "csharp" # Default language (csharp, java, nodejs, python, go, etc.) - can be overridden at application level
+  v2migration: false # Set to true to enable ArgoCD sync options for v2 migration (e.g., skip schema validation, ignore certain fields)
+  commitDeployed: "" # Optional: Git commit hash or identifier for the deployed code (used for tracking deployments)
+  correlationId: "" # Optional: Correlation ID for tracking deployments across systems
   env: {}
   dependencies:
     mongodb: false

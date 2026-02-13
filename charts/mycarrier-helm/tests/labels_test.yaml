@@ -52,6 +52,70 @@ tests:
       - equal:
           path: metadata.labels["mycarrier.tech/commitDeployed"]
           value: abc123def456
+      - isNullOrEmpty:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+
+  # Test correlationId label with value
+  - it: should include correlationId label when provided
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.correlationId: "abc-123-def-456"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+          value: "abc-123-def-456"
+
+  # Test correlationId label with empty value
+  - it: should set empty correlationId when not provided
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.correlationId: ""
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - isNullOrEmpty:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+
+  # Test correlationId label truncation at 63 characters
+  - it: should truncate correlationId to 63 characters
+    set:
+      environment.name: "dev"
+      global.appStack: "test-stack"
+      global.branchlabel: "main"
+      global.correlationId: "this-is-a-very-long-correlation-id-that-exceeds-sixty-three-characters-and-should-be-truncated"
+      applications.test-app.deploymentType: deployment
+      applications.test-app.isFrontend: false
+      applications.test-app.image.registry: "myregistry.example.com"
+      applications.test-app.image.repository: "mycarrier/test-app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.ports.http: 8080
+      applications.test-app.env: {}
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+          value: "this-is-a-very-long-correlation-id-that-exceeds-sixty-three-cha"
 
   # Test commitDeployed label with empty value
   - it: should set empty commitDeployed when not provided

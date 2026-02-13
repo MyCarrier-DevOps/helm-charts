@@ -13,6 +13,7 @@
 {{- $appStack := $ctx.defaults.appStack -}}
 {{- $branchLabel := $ctx.defaults.branchLabel -}}
 {{- $commitDeployed := $ctx.defaults.commitDeployed -}}
+{{- $correlationId := $ctx.defaults.correlationId -}}
 
 {{/* Get app name - first try .appName, then from application if present */}}
 {{- $appName := .appName | default "" -}}
@@ -27,7 +28,7 @@ mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
 mycarrier.tech/reference: {{ $branchLabel | toString | trunc 63 | quote }}
 mycarrier.tech/commitDeployed: {{ $commitDeployed | toString | trunc 63 | quote }}
-
+mycarrier.tech/correlationId: {{ $correlationId | toString | trunc 63 | quote }}
 {{- end -}}
 
 {{- define "helm.labels.version" }}
