@@ -38,7 +38,12 @@
 {{- $envName := $ctx.defaults.environmentName -}}
 {{- $appStack := $ctx.defaults.appStack -}}
 
+{{/* Allow namespace override: if environment.namespaceOverride is set, use it instead of environment name */}}
+{{- if and .Values .Values.environment .Values.environment.namespaceOverride -}}
+{{ .Values.environment.namespaceOverride }}
+{{- else -}}
 {{ $envName }}
+{{- end -}}
 
 {{- end -}}
 
