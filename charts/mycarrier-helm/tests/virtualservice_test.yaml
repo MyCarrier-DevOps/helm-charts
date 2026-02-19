@@ -75,8 +75,7 @@ tests:
         - "custom-host.example.com"
         - "another-custom-host.example.com"
       applications.test-app-api.networking.istio.routes.external.prefix: "/external"
-      applications.test-app-api.networking.istio.routes.external.destination.host: "external-service"
-      applications.test-app-api.networking.istio.routes.external.destination.port: 80
+      applications.test-app-api.networking.istio.routes.external.destination: "external-service.other-ns.svc.cluster.local"
     asserts:
       - isKind:
           of: VirtualService
@@ -93,6 +92,13 @@ tests:
       - equal:
           path: spec.http[1].name
           value: external
+      # Route should use the explicit destination override
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: "external-service.other-ns.svc.cluster.local"
+      # destination field should not leak into the route spec
+      - notExists:
+          path: spec.http[1].destination
 
   - it: should create feature branch specific virtual service
     set:
@@ -256,7 +262,7 @@ tests:
           path: spec.http[1].redirect.authority
           value: dev-new-domain.mycarrier.dev
 
-  - it: should configure custom routes when networking.istio.routes is specified
+  - it: should route custom routes to owning app service by default
     set:
       environment.name: "dev"
       applications.routes-app.deploymentType: deployment
@@ -282,12 +288,46 @@ tests:
       - equal:
           path: spec.http[1].match[0].uri.prefix
           value: /external
+      # Without destination override, routes to the owning app's service
       - equal:
           path: spec.http[1].route[0].destination.host
-          value: external-svc
+          value: "app-routes-app.dev.svc.cluster.local"
       - equal:
           path: spec.http[1].route[0].destination.port.number
           value: 80
+
+  - it: should use explicit destination override for custom routes
+    set:
+      environment.name: "dev"
+      applications.routes-app.deploymentType: deployment
+      applications.routes-app.isFrontend: false
+      applications.routes-app.image.registry: "myregistry.example.com"
+      applications.routes-app.image.repository: "mycarrier/routes-app"
+      applications.routes-app.image.tag: "1.0.0"
+      applications.routes-app.ports.http: 8080
+      applications.routes-app.networking.ingress.type: "istio"
+      applications.routes-app.networking.istio.enabled: true
+      applications.routes-app.networking.istio.routes:
+        external-svc:
+          destination: "external-service.other-ns.svc.cluster.local"
+          match:
+            - uri:
+                prefix: /external
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: external-svc
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: "external-service.other-ns.svc.cluster.local"
+      - equal:
+          path: spec.http[1].route[0].destination.port.number
+          value: 80
+      # destination field should not leak into the rendered Istio route spec
+      - notExists:
+          path: spec.http[1].destination
 
   - it: should configure custom response headers when networking.istio.responseHeaders is specified
     set:

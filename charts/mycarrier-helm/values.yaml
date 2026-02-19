@@ -229,7 +229,17 @@ applications: {}
 #       cloudflareProxied: true  # Enable Cloudflare proxy for VirtualService DNS records (external-dns annotation, default: true)
 #       hosts: []
 #       redirects: {}
-#       routes: {}
+#       routes: {}  # Custom routes; destination defaults to the app's service. Override with 'destination' field per route.
+#       # routes:
+#       #   my-route:
+#       #     match:
+#       #       - uri:
+#       #           prefix: /ui/portal
+#       #   external-route:
+#       #     destination: "other-service.namespace.svc.cluster.local"  # optional override
+#       #     match:
+#       #       - uri:
+#       #           prefix: /api/external
 #       responseHeaders: {}
 #       corsPolicy: {}
 #       

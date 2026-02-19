@@ -640,8 +640,24 @@
                           },
                           "routes": {
                             "type": "object",
+                            "description": "Custom routes for the VirtualService. Each key is used as the route name. By default, routes destination is the owning application's service. Use the optional 'destination' field to override.",
                             "additionalProperties": {
-                              "type": "object"
+                              "type": "object",
+                              "properties": {
+                                "destination": {
+                                  "type": "string",
+                                  "description": "Optional destination host override. If not specified, defaults to the owning application's service FQDN."
+                                },
+                                "match": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object"
+                                  }
+                                },
+                                "rewrite": {
+                                  "type": "object"
+                                }
+                              }
                             }
                           },
                           "responseHeaders": {
