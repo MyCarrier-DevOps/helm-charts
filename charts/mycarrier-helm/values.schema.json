@@ -14,7 +14,7 @@
         "language": {
           "type": "string",
           "description": "Programming language used by the application",
-          "enum": ["csharp", "nodejs", "java", "python", "nginx"]
+          "enum": ["csharp", "nodejs", "python", "go"]
         },
         "gitbranch": {
           "oneOf": [
