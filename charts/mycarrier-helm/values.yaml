@@ -49,12 +49,14 @@ global:
 ## Environment-specific settings
 
 ## @param environment.name Environment name (dev, preprod, prod, or feature-*)
+## @param environment.namespaceOverride Override the Kubernetes namespace (defaults to environment.name if not set)
 ## @param environment.dependencyenv Environment name for dependencies
 ## @extra environment.domainOverride Domain override configuration
 ## @param environment.domainOverride.enabled Whether to override the default domain (default domains: mycarrier.dev for non-prod, mycarriertms.com for prod)
 ## @param environment.domainOverride.domain Domain to use when override is enabled
 environment:
   name: "dev"
+  namespaceOverride: ""
   dependencyenv: "dev"
   domainOverride:
     enabled: false

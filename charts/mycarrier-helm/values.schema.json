@@ -44,6 +44,12 @@
           "description": "Environment name (dev, preprod, prod, or feature*)",
           "pattern": "^(dev|preprod|prod|feature.+)$"
         },
+        "namespaceOverride": {
+          "oneOf": [
+            { "type": "string", "description": "Override the Kubernetes namespace (defaults to environment.name if not set)", "default": "" },
+            { "type": "null" }
+          ]
+        },
         "dependencyenv": {
           "oneOf": [
             { "type": "string", "description": "Environment name for dependencies", "default": "dev" },
