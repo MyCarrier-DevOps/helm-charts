@@ -62,11 +62,12 @@ http:
 {{- end }}
 {{- if and .application.networking .application.networking.istio .application.networking.istio.routes }}
 {{- range $key, $value := .application.networking.istio.routes }}
+{{- $routeSpec := omit $value "destination" }}
 - name: {{ $key }}
-  {{- toYaml $value | nindent 2 }}
+  {{- toYaml $routeSpec | nindent 2 }}
   route:
   - destination:
-      host: {{ $key }}
+      host: "{{ default (printf "%s.%s.svc.cluster.local" $fullName $namespace) $value.destination }}"
       port:
         number: 80
   {{- $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}

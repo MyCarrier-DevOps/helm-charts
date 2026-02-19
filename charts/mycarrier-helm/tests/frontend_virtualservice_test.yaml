@@ -283,3 +283,169 @@ tests:
       - equal:
           path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
           value: "false"
+
+  - it: should route custom routes to owning app service by default
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              routes:
+                welcome-portal:
+                  match:
+                    - uri:
+                        prefix: /ui/welcome
+                customer-portal:
+                  match:
+                    - uri:
+                        prefix: /ui/customer
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      # Map iteration is alphabetical: customer-portal before welcome-portal
+      - equal:
+          path: spec.http[2].name
+          value: customer-portal-custom-route
+      - equal:
+          path: spec.http[2].route[0].destination.host
+          value: "test-stack-main-app.dev.svc.cluster.local"
+      - equal:
+          path: spec.http[2].route[0].destination.port.number
+          value: 80
+      - equal:
+          path: spec.http[3].name
+          value: welcome-portal-custom-route
+      - equal:
+          path: spec.http[3].route[0].destination.host
+          value: "test-stack-main-app.dev.svc.cluster.local"
+
+  - it: should use explicit destination override when specified in route
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              routes:
+                api-proxy:
+                  destination: "backend-api.other-ns.svc.cluster.local"
+                  match:
+                    - uri:
+                        prefix: /api/proxy
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.http[2].name
+          value: api-proxy-custom-route
+      - equal:
+          path: spec.http[2].route[0].destination.host
+          value: "backend-api.other-ns.svc.cluster.local"
+      - equal:
+          path: spec.http[2].route[0].destination.port.number
+          value: 80
+      # Ensure destination field is not rendered in the Istio route spec
+      - notExists:
+          path: spec.http[2].destination
+
+  - it: should not include destination field in rendered route spec
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              routes:
+                my-route:
+                  destination: "custom-svc.ns.svc.cluster.local"
+                  match:
+                    - uri:
+                        prefix: /ui/portal
+                  rewrite:
+                    uri: /index.html
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.http[2].route[0].destination.host
+          value: "custom-svc.ns.svc.cluster.local"
+      # rewrite should still be present
+      - equal:
+          path: spec.http[2].rewrite.uri
+          value: /index.html
+      # destination should NOT leak as a top-level field on the http route
+      - notExists:
+          path: spec.http[2].destination

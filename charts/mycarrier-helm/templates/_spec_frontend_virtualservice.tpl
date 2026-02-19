@@ -118,13 +118,15 @@ http:
 
 {{/* Handle custom routes for any frontend app */}}
 {{- range $appName, $appValues := $frontendApps }}
+{{- $routeFullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
 {{- if and $appValues.networking $appValues.networking.istio $appValues.networking.istio.routes }}
 {{- range $key, $value := $appValues.networking.istio.routes }}
+{{- $routeSpec := omit $value "destination" }}
 - name: {{ $key }}-custom-route
-  {{- toYaml $value | nindent 2 }}
+  {{- toYaml $routeSpec | nindent 2 }}
   route:
   - destination:
-      host: {{ $key }}
+      host: "{{ default (printf "%s.%s.svc.cluster.local" $routeFullName $namespace) $value.destination }}"
       port:
         number: 80
   {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
