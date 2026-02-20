@@ -15,9 +15,10 @@
 {{- $isSimpleEnv := eq (include "helm.isSimpleEnvironment" $) "true" -}}
 {{- $envName := $.Values.environment.name -}}
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
+{{- $internalEnabled := dig "networking" "istio" "internalEnabled" true .application -}}
 hosts:
 - {{ $fullName }}
-{{- if and $metaenv (not $isFeatureEnv) }}
+{{- if and $metaenv (not $isFeatureEnv) $internalEnabled }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
 {{- end }}
 {{ if $isFeatureEnv }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
@@ -126,7 +127,7 @@ http:
        Flow: Ingress → VirtualService → *.dev.internal → WASM plugin intercepts → 
              If feature env has service: routes to feature env
              If 404/503: WASM creates fallback to dev with original headers */ -}}
-{{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+{{- if and (not $isFeatureEnv) (eq $metaenv "dev") $internalEnabled }}
 - name: {{ $fullName }}-feature-routing
   match:
     - headers:

@@ -1,0 +1,213 @@
+suite: Internal enabled flag tests
+templates:
+  - internal-serviceentry.yaml
+  - internal-wasmplugin.yaml
+  - virtualService.yaml
+tests:
+  # ============================================================================
+  # ServiceEntry: internalEnabled=false should suppress the internal ServiceEntry
+  # ============================================================================
+  - it: should not render internal service entry when internalEnabled is false
+    template: internal-serviceentry.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: false
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render internal service entry when internalEnabled is true (explicit)
+    template: internal-serviceentry.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: ServiceEntry
+      - equal:
+          path: metadata.name
+          value: app-test-app-internal
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app.dev.internal
+
+  - it: should render internal service entry by default (internalEnabled not set)
+    template: internal-serviceentry.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: ServiceEntry
+      - equal:
+          path: spec.hosts[0]
+          value: app-test-app.dev.internal
+
+  # ============================================================================
+  # WasmPlugin: internalEnabled=false should suppress the WasmPlugin
+  # ============================================================================
+  - it: should not render wasm plugin when internalEnabled is false
+    template: internal-wasmplugin.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: false
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render wasm plugin when internalEnabled is true
+    template: internal-wasmplugin.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: WasmPlugin
+
+  # ============================================================================
+  # VirtualService: internalEnabled=false should suppress internal host and
+  # feature-routing route, but still render the VirtualService itself
+  # ============================================================================
+  - it: should not include internal host in virtualservice when internalEnabled is false
+    template: virtualService.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: false
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify the internal host is NOT present
+      - notContains:
+          path: spec.hosts
+          content: app-test-app.dev.internal
+
+  - it: should not include feature-routing route when internalEnabled is false
+    template: virtualService.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: false
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify no route has the feature-routing name
+      - notContains:
+          path: spec.http
+          content:
+            name: app-test-app-feature-routing
+          any: true
+
+  - it: should include internal host when internalEnabled is true (default)
+    template: virtualService.yaml
+    set:
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      # Verify the internal host IS present by default
+      - contains:
+          path: spec.hosts
+          content: app-test-app.dev.internal
+
+  # ============================================================================
+  # Feature environment offload VirtualService: internalEnabled=false should
+  # suppress the internal host in the offload VS
+  # ============================================================================
+  - it: should not include internal host in offload VS when internalEnabled is false
+    template: virtualService.yaml
+    set:
+      environment.name: feature-test-branch
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.networking.istio.internalEnabled: false
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: app-test-app-feature-test-branch-offload
+      - notContains:
+          path: spec.hosts
+          content: app-test-app.dev.internal
+
+  - it: should include internal host in offload VS when internalEnabled is true (default)
+    template: virtualService.yaml
+    set:
+      environment.name: feature-test-branch
+      applications.test-app.deploymentType: deployment
+      applications.test-app.ports.http: 8080
+      applications.test-app.networking.ingress.type: istio
+      applications.test-app.networking.istio.enabled: true
+      applications.test-app.image.registry: myregistry.example.com
+      applications.test-app.image.repository: mycarrier/test-app
+      applications.test-app.image.tag: "1.0.0"
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: VirtualService
+      - contains:
+          path: spec.hosts
+          content: app-test-app.dev.internal

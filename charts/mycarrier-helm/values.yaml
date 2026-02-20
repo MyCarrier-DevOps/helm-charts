@@ -228,6 +228,7 @@ applications: {}
 #     
 #     istio:
 #       enabled: true
+#       internalEnabled: true  # Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host (default: true)
 #       cloudflareProxied: true  # Enable Cloudflare proxy for VirtualService DNS records (external-dns annotation, default: true)
 #       hosts: []
 #       redirects: {}

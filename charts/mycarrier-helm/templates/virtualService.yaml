@@ -14,6 +14,7 @@
 {{- end }}
 {{- $appIstioDisabled := dig "istioDisabled" false $appValues }}
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $appValues }}
+{{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $appValues }}
 {{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) }}
 {{- if $renderVirtualService }}
 ---
@@ -53,7 +54,9 @@ spec:
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
   - {{ $baseFullName }}
+  {{- if $internalEnabled }}
   - {{ $baseFullName }}.{{ $metaNamespace }}.internal
+  {{- end }}
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
   {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}

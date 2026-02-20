@@ -632,6 +632,11 @@
                             "type": "boolean",
                             "default": true
                           },
+                          "internalEnabled": {
+                            "type": "boolean",
+                            "description": "Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host for feature-routing via WASM fallback. When false, these resources are not rendered and feature-header requests fall through to the default route.",
+                            "default": true
+                          },
                           "hosts": {
                             "type": "array",
                             "items": {
