@@ -19,10 +19,12 @@ spec:
                   branchlabel: {{ $.Values.global.branchlabel }}
                   language: {{ $.Values.global.language }}
                   v2migration: {{ $.Values.global.v2migration }}
-                  {{ if $.Values.global.env }}
+                  {{- $mergedEnv := deepCopy ($.Values.global.env | default dict) }}
+                  {{- if .global }}{{- if .global.env }}{{- $mergedEnv = mustMergeOverwrite $mergedEnv .global.env }}{{- end }}{{- end }}
+                  {{- if $mergedEnv }}
                   env:
-                    {{- $.Values.global.env | toYaml | nindent 20 }}
-                  {{ end }}
+                    {{- $mergedEnv | toYaml | nindent 20 }}
+                  {{- end }}
                   {{ with $.Values.global.dependencies }}
                   dependencies:
                     {{- toYaml . | nindent 20 }}
