@@ -1,8 +1,13 @@
+{{- /*
+  Generates one ApplicationSet per defined environment, separated by YAML document markers.
+  Each ApplicationSet contains a single list generator element for its environment.
+*/ -}}
+{{- range $env := .Values.environments }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: {{ .Values.global.appStack | lower }}
+  name: {{ $.Values.global.appStack | lower }}-{{ $env.name }}
   namespace: argocd
 spec:
   goTemplate: true
@@ -10,7 +15,6 @@ spec:
   generators:
       - list:
           elements:
-          {{- range .Values.environments }}
             - Values:
                 isEnvironmentDeploy: true
                 global:
@@ -20,7 +24,7 @@ spec:
                   language: {{ $.Values.global.language }}
                   v2migration: {{ $.Values.global.v2migration }}
                   {{- $mergedEnv := deepCopy ($.Values.global.env | default dict) }}
-                  {{- if .global }}{{- if .global.env }}{{- $mergedEnv = mustMergeOverwrite $mergedEnv .global.env }}{{- end }}{{- end }}
+                  {{- if $env.global }}{{- if $env.global.env }}{{- $mergedEnv = mustMergeOverwrite $mergedEnv $env.global.env }}{{- end }}{{- end }}
                   {{- if $mergedEnv }}
                   env:
                     {{- $mergedEnv | toYaml | nindent 20 }}
@@ -30,28 +34,27 @@ spec:
                     {{- toYaml . | nindent 20 }}
                   {{ end }}
                 environment:
-                  name: {{ .name }}
-                  dependencyenv: {{ .dependencyenv | default "" }}
-                enableVaultCA: {{ .enableVaultCA | default false }}
-                disableOtelAutoinstrumentation: {{ .disableOtelAutoinstrumentation | default false }}
-                tolerations: {{ .tolerations | default "[]" }}
-                deployment: {{ .deployment | default "deployment" }}
-                {{ with .applications }}applications:
+                  name: {{ $env.name }}
+                  dependencyenv: {{ $env.dependencyenv | default "" }}
+                enableVaultCA: {{ $env.enableVaultCA | default false }}
+                disableOtelAutoinstrumentation: {{ $env.disableOtelAutoinstrumentation | default false }}
+                tolerations: {{ $env.tolerations | default "[]" }}
+                deployment: {{ $env.deployment | default "deployment" }}
+                {{ with $env.applications }}applications:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
-                {{ with .jobs }}jobs:
+                {{ with $env.jobs }}jobs:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
-                {{ with .secrets }}secrets:
+                {{ with $env.secrets }}secrets:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
-                {{ with .infrastructure }}infrastructure:
+                {{ with $env.infrastructure }}infrastructure:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
-          {{- end }}
   template:
     metadata:
-      name: "{{ .Values.global.appStack | lower }}-{{`{{`}} .Values.environment.name {{`}}`}}"
+      name: "{{ $.Values.global.appStack | lower }}-{{`{{`}} .Values.environment.name {{`}}`}}"
       annotations:
         notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
     spec:
@@ -62,7 +65,7 @@ spec:
       source:
         repoURL: https://charts.mycarrier.dev
         chart: mycarrier-helm
-        targetRevision: "{{.Values.mycarrierChartVersion | default "3.0.40"}}"
+        targetRevision: "{{ $.Values.mycarrierChartVersion | default "3.0.44" }}"
         helm:
           values: |2+
             {{`{{`}} .Values | toYaml {{`}}`}}
@@ -86,3 +89,4 @@ spec:
             duration: 5s
             factor: 2
             maxDuration: 10m
+{{- end }}

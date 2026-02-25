@@ -3,26 +3,37 @@ suite: application set
 templates:
   - templates/appset.yaml
 tests:
-  - it: renders application set metadata and generator entries
+  - it: renders one application set per environment
     values:
       - fixtures/basic-environments.yaml
     asserts:
-      - equal:
-          path: kind
-          value: ApplicationSet
-      - equal:
-          path: metadata.name
-          value: carriers
+      - hasDocuments:
+          count: 2
+      - containsDocument:
+          kind: ApplicationSet
+          apiVersion: argoproj.io/v1alpha1
+          name: carriers-dev
+          namespace: argocd
+          any: true
+      - containsDocument:
+          kind: ApplicationSet
+          apiVersion: argoproj.io/v1alpha1
+          name: carriers-prod
+          namespace: argocd
+          any: true
+  - it: forwards dev environment configuration into list elements
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
       - equal:
           path: spec.goTemplateOptions[0]
           value: missingkey=error
       - lengthEqual:
           path: spec.generators[0].list.elements
-          count: 2
-  - it: forwards environment specific configuration into list elements
-    values:
-      - fixtures/basic-environments.yaml
-    asserts:
+          count: 1
       - equal:
           path: spec.generators[0].list.elements[0].Values.environment.name
           value: dev
@@ -47,25 +58,34 @@ tests:
   - it: applies defaults for omitted environment settings
     values:
       - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-prod
     asserts:
+      - lengthEqual:
+          path: spec.generators[0].list.elements
+          count: 1
       - equal:
-          path: spec.generators[0].list.elements[1].Values.environment.name
+          path: spec.generators[0].list.elements[0].Values.environment.name
           value: prod
       - equal:
-          path: spec.generators[0].list.elements[1].Values.enableVaultCA
+          path: spec.generators[0].list.elements[0].Values.enableVaultCA
           value: false
       - equal:
-          path: spec.generators[0].list.elements[1].Values.disableOtelAutoinstrumentation
+          path: spec.generators[0].list.elements[0].Values.disableOtelAutoinstrumentation
           value: false
       - equal:
-          path: spec.generators[0].list.elements[1].Values.deployment
+          path: spec.generators[0].list.elements[0].Values.deployment
           value: deployment
       - equal:
-          path: spec.generators[0].list.elements[1].Values.tolerations
+          path: spec.generators[0].list.elements[0].Values.tolerations
           value: []
   - it: configures template with chart source and sync policies
     values:
       - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
     asserts:
       - equal:
           path: spec.template.metadata.name
