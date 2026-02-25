@@ -1,4 +1,4 @@
-mycarrierChartVersion: 2.5.100
+
 global:
   appStack: carriers
   gitbranch: main
@@ -21,7 +21,6 @@ global:
 
 environments:
   - name: dev
-    destinationNamespace: platform-dev
     global:
       gitbranch: dev
       dependencies:
@@ -77,7 +76,6 @@ environments:
               sku: Standard_LRS
 
   - name: prod
-    destinationNamespace: platform-prod
     releaseName: shipments-prod
     global:
       gitbranch: main

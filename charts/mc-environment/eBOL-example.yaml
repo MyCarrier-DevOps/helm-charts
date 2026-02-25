@@ -1,5 +1,3 @@
-mycarrierChartVersion: 2.5.100
-
 global:
   appStack: billoflading
   language: csharp
