@@ -101,7 +101,7 @@ tests:
   - it: should include standard helm labels
     set:
       global.appStack: labeltest
-      global.language: nginx
+      global.language: nodejs
       environment.name: dev
       applications.test-app-api.deploymentType: deployment
       applications.test-app-api.image.registry: "myregistry.example.com"

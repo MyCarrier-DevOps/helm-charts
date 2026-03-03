@@ -74,7 +74,7 @@ tests:
   - it: should create resource group with Observe management policy for import
     set:
       global.appStack: importtest
-      global.language: java
+      global.language: csharp
       environment.name: dev
       applications.test-app.deploymentType: deployment
       applications.test-app.image.registry: "test.io"
@@ -188,7 +188,7 @@ tests:
   - it: should create resource group with custom annotations
     set:
       global.appStack: annotest
-      global.language: java
+      global.language: csharp
       environment.name: dev
       applications.test-app.deploymentType: deployment
       applications.test-app.image.registry: "test.io"

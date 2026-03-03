@@ -185,7 +185,7 @@ tests:
   - it: should support managementPolicies for importing existing resources
     set:
       global.appStack: importtest
-      global.language: java
+      global.language: csharp
       environment.name: dev
       applications.test-app-api.deploymentType: deployment
       applications.test-app-api.image.registry: "myregistry.example.com"
@@ -448,7 +448,7 @@ tests:
   - it: should create service bus with tags
     set:
       global.appStack: tagtest
-      global.language: java
+      global.language: csharp
       environment.name: dev
       applications.test-app-api.deploymentType: deployment
       applications.test-app-api.image.registry: "myregistry.example.com"
@@ -733,7 +733,7 @@ tests:
   - it: should create service bus subscription with forwarding configuration
     set:
       global.appStack: fwdtest
-      global.language: java
+      global.language: csharp
       environment.name: dev
       applications.test-app-api.deploymentType: deployment
       applications.test-app-api.image.registry: "myregistry.example.com"
