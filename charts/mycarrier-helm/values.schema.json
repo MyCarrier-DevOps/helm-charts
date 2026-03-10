@@ -637,6 +637,11 @@
                             "description": "Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host for feature-routing via WASM fallback. When false, these resources are not rendered and feature-header requests fall through to the default route.",
                             "default": true
                           },
+                          "offloadVSEnabled": {
+                            "type": "boolean",
+                            "description": "Enable the offload VirtualService for feature environments. When false, the offload VS is not rendered for this application.",
+                            "default": true
+                          },
                           "hosts": {
                             "type": "array",
                             "items": {

@@ -41,7 +41,8 @@ metadata:
 spec:
   {{ include "helm.specs.multifrontend.virtualservice" $multiFrontendContext | indent 2 | trim }}
 
-{{- if hasPrefix "feature" $.Values.environment.name }}
+{{- $offloadVSEnabled := dig "networking" "istio" "offloadVSEnabled" true $primaryAppValues }}
+{{- if and (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
