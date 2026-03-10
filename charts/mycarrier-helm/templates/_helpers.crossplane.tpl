@@ -49,16 +49,18 @@ Usage: {{ include "helm.azure.storage.instanceName" (dict "instance" $instance "
 {{- end -}}
 
 {{/*
-Truncate a name to 63 characters for Kubernetes RFC 1123 compliance.
-If the name fits, use it as-is. If it exceeds 63 chars, truncate to 54 chars
-and append a stable 8-character hash suffix to avoid collisions.
+Sanitize a name for Kubernetes RFC 1123 subdomain compliance.
+Lowercases and replaces underscores with hyphens (the most common invalid char).
+If the result exceeds 63 chars, truncates to 54 chars and appends a stable
+8-character hash suffix to avoid collisions.
 Usage: {{ include "helm.k8s.safename" $name }}
 */}}
 {{- define "helm.k8s.safename" -}}
-{{- if le (len .) 63 -}}
-{{- . -}}
+{{- $sanitized := . | lower | replace "_" "-" -}}
+{{- if le (len $sanitized) 63 -}}
+{{- $sanitized -}}
 {{- else -}}
-{{- printf "%s-%s" (. | trunc 54 | trimSuffix "-") (. | sha256sum | trunc 8) -}}
+{{- printf "%s-%s" ($sanitized | trunc 54 | trimSuffix "-") ($sanitized | sha256sum | trunc 8) -}}
 {{- end -}}
 {{- end -}}
 
@@ -67,8 +69,7 @@ Generate Service Bus Topic full name (namespace-topic, max 63 chars for k8s)
 Usage: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
 */}}
 {{- define "helm.azure.servicebus.topic.fullname" -}}
-{{- $name := printf "%s-%s" .namespace .topic | lower -}}
-{{- include "helm.k8s.safename" $name -}}
+{{- include "helm.k8s.safename" (printf "%s-%s" .namespace .topic) -}}
 {{- end -}}
 
 {{/*
@@ -76,8 +77,7 @@ Generate Service Bus Subscription full name (namespace-topic-subscription, max 6
 Usage: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
 */}}
 {{- define "helm.azure.servicebus.subscription.fullname" -}}
-{{- $name := printf "%s-%s-%s" .namespace .topic .subscription | lower -}}
-{{- include "helm.k8s.safename" $name -}}
+{{- include "helm.k8s.safename" (printf "%s-%s-%s" .namespace .topic .subscription) -}}
 {{- end -}}
 
 {{/*
@@ -87,6 +87,5 @@ to keep names shorter and more readable.
 Usage: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "rule" $rule.name) }}
 */}}
 {{- define "helm.azure.servicebus.rule.fullname" -}}
-{{- $name := printf "%s-%s" .subscription .rule | lower -}}
-{{- include "helm.k8s.safename" $name -}}
+{{- include "helm.k8s.safename" (printf "%s-%s" .subscription .rule) -}}
 {{- end -}}

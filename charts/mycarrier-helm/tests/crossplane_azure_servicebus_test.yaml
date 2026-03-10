@@ -763,8 +763,8 @@ tests:
           value: "dlq-topic"
         documentIndex: 2
 
-  # Test 17: Service Bus with uppercase subscription names should produce RFC 1123 compliant names
-  - it: should lowercase metadata names for RFC 1123 compliance
+  # Test 17: Service Bus names should be sanitized for RFC 1123 compliance
+  - it: should sanitize metadata names for RFC 1123 compliance (lowercase, no underscores)
     set:
       global.appStack: castest
       global.language: csharp
@@ -784,24 +784,28 @@ tests:
                   subscriptions:
                     - name: "MC.Carrier.OrderService"
                       rules:
-                        - name: "HighPriority"
+                        - name: "carrier_updated_filter"
                           filterType: "SqlFilter"
-                          sqlFilter: "priority = 'high'"
+                          sqlFilter: "type = 'updated'"
     asserts:
       - hasDocuments:
           count: 4
+      # Topic: lowercased
       - equal:
           path: metadata.name
           value: "my-servicebus-integrationevents"
         documentIndex: 1
+      # Subscription: lowercased
       - equal:
           path: metadata.name
           value: "my-servicebus-integrationevents-mc.carrier.orderservice"
         documentIndex: 2
+      # Rule: subscription-rule, lowercased, underscores replaced with hyphens
       - equal:
           path: metadata.name
-          value: "mc.carrier.orderservice-highpriority"
+          value: "mc.carrier.orderservice-carrier-updated-filter"
         documentIndex: 3
+      # All names must match RFC 1123 subdomain pattern
       - matchRegex:
           path: metadata.name
           pattern: "^[a-z0-9]([a-z0-9.\\-]*[a-z0-9])?$"
