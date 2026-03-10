@@ -9,7 +9,7 @@
 apiVersion: azure.upbound.io/v1beta1
 kind: ResourceGroup
 metadata:
-  name: {{ $rgInstance.name | required "Resource Group name is required" }}
+  name: {{ $rgInstance.name | required "Resource Group name is required" | lower }}
   namespace: {{ $rgInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
   labels:
     {{- include "helm.labels.standard" $ | nindent 4 }}
