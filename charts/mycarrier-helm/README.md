@@ -183,7 +183,7 @@ applications:
   example-api:
     isFrontend: false                      # Whether this is a frontend application
     forceOffload: false                    # Whether to force offloading
-    staticHostname: "api.example.com"      # Optional static hostname
+    staticHostname: "api.example.com"      # Optional static hostname (in feature envs, requires isEnvironmentDeploy: true)
     labels: {}                             # Custom labels
     annotations: {}                        # Custom annotations
     deploymentType: "deployment"           # Type: deployment, statefulset, or rollout
@@ -1182,7 +1182,7 @@ When contributing to this chart, please follow the coding standards defined in t
 
 | Name                  | Description                                                                            | Value   |
 | --------------------- | -------------------------------------------------------------------------------------- | ------- |
-| `isEnvironmentDeploy` | Whether this is an environment-level deployment (affects resource naming and behavior) | `false` |
+| `isEnvironmentDeploy` | Whether this is an environment-level deployment. When `true`: suppresses the offload `ApplicationSet` generator, and enables `staticHostname` to be included in VirtualService hosts for feature environments. | `false` |
 
 ## License
 

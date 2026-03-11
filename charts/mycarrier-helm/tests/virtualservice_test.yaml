@@ -184,6 +184,68 @@ tests:
           value: app-test-app-api.dev.mycarrier.dev
         documentIndex: 1
 
+  - it: should include staticHostname in feature environment when isEnvironmentDeploy is true
+    set:
+      environment.name: "feature-test"
+      isEnvironmentDeploy: true
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.staticHostname: "api.custom.domain"
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+    asserts:
+      # Primary VS: staticHostname included alongside feature hostname
+      - contains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 0
+      - contains:
+          path: spec.hosts
+          content: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 0
+      # Offload VS: staticHostname replaces default appstack-appname host
+      - contains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 1
+      - notContains:
+          path: spec.hosts
+          content: app-test-app-api.dev.mycarrier.dev
+        documentIndex: 1
+
+  - it: should not include staticHostname in feature environment when isEnvironmentDeploy is false
+    set:
+      environment.name: "feature-test"
+      isEnvironmentDeploy: false
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.staticHostname: "api.custom.domain"
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+    asserts:
+      # Primary VS: feature hostname present, static hostname absent
+      - contains:
+          path: spec.hosts
+          content: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 0
+      - notContains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 0
+      # Offload VS: default appstack-appname host present, static hostname absent
+      - contains:
+          path: spec.hosts
+          content: app-test-app-api.dev.mycarrier.dev
+        documentIndex: 1
+      - notContains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 1
+
   - it: should not render virtual service when istio is explicitly disabled
     set:
       environment.name: "dev"
@@ -565,4 +627,48 @@ tests:
       - equal:
           path: metadata.name
           value: teststack-test-app-feature-test-branch-offload
+        documentIndex: 1
+
+  - it: should use default hostname in offload VS hosts when staticHostname set but isEnvironmentDeploy is false
+    set:
+      global.appStack: teststack
+      global.language: csharp
+      environment.name: "feature-test-branch"
+      isEnvironmentDeploy: false
+      applications.test-app.deploymentType: deployment
+      applications.test-app.staticHostname: "api.custom.domain"
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.enabled: true
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: teststack-test-app.dev.mycarrier.dev
+        documentIndex: 1
+      - notContains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 1
+
+  - it: should use staticHostname in offload VS hosts when isEnvironmentDeploy is true
+    set:
+      global.appStack: teststack
+      global.language: csharp
+      environment.name: "feature-test-branch"
+      isEnvironmentDeploy: true
+      applications.test-app.deploymentType: deployment
+      applications.test-app.staticHostname: "api.custom.domain"
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.enabled: true
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 1
+      - notContains:
+          path: spec.hosts
+          content: teststack-test-app.dev.mycarrier.dev
         documentIndex: 1

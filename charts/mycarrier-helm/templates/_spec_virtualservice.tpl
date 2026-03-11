@@ -21,9 +21,16 @@ hosts:
 {{- if and $metaenv (not $isFeatureEnv) $internalEnabled }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
 {{- end }}
-{{ if $isFeatureEnv }}- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-{{ if and (not .application.staticHostname) (not $isFeatureEnv)}}- {{ (list ($.Values.global.appStack) (.appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-{{ if and (.application.staticHostname) (not $isFeatureEnv) }}- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}{{ end }}
+{{- if $isFeatureEnv }}
+- {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
+{{- if and .application.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
+- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}
+{{- end }}
+{{- else if .application.staticHostname }}
+- {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}
+{{- else }}
+- {{ (list ($.Values.global.appStack) (.appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
+{{- end }}
 {{- /* Include additional custom hosts from networking.istio.hosts */ -}}
 {{- $istioConfig := dig "networking" "istio" dict .application -}}
 {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts }}
