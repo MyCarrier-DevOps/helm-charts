@@ -294,7 +294,7 @@ tests:
           value: "app-routes-app.dev.svc.cluster.local"
       - equal:
           path: spec.http[1].route[0].destination.port.number
-          value: 80
+          value: 8080
 
   - it: should use explicit destination override for custom routes
     set:
@@ -324,10 +324,39 @@ tests:
           value: "external-service.other-ns.svc.cluster.local"
       - equal:
           path: spec.http[1].route[0].destination.port.number
-          value: 80
+          value: 8080
       # destination field should not leak into the rendered Istio route spec
       - notExists:
           path: spec.http[1].destination
+      # port field should not leak into the rendered Istio route spec
+      - notExists:
+          path: spec.http[1].port
+
+  - it: should use custom port override for routes
+    set:
+      environment.name: "dev"
+      applications.routes-app.deploymentType: deployment
+      applications.routes-app.isFrontend: false
+      applications.routes-app.image.registry: "myregistry.example.com"
+      applications.routes-app.image.repository: "mycarrier/routes-app"
+      applications.routes-app.image.tag: "1.0.0"
+      applications.routes-app.ports.http: 8080
+      applications.routes-app.networking.ingress.type: "istio"
+      applications.routes-app.networking.istio.enabled: true
+      applications.routes-app.networking.istio.routes:
+        grpc-route:
+          port: 9090
+          match:
+            - uri:
+                prefix: /grpc
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].route[0].destination.port.number
+          value: 9090
+      - notExists:
+          path: spec.http[1].port
 
   - it: should configure custom response headers when networking.istio.responseHeaders is specified
     set:

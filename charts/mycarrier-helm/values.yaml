@@ -241,6 +241,7 @@ applications: {}
 #       #           prefix: /ui/portal
 #       #   external-route:
 #       #     destination: "other-service.namespace.svc.cluster.local"  # optional override
+#       #     port: 9090  # optional port override (defaults to ports.http or 8080)
 #       #     match:
 #       #       - uri:
 #       #           prefix: /api/external

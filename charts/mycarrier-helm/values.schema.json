@@ -664,6 +664,10 @@
                                   "type": "string",
                                   "description": "Optional destination host override. If not specified, defaults to the owning application's service FQDN."
                                 },
+                                "port": {
+                                  "type": "integer",
+                                  "description": "Optional destination port override. If not specified, defaults to the application's ports.http value (or 8080)."
+                                },
                                 "match": {
                                   "type": "array",
                                   "items": {
