@@ -121,6 +121,11 @@
         { "type": "null" }
       ]
     },
+    "isEnvironmentDeploy": {
+      "type": "boolean",
+      "description": "Whether this is an environment-level deployment. When true, suppresses the offload ApplicationSet generator and enables staticHostname to be added to VirtualService hosts in feature environments.",
+      "default": false
+    },
     "applications": {
       "type": "object",
       "patternProperties": {
@@ -156,7 +161,7 @@
             "oneOf": [
               {
                 "type": "string",
-                "description": "Static hostname for the application"
+                "description": "Static hostname for the application. In non-feature environments, replaces the default appstack-appname hostname. In feature environments, only added to the VirtualService hosts when isEnvironmentDeploy is true."
               },
               {
                 "type": "null"

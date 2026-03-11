@@ -184,6 +184,44 @@ tests:
           value: app-test-app-api.dev.mycarrier.dev
         documentIndex: 1
 
+  - it: should include staticHostname in feature environment when isEnvironmentDeploy is true
+    set:
+      environment.name: "feature-test"
+      isEnvironmentDeploy: true
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.staticHostname: "api.custom.domain"
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 0
+      - contains:
+          path: spec.hosts
+          content: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 0
+
+  - it: should not include staticHostname in feature environment when isEnvironmentDeploy is false
+    set:
+      environment.name: "feature-test"
+      isEnvironmentDeploy: false
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.staticHostname: "api.custom.domain"
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+    asserts:
+      - notContains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 0
+
   - it: should not render virtual service when istio is explicitly disabled
     set:
       environment.name: "dev"
