@@ -60,8 +60,11 @@ spec:
   {{- end }}
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
-  {{ if (not $appValues.staticHostname)}}- {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}{{ end -}}
-  {{- if $appValues.staticHostname }}- {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}{{- end }}
+  {{- if and $appValues.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
+  - {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}
+  {{- else }}
+  - {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
+  {{- end }}
   {{- /* Include additional custom hosts from networking.istio.hosts */ -}}
   {{- $istioConfig := dig "networking" "istio" dict $appValues -}}
   {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
