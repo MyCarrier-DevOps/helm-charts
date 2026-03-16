@@ -7,7 +7,7 @@
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $kedaConfig := $appValues.keda }}
-{{- if dig "connectionStringSecret" "vault" nil $kedaConfig }}
+{{- if and (not (dig "namespace" "" $kedaConfig)) (dig "connectionStringSecret" "vault" nil $kedaConfig) }}
 ---
 {{ include "helm.specs.keda.externalSecret" $appContext }}
 {{- end }}

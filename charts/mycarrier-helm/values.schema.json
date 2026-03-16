@@ -1138,6 +1138,10 @@
                 "type": "string",
                 "description": "Azure Service Bus queue name (required when type is 'queue')"
               },
+              "namespace": {
+                "type": "string",
+                "description": "Azure Service Bus namespace (e.g., 'my-sb'). When set, uses pod identity (Azure managed identity) for authentication instead of connection strings. No connectionStringSecret is needed."
+              },
               "connectionStringSecret": {
                 "type": "object",
                 "description": "Azure Service Bus connection string source. Use either name/key to reference an existing K8s secret, or vault to auto-create one via External Secrets Operator.",
