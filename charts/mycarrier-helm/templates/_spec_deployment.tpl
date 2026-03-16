@@ -9,7 +9,7 @@
 {{- $imagePullSecret := $ctx.chartDefaults.imagePullSecret -}}
 {{- $rawEnvironmentName := $.Values.environment.name | default "dev" -}}
 {{- $computedEnvironmentName := ternary "uat" $rawEnvironmentName (eq $rawEnvironmentName "preprod") -}}
-{{- if ne "true" (include "helm.hpaCondition" . | trim) }}
+{{- if and (ne "true" (include "helm.hpaCondition" . | trim)) (ne "true" (include "helm.kedaCondition" . | trim)) }}
 {{- if eq "0" $envScaling }}
 {{- if hasPrefix "feature" $.Values.environment.name }}
 {{- if not (kindIs "invalid" .application.replicas) }}

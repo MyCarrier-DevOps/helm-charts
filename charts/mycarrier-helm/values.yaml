@@ -335,6 +335,9 @@ applications: {}
 #   # ----------------------------------------------------------------------------
 #   # Horizontal Pod Autoscaler (HPA)
 #   # ----------------------------------------------------------------------------
+#   # HPA scales based on CPU/memory utilization metrics.
+#   # NOTE: HPA and KEDA are mutually exclusive. If keda.enabled is true, HPA
+#   # will NOT be created even if autoscaling.enabled is true. KEDA takes precedence.
 #   autoscaling:
 #     enabled: false
 #     minReplicas: 2         # Default: application replicas (min 2)
@@ -342,7 +345,61 @@ applications: {}
 #     targetCPUUtilizationPercentage: 80
 #     targetMemoryUtilizationPercentage: 80
 #     forceAutoscaling: false  # Force HPA even if replicas=1
-#   
+#
+#   # ----------------------------------------------------------------------------
+#   # KEDA Autoscaler (Azure Service Bus)
+#   # ----------------------------------------------------------------------------
+#   # KEDA scales based on Azure Service Bus queue/topic message count.
+#   #
+#   # Authentication: Two options for the connection string:
+#   #   Option A) Reference an existing K8s secret (name + key)
+#   #   Option B) Auto-create from Vault via External Secrets Operator (vault.path + vault.property)
+#   #
+#   # NOTE: HPA and KEDA are mutually exclusive. When keda.enabled is true,
+#   # HPA is automatically disabled and replicas are managed by KEDA.
+#   #
+#   # Resources created:
+#   #   - TriggerAuthentication: References the K8s secret for connection string auth
+#   #   - ScaledObject: Configures the scaling trigger and target
+#   #   - ExternalSecret (only with vault option): Syncs Vault secret into a K8s secret
+#   #
+#   # --- Queue-based scaling (with existing K8s secret) ---
+#   # keda:
+#   #   enabled: true
+#   #   type: "queue"                        # Required: "queue" or "topic"
+#   #   queueName: "my-queue"                # Required for type: queue
+#   #   connectionStringSecret:              # Option A: Reference existing K8s secret
+#   #     name: "servicebus-secret"          #   Name of the Kubernetes Secret
+#   #     key: "connection-string"           #   Key within the secret
+#   #   messageCount: "500"                  # Optional: Messages per replica to trigger scaling (default: "500")
+#   #   activationMessageCount: "1"          # Optional: Messages to activate scaler (scale from 0/idle)
+#   #   pollingInterval: 30                  # Optional: How often KEDA checks the trigger (seconds, default: 30)
+#   #   cooldownPeriod: 300                  # Optional: Wait after last trigger before scaling down (seconds, default: 300)
+#   #   minReplicaCount: 2                   # Optional: Minimum replicas (default: 2)
+#   #   maxReplicaCount: 50                  # Optional: Maximum replicas (default: 50)
+#   #   idleReplicaCount: 0                  # Optional: Replicas when idle (set to 0 for scale-to-zero)
+#   #   advanced:                            # Optional: Advanced KEDA scaling policies
+#   #     horizontalPodAutoscalerConfig:
+#   #       behavior:
+#   #         scaleDown:
+#   #           stabilizationWindowSeconds: 300
+#   #
+#   # --- Topic-based scaling (with Vault) ---
+#   # keda:
+#   #   enabled: true
+#   #   type: "topic"                        # Required: "queue" or "topic"
+#   #   topicName: "my-topic"                # Required for type: topic
+#   #   subscriptionName: "my-subscription"  # Required for type: topic
+#   #   connectionStringSecret:              # Option B: Auto-create from Vault via ESO
+#   #     vault:
+#   #       path: "secrets/data/dev/servicebus"       # Vault secret path
+#   #       property: "connectionString"              # Property within the Vault secret
+#   #       secretStoreName: "vault-backend"          # Optional: ClusterSecretStore name (default: "vault-backend")
+#   #       refreshInterval: "15m"                   # Optional: How often ESO polls Vault for changes (default: "15m")
+#   #   messageCount: "10"
+#   #   minReplicaCount: 1
+#   #   maxReplicaCount: 20
+#
 #   # ----------------------------------------------------------------------------
 #   # Automated Testing Configuration
 #   # ----------------------------------------------------------------------------

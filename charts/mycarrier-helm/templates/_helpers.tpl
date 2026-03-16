@@ -139,8 +139,10 @@ It's meant to be used as an include that evaluates the condition inline
 {{- $globalForceAutoscaling := $ctx.defaults.forceAutoscaling }}
 {{- $envScaling := include "helm.envScaling" . }}
 {{- $appForceAutoscaling := dig "autoscaling" "forceAutoscaling" nil .application }}
+{{/* 0. KEDA takes precedence - never create HPA when KEDA is enabled */}}
+{{- if eq "true" (include "helm.kedaCondition" . | trim) }}false
 {{/* 1. Explicit app-level enable always wins */}}
-{{- if dig "autoscaling" "enabled" false .application }}true
+{{- else if dig "autoscaling" "enabled" false .application }}true
 {{/* 2. App-level forceAutoscaling true creates HPA (even for migrations) */}}
 {{- else if eq $appForceAutoscaling true }}true
 {{/* 3. App-level forceAutoscaling false explicitly disables HPA */}}
@@ -150,6 +152,16 @@ It's meant to be used as an include that evaluates the condition inline
 {{/* 5. Global force or automatic prod scaling (but NOT for migrations) */}}
 {{- else if and (not (contains "migration" .appName)) (or (eq $globalForceAutoscaling true) (eq $envScaling "1")) }}true
 {{/* 6. Default: no HPA */}}
+{{- else }}false
+{{- end -}}
+{{- end -}}
+
+{{/*
+Determines if KEDA ScaledObject should be created for an application.
+Returns "true" if keda.enabled is true on the application.
+*/}}
+{{- define "helm.kedaCondition" -}}
+{{- if dig "keda" "enabled" false .application }}true
 {{- else }}false
 {{- end -}}
 {{- end -}}

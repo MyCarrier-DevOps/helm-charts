@@ -7,7 +7,9 @@
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
 {{- $imagePullSecret := $ctx.chartDefaults.imagePullSecret -}}
+{{- if and (ne "true" (include "helm.hpaCondition" . | trim)) (ne "true" (include "helm.kedaCondition" . | trim)) }}
 replicas: {{ if and (not (kindIs "invalid" .application.replicas)) (or (eq "1" $envScaling) (and (eq "0" $envScaling) (eq "0" (default "0" .application.replicas | toString)))) }}{{ .application.replicas }}{{ else }}{{ 1 }}{{ end }}
+{{- end }}
 serviceName: {{ $fullName }}
 {{- if .application.updateStrategy }}
 updateStrategy:

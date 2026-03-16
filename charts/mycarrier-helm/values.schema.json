@@ -1111,6 +1111,110 @@
                 "description": "Target memory utilization percentage"
               }
             }
+          },
+          "keda": {
+            "type": "object",
+            "description": "KEDA autoscaler configuration for Azure Service Bus scaling",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable KEDA ScaledObject for this application",
+                "default": false
+              },
+              "type": {
+                "type": "string",
+                "description": "Azure Service Bus trigger type",
+                "enum": ["topic", "queue"]
+              },
+              "topicName": {
+                "type": "string",
+                "description": "Azure Service Bus topic name (required when type is 'topic')"
+              },
+              "subscriptionName": {
+                "type": "string",
+                "description": "Azure Service Bus subscription name (required when type is 'topic')"
+              },
+              "queueName": {
+                "type": "string",
+                "description": "Azure Service Bus queue name (required when type is 'queue')"
+              },
+              "connectionStringSecret": {
+                "type": "object",
+                "description": "Azure Service Bus connection string source. Use either name/key to reference an existing K8s secret, or vault to auto-create one via External Secrets Operator.",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of an existing Kubernetes secret (used with 'key', mutually exclusive with 'vault')"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "Key within the existing secret containing the connection string (used with 'name')"
+                  },
+                  "vault": {
+                    "type": "object",
+                    "description": "Vault path to auto-create K8s secret via External Secrets Operator (mutually exclusive with name/key)",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "description": "Vault secret path (e.g., 'secrets/data/dev/servicebus')"
+                      },
+                      "property": {
+                        "type": "string",
+                        "description": "Property within the Vault secret containing the connection string"
+                      },
+                      "secretStoreName": {
+                        "type": "string",
+                        "description": "Name of the ClusterSecretStore to use",
+                        "default": "vault-backend"
+                      },
+                      "refreshInterval": {
+                        "type": "string",
+                        "description": "How often ESO polls Vault for secret changes (e.g., '15m', '5m', '1h')",
+                        "default": "15m"
+                      }
+                    },
+                    "required": ["path", "property"]
+                  }
+                }
+              },
+              "messageCount": {
+                "type": "string",
+                "description": "Target message count per replica to trigger scaling",
+                "default": "500"
+              },
+              "activationMessageCount": {
+                "type": "string",
+                "description": "Message count threshold to activate the scaler (scale from 0)"
+              },
+              "pollingInterval": {
+                "type": "integer",
+                "description": "How often KEDA checks the trigger source (seconds)",
+                "default": 30
+              },
+              "cooldownPeriod": {
+                "type": "integer",
+                "description": "Period to wait after last trigger before scaling down (seconds)",
+                "default": 300
+              },
+              "idleReplicaCount": {
+                "type": "integer",
+                "description": "Number of replicas when idle (set to 0 to enable scale-to-zero)"
+              },
+              "minReplicaCount": {
+                "type": "integer",
+                "description": "Minimum number of replicas",
+                "default": 2
+              },
+              "maxReplicaCount": {
+                "type": "integer",
+                "description": "Maximum number of replicas",
+                "default": 50
+              },
+              "advanced": {
+                "type": "object",
+                "description": "Advanced KEDA scaling configuration (e.g., scaling policies)"
+              }
+            }
           }
         }
       }

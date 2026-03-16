@@ -38,6 +38,7 @@ tests:
       applications.test-app-api.image.tag: "1.0.0"
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.replicas: 3
+      applications.test-app-api.autoscaling.forceAutoscaling: false
     asserts:
       - equal:
           path: spec.replicas

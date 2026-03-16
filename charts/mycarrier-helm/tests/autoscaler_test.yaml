@@ -116,3 +116,42 @@ tests:
       - equal:
           path: spec.scaleTargetRef.kind
           value: Deployment
+
+  - it: should not create HPA when KEDA is enabled even with autoscaling.enabled true
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.autoscaling.enabled: true
+      applications.test-app-api.autoscaling.minReplicas: 2
+      applications.test-app-api.autoscaling.maxReplicas: 5
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create HPA when KEDA is enabled in prod auto-scaling env
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - hasDocuments:
+          count: 0
