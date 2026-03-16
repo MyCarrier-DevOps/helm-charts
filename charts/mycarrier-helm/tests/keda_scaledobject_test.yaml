@@ -279,3 +279,209 @@ tests:
       - equal:
           path: spec.triggers[0].metadata.activationMessageCount
           value: "1"
+
+  - it: should create ExternalSecret when vault is configured
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
+      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: ExternalSecret
+        documentIndex: 0
+      - isKind:
+          of: TriggerAuthentication
+        documentIndex: 1
+      - isKind:
+          of: ScaledObject
+        documentIndex: 2
+
+  - it: should configure ExternalSecret with correct Vault path and property
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
+      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: app-test-app-api-keda-servicebus-es
+      - equal:
+          path: spec.secretStoreRef.kind
+          value: ClusterSecretStore
+      - equal:
+          path: spec.secretStoreRef.name
+          value: vault-backend
+      - equal:
+          path: spec.target.name
+          value: app-test-app-api-keda-servicebus
+      - equal:
+          path: spec.target.creationPolicy
+          value: Owner
+      - equal:
+          path: spec.data[0].secretKey
+          value: connectionString
+      - equal:
+          path: spec.data[0].remoteRef.key
+          value: "secrets/data/dev/servicebus"
+      - equal:
+          path: spec.data[0].remoteRef.property
+          value: "connectionString"
+
+  - it: should configure TriggerAuthentication to reference auto-created secret when vault is used
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
+      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.secretTargetRef[0].parameter
+          value: connection
+      - equal:
+          path: spec.secretTargetRef[0].name
+          value: app-test-app-api-keda-servicebus
+      - equal:
+          path: spec.secretTargetRef[0].key
+          value: connectionString
+
+  - it: should not create ExternalSecret when using direct secret reference
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: TriggerAuthentication
+        documentIndex: 0
+      - isKind:
+          of: ScaledObject
+        documentIndex: 1
+
+  - it: should allow minReplicaCount of 0
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.minReplicaCount: 0
+      applications.test-app-api.keda.idleReplicaCount: 0
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.minReplicaCount
+          value: 0
+
+  - it: should fail when keda.type is not set
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.type must be 'queue' or 'topic', got '<not set>'"
+
+  - it: should fail when queueName is missing for queue type
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.queueName is required when keda.type is 'queue'"
+
+  - it: should fail when topicName is missing for topic type
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.topicName is required when keda.type is 'topic'"
+
+  - it: should fail when connectionStringSecret is missing
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.connectionStringSecret is required (use name/key or vault)"

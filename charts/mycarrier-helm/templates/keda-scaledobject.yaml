@@ -3,8 +3,14 @@
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- if eq "true" (include "helm.kedaCondition" $appContext | trim) }}
+{{- include "helm.specs.keda.validate" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
+{{- $kedaConfig := $appValues.keda }}
+{{- if dig "connectionStringSecret" "vault" nil $kedaConfig }}
+---
+{{ include "helm.specs.keda.externalSecret" $appContext }}
+{{- end }}
 ---
 apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication

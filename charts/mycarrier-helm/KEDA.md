@@ -66,26 +66,45 @@ The `messageCount` value represents **how many messages one replica can handle**
 
 ## Authentication
 
-KEDA authenticates to Azure Service Bus using a **connection string** stored in a Kubernetes Secret. The secret must exist in the namespace before deployment.
+KEDA authenticates to Azure Service Bus using a **connection string** stored in a Kubernetes Secret. The chart provides two options for supplying this secret:
 
-The secret can be provisioned via:
-- HashiCorp Vault (using the chart's Vault integration)
-- External Secrets Operator
-- Manual creation
+### Option A: Reference an Existing Kubernetes Secret
 
-```yaml
-# Example: Creating the secret manually
-kubectl create secret generic servicebus-secret \
-  --from-literal=connection-string="Endpoint=sb://my-namespace.servicebus.windows.net/;SharedAccessKeyName=...;SharedAccessKey=..."
-```
-
-The chart references this secret through the `connectionStringSecret` configuration:
+Point to a secret that already exists in the namespace (created manually, by another operator, etc.):
 
 ```yaml
 connectionStringSecret:
   name: "servicebus-secret"      # Name of the Kubernetes Secret
   key: "connection-string"       # Key within the secret
 ```
+
+```bash
+# Example: Creating the secret manually
+kubectl create secret generic servicebus-secret \
+  --from-literal=connection-string="Endpoint=sb://my-namespace.servicebus.windows.net/;SharedAccessKeyName=...;SharedAccessKey=..."
+```
+
+**Resources created:** TriggerAuthentication + ScaledObject (2 resources)
+
+### Option B: Auto-Create from Vault via External Secrets Operator
+
+The chart generates an `ExternalSecret` that syncs the connection string from Vault into a Kubernetes Secret automatically. No pre-existing secret needed.
+
+```yaml
+connectionStringSecret:
+  vault:
+    path: "secrets/data/dev/servicebus"    # Vault secret path
+    property: "connectionString"           # Property within the Vault secret
+```
+
+The chart creates an `ExternalSecret` (named `<fullName>-keda-servicebus-es`) that:
+1. Reads from the `vault-backend` ClusterSecretStore
+2. Syncs into a K8s Secret named `<fullName>-keda-servicebus`
+3. The TriggerAuthentication automatically references this generated secret
+
+**Resources created:** ExternalSecret + TriggerAuthentication + ScaledObject (3 resources)
+
+> **Note:** This uses the same External Secrets Operator and `vault-backend` ClusterSecretStore as the chart's existing `secrets.mounted` feature.
 
 ## Configuration
 
@@ -141,8 +160,10 @@ applications:
 | `queueName` | When type=queue | - | Azure Service Bus queue name |
 | `topicName` | When type=topic | - | Azure Service Bus topic name |
 | `subscriptionName` | When type=topic | - | Azure Service Bus subscription name |
-| `connectionStringSecret.name` | Yes | - | Kubernetes Secret name |
-| `connectionStringSecret.key` | Yes | - | Key within the Secret |
+| `connectionStringSecret.name` | Option A | - | Existing Kubernetes Secret name |
+| `connectionStringSecret.key` | Option A | - | Key within the existing Secret |
+| `connectionStringSecret.vault.path` | Option B | - | Vault secret path (auto-creates K8s secret via ESO) |
+| `connectionStringSecret.vault.property` | Option B | - | Property within the Vault secret |
 | `messageCount` | No | `"500"` | Target messages per replica to trigger scaling |
 | `activationMessageCount` | No | - | Message threshold to activate the scaler (scale from idle) |
 | `pollingInterval` | No | `30` | How often KEDA checks the trigger source (seconds) |
@@ -176,7 +197,29 @@ applications:
 - Polls every 30 seconds
 - Scales down after 300 seconds of inactivity
 
-### Example 2: High-Throughput Topic Consumer
+### Example 2: Queue Consumer with Vault
+
+Connection string auto-synced from Vault — no pre-existing K8s secret needed:
+
+```yaml
+applications:
+  queue-worker:
+    keda:
+      enabled: true
+      type: "queue"
+      queueName: "tasks"
+      connectionStringSecret:
+        vault:
+          path: "secrets/data/prod/servicebus"
+          property: "connectionString"
+```
+
+**Result:**
+- Creates an `ExternalSecret` that syncs from Vault into a K8s Secret
+- TriggerAuthentication automatically references the generated secret
+- Same scaling behavior as Example 1
+
+### Example 3: High-Throughput Topic Consumer
 
 Custom parameters for a high-volume workload:
 
@@ -204,7 +247,7 @@ applications:
 - Polls every 10 seconds for faster reaction
 - Scales down after 120 seconds of inactivity
 
-### Example 3: Scale-to-Zero Worker
+### Example 4: Scale-to-Zero Worker
 
 For workloads that should scale to zero when idle:
 
@@ -228,7 +271,7 @@ applications:
 - Activates (scales from 0 to 1) when at least 1 message appears
 - Scales between 1-50 replicas when active
 
-### Example 4: Advanced Scaling Policies
+### Example 5: Advanced Scaling Policies
 
 Fine-tune scale-down behavior to prevent flapping:
 
@@ -265,7 +308,7 @@ applications:
 - Waits 300 seconds of stable metrics before scaling down
 - Scales up at most 4 pods per minute
 
-### Example 5: KEDA with Rollout Deployment
+### Example 6: KEDA with Rollout Deployment
 
 KEDA works with all deployment types:
 
@@ -310,13 +353,14 @@ The `replicas` field is omitted from the Deployment/StatefulSet/Rollout spec, al
 ### Issue: KEDA not scaling
 
 **Possible causes:**
-1. Secret does not exist in the namespace
+1. Secret does not exist in the namespace (or ExternalSecret failed to sync)
 2. Connection string is invalid or expired
 3. Queue/topic name is misspelled
 4. `pollingInterval` is too high to notice short bursts
 
 **Solutions:**
 - Verify the secret: `kubectl get secret <name> -n <namespace>`
+- If using Vault: check ExternalSecret status: `kubectl describe externalsecret <fullName>-keda-servicebus-es`
 - Check KEDA operator logs: `kubectl logs -n keda -l app=keda-operator`
 - Verify the ScaledObject: `kubectl describe scaledobject <name>`
 

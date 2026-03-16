@@ -1140,18 +1140,32 @@
               },
               "connectionStringSecret": {
                 "type": "object",
-                "description": "Kubernetes secret reference for Azure Service Bus connection string",
+                "description": "Azure Service Bus connection string source. Use either name/key to reference an existing K8s secret, or vault to auto-create one via External Secrets Operator.",
                 "properties": {
                   "name": {
                     "type": "string",
-                    "description": "Name of the Kubernetes secret"
+                    "description": "Name of an existing Kubernetes secret (used with 'key', mutually exclusive with 'vault')"
                   },
                   "key": {
                     "type": "string",
-                    "description": "Key within the secret containing the connection string"
+                    "description": "Key within the existing secret containing the connection string (used with 'name')"
+                  },
+                  "vault": {
+                    "type": "object",
+                    "description": "Vault path to auto-create K8s secret via External Secrets Operator (mutually exclusive with name/key)",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "description": "Vault secret path (e.g., 'secrets/data/dev/servicebus')"
+                      },
+                      "property": {
+                        "type": "string",
+                        "description": "Property within the Vault secret containing the connection string"
+                      }
+                    },
+                    "required": ["path", "property"]
                   }
-                },
-                "required": ["name", "key"]
+                }
               },
               "messageCount": {
                 "type": "string",
