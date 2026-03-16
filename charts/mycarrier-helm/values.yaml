@@ -351,24 +351,32 @@ applications: {}
 #   # ----------------------------------------------------------------------------
 #   # KEDA scales based on Azure Service Bus queue/topic message count.
 #   #
-#   # Authentication: Two options for the connection string:
-#   #   Option A) Reference an existing K8s secret (name + key)
-#   #   Option B) Auto-create from Vault via External Secrets Operator (vault.path + vault.property)
+#   # Authentication: Three options:
+#   #   Option A) Pod identity — cluster nodes have Azure managed identity access to Service Bus (no secrets needed)
+#   #   Option B) Reference an existing K8s secret (name + key)
+#   #   Option C) Auto-create from Vault via External Secrets Operator (vault.path + vault.property)
 #   #
 #   # NOTE: HPA and KEDA are mutually exclusive. When keda.enabled is true,
 #   # HPA is automatically disabled and replicas are managed by KEDA.
 #   #
 #   # Resources created:
-#   #   - TriggerAuthentication: References the K8s secret for connection string auth
+#   #   - TriggerAuthentication: Uses podIdentity (option A) or secret reference (options B/C)
 #   #   - ScaledObject: Configures the scaling trigger and target
-#   #   - ExternalSecret (only with vault option): Syncs Vault secret into a K8s secret
+#   #   - ExternalSecret (only with vault option C): Syncs Vault secret into a K8s secret
+#   #
+#   # --- Queue-based scaling (with pod identity / managed identity) ---
+#   # keda:
+#   #   enabled: true
+#   #   type: "queue"                        # Required: "queue" or "topic"
+#   #   queueName: "my-queue"                # Required for type: queue
+#   #   namespace: "my-servicebus-namespace" # Option A: Azure Service Bus namespace (uses pod identity, no secrets)
 #   #
 #   # --- Queue-based scaling (with existing K8s secret) ---
 #   # keda:
 #   #   enabled: true
 #   #   type: "queue"                        # Required: "queue" or "topic"
 #   #   queueName: "my-queue"                # Required for type: queue
-#   #   connectionStringSecret:              # Option A: Reference existing K8s secret
+#   #   connectionStringSecret:              # Option B: Reference existing K8s secret
 #   #     name: "servicebus-secret"          #   Name of the Kubernetes Secret
 #   #     key: "connection-string"           #   Key within the secret
 #   #   messageCount: "500"                  # Optional: Messages per replica to trigger scaling (default: "500")
@@ -390,7 +398,7 @@ applications: {}
 #   #   type: "topic"                        # Required: "queue" or "topic"
 #   #   topicName: "my-topic"                # Required for type: topic
 #   #   subscriptionName: "my-subscription"  # Required for type: topic
-#   #   connectionStringSecret:              # Option B: Auto-create from Vault via ESO
+#   #   connectionStringSecret:              # Option C: Auto-create from Vault via ESO
 #   #     vault:
 #   #       path: "secrets/data/dev/servicebus"       # Vault secret path
 #   #       property: "connectionString"              # Property within the Vault secret

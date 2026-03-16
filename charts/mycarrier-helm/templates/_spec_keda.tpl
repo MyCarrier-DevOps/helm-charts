@@ -21,13 +21,20 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
     {{- fail (printf "application '%s': keda.queueName is required when keda.type is 'queue'" .appName) }}
   {{- end }}
 {{- end }}
-{{/* Validate connectionStringSecret: must have either name+key or vault */}}
-{{- if not (dig "connectionStringSecret" nil $kedaConfig) }}
-  {{- fail (printf "application '%s': keda.connectionStringSecret is required (use name/key or vault)" .appName) }}
+{{/* Validate authentication: must have either namespace (pod identity) or connectionStringSecret, not both */}}
+{{- if and (dig "namespace" "" $kedaConfig) (dig "connectionStringSecret" nil $kedaConfig) }}
+  {{- fail (printf "application '%s': keda.namespace (pod identity) and keda.connectionStringSecret are mutually exclusive — use one or the other" .appName) }}
 {{- end }}
-{{- if not (dig "connectionStringSecret" "vault" nil $kedaConfig) }}
-  {{- if not (and (dig "connectionStringSecret" "name" "" $kedaConfig) (dig "connectionStringSecret" "key" "" $kedaConfig)) }}
-    {{- fail (printf "application '%s': keda.connectionStringSecret requires either vault (path+property) or name+key" .appName) }}
+{{- if dig "namespace" "" $kedaConfig }}
+  {{/* Pod identity mode: namespace is sufficient, no connectionStringSecret needed */}}
+{{- else }}
+  {{- if not (dig "connectionStringSecret" nil $kedaConfig) }}
+    {{- fail (printf "application '%s': keda requires either namespace (for pod identity) or connectionStringSecret (name/key or vault)" .appName) }}
+  {{- end }}
+  {{- if not (dig "connectionStringSecret" "vault" nil $kedaConfig) }}
+    {{- if not (and (dig "connectionStringSecret" "name" "" $kedaConfig) (dig "connectionStringSecret" "key" "" $kedaConfig)) }}
+      {{- fail (printf "application '%s': keda.connectionStringSecret requires either vault (path+property) or name+key" .appName) }}
+    {{- end }}
   {{- end }}
 {{- end }}
 {{- end -}}
@@ -80,6 +87,9 @@ triggers:
       {{- if dig "activationMessageCount" nil $kedaConfig }}
       activationMessageCount: {{ $kedaConfig.activationMessageCount | quote }}
       {{- end }}
+      {{- if dig "namespace" "" $kedaConfig }}
+      namespace: {{ $kedaConfig.namespace | quote }}
+      {{- end }}
     authenticationRef:
       name: {{ $fullName }}-keda-trigger-auth
 {{- else }}
@@ -89,6 +99,9 @@ triggers:
       messageCount: {{ dig "messageCount" $kedaDefaults.messageCount $kedaConfig | quote }}
       {{- if dig "activationMessageCount" nil $kedaConfig }}
       activationMessageCount: {{ $kedaConfig.activationMessageCount | quote }}
+      {{- end }}
+      {{- if dig "namespace" "" $kedaConfig }}
+      namespace: {{ $kedaConfig.namespace | quote }}
       {{- end }}
     authenticationRef:
       name: {{ $fullName }}-keda-trigger-auth
@@ -103,6 +116,10 @@ When a direct secret reference is used, it points to the user-specified secret.
 {{- define "helm.specs.keda.triggerAuth" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $kedaConfig := .application.keda -}}
+{{- if dig "namespace" "" $kedaConfig }}
+podIdentity:
+  provider: azure
+{{- else }}
 secretTargetRef:
   - parameter: connection
     {{- if dig "connectionStringSecret" "vault" nil $kedaConfig }}
@@ -112,6 +129,7 @@ secretTargetRef:
     name: {{ $kedaConfig.connectionStringSecret.name }}
     key: {{ $kedaConfig.connectionStringSecret.key }}
     {{- end }}
+{{- end }}
 {{- end -}}
 
 {{/*

@@ -470,7 +470,7 @@ tests:
       - failedTemplate:
           errorMessage: "application 'test-app-api': keda.topicName is required when keda.type is 'topic'"
 
-  - it: should fail when connectionStringSecret is missing
+  - it: should fail when neither connectionStringSecret nor namespace is provided
     set:
       environment.name: "prod"
       applications.test-app-api.deploymentType: deployment
@@ -484,4 +484,102 @@ tests:
       applications.test-app-api.keda.queueName: "my-queue"
     asserts:
       - failedTemplate:
-          errorMessage: "application 'test-app-api': keda.connectionStringSecret is required (use name/key or vault)"
+          errorMessage: "application 'test-app-api': keda requires either namespace (for pod identity) or connectionStringSecret (name/key or vault)"
+
+  - it: should create TriggerAuthentication with podIdentity when namespace is set
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.namespace: "my-servicebus-namespace"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: TriggerAuthentication
+        documentIndex: 0
+      - isKind:
+          of: ScaledObject
+        documentIndex: 1
+
+  - it: should configure TriggerAuthentication with podIdentity provider azure
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.namespace: "my-servicebus-namespace"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.podIdentity.provider
+          value: azure
+      - notExists:
+          path: spec.secretTargetRef
+
+  - it: should include namespace in ScaledObject trigger metadata when using pod identity
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.namespace: "my-servicebus-namespace"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.namespace
+          value: "my-servicebus-namespace"
+      - equal:
+          path: spec.triggers[0].metadata.queueName
+          value: "my-queue"
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: app-test-app-api-keda-trigger-auth
+
+  - it: should include namespace in topic trigger metadata when using pod identity
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-subscription"
+      applications.test-app-api.keda.namespace: "my-servicebus-namespace"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.namespace
+          value: "my-servicebus-namespace"
+      - equal:
+          path: spec.triggers[0].metadata.topicName
+          value: "my-topic"
+
+  # NOTE: Setting both namespace and connectionStringSecret is rejected by the JSON schema
+  # (oneOf constraint) before templates are rendered. Schema validation errors cannot be
+  # asserted with failedTemplate in helm-unittest, so mutual exclusivity is enforced by:
+  #   1. JSON schema oneOf (primary — catches at values validation time)
+  #   2. Template-level fail (backup — catches when schema validation is bypassed)
