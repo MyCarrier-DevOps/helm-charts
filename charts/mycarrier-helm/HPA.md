@@ -1,6 +1,6 @@
-# Autoscaling Configuration Guide
+# HPA (Horizontal Pod Autoscaler) Configuration Guide
 
-This document provides a comprehensive guide to autoscaling behavior in the MyCarrier Helm chart, including the decision logic, configuration hierarchy, and detailed examples.
+This document provides a comprehensive guide to HPA autoscaling behavior in the MyCarrier Helm chart, including the decision logic, configuration hierarchy, and detailed examples.
 
 ## Overview
 
@@ -11,10 +11,15 @@ The chart provides intelligent autoscaling with multiple configuration levels:
 - **Migration app protection** to prevent unintended scaling of migrations
 - **Override mechanism** to explicitly disable autoscaling
 
+## KEDA Interaction
+
+The chart also supports [KEDA](KEDA.md) for event-driven autoscaling based on Azure Service Bus queue/topic message count. **HPA and KEDA are mutually exclusive per application.** When `keda.enabled` is true on an application, HPA is never created for that application — regardless of `autoscaling.enabled`, `forceAutoscaling`, or automatic production scaling. KEDA is checked first (step 0) in the HPA decision logic and short-circuits all other conditions.
+
 ## Configuration Hierarchy
 
 Autoscaling is determined by checking configurations in this order (highest precedence first):
 
+0. **KEDA override**: `applications.<app>.keda.enabled` — if true, HPA is not created
 1. **Per-app explicit enable**: `applications.<app>.autoscaling.enabled`
 2. **Per-app force**: `applications.<app>.autoscaling.forceAutoscaling`
 3. **Global override**: `global.forceAutoscaling: false` (blocks automatic scaling)
@@ -101,6 +106,10 @@ applications:
 
 ```python
 def should_create_hpa(app_name, app_config, global_config, env_scaling):
+    # 0. KEDA takes precedence - never create HPA when KEDA is enabled
+    if app_config.keda.enabled == true:
+        return False
+
     # 1. Explicit enable always wins
     if app_config.autoscaling.enabled == true:
         return True
@@ -141,9 +150,11 @@ def is_migration_app(app_name):
 ### Template Implementation
 
 The logic is implemented in:
+- `templates/_helpers.tpl` - `helm.hpaCondition` (includes KEDA check) and `helm.kedaCondition`
 - `templates/autoscaler.yaml` - HPA creation condition
-- `templates/_spec_deployment.tpl` - Replicas field omission
-- `templates/_spec_rollout.tpl` - Replicas field omission
+- `templates/keda-scaledobject.yaml` - KEDA ScaledObject and TriggerAuthentication creation
+- `templates/_spec_deployment.tpl` - Replicas field omission (HPA or KEDA)
+- `templates/_spec_rollout.tpl` - Replicas field omission (HPA or KEDA)
 
 ## Examples
 
@@ -518,9 +529,11 @@ applications:
 
 - [templates/autoscaler.yaml](templates/autoscaler.yaml) - HPA resource template
 - [templates/_spec_hpa.tpl](templates/_spec_hpa.tpl) - HPA spec with defaults
+- [templates/_helpers.tpl](templates/_helpers.tpl) - `helm.hpaCondition` and `helm.kedaCondition`
 - [templates/_spec_deployment.tpl](templates/_spec_deployment.tpl) - Deployment replicas logic
 - [templates/_spec_rollout.tpl](templates/_spec_rollout.tpl) - Rollout replicas logic
 - [templates/_context.tpl](templates/_context.tpl) - Default forceAutoscaling value
+- [KEDA.md](KEDA.md) - KEDA autoscaler documentation
 - [REPLICAS.md](REPLICAS.md) - Replica defaults documentation
 - [AUTOSCALING_TEST_MATRIX.md](AUTOSCALING_TEST_MATRIX.md) - Test coverage
 - [README.md](README.md#autoscaling-configuration) - Quick reference

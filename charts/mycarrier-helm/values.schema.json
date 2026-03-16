@@ -1111,6 +1111,86 @@
                 "description": "Target memory utilization percentage"
               }
             }
+          },
+          "keda": {
+            "type": "object",
+            "description": "KEDA autoscaler configuration for Azure Service Bus scaling",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable KEDA ScaledObject for this application",
+                "default": false
+              },
+              "type": {
+                "type": "string",
+                "description": "Azure Service Bus trigger type",
+                "enum": ["topic", "queue"]
+              },
+              "topicName": {
+                "type": "string",
+                "description": "Azure Service Bus topic name (required when type is 'topic')"
+              },
+              "subscriptionName": {
+                "type": "string",
+                "description": "Azure Service Bus subscription name (required when type is 'topic')"
+              },
+              "queueName": {
+                "type": "string",
+                "description": "Azure Service Bus queue name (required when type is 'queue')"
+              },
+              "connectionStringSecret": {
+                "type": "object",
+                "description": "Kubernetes secret reference for Azure Service Bus connection string",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the Kubernetes secret"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "Key within the secret containing the connection string"
+                  }
+                },
+                "required": ["name", "key"]
+              },
+              "messageCount": {
+                "type": "string",
+                "description": "Target message count per replica to trigger scaling",
+                "default": "500"
+              },
+              "activationMessageCount": {
+                "type": "string",
+                "description": "Message count threshold to activate the scaler (scale from 0)"
+              },
+              "pollingInterval": {
+                "type": "integer",
+                "description": "How often KEDA checks the trigger source (seconds)",
+                "default": 30
+              },
+              "cooldownPeriod": {
+                "type": "integer",
+                "description": "Period to wait after last trigger before scaling down (seconds)",
+                "default": 300
+              },
+              "idleReplicaCount": {
+                "type": "integer",
+                "description": "Number of replicas when idle (set to 0 to enable scale-to-zero)"
+              },
+              "minReplicaCount": {
+                "type": "integer",
+                "description": "Minimum number of replicas",
+                "default": 2
+              },
+              "maxReplicaCount": {
+                "type": "integer",
+                "description": "Maximum number of replicas",
+                "default": 50
+              },
+              "advanced": {
+                "type": "object",
+                "description": "Advanced KEDA scaling configuration (e.g., scaling policies)"
+              }
+            }
           }
         }
       }

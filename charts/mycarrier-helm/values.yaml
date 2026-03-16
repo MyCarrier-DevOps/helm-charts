@@ -335,6 +335,9 @@ applications: {}
 #   # ----------------------------------------------------------------------------
 #   # Horizontal Pod Autoscaler (HPA)
 #   # ----------------------------------------------------------------------------
+#   # HPA scales based on CPU/memory utilization metrics.
+#   # NOTE: HPA and KEDA are mutually exclusive. If keda.enabled is true, HPA
+#   # will NOT be created even if autoscaling.enabled is true. KEDA takes precedence.
 #   autoscaling:
 #     enabled: false
 #     minReplicas: 2         # Default: application replicas (min 2)
@@ -342,7 +345,56 @@ applications: {}
 #     targetCPUUtilizationPercentage: 80
 #     targetMemoryUtilizationPercentage: 80
 #     forceAutoscaling: false  # Force HPA even if replicas=1
-#   
+#
+#   # ----------------------------------------------------------------------------
+#   # KEDA Autoscaler (Azure Service Bus)
+#   # ----------------------------------------------------------------------------
+#   # KEDA scales based on Azure Service Bus queue/topic message count.
+#   # Authentication uses a connection string stored in a Kubernetes Secret.
+#   # The secret must exist in the namespace before deployment (e.g., from Vault,
+#   # External Secrets Operator, or manual creation).
+#   #
+#   # NOTE: HPA and KEDA are mutually exclusive. When keda.enabled is true,
+#   # HPA is automatically disabled and replicas are managed by KEDA.
+#   #
+#   # Creates two resources:
+#   #   - TriggerAuthentication: References the K8s secret for connection string auth
+#   #   - ScaledObject: Configures the scaling trigger and target
+#   #
+#   # --- Queue-based scaling ---
+#   # keda:
+#   #   enabled: true
+#   #   type: "queue"                        # Required: "queue" or "topic"
+#   #   queueName: "my-queue"                # Required for type: queue
+#   #   connectionStringSecret:              # Required: Reference to existing K8s secret
+#   #     name: "servicebus-secret"          #   Name of the Kubernetes Secret
+#   #     key: "connection-string"           #   Key within the secret
+#   #   messageCount: "500"                  # Optional: Messages per replica to trigger scaling (default: "500")
+#   #   activationMessageCount: "1"          # Optional: Messages to activate scaler (scale from 0/idle)
+#   #   pollingInterval: 30                  # Optional: How often KEDA checks the trigger (seconds, default: 30)
+#   #   cooldownPeriod: 300                  # Optional: Wait after last trigger before scaling down (seconds, default: 300)
+#   #   minReplicaCount: 2                   # Optional: Minimum replicas (default: 2)
+#   #   maxReplicaCount: 50                  # Optional: Maximum replicas (default: 50)
+#   #   idleReplicaCount: 0                  # Optional: Replicas when idle (set to 0 for scale-to-zero)
+#   #   advanced:                            # Optional: Advanced KEDA scaling policies
+#   #     horizontalPodAutoscalerConfig:
+#   #       behavior:
+#   #         scaleDown:
+#   #           stabilizationWindowSeconds: 300
+#   #
+#   # --- Topic-based scaling ---
+#   # keda:
+#   #   enabled: true
+#   #   type: "topic"                        # Required: "queue" or "topic"
+#   #   topicName: "my-topic"                # Required for type: topic
+#   #   subscriptionName: "my-subscription"  # Required for type: topic
+#   #   connectionStringSecret:              # Required: Reference to existing K8s secret
+#   #     name: "servicebus-secret"
+#   #     key: "connection-string"
+#   #   messageCount: "10"
+#   #   minReplicaCount: 1
+#   #   maxReplicaCount: 20
+#
 #   # ----------------------------------------------------------------------------
 #   # Automated Testing Configuration
 #   # ----------------------------------------------------------------------------

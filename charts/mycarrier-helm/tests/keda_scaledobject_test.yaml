@@ -1,0 +1,281 @@
+suite: KEDA ScaledObject template tests
+templates:
+  - keda-scaledobject.yaml
+tests:
+  - it: should not create ScaledObject when keda is not enabled
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create ScaledObject and TriggerAuthentication for Azure Service Bus topic
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-subscription"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: TriggerAuthentication
+        documentIndex: 0
+      - isKind:
+          of: ScaledObject
+        documentIndex: 1
+
+  - it: should configure TriggerAuthentication with correct secret reference for topic
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-subscription"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: app-test-app-api-keda-trigger-auth
+      - equal:
+          path: spec.secretTargetRef[0].parameter
+          value: connection
+      - equal:
+          path: spec.secretTargetRef[0].name
+          value: servicebus-secret
+      - equal:
+          path: spec.secretTargetRef[0].key
+          value: connection-string
+
+  - it: should configure ScaledObject with topic trigger and defaults
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-subscription"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: app-test-app-api
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Deployment
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: app-test-app-api
+      - equal:
+          path: spec.pollingInterval
+          value: 30
+      - equal:
+          path: spec.cooldownPeriod
+          value: 300
+      - equal:
+          path: spec.minReplicaCount
+          value: 2
+      - equal:
+          path: spec.maxReplicaCount
+          value: 50
+      - equal:
+          path: spec.triggers[0].type
+          value: azure-servicebus
+      - equal:
+          path: spec.triggers[0].metadata.topicName
+          value: "my-topic"
+      - equal:
+          path: spec.triggers[0].metadata.subscriptionName
+          value: "my-subscription"
+      - equal:
+          path: spec.triggers[0].metadata.messageCount
+          value: "500"
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: app-test-app-api-keda-trigger-auth
+
+  - it: should configure ScaledObject with queue trigger
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.triggers[0].type
+          value: azure-servicebus
+      - equal:
+          path: spec.triggers[0].metadata.queueName
+          value: "my-queue"
+      - equal:
+          path: spec.triggers[0].metadata.messageCount
+          value: "500"
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: app-test-app-api-keda-trigger-auth
+
+  - it: should use custom scaling parameters when specified
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.pollingInterval: 15
+      applications.test-app-api.keda.cooldownPeriod: 120
+      applications.test-app-api.keda.minReplicaCount: 1
+      applications.test-app-api.keda.maxReplicaCount: 20
+      applications.test-app-api.keda.messageCount: "10"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.pollingInterval
+          value: 15
+      - equal:
+          path: spec.cooldownPeriod
+          value: 120
+      - equal:
+          path: spec.minReplicaCount
+          value: 1
+      - equal:
+          path: spec.maxReplicaCount
+          value: 20
+      - equal:
+          path: spec.triggers[0].metadata.messageCount
+          value: "10"
+
+  - it: should support idleReplicaCount for scale-to-zero
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.idleReplicaCount: 0
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.idleReplicaCount
+          value: 0
+
+  - it: should target rollout when deploymentType is rollout
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-sub"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef.apiVersion
+          value: argoproj.io/v1alpha1
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Rollout
+
+  - it: should target statefulset when deploymentType is statefulset
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef.apiVersion
+          value: apps/v1
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: StatefulSet
+
+  - it: should support activationMessageCount
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-sub"
+      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
+      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.activationMessageCount: "1"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.activationMessageCount
+          value: "1"
