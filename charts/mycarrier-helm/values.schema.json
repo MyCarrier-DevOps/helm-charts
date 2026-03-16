@@ -1161,6 +1161,16 @@
                       "property": {
                         "type": "string",
                         "description": "Property within the Vault secret containing the connection string"
+                      },
+                      "secretStoreName": {
+                        "type": "string",
+                        "description": "Name of the ClusterSecretStore to use",
+                        "default": "vault-backend"
+                      },
+                      "refreshInterval": {
+                        "type": "string",
+                        "description": "How often ESO polls Vault for secret changes (e.g., '15m', '5m', '1h')",
+                        "default": "15m"
                       }
                     },
                     "required": ["path", "property"]

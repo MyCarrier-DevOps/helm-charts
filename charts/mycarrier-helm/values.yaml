@@ -394,6 +394,8 @@ applications: {}
 #   #     vault:
 #   #       path: "secrets/data/dev/servicebus"       # Vault secret path
 #   #       property: "connectionString"              # Property within the Vault secret
+#   #       secretStoreName: "vault-backend"          # Optional: ClusterSecretStore name (default: "vault-backend")
+#   #       refreshInterval: "15m"                   # Optional: How often ESO polls Vault for changes (default: "15m")
 #   #   messageCount: "10"
 #   #   minReplicaCount: 1
 #   #   maxReplicaCount: 20

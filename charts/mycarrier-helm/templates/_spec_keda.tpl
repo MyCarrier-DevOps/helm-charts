@@ -136,10 +136,10 @@ metadata:
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  refreshInterval: 15m0s
+  refreshInterval: {{ dig "connectionStringSecret" "vault" "refreshInterval" "15m" $kedaConfig }}
   secretStoreRef:
     kind: ClusterSecretStore
-    name: vault-backend
+    name: {{ dig "connectionStringSecret" "vault" "secretStoreName" "vault-backend" $kedaConfig }}
   target:
     name: {{ $fullName }}-keda-servicebus
     creationPolicy: Owner

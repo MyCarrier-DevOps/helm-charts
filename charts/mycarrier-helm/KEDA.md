@@ -95,10 +95,12 @@ connectionStringSecret:
   vault:
     path: "secrets/data/dev/servicebus"    # Vault secret path
     property: "connectionString"           # Property within the Vault secret
+    # secretStoreName: "vault-backend"     # Optional: ClusterSecretStore name (default: "vault-backend")
+    # refreshInterval: "15m"              # Optional: How often ESO polls Vault (default: "15m")
 ```
 
 The chart creates an `ExternalSecret` (named `<fullName>-keda-servicebus-es`) that:
-1. Reads from the `vault-backend` ClusterSecretStore
+1. Reads from the ClusterSecretStore (default: `vault-backend`, configurable via `vault.secretStoreName`)
 2. Syncs into a K8s Secret named `<fullName>-keda-servicebus`
 3. The TriggerAuthentication automatically references this generated secret
 
@@ -164,6 +166,8 @@ applications:
 | `connectionStringSecret.key` | Option A | - | Key within the existing Secret |
 | `connectionStringSecret.vault.path` | Option B | - | Vault secret path (auto-creates K8s secret via ESO) |
 | `connectionStringSecret.vault.property` | Option B | - | Property within the Vault secret |
+| `connectionStringSecret.vault.secretStoreName` | No | `"vault-backend"` | ClusterSecretStore name for ESO |
+| `connectionStringSecret.vault.refreshInterval` | No | `"15m"` | How often ESO polls Vault for secret changes |
 | `messageCount` | No | `"500"` | Target messages per replica to trigger scaling |
 | `activationMessageCount` | No | - | Message threshold to activate the scaler (scale from idle) |
 | `pollingInterval` | No | `30` | How often KEDA checks the trigger source (seconds) |
