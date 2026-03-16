@@ -66,7 +66,7 @@ The `messageCount` value represents **how many messages one replica can handle**
 
 ## Authentication
 
-The chart provides three options for authenticating KEDA to Azure Service Bus:
+The chart provides three mutually exclusive options for authenticating KEDA to Azure Service Bus. You must use exactly one of these — setting both `namespace` and `connectionStringSecret` will fail validation:
 
 ### Option A: Pod Identity (Azure Managed Identity)
 

@@ -1140,11 +1140,11 @@
               },
               "namespace": {
                 "type": "string",
-                "description": "Azure Service Bus namespace (e.g., 'my-sb'). When set, uses pod identity (Azure managed identity) for authentication instead of connection strings. No connectionStringSecret is needed."
+                "description": "Azure Service Bus namespace (e.g., 'my-sb'). When set, uses pod identity (Azure managed identity) for authentication instead of connection strings. Mutually exclusive with connectionStringSecret."
               },
               "connectionStringSecret": {
                 "type": "object",
-                "description": "Azure Service Bus connection string source. Use either name/key to reference an existing K8s secret, or vault to auto-create one via External Secrets Operator.",
+                "description": "Azure Service Bus connection string source. Mutually exclusive with namespace. Use either name/key to reference an existing K8s secret, or vault to auto-create one via External Secrets Operator.",
                 "properties": {
                   "name": {
                     "type": "string",
@@ -1218,7 +1218,26 @@
                 "type": "object",
                 "description": "Advanced KEDA scaling configuration (e.g., scaling policies)"
               }
-            }
+            },
+            "oneOf": [
+              {
+                "properties": { "namespace": { "type": "string" } },
+                "required": ["namespace"],
+                "not": { "required": ["connectionStringSecret"] }
+              },
+              {
+                "required": ["connectionStringSecret"],
+                "not": { "required": ["namespace"] }
+              },
+              {
+                "not": {
+                  "anyOf": [
+                    { "required": ["namespace"] },
+                    { "required": ["connectionStringSecret"] }
+                  ]
+                }
+              }
+            ]
           }
         }
       }

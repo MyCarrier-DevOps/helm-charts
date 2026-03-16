@@ -21,7 +21,10 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
     {{- fail (printf "application '%s': keda.queueName is required when keda.type is 'queue'" .appName) }}
   {{- end }}
 {{- end }}
-{{/* Validate authentication: must have either namespace (pod identity) or connectionStringSecret */}}
+{{/* Validate authentication: must have either namespace (pod identity) or connectionStringSecret, not both */}}
+{{- if and (dig "namespace" "" $kedaConfig) (dig "connectionStringSecret" nil $kedaConfig) }}
+  {{- fail (printf "application '%s': keda.namespace (pod identity) and keda.connectionStringSecret are mutually exclusive — use one or the other" .appName) }}
+{{- end }}
 {{- if dig "namespace" "" $kedaConfig }}
   {{/* Pod identity mode: namespace is sufficient, no connectionStringSecret needed */}}
 {{- else }}

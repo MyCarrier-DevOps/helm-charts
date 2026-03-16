@@ -578,27 +578,8 @@ tests:
           path: spec.triggers[0].metadata.topicName
           value: "my-topic"
 
-  - it: should not create ExternalSecret when namespace is set even with vault config
-    set:
-      environment.name: "prod"
-      applications.test-app-api.deploymentType: deployment
-      applications.test-app-api.isFrontend: false
-      applications.test-app-api.image.registry: "myregistry.example.com"
-      applications.test-app-api.image.repository: "mycarrier/test-app-api"
-      applications.test-app-api.image.tag: "1.0.0"
-      applications.test-app-api.ports.http: 8080
-      applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.type: "queue"
-      applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.namespace: "my-servicebus-namespace"
-      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
-      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
-    asserts:
-      - hasDocuments:
-          count: 2
-      - isKind:
-          of: TriggerAuthentication
-        documentIndex: 0
-      - isKind:
-          of: ScaledObject
-        documentIndex: 1
+  # NOTE: Setting both namespace and connectionStringSecret is rejected by the JSON schema
+  # (oneOf constraint) before templates are rendered. Schema validation errors cannot be
+  # asserted with failedTemplate in helm-unittest, so mutual exclusivity is enforced by:
+  #   1. JSON schema oneOf (primary — catches at values validation time)
+  #   2. Template-level fail (backup — catches when schema validation is bypassed)
