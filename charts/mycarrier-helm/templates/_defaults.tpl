@@ -60,7 +60,7 @@ that can be referenced across templates to avoid scattered literals.
 {{- $_ := set $keda "cooldownPeriod" 300 -}}
 {{- $_ := set $keda "minReplicaCount" 2 -}}
 {{- $_ := set $keda "maxReplicaCount" 50 -}}
-{{- $_ := set $keda "messageCount" "500" -}}
+{{- $_ := set $keda "messageCount" 500 -}}
 {{- $_ := set $defaults "keda" $keda -}}
 
 {{- $_ := set $defaults "imagePullSecret" "imagepull" -}}

@@ -12,7 +12,7 @@ KEDA enables event-driven autoscaling based on Azure Service Bus message count. 
 
 When KEDA is enabled for an application, the chart creates two resources:
 
-1. **TriggerAuthentication** - Authenticates to Azure Service Bus via pod identity (managed identity) or a Kubernetes Secret containing a connection string
+1. **TriggerAuthentication** - Authenticates to Azure Service Bus via a Kubernetes Secret containing a connection string
 2. **ScaledObject** - Configures the scaling trigger, target workload, and scaling parameters
 
 KEDA polls Azure Service Bus at a configurable interval and scales the workload based on the number of pending messages relative to the `messageCount` threshold.
@@ -29,7 +29,7 @@ The result is then clamped between `minReplicaCount` and `maxReplicaCount`. If `
 
 ### Scaling Formula Walkthrough
 
-Given the defaults (`messageCount: "500"`, `minReplicaCount: 2`, `maxReplicaCount: 50`):
+Given the defaults (`messageCount: 500`, `minReplicaCount: 2`, `maxReplicaCount: 50`):
 
 | Active Messages | Calculation | Raw Result | Clamped Result | Reason |
 |-----------------|-------------|-----------|----------------|--------|
@@ -50,7 +50,7 @@ When `idleReplicaCount: 0` is set, KEDA introduces a two-phase activation:
 2. **Activation** (active messages >= `activationMessageCount`): Scales from 0 to at least `minReplicaCount`
 3. **Active scaling**: Normal formula applies (`ceil(activeMessages / messageCount)`)
 
-| Active Messages | `idleReplicaCount: 0`, `activationMessageCount: "1"` | Result |
+| Active Messages | `idleReplicaCount: 0`, `activationMessageCount: 1` | Result |
 |-----------------|-------------------------------------------------------|--------|
 | 0 | Below activation threshold | **0** (idle) |
 | 1 | Meets activation threshold | **2** (jumps to `minReplicaCount`) |
@@ -60,31 +60,15 @@ When `idleReplicaCount: 0` is set, KEDA introduces a two-phase activation:
 
 The `messageCount` value represents **how many messages one replica can handle** during a polling interval. To choose the right value:
 
-- **Too low** (e.g., `"1"`): Aggressive scaling, many replicas created quickly. Useful for latency-sensitive workloads.
-- **Too high** (e.g., `"10000"`): Conservative scaling, fewer replicas. Useful for batch processing where throughput per pod is high.
-- **Right-sized**: Estimate how many messages one pod processes per `pollingInterval` (default 30s). If a pod processes ~500 messages in 30 seconds, `messageCount: "500"` keeps the backlog stable.
+- **Too low** (e.g., `1`): Aggressive scaling, many replicas created quickly. Useful for latency-sensitive workloads.
+- **Too high** (e.g., `10000`): Conservative scaling, fewer replicas. Useful for batch processing where throughput per pod is high.
+- **Right-sized**: Estimate how many messages one pod processes per `pollingInterval` (default 30s). If a pod processes ~500 messages in 30 seconds, `messageCount: 500` keeps the backlog stable.
 
 ## Authentication
 
-The chart provides three mutually exclusive options for authenticating KEDA to Azure Service Bus. You must use exactly one of these — setting both `namespace` and `connectionStringSecret` will fail validation:
+The chart provides two options for authenticating KEDA to Azure Service Bus via `connectionStringSecret`:
 
-### Option A: Pod Identity (Azure Managed Identity)
-
-When your AKS cluster nodes have an Azure managed identity (kubelet identity) with access to Azure Service Bus, KEDA can authenticate using the same identity — no secrets needed. Just provide the Azure Service Bus namespace name:
-
-```yaml
-keda:
-  enabled: true
-  type: "queue"
-  queueName: "my-queue"
-  namespace: "my-servicebus-namespace"   # Azure Service Bus namespace name
-```
-
-The chart creates a `TriggerAuthentication` with `podIdentity.provider: azure`, which tells KEDA to authenticate via the node's managed identity (IMDS). This is the same mechanism that allows your applications to connect to Service Bus using just the hostname with `DefaultAzureCredential`.
-
-**Resources created:** TriggerAuthentication + ScaledObject (2 resources)
-
-### Option B: Reference an Existing Kubernetes Secret
+### Option A: Reference an Existing Kubernetes Secret
 
 Point to a secret that already exists in the namespace (created manually, by another operator, etc.):
 
@@ -102,7 +86,7 @@ kubectl create secret generic servicebus-secret \
 
 **Resources created:** TriggerAuthentication + ScaledObject (2 resources)
 
-### Option C: Auto-Create from Vault via External Secrets Operator
+### Option B: Auto-Create from Vault via External Secrets Operator
 
 The chart generates an `ExternalSecret` that syncs the connection string from Vault into a Kubernetes Secret automatically. No pre-existing secret needed.
 
@@ -142,7 +126,9 @@ applications:
       enabled: true
       type: "queue"
       queueName: "orders"
-      namespace: "my-servicebus-namespace"   # Pod identity (or use connectionStringSecret instead)
+      connectionStringSecret:
+        name: "servicebus-secret"
+        key: "connection-string"
 ```
 
 ### Topic-Based Scaling
@@ -162,7 +148,9 @@ applications:
       type: "topic"
       topicName: "notifications"
       subscriptionName: "email-sender"
-      namespace: "my-servicebus-namespace"   # Pod identity (or use connectionStringSecret instead)
+      connectionStringSecret:
+        name: "servicebus-secret"
+        key: "connection-string"
 ```
 
 ### Configuration Reference
@@ -174,14 +162,13 @@ applications:
 | `queueName` | When type=queue | - | Azure Service Bus queue name |
 | `topicName` | When type=topic | - | Azure Service Bus topic name |
 | `subscriptionName` | When type=topic | - | Azure Service Bus subscription name |
-| `namespace` | Option A | - | Azure Service Bus namespace name (enables pod identity auth, no secrets needed) |
-| `connectionStringSecret.name` | Option B | - | Existing Kubernetes Secret name |
-| `connectionStringSecret.key` | Option B | - | Key within the existing Secret |
-| `connectionStringSecret.vault.path` | Option C | - | Vault secret path (auto-creates K8s secret via ESO) |
-| `connectionStringSecret.vault.property` | Option C | - | Property within the Vault secret |
+| `connectionStringSecret.name` | Option A | - | Existing Kubernetes Secret name |
+| `connectionStringSecret.key` | Option A | - | Key within the existing Secret |
+| `connectionStringSecret.vault.path` | Option B | - | Vault secret path (auto-creates K8s secret via ESO) |
+| `connectionStringSecret.vault.property` | Option B | - | Property within the Vault secret |
 | `connectionStringSecret.vault.secretStoreName` | No | `"vault-backend"` | ClusterSecretStore name for ESO |
 | `connectionStringSecret.vault.refreshInterval` | No | `"15m"` | How often ESO polls Vault for secret changes |
-| `messageCount` | No | `"500"` | Target messages per replica to trigger scaling |
+| `messageCount` | No | `500` | Target messages per replica to trigger scaling |
 | `activationMessageCount` | No | - | Message threshold to activate the scaler (scale from idle) |
 | `pollingInterval` | No | `30` | How often KEDA checks the trigger source (seconds) |
 | `cooldownPeriod` | No | `300` | Wait time after last trigger before scaling down (seconds) |
@@ -192,30 +179,9 @@ applications:
 
 ## Examples
 
-### Example 1: Basic Queue Consumer (Pod Identity)
+### Example 1: Basic Queue Consumer
 
-Minimal configuration using pod identity — no secrets needed:
-
-```yaml
-applications:
-  queue-worker:
-    keda:
-      enabled: true
-      type: "queue"
-      queueName: "tasks"
-      namespace: "my-servicebus-namespace"
-```
-
-**Result:**
-- Authenticates via node managed identity (no secrets)
-- Scales between 2-50 replicas
-- Triggers when queue has more than 500 messages per replica
-- Polls every 30 seconds
-- Scales down after 300 seconds of inactivity
-
-### Example 2: Queue Consumer with Connection String
-
-Using an existing Kubernetes Secret for authentication:
+Minimal configuration using an existing Kubernetes Secret:
 
 ```yaml
 applications:
@@ -230,9 +196,13 @@ applications:
 ```
 
 **Result:**
-- Same scaling behavior as Example 1, but authenticates via connection string
+- Authenticates via connection string from the referenced secret
+- Scales between 2-50 replicas
+- Triggers when queue has more than 500 messages per replica
+- Polls every 30 seconds
+- Scales down after 300 seconds of inactivity
 
-### Example 3: Queue Consumer with Vault
+### Example 2: Queue Consumer with Vault
 
 Connection string auto-synced from Vault — no pre-existing K8s secret needed:
 
@@ -254,7 +224,7 @@ applications:
 - TriggerAuthentication automatically references the generated secret
 - Same scaling behavior as Example 1
 
-### Example 4: High-Throughput Topic Consumer
+### Example 3: High-Throughput Topic Consumer
 
 Custom parameters for a high-volume workload:
 
@@ -266,8 +236,10 @@ applications:
       type: "topic"
       topicName: "events"
       subscriptionName: "event-processor"
-      namespace: "my-servicebus-namespace"
-      messageCount: "20"
+      connectionStringSecret:
+        name: "servicebus-secret"
+        key: "connection-string"
+      messageCount: 20
       pollingInterval: 10
       cooldownPeriod: 120
       minReplicaCount: 3
@@ -280,7 +252,7 @@ applications:
 - Polls every 10 seconds for faster reaction
 - Scales down after 120 seconds of inactivity
 
-### Example 5: Scale-to-Zero Worker
+### Example 4: Scale-to-Zero Worker
 
 For workloads that should scale to zero when idle:
 
@@ -291,10 +263,12 @@ applications:
       enabled: true
       type: "queue"
       queueName: "batch-jobs"
-      namespace: "my-servicebus-namespace"
+      connectionStringSecret:
+        name: "servicebus-secret"
+        key: "connection-string"
       idleReplicaCount: 0
       minReplicaCount: 1
-      activationMessageCount: "1"
+      activationMessageCount: 1
 ```
 
 **Result:**
@@ -302,7 +276,7 @@ applications:
 - Activates (scales from 0 to 1) when at least 1 message appears
 - Scales between 1-50 replicas when active
 
-### Example 6: Advanced Scaling Policies
+### Example 5: Advanced Scaling Policies
 
 Fine-tune scale-down behavior to prevent flapping:
 
@@ -313,7 +287,9 @@ applications:
       enabled: true
       type: "queue"
       queueName: "orders"
-      namespace: "my-servicebus-namespace"
+      connectionStringSecret:
+        name: "servicebus-secret"
+        key: "connection-string"
       minReplicaCount: 2
       maxReplicaCount: 20
       advanced:
@@ -337,7 +313,7 @@ applications:
 - Waits 300 seconds of stable metrics before scaling down
 - Scales up at most 4 pods per minute
 
-### Example 7: KEDA with Rollout Deployment
+### Example 6: KEDA with Rollout Deployment
 
 KEDA works with all deployment types:
 
@@ -350,7 +326,9 @@ applications:
       type: "topic"
       topicName: "messages"
       subscriptionName: "handler"
-      namespace: "my-servicebus-namespace"
+      connectionStringSecret:
+        name: "servicebus-secret"
+        key: "connection-string"
 ```
 
 **Result:**
@@ -380,17 +358,15 @@ The `replicas` field is omitted from the Deployment/StatefulSet/Rollout spec, al
 ### Issue: KEDA not scaling
 
 **Possible causes:**
-1. **Pod identity:** The node's managed identity does not have the required RBAC role on the Service Bus namespace (needs `Azure Service Bus Data Owner` or `Azure Service Bus Data Receiver`)
-2. **Connection string:** Secret does not exist in the namespace (or ExternalSecret failed to sync)
-3. Connection string is invalid or expired
-4. Queue/topic name is misspelled
-5. `pollingInterval` is too high to notice short bursts
+1. **Connection string:** Secret does not exist in the namespace (or ExternalSecret failed to sync)
+2. Connection string is invalid or expired
+3. Queue/topic name is misspelled
+4. `pollingInterval` is too high to notice short bursts
 
 **Solutions:**
 - Check KEDA operator logs: `kubectl logs -n keda -l app=keda-operator`
 - Verify the ScaledObject: `kubectl describe scaledobject <name>`
-- If using pod identity: verify the node managed identity has access to the Service Bus namespace in Azure IAM
-- If using connection string: verify the secret: `kubectl get secret <name> -n <namespace>`
+- Verify the secret exists: `kubectl get secret <name> -n <namespace>`
 - If using Vault: check ExternalSecret status: `kubectl describe externalsecret <fullName>-keda-servicebus-es`
 
 ### Issue: HPA still being created alongside KEDA
