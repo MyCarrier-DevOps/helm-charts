@@ -1138,44 +1138,9 @@
                 "type": "string",
                 "description": "Azure Service Bus queue name (required when type is 'queue')"
               },
-              "connectionStringSecret": {
-                "type": "object",
-                "description": "Azure Service Bus connection string source. Mutually exclusive with namespace. Use either name/key to reference an existing K8s secret, or vault to auto-create one via External Secrets Operator.",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "description": "Name of an existing Kubernetes secret (used with 'key', mutually exclusive with 'vault')"
-                  },
-                  "key": {
-                    "type": "string",
-                    "description": "Key within the existing secret containing the connection string (used with 'name')"
-                  },
-                  "vault": {
-                    "type": "object",
-                    "description": "Vault path to auto-create K8s secret via External Secrets Operator (mutually exclusive with name/key)",
-                    "properties": {
-                      "path": {
-                        "type": "string",
-                        "description": "Vault secret path (e.g., 'secrets/data/dev/servicebus')"
-                      },
-                      "property": {
-                        "type": "string",
-                        "description": "Property within the Vault secret containing the connection string"
-                      },
-                      "secretStoreName": {
-                        "type": "string",
-                        "description": "Name of the ClusterSecretStore to use",
-                        "default": "vault-backend"
-                      },
-                      "refreshInterval": {
-                        "type": "string",
-                        "description": "How often ESO polls Vault for secret changes (e.g., '15m', '5m', '1h')",
-                        "default": "15m"
-                      }
-                    },
-                    "required": ["path", "property"]
-                  }
-                }
+              "clusterAuthRef": {
+                "type": "string",
+                "description": "Name of an existing ClusterTriggerAuthentication resource (managed outside this chart). Defaults to servicebus-connectionstring-<env> based on environment (dev/feature -> dev, preprod -> preprod, prod -> prod)."
               },
               "messageCount": {
                 "type": "integer",
@@ -1214,8 +1179,7 @@
                 "type": "object",
                 "description": "Advanced KEDA scaling configuration (e.g., scaling policies)"
               }
-            },
-            "required": ["connectionStringSecret"]
+            }
           }
         }
       }

@@ -15,7 +15,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should create ScaledObject and TriggerAuthentication for Azure Service Bus topic
+  - it: should create only a ScaledObject (no TriggerAuthentication)
     set:
       environment.name: "prod"
       applications.test-app-api.deploymentType: deployment
@@ -28,47 +28,13 @@ tests:
       applications.test-app-api.keda.type: "topic"
       applications.test-app-api.keda.topicName: "my-topic"
       applications.test-app-api.keda.subscriptionName: "my-subscription"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
     asserts:
       - hasDocuments:
-          count: 2
-      - isKind:
-          of: TriggerAuthentication
-        documentIndex: 0
+          count: 1
       - isKind:
           of: ScaledObject
-        documentIndex: 1
-
-  - it: should configure TriggerAuthentication with correct secret reference for topic
-    set:
-      environment.name: "prod"
-      applications.test-app-api.deploymentType: deployment
-      applications.test-app-api.isFrontend: false
-      applications.test-app-api.image.registry: "myregistry.example.com"
-      applications.test-app-api.image.repository: "mycarrier/test-app-api"
-      applications.test-app-api.image.tag: "1.0.0"
-      applications.test-app-api.ports.http: 8080
-      applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.type: "topic"
-      applications.test-app-api.keda.topicName: "my-topic"
-      applications.test-app-api.keda.subscriptionName: "my-subscription"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
-    documentIndex: 0
-    asserts:
-      - equal:
-          path: metadata.name
-          value: app-test-app-api-keda-trigger-auth
-      - equal:
-          path: spec.secretTargetRef[0].parameter
-          value: connection
-      - equal:
-          path: spec.secretTargetRef[0].name
-          value: servicebus-secret
-      - equal:
-          path: spec.secretTargetRef[0].key
-          value: connection-string
+        documentIndex: 0
 
   - it: should configure ScaledObject with topic trigger and defaults
     set:
@@ -83,9 +49,8 @@ tests:
       applications.test-app-api.keda.type: "topic"
       applications.test-app-api.keda.topicName: "my-topic"
       applications.test-app-api.keda.subscriptionName: "my-subscription"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
-    documentIndex: 1
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
     asserts:
       - equal:
           path: metadata.name
@@ -122,7 +87,10 @@ tests:
           value: "500"
       - equal:
           path: spec.triggers[0].authenticationRef.name
-          value: app-test-app-api-keda-trigger-auth
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[0].authenticationRef.kind
+          value: ClusterTriggerAuthentication
 
   - it: should configure ScaledObject with queue trigger
     set:
@@ -136,9 +104,8 @@ tests:
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
       applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
-    documentIndex: 1
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.triggers[0].type
@@ -151,7 +118,10 @@ tests:
           value: "500"
       - equal:
           path: spec.triggers[0].authenticationRef.name
-          value: app-test-app-api-keda-trigger-auth
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[0].authenticationRef.kind
+          value: ClusterTriggerAuthentication
 
   - it: should use custom scaling parameters when specified
     set:
@@ -165,14 +135,13 @@ tests:
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
       applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
       applications.test-app-api.keda.pollingInterval: 15
       applications.test-app-api.keda.cooldownPeriod: 120
       applications.test-app-api.keda.minReplicaCount: 1
       applications.test-app-api.keda.maxReplicaCount: 20
       applications.test-app-api.keda.messageCount: 10
-    documentIndex: 1
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.pollingInterval
@@ -202,10 +171,9 @@ tests:
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
       applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
       applications.test-app-api.keda.idleReplicaCount: 0
-    documentIndex: 1
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.idleReplicaCount
@@ -224,9 +192,8 @@ tests:
       applications.test-app-api.keda.type: "topic"
       applications.test-app-api.keda.topicName: "my-topic"
       applications.test-app-api.keda.subscriptionName: "my-sub"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
-    documentIndex: 1
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.scaleTargetRef.apiVersion
@@ -247,9 +214,8 @@ tests:
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
       applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
-    documentIndex: 1
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.scaleTargetRef.apiVersion
@@ -271,132 +237,13 @@ tests:
       applications.test-app-api.keda.type: "topic"
       applications.test-app-api.keda.topicName: "my-topic"
       applications.test-app-api.keda.subscriptionName: "my-sub"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
       applications.test-app-api.keda.activationMessageCount: 1
-    documentIndex: 1
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.triggers[0].metadata.activationMessageCount
           value: "1"
-
-  - it: should create ExternalSecret when vault is configured
-    set:
-      environment.name: "prod"
-      applications.test-app-api.deploymentType: deployment
-      applications.test-app-api.isFrontend: false
-      applications.test-app-api.image.registry: "myregistry.example.com"
-      applications.test-app-api.image.repository: "mycarrier/test-app-api"
-      applications.test-app-api.image.tag: "1.0.0"
-      applications.test-app-api.ports.http: 8080
-      applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.type: "queue"
-      applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
-      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
-    asserts:
-      - hasDocuments:
-          count: 3
-      - isKind:
-          of: ExternalSecret
-        documentIndex: 0
-      - isKind:
-          of: TriggerAuthentication
-        documentIndex: 1
-      - isKind:
-          of: ScaledObject
-        documentIndex: 2
-
-  - it: should configure ExternalSecret with correct Vault path and property
-    set:
-      environment.name: "prod"
-      applications.test-app-api.deploymentType: deployment
-      applications.test-app-api.isFrontend: false
-      applications.test-app-api.image.registry: "myregistry.example.com"
-      applications.test-app-api.image.repository: "mycarrier/test-app-api"
-      applications.test-app-api.image.tag: "1.0.0"
-      applications.test-app-api.ports.http: 8080
-      applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.type: "queue"
-      applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
-      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
-    documentIndex: 0
-    asserts:
-      - equal:
-          path: metadata.name
-          value: app-test-app-api-keda-servicebus-es
-      - equal:
-          path: spec.secretStoreRef.kind
-          value: ClusterSecretStore
-      - equal:
-          path: spec.secretStoreRef.name
-          value: vault-backend
-      - equal:
-          path: spec.target.name
-          value: app-test-app-api-keda-servicebus
-      - equal:
-          path: spec.target.creationPolicy
-          value: Owner
-      - equal:
-          path: spec.data[0].secretKey
-          value: connectionString
-      - equal:
-          path: spec.data[0].remoteRef.key
-          value: "secrets/data/dev/servicebus"
-      - equal:
-          path: spec.data[0].remoteRef.property
-          value: "connectionString"
-
-  - it: should configure TriggerAuthentication to reference auto-created secret when vault is used
-    set:
-      environment.name: "prod"
-      applications.test-app-api.deploymentType: deployment
-      applications.test-app-api.isFrontend: false
-      applications.test-app-api.image.registry: "myregistry.example.com"
-      applications.test-app-api.image.repository: "mycarrier/test-app-api"
-      applications.test-app-api.image.tag: "1.0.0"
-      applications.test-app-api.ports.http: 8080
-      applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.type: "queue"
-      applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.vault.path: "secrets/data/dev/servicebus"
-      applications.test-app-api.keda.connectionStringSecret.vault.property: "connectionString"
-    documentIndex: 1
-    asserts:
-      - equal:
-          path: spec.secretTargetRef[0].parameter
-          value: connection
-      - equal:
-          path: spec.secretTargetRef[0].name
-          value: app-test-app-api-keda-servicebus
-      - equal:
-          path: spec.secretTargetRef[0].key
-          value: connectionString
-
-  - it: should not create ExternalSecret when using direct secret reference
-    set:
-      environment.name: "prod"
-      applications.test-app-api.deploymentType: deployment
-      applications.test-app-api.isFrontend: false
-      applications.test-app-api.image.registry: "myregistry.example.com"
-      applications.test-app-api.image.repository: "mycarrier/test-app-api"
-      applications.test-app-api.image.tag: "1.0.0"
-      applications.test-app-api.ports.http: 8080
-      applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.type: "queue"
-      applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
-    asserts:
-      - hasDocuments:
-          count: 2
-      - isKind:
-          of: TriggerAuthentication
-        documentIndex: 0
-      - isKind:
-          of: ScaledObject
-        documentIndex: 1
 
   - it: should allow minReplicaCount of 0
     set:
@@ -410,11 +257,10 @@ tests:
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
       applications.test-app-api.keda.queueName: "my-queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
       applications.test-app-api.keda.minReplicaCount: 0
       applications.test-app-api.keda.idleReplicaCount: 0
-    documentIndex: 1
+    documentIndex: 0
     asserts:
       - equal:
           path: spec.minReplicaCount
@@ -430,8 +276,7 @@ tests:
       applications.test-app-api.image.tag: "1.0.0"
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.keda.enabled: true
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
     asserts:
       - failedTemplate:
           errorMessage: "application 'test-app-api': keda.type must be 'queue' or 'topic', got '<not set>'"
@@ -447,8 +292,7 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
     asserts:
       - failedTemplate:
           errorMessage: "application 'test-app-api': keda.queueName is required when keda.type is 'queue'"
@@ -464,12 +308,228 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "topic"
-      applications.test-app-api.keda.connectionStringSecret.name: "servicebus-secret"
-      applications.test-app-api.keda.connectionStringSecret.key: "connection-string"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
     asserts:
       - failedTemplate:
           errorMessage: "application 'test-app-api': keda.topicName is required when keda.type is 'topic'"
 
-  # NOTE: Missing connectionStringSecret is now caught by JSON schema validation
-  # (required: ["connectionStringSecret"]) before templates are rendered.
-  # Schema validation errors cannot be asserted with failedTemplate in helm-unittest.
+  - it: should fail when subscriptionName is missing for topic type
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.subscriptionName is required when keda.type is 'topic'"
+
+  - it: should render advanced scaling policies
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+      applications.test-app-api.keda.advanced:
+        horizontalPodAutoscalerConfig:
+          behavior:
+            scaleDown:
+              stabilizationWindowSeconds: 300
+              policies:
+                - type: Percent
+                  value: 25
+                  periodSeconds: 60
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.advanced.horizontalPodAutoscalerConfig.behavior.scaleDown.stabilizationWindowSeconds
+          value: 300
+      - equal:
+          path: spec.advanced.horizontalPodAutoscalerConfig.behavior.scaleDown.policies[0].type
+          value: Percent
+      - equal:
+          path: spec.advanced.horizontalPodAutoscalerConfig.behavior.scaleDown.policies[0].value
+          value: 25
+
+  - it: should not render activationMessageCount when not set
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.triggers[0].metadata.activationMessageCount
+
+  - it: should not render idleReplicaCount when not set
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.idleReplicaCount
+
+  - it: should not render advanced when not set
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.advanced
+
+  - it: should default clusterAuthRef for topic trigger
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-sub"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[0].authenticationRef.kind
+          value: ClusterTriggerAuthentication
+
+  - it: should default clusterAuthRef to servicebus-connectionstring-prod for prod
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[0].authenticationRef.kind
+          value: ClusterTriggerAuthentication
+
+  - it: should default clusterAuthRef to servicebus-connectionstring-dev for dev
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-dev
+
+  - it: should default clusterAuthRef to servicebus-connectionstring-dev for feature envs
+    set:
+      environment.name: "feature42"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-dev
+
+  - it: should default clusterAuthRef to servicebus-connectionstring-preprod for preprod
+    set:
+      environment.name: "preprod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-preprod
+
+  - it: should allow overriding clusterAuthRef
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "queue"
+      applications.test-app-api.keda.queueName: "my-queue"
+      applications.test-app-api.keda.clusterAuthRef: "custom-cluster-auth"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: custom-cluster-auth

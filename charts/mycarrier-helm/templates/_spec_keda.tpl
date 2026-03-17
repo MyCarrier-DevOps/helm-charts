@@ -21,15 +21,6 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
     {{- fail (printf "application '%s': keda.queueName is required when keda.type is 'queue'" .appName) }}
   {{- end }}
 {{- end }}
-{{/* Validate authentication: connectionStringSecret is required */}}
-{{- if not (dig "connectionStringSecret" nil $kedaConfig) }}
-  {{- fail (printf "application '%s': keda.connectionStringSecret is required (name/key or vault)" .appName) }}
-{{- end }}
-{{- if not (dig "connectionStringSecret" "vault" nil $kedaConfig) }}
-  {{- if not (and (dig "connectionStringSecret" "name" "" $kedaConfig) (dig "connectionStringSecret" "key" "" $kedaConfig)) }}
-    {{- fail (printf "application '%s': keda.connectionStringSecret requires either vault (path+property) or name+key" .appName) }}
-  {{- end }}
-{{- end }}
 {{- end -}}
 
 {{- define "helm.specs.keda.scaledObject" -}}
@@ -40,6 +31,10 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
 {{- end -}}
 {{- $kedaDefaults := $ctx.chartDefaults.keda -}}
 {{- $kedaConfig := .application.keda -}}
+{{/* Resolve clusterAuthRef: use configured value or default based on environment */}}
+{{- $metaEnv := include "helm.metaEnvironment" . | trim -}}
+{{- $defaultClusterAuthRef := printf "servicebus-connectionstring-%s" $metaEnv -}}
+{{- $clusterAuthRef := dig "clusterAuthRef" $defaultClusterAuthRef $kedaConfig -}}
 {{/* Compute min/max replica counts - use kindIs "invalid" to allow 0 */}}
 {{- $configuredMinReplicas := dig "minReplicaCount" nil $kedaConfig }}
 {{- $minReplicaCount := ternary ($configuredMinReplicas | int) ($kedaDefaults.minReplicaCount | int) (not (kindIs "invalid" $configuredMinReplicas)) }}
@@ -81,7 +76,8 @@ triggers:
       activationMessageCount: {{ $kedaConfig.activationMessageCount | quote }}
       {{- end }}
     authenticationRef:
-      name: {{ $fullName }}-keda-trigger-auth
+      name: {{ $clusterAuthRef }}
+      kind: ClusterTriggerAuthentication
 {{- else }}
   - type: azure-servicebus
     metadata:
@@ -91,63 +87,7 @@ triggers:
       activationMessageCount: {{ $kedaConfig.activationMessageCount | quote }}
       {{- end }}
     authenticationRef:
-      name: {{ $fullName }}-keda-trigger-auth
+      name: {{ $clusterAuthRef }}
+      kind: ClusterTriggerAuthentication
 {{- end }}
-{{- end -}}
-
-{{/*
-Determines the K8s secret name and key for the TriggerAuthentication.
-When vault is configured, the ExternalSecret creates a secret named "<fullName>-keda-servicebus".
-When a direct secret reference is used, it points to the user-specified secret.
-*/}}
-{{- define "helm.specs.keda.triggerAuth" -}}
-{{- $fullName := include "helm.fullname" . }}
-{{- $kedaConfig := .application.keda -}}
-secretTargetRef:
-  - parameter: connection
-    {{- if dig "connectionStringSecret" "vault" nil $kedaConfig }}
-    name: {{ $fullName }}-keda-servicebus
-    key: connectionString
-    {{- else }}
-    name: {{ $kedaConfig.connectionStringSecret.name }}
-    key: {{ $kedaConfig.connectionStringSecret.key }}
-    {{- end }}
-{{- end -}}
-
-{{/*
-Generates an ExternalSecret that syncs the Azure Service Bus connection string
-from Vault into a K8s Secret for KEDA TriggerAuthentication.
-*/}}
-{{- define "helm.specs.keda.externalSecret" -}}
-{{- $fullName := include "helm.fullname" . }}
-{{- $namespace := include "helm.namespace" . }}
-{{- $kedaConfig := .application.keda -}}
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: {{ $fullName }}-keda-servicebus-es
-  namespace: {{ $namespace }}
-  labels:
-    {{ include "helm.labels.dependencies" . | indent 4 | trim }}
-    {{ include "helm.labels.standard" . | indent 4 | trim }}
-    {{ include "helm.labels.version" . | indent 4 | trim }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "-1000"
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-spec:
-  refreshInterval: {{ dig "connectionStringSecret" "vault" "refreshInterval" "15m" $kedaConfig }}
-  secretStoreRef:
-    kind: ClusterSecretStore
-    name: {{ dig "connectionStringSecret" "vault" "secretStoreName" "vault-backend" $kedaConfig }}
-  target:
-    name: {{ $fullName }}-keda-servicebus
-    creationPolicy: Owner
-  data:
-    - secretKey: connectionString
-      remoteRef:
-        key: {{ $kedaConfig.connectionStringSecret.vault.path }}
-        property: {{ $kedaConfig.connectionStringSecret.vault.property }}
-        conversionStrategy: Default
-        decodingStrategy: None
 {{- end -}}

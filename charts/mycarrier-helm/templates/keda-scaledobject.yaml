@@ -6,26 +6,6 @@
 {{- include "helm.specs.keda.validate" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
-{{- $kedaConfig := $appValues.keda }}
-{{- if dig "connectionStringSecret" "vault" nil $kedaConfig }}
----
-{{ include "helm.specs.keda.externalSecret" $appContext }}
-{{- end }}
----
-apiVersion: keda.sh/v1alpha1
-kind: TriggerAuthentication
-metadata:
-  name: {{ $fullName }}-keda-trigger-auth
-  namespace: {{ $namespace }}
-  labels:
-    {{ include "helm.labels.dependencies" $appContext | indent 4 | trim }}
-    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
-    {{ include "helm.labels.version" $appContext | indent 4 | trim }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "11"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
-spec:
-  {{ include "helm.specs.keda.triggerAuth" $appContext | indent 2 | trim }}
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
