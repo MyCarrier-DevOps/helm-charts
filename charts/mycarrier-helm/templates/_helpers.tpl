@@ -158,10 +158,16 @@ It's meant to be used as an include that evaluates the condition inline
 
 {{/*
 Determines if KEDA ScaledObject should be created for an application.
-Returns "true" if keda.enabled is true on the application.
+Returns "true" if keda.enabled is true on the application and the environment is not a feature environment.
+KEDA is blocked on feature environments to avoid unnecessary resource consumption.
 */}}
 {{- define "helm.kedaCondition" -}}
-{{- if dig "keda" "enabled" false .application }}true
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $envName := $ctx.defaults.environmentName -}}
+{{- if and (dig "keda" "enabled" false .application) (not (hasPrefix "feature" $envName)) }}true
 {{- else }}false
 {{- end -}}
 {{- end -}}

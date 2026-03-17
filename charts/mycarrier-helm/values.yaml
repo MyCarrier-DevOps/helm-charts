@@ -359,6 +359,7 @@ applications: {}
 #   #
 #   # NOTE: HPA and KEDA are mutually exclusive. When keda.enabled is true,
 #   # HPA is automatically disabled and replicas are managed by KEDA.
+#   # NOTE: KEDA is blocked on feature environments (environment.name starting with "feature").
 #   #
 #   # --- Queue-based scaling ---
 #   # keda:

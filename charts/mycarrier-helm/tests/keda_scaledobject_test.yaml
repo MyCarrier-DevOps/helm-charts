@@ -479,7 +479,7 @@ tests:
           path: spec.triggers[0].authenticationRef.name
           value: servicebus-connectionstring-dev
 
-  - it: should default clusterAuthRef to servicebus-connectionstring-dev for feature envs
+  - it: should not create ScaledObject on feature environments even when keda is enabled
     set:
       environment.name: "feature42"
       applications.test-app-api.deploymentType: deployment
@@ -491,11 +491,9 @@ tests:
       applications.test-app-api.keda.enabled: true
       applications.test-app-api.keda.type: "queue"
       applications.test-app-api.keda.queueName: "my-queue"
-    documentIndex: 0
     asserts:
-      - equal:
-          path: spec.triggers[0].authenticationRef.name
-          value: servicebus-connectionstring-dev
+      - hasDocuments:
+          count: 0
 
   - it: should default clusterAuthRef to servicebus-connectionstring-preprod for preprod
     set:
