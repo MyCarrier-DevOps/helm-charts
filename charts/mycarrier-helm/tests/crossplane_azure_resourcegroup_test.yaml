@@ -27,7 +27,7 @@ tests:
           value: azure.upbound.io/v1beta1
       - equal:
           path: metadata.name
-          value: "dev-rg-test-dev"
+          value: "dev-testapp-rg-test-dev"
       - equal:
           path: metadata.namespace
           value: dev-testapp
@@ -144,21 +144,21 @@ tests:
         documentIndex: 0
       - equal:
           path: metadata.name
-          value: "dev-rg-app-dev"
+          value: "dev-multitest-rg-app-dev"
         documentIndex: 0
       - isKind:
           of: ResourceGroup
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: "dev-rg-data-dev"
+          value: "dev-multitest-rg-data-dev"
         documentIndex: 1
       - isKind:
           of: ResourceGroup
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: "dev-rg-network-dev"
+          value: "dev-multitest-rg-network-dev"
         documentIndex: 2
 
   # Test 6: Resource Group with custom namespace
