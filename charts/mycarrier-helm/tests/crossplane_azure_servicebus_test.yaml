@@ -30,7 +30,7 @@ tests:
         documentIndex: 0
       - equal:
           path: metadata.name
-          value: "test-servicebus"
+          value: "dev-test-servicebus"
         documentIndex: 0
       - equal:
           path: metadata.namespace
@@ -53,7 +53,7 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: "test-servicebus-orders"
+          value: "dev-test-servicebus-orders"
         documentIndex: 1
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/namespace"]
@@ -64,7 +64,7 @@ tests:
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: "test-servicebus-orders-processor"
+          value: "dev-orders-processor"
         documentIndex: 2
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/namespace"]
@@ -72,7 +72,7 @@ tests:
         documentIndex: 2
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/topic"]
-          value: "test-servicebus-orders"
+          value: "dev-test-servicebus-orders"
         documentIndex: 2
 
   # Test 2: Service Bus with subscription rules (SqlFilter)
@@ -108,7 +108,7 @@ tests:
         documentIndex: 3
       - equal:
           path: metadata.name
-          value: "filtered-sub-high-priority"
+          value: "dev-high-priority"
         documentIndex: 3
       - equal:
           path: spec.forProvider.filterType
@@ -124,11 +124,11 @@ tests:
         documentIndex: 3
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/topic"]
-          value: "test-sb-rules-events"
+          value: "dev-test-sb-rules-events"
         documentIndex: 3
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/subscription"]
-          value: "test-sb-rules-events-filtered-sub"
+          value: "dev-events-filtered-sub"
         documentIndex: 3
 
   # Test 3: Service Bus with subscription rules (CorrelationFilter)
@@ -268,42 +268,42 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: "multi-sb-orders"
+          value: "dev-multi-sb-orders"
         documentIndex: 1
       - isKind:
           of: Subscription
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: "multi-sb-orders-processor"
+          value: "dev-orders-processor"
         documentIndex: 2
       - isKind:
           of: Subscription
         documentIndex: 3
       - equal:
           path: metadata.name
-          value: "multi-sb-orders-archiver"
+          value: "dev-orders-archiver"
         documentIndex: 3
       - isKind:
           of: Topic
         documentIndex: 4
       - equal:
           path: metadata.name
-          value: "multi-sb-notifications"
+          value: "dev-multi-sb-notifications"
         documentIndex: 4
       - isKind:
           of: Subscription
         documentIndex: 5
       - equal:
           path: metadata.name
-          value: "multi-sb-notifications-email-sender"
+          value: "dev-notifications-email-sender"
         documentIndex: 5
       - isKind:
           of: Subscription
         documentIndex: 6
       - equal:
           path: metadata.name
-          value: "multi-sb-notifications-sms-sender"
+          value: "dev-notifications-sms-sender"
         documentIndex: 6
 
   # Test 6: Service Bus with subscription properties
@@ -790,20 +790,20 @@ tests:
     asserts:
       - hasDocuments:
           count: 4
-      # Topic: lowercased
+      # Topic: environment-namespace-topic, lowercased
       - equal:
           path: metadata.name
-          value: "my-servicebus-integrationevents"
+          value: "dev-my-servicebus-integrationevents"
         documentIndex: 1
-      # Subscription: lowercased
+      # Subscription: environment-topic-subscription, lowercased (namespace dropped)
       - equal:
           path: metadata.name
-          value: "my-servicebus-integrationevents-mc.carrier.orderservice"
+          value: "dev-integrationevents-mc.carrier.orderservice"
         documentIndex: 2
-      # Rule: subscription-rule, lowercased, underscores replaced with hyphens
+      # Rule: environment-rule, lowercased, underscores replaced with hyphens
       - equal:
           path: metadata.name
-          value: "mc.carrier.orderservice-carrier-updated-filter"
+          value: "dev-carrier-updated-filter"
         documentIndex: 3
       # All names must match RFC 1123 subdomain pattern
       - matchRegex:

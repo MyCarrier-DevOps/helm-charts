@@ -36,7 +36,7 @@ tests:
           of: AzureBlobStorage
       - equal:
           path: metadata.name
-          value: stexampletestappdev
+          value: dev-stexampletestappdev
       - equal:
           path: metadata.namespace
           value: dev-exampletestapp
@@ -72,7 +72,7 @@ tests:
           of: AzureBlobStorage
       - equal:
           path: metadata.name
-          value: stminimaldev
+          value: dev-stminimaldev
       - equal:
           path: metadata.namespace
           value: dev-minimal

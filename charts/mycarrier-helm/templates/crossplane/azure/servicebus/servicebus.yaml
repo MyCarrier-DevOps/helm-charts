@@ -12,7 +12,7 @@
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: ServiceBusNamespace
 metadata:
-  name: {{ include "helm.k8s.safename" ($sbInstance.name | required "Service Bus name is required") }}
+  name: {{ include "helm.crossplane.name" (dict "name" ($sbInstance.name | required "Service Bus name is required") "environment" $root.Values.environment.name) }}
   namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
@@ -63,12 +63,12 @@ spec:
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: Topic
 metadata:
-  name: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
+  name: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
   namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
-    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
+    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
   annotations:
     crossplane.io/external-name: {{ $topic.name }}
   {{- if $topic.annotations }}
@@ -134,13 +134,13 @@ spec:
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: Subscription
 metadata:
-  name: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
+  name: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name) }}
   namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
-    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
-    servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
+    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
+    servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name) }}
   annotations:
     crossplane.io/external-name: {{ $subscription.name }}
   {{- if $subscription.annotations }}
@@ -165,7 +165,7 @@ spec:
       matchLabels:
         {{- toYaml $cachedLabels | nindent 8 }}
         servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
-        servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
+        servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
     {{- end }}
     maxDeliveryCount: {{ $subscription.maxDeliveryCount | default 10 }}
     {{- if $subscription.lockDuration }}
@@ -207,13 +207,13 @@ spec:
 apiVersion: servicebus.azure.upbound.io/v1beta2
 kind: SubscriptionRule
 metadata:
-  name: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "rule" $rule.name) }}
+  name: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "rule" $rule.name "environment" $root.Values.environment.name) }}
   namespace: {{ $sbInstance.namespace | default (printf "%s-%s" $root.Values.environment.name $root.Values.global.appStack) }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
-    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
-    servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
+    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
+    servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name) }}
   annotations:
     crossplane.io/external-name: {{ $rule.name }}
   {{- if $rule.annotations }}
@@ -239,8 +239,8 @@ spec:
       matchLabels:
         {{- toYaml $cachedLabels | nindent 8 }}
         servicebus.mycarrier.io/namespace: {{ $sbInstance.name }}
-        servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name) }}
-        servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name) }}
+        servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
+        servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name) }}
     {{- end }}
     {{- if $rule.sqlFilter }}
     sqlFilter: {{ $rule.sqlFilter | quote }}
