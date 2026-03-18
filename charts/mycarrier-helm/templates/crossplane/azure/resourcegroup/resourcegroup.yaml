@@ -9,7 +9,7 @@
 apiVersion: azure.upbound.io/v1beta1
 kind: ResourceGroup
 metadata:
-  name: {{ include "helm.crossplane.name" (dict "name" ($rgInstance.name | required "Resource Group name is required") "environment" $.Values.environment.name) }}
+  name: {{ include "helm.crossplane.name" (dict "name" ($rgInstance.name | required "Resource Group name is required") "environment" $.Values.environment.name "appStack" $.Values.global.appStack) }}
   namespace: {{ $rgInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
   labels:
     {{- include "helm.labels.standard" $ | nindent 4 }}

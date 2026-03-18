@@ -4,7 +4,7 @@
 apiVersion: azure.platform.io/v1alpha1
 kind: AzureBlobStorage
 metadata:
-  name: {{ include "helm.crossplane.name" (dict "name" (include "helm.azure.storage.instanceName" (dict "instance" $instance "root" $)) "environment" $.Values.environment.name) }}
+  name: {{ include "helm.crossplane.name" (dict "name" (include "helm.azure.storage.instanceName" (dict "instance" $instance "root" $)) "environment" $.Values.environment.name "appStack" $.Values.global.appStack) }}
   namespace: {{ $instance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
   labels:
     {{- include "helm.labels.standard" $ | nindent 4 }}

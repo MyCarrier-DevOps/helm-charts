@@ -69,35 +69,35 @@ Usage: {{ include "helm.k8s.safename" $name }}
 {{- end -}}
 
 {{/*
-Prefix a crossplane resource name with the environment name and sanitize for k8s compliance.
-Usage: {{ include "helm.crossplane.name" (dict "name" $name "environment" $root.Values.environment.name) }}
+Prefix a crossplane resource name with environment and appStack, then sanitize for k8s compliance.
+Usage: {{ include "helm.crossplane.name" (dict "name" $name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
 */}}
 {{- define "helm.crossplane.name" -}}
-{{- include "helm.k8s.safename" (printf "%s-%s" .environment .name) -}}
+{{- include "helm.k8s.safename" (printf "%s-%s-%s" .environment .appStack .name) -}}
 {{- end -}}
 
 {{/*
-Generate Service Bus Topic full name (environment-namespace-topic, max 63 chars for k8s)
-Usage: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name) }}
+Generate Service Bus Topic full name (environment-appStack-namespace-topic, max 63 chars for k8s)
+Usage: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
 */}}
 {{- define "helm.azure.servicebus.topic.fullname" -}}
-{{- include "helm.k8s.safename" (printf "%s-%s-%s" .environment .namespace .topic) -}}
+{{- include "helm.k8s.safename" (printf "%s-%s-%s-%s" .environment .appStack .namespace .topic) -}}
 {{- end -}}
 
 {{/*
-Generate Service Bus Subscription full name (environment-topic-subscription, max 63 chars for k8s)
+Generate Service Bus Subscription full name (environment-appStack-topic-subscription, max 63 chars for k8s)
 The namespace context is captured via labels (servicebus.mycarrier.io/namespace).
-Usage: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name) }}
+Usage: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
 */}}
 {{- define "helm.azure.servicebus.subscription.fullname" -}}
-{{- include "helm.k8s.safename" (printf "%s-%s-%s" .environment .topic .subscription) -}}
+{{- include "helm.k8s.safename" (printf "%s-%s-%s-%s" .environment .appStack .topic .subscription) -}}
 {{- end -}}
 
 {{/*
-Generate Service Bus Subscription Rule full name (environment-rule, max 63 chars for k8s)
+Generate Service Bus Subscription Rule full name (environment-appStack-rule, max 63 chars for k8s)
 The namespace, topic, and subscription context are captured via labels.
-Usage: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "rule" $rule.name "environment" $root.Values.environment.name) }}
+Usage: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbInstance.name "topic" $topic.name "subscription" $subscription.name "rule" $rule.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
 */}}
 {{- define "helm.azure.servicebus.rule.fullname" -}}
-{{- include "helm.k8s.safename" (printf "%s-%s" .environment .rule) -}}
+{{- include "helm.k8s.safename" (printf "%s-%s-%s" .environment .appStack .rule) -}}
 {{- end -}}
