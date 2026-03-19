@@ -31,7 +31,6 @@ spec:
       accessTier: {{ $instance.newStorageAccount.accessTier }}
       {{- end }}
     {{- else }}
-    # Default: create new storage account with auto-generated name (Azure compliant: 3-24 lowercase alphanumeric)
     newStorageAccount:
       name: {{ $instance.name | default (include "helm.azure.storage.name" $) }}
       location: {{ $instance.location | required "location is required for new storage accounts" }}
@@ -49,7 +48,6 @@ spec:
     existingResourceGroup:
       name: {{ $instance.existingResourceGroup.name }}
     {{- else }}
-    # Default: create new resource group with auto-generated name (Azure compliant: 1-90 chars, alphanumeric, hyphens, underscores, periods, parentheses)
     newResourceGroup:
       name: {{ ($instance.newResourceGroup).name | default (include "helm.azure.resourceGroup.name" $) }}
     {{- end }}

@@ -149,11 +149,11 @@ Render managementPolicies block with a default of ["Observe"].
 Usage: {{ include "helm.crossplane.managementPolicies" (dict "policies" $instance.managementPolicies) | nindent 2 }}
 */}}
 {{- define "helm.crossplane.managementPolicies" -}}
-{{- if .policies }}
+{{- if .policies -}}
 managementPolicies:
   {{- toYaml .policies | nindent 2 }}
-{{- else }}
+{{- else -}}
 managementPolicies:
   - "Observe"
-{{- end }}
+{{- end -}}
 {{- end -}}
