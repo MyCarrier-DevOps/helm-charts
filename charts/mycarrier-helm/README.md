@@ -1169,14 +1169,15 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Infrastructure Resources
 
-| Name                                    | Description                                | Value |
-| --------------------------------------- | ------------------------------------------ | ----- |
-| `infrastructure`                        | Infrastructure configuration               |       |
-| `infrastructure.azure`                  | Azure infrastructure resources             |       |
-| `infrastructure.azure.resourceGroup`    | Azure Resource Group configurations        | `[]`  |
-| `infrastructure.azure.storage`          | Azure Storage configuration                |       |
-| `infrastructure.azure.storage.accounts` | Azure storage account configurations       | `[]`  |
-| `infrastructure.azure.servicebus`       | Azure Service Bus namespace configurations | `[]`  |
+Azure infrastructure resources managed through Crossplane. See [Infrastructure Guide](docs/crossplane-infrastructure.md) for detailed configuration examples.
+
+| Name                                          | Description                                              | Value       |
+| --------------------------------------------- | -------------------------------------------------------- | ----------- |
+| `infrastructure.azure.defaults.location`      | Default Azure region for all resources                   | `""`        |
+| `infrastructure.azure.defaults.providerConfigRef` | Default Crossplane ProviderConfig name               | `"default"` |
+| `infrastructure.azure.resourceGroup`          | Azure Resource Group configurations                     | `[]`        |
+| `infrastructure.azure.storage.accounts`       | Azure storage account configurations                    | `[]`        |
+| `infrastructure.azure.servicebus`             | Azure Service Bus namespace configurations              | `[]`        |
 
 ### Deployment Settings
 

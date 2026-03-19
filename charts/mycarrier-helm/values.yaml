@@ -600,6 +600,9 @@ secrets:
 
 ## @extra infrastructure Infrastructure configuration
 ## @extra infrastructure.azure Azure infrastructure resources
+## @extra infrastructure.azure.defaults Default values shared across all Azure resources
+## @param infrastructure.azure.defaults.location [string] Default Azure region for all resources (empty = must set per-resource)
+## @param infrastructure.azure.defaults.providerConfigRef [string] Default Crossplane ProviderConfig name
 ## @param infrastructure.azure.resourceGroup [array] Azure Resource Group configurations
 ## @extra infrastructure.azure.storage Azure Storage configuration
 ## @param infrastructure.azure.storage.accounts [array] Azure storage account configurations
@@ -607,11 +610,20 @@ secrets:
 
 infrastructure:
   azure:
+    # Default values shared across all Azure Crossplane resources.
+    # Per-resource values take precedence over these defaults.
+    defaults:
+      location: ""                  # Default Azure region (e.g., "East US"). Empty = must set per-resource.
+      providerConfigRef: "default"  # Default Crossplane ProviderConfig name
+
     # Azure Resource Group configurations
     resourceGroup: []
       # Example Resource Group configuration:
-      # - name: "rg-app-dev"                              # Required: Resource Group name
-      #   location: "East US"                             # Required: Azure region
+      # - name: "rg-app-dev"                              # Optional: Resource Group name (default: inf-{metaEnv})
+      #                                                    # metaEnv maps feature-* to "dev", otherwise uses env name
+      #                                                    # Examples: inf-dev, inf-preprod, inf-prod
+      #   location: "East US"                             # Required: Azure region (or set infrastructure.azure.defaults.location)
+      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: "default")
       #
       #   # Optional: Manage resource lifecycle with managementPolicies
       #   # managementPolicies: ["Observe"]               # Optional: Management policies (default: ["Observe"] - import/read-only mode)
@@ -629,7 +641,7 @@ infrastructure:
       #     managed-by: "crossplane"
       #
       #   # Optional: Custom Kubernetes namespace
-      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: {env}-{appStack})
+      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: environment.name)
       #
       #   # Optional: Custom annotations
       #   annotations:
@@ -681,9 +693,13 @@ infrastructure:
     # Azure Service Bus configurations
     servicebus: []
       # Example Service Bus configuration:
-      # - name: "my-servicebus-namespace"                # Required: Service Bus namespace name
-      #   location: "East US"                             # Required: Azure region
-      #   sku: "Standard"                                 # Required: Basic, Standard, or Premium (no default - must specify)
+      # - name: "my-servicebus-namespace"                # Optional: Service Bus namespace name (default: inf-{metaEnv}-servicebus)
+      #                                                    # metaEnv maps feature-* to "dev", otherwise uses env name
+      #                                                    # Examples: inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus
+      #   location: "East US"                             # Required: Azure region (or set infrastructure.azure.defaults.location)
+      #   sku: "Standard"                                 # Optional: Basic, Standard, or Premium (default: "Standard")
+      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: "default")
+      #                                                    # Inherited by all child resources (topics, subscriptions, rules)
       #   resourceGroupName: "rg-app-dev"                 # Optional: Resource group name (default: rg-{appStack}-{env})
       #
       #   # Optional: For Premium SKU only
@@ -701,7 +717,7 @@ infrastructure:
       #     purpose: "messaging"
       #
       #   # Optional: Custom Kubernetes namespace
-      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: {env}-{appStack})
+      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: environment.name)
       #
       #   # Required: At least one topic with subscriptions
       #   topics:

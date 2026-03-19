@@ -39,7 +39,7 @@ tests:
           value: dev-exampletestapp-stexampletestappdev
       - equal:
           path: metadata.namespace
-          value: dev-exampletestapp
+          value: dev
       - equal:
           path: spec.parameters.newStorageAccount.name
           value: stexampletestappdev
@@ -75,7 +75,7 @@ tests:
           value: dev-minimal-stminimaldev
       - equal:
           path: metadata.namespace
-          value: dev-minimal
+          value: dev
       - equal:
           path: spec.parameters.newStorageAccount.location
           value: "North Central US"

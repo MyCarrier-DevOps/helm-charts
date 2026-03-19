@@ -101,3 +101,48 @@ Usage: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbIns
 {{- define "helm.azure.servicebus.rule.fullname" -}}
 {{- include "helm.k8s.safename" (printf "%s-%s-%s" .environment .appStack .rule) -}}
 {{- end -}}
+
+{{/*
+Generate default Resource Group name based on environment.
+Uses metaEnvironment to map feature-* environments to "dev".
+Output: inf-{metaEnv} (e.g., inf-dev, inf-preprod, inf-prod)
+Usage: {{ include "helm.azure.resourceGroup.defaultName" (dict "root" $root) }}
+*/}}
+{{- define "helm.azure.resourceGroup.defaultName" -}}
+{{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- printf "inf-%s" $metaEnv -}}
+{{- end -}}
+
+{{/*
+Generate default Service Bus namespace name based on environment.
+Uses metaEnvironment to map feature-* environments to "dev".
+Output: inf-{metaEnv}-servicebus (e.g., inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus)
+Usage: {{ include "helm.azure.servicebus.name" (dict "root" $root) }}
+*/}}
+{{- define "helm.azure.servicebus.name" -}}
+{{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- printf "inf-%s-servicebus" $metaEnv -}}
+{{- end -}}
+
+{{/*
+Resolve the Kubernetes namespace for a Crossplane resource.
+Falls back to helm.namespace (environment.name or environment.namespaceOverride) if no explicit namespace is provided.
+Usage: {{ include "helm.crossplane.namespace" (dict "namespace" $instance.namespace "root" $root) }}
+*/}}
+{{- define "helm.crossplane.namespace" -}}
+{{- .namespace | default (include "helm.namespace" .root | trim) -}}
+{{- end -}}
+
+{{/*
+Render managementPolicies block with a default of ["Observe"].
+Usage: {{ include "helm.crossplane.managementPolicies" (dict "policies" $instance.managementPolicies) | nindent 2 }}
+*/}}
+{{- define "helm.crossplane.managementPolicies" -}}
+{{- if .policies }}
+managementPolicies:
+  {{- toYaml .policies | nindent 2 }}
+{{- else }}
+managementPolicies:
+  - "Observe"
+{{- end }}
+{{- end -}}
