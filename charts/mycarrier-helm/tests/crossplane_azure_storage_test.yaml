@@ -120,3 +120,23 @@ tests:
           path: metadata.labels
       - exists:
           path: metadata.labels["app.kubernetes.io/name"]
+
+  # Test 5: Feature environments should not create any resources
+  - it: should not create any resources for feature environments
+    set:
+      global.appStack: featstore
+      global.language: csharp
+      environment.name: feature10
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          storage:
+            accounts:
+              - newStorageAccount:
+                  location: "East US"
+    asserts:
+      - hasDocuments:
+          count: 0

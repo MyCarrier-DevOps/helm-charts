@@ -34,6 +34,8 @@ infrastructure:
 
 Both examples produce fully configured Crossplane resources with auto-generated names, `Standard` SKU, `Observe` management policy, and `default` provider config. Location must be set either per-resource or via `infrastructure.azure.defaults.location`.
 
+**Note:** Crossplane resources are only created for `dev`, `preprod`, and `prod` environments. Feature environments (`feature-*`) do not provision infrastructure.
+
 ## Global Defaults
 
 `infrastructure.azure.defaults` is a top-level configuration block in your values that sets shared defaults for **all** Crossplane resources (resource groups and service bus). These are not per-resource settings — they apply globally and eliminate repetition when multiple resources share the same location or provider.
@@ -60,23 +62,23 @@ Per-resource values always take precedence over `defaults`.
 | `location` | From `defaults.location` | Resource Group, Service Bus |
 | `providerConfigRef` | `"default"` | Resource Group, Service Bus (+ all children) |
 | `managementPolicies` | `["Observe"]` | All Crossplane resources |
-| `resourceGroupName` | `rg-{appStack}-{env}` | Service Bus |
+| `resourceGroupName` | `inf-{env}` | Service Bus |
 | `maxDeliveryCount` | `10` | Subscription |
 | `namespace` (K8s) | `environment.name` | All resources |
 
-`{env}` in default names uses `metaEnvironment`: all `feature-*` environments map to `dev`, all others use their actual name.
+Feature environments (`feature-*`) are blocked from creating Crossplane resources entirely.
 
 ### Per-Environment Defaults
 
 For an app with `global.appStack: myapp`:
 
-| Resource | dev / feature-* | preprod | prod |
-|----------|----------------|---------|------|
+| Resource | dev | preprod | prod |
+|----------|-----|---------|------|
 | Resource Group name | `inf-dev` | `inf-preprod` | `inf-prod` |
 | Service Bus name | `inf-dev-servicebus` | `inf-preprod-servicebus` | `inf-prod-servicebus` |
-| Service Bus RG | `rg-myapp-dev` | `rg-myapp-preprod` | `rg-myapp-prod` |
+| Service Bus RG ref | `inf-dev` | `inf-preprod` | `inf-prod` |
 | Storage account | `stmyappdev` | `stmyapppreprod` | `stmyappprod` |
-| K8s namespace | `dev` (or `feature42`) | `preprod` | `prod` |
+| K8s namespace | `dev` | `preprod` | `prod` |
 
 ## Resource Groups
 
@@ -195,7 +197,7 @@ infrastructure:
 
 ## Management Policies
 
-All resources default to `["Observe"]` (read-only import). The `Delete` policy is **blocked** to prevent accidental infrastructure deletion.
+All resources default to `["Observe"]` (read-only import). Both `Delete` and `*` (wildcard) policies are **blocked** to prevent accidental infrastructure deletion.
 
 | Policy | Description |
 |--------|-------------|

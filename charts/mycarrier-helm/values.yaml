@@ -700,7 +700,7 @@ infrastructure:
       #   sku: "Standard"                                 # Optional: Basic, Standard, or Premium (default: "Standard")
       #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: "default")
       #                                                    # Inherited by all child resources (topics, subscriptions, rules)
-      #   resourceGroupName: "rg-app-dev"                 # Optional: Resource group name (default: rg-{appStack}-{env})
+      #   resourceGroupName: "rg-app-dev"                 # Optional: Resource group name (default: inf-{env}, matching default RG name)
       #
       #   # Optional: For Premium SKU only
       #   # capacity: 1                                   # Optional: Messaging units: 1, 2, 4, 8, or 16 (default: 1)

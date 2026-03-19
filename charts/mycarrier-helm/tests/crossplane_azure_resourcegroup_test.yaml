@@ -373,8 +373,8 @@ tests:
           path: metadata.name
           value: "dev-defrgname-inf-dev"
 
-  # Test 15: Default resource group name for feature environment maps to dev
-  - it: should default resource group name to inf-dev for feature environments
+  # Test 15: Feature environments should not create any resources
+  - it: should not create any resources for feature environments
     set:
       global.appStack: featrg
       global.language: csharp
@@ -389,10 +389,7 @@ tests:
             - location: "East US"
     asserts:
       - hasDocuments:
-          count: 1
-      - equal:
-          path: metadata.name
-          value: "feature99-featrg-inf-dev"
+          count: 0
 
   # Test 16: Default resource group name for preprod
   - it: should default resource group name to inf-preprod for preprod
@@ -414,3 +411,23 @@ tests:
       - equal:
           path: metadata.name
           value: "preprod-preprg-inf-preprod"
+
+  # Test 17: Wildcard (*) managementPolicies should be blocked (schema rejects before template)
+  - it: should fail when wildcard managementPolicies is used
+    set:
+      global.appStack: wildcard
+      global.language: csharp
+      environment.name: dev
+      applications.test-app.deploymentType: deployment
+      applications.test-app.image.registry: "test.io"
+      applications.test-app.image.repository: "test/app"
+      applications.test-app.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          resourceGroup:
+            - name: "rg-wildcard"
+              location: "East US"
+              managementPolicies:
+                - "*"
+    asserts:
+      - failedTemplate: {}

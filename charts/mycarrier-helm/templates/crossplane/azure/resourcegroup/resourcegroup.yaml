@@ -1,4 +1,4 @@
-{{- if .Values.infrastructure.azure.resourceGroup }}
+{{- if and .Values.infrastructure.azure.resourceGroup (not (hasPrefix "feature" .Values.environment.name)) }}
 {{- $defaultProviderConfigRef := "default" -}}
 {{- $defaultLocation := "" -}}
 {{- with .Values.infrastructure.azure.defaults -}}
@@ -8,7 +8,7 @@
 {{- range $rgIndex, $rgInstance := .Values.infrastructure.azure.resourceGroup }}
 {{- $rgName := $rgInstance.name | default (include "helm.azure.resourceGroup.defaultName" (dict "root" $)) -}}
 {{- if $rgInstance.managementPolicies }}
-{{- if has "Delete" $rgInstance.managementPolicies }}
+{{- if or (has "Delete" $rgInstance.managementPolicies) (has "*" $rgInstance.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Resource Group '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $rgName) }}
 {{- end }}
 {{- end }}

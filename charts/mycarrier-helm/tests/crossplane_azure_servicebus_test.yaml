@@ -46,7 +46,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.forProvider.resourceGroupName
-          value: "rg-exampletestapp-dev"
+          value: "inf-dev"
         documentIndex: 0
       - isKind:
           of: Topic
@@ -947,8 +947,8 @@ tests:
           value: "dev-defname-inf-dev-servicebus-orders"
         documentIndex: 1
 
-  # Test 21: Default servicebus name for feature environment maps to dev
-  - it: should default servicebus name to inf-dev-servicebus for feature environments
+  # Test 21: Feature environments should not create any resources
+  - it: should not create any resources for feature environments
     set:
       global.appStack: featname
       global.language: csharp
@@ -968,15 +968,7 @@ tests:
                     - name: "processor"
     asserts:
       - hasDocuments:
-          count: 3
-      - equal:
-          path: metadata.name
-          value: "feature42-featname-inf-dev-servicebus"
-        documentIndex: 0
-      - equal:
-          path: metadata.labels["servicebus.mycarrier.io/namespace"]
-          value: "inf-dev-servicebus"
-        documentIndex: 1
+          count: 0
 
   # Test 22: Default servicebus name for preprod environment
   - it: should default servicebus name to inf-preprod-servicebus for preprod
@@ -1178,7 +1170,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.forProvider.resourceGroupName
-          value: "rg-minimal-dev"
+          value: "inf-dev"
         documentIndex: 0
       # Topic defaults
       - equal:
@@ -1244,3 +1236,60 @@ tests:
           path: metadata.namespace
           value: preprod
         documentIndex: 3
+
+  # Test 29: Wildcard (*) managementPolicies should be blocked (schema rejects before template)
+  - it: should fail when wildcard managementPolicies is used on namespace
+    set:
+      global.appStack: wildcard
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wildcard-sb"
+              location: "East US"
+              managementPolicies:
+                - "*"
+              topics:
+                - name: "test"
+                  subscriptions:
+                    - name: "sub"
+    asserts:
+      - failedTemplate: {}
+
+  # Test 30: ServiceBusNamespace should have servicebus.mycarrier.io/namespace label
+  - it: should add namespace label to ServiceBusNamespace for topic selector disambiguation
+    set:
+      global.appStack: nslabel
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "labeled-sb"
+              location: "East US"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      # ServiceBusNamespace has the namespace label
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "labeled-sb"
+        documentIndex: 0
+      # Topic selector includes the namespace label
+      - equal:
+          path: spec.forProvider.namespaceIdSelector.matchLabels["servicebus.mycarrier.io/namespace"]
+          value: "labeled-sb"
+        documentIndex: 1

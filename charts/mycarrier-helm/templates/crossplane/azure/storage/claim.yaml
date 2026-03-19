@@ -1,4 +1,4 @@
-{{- if .Values.infrastructure.azure.storage.accounts }}
+{{- if and .Values.infrastructure.azure.storage.accounts (not (hasPrefix "feature" .Values.environment.name)) }}
 {{- range $instance := .Values.infrastructure.azure.storage.accounts }}
 ---
 apiVersion: azure.platform.io/v1alpha1

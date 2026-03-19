@@ -1,4 +1,4 @@
-{{- if .Values.infrastructure.azure.servicebus }}
+{{- if and .Values.infrastructure.azure.servicebus (not (hasPrefix "feature" .Values.environment.name)) }}
 {{- $root := . -}}
 {{- $cachedLabels := include "helm.labels.standard" $root | fromYaml -}}
 {{- range $sbIndex, $sbInstance := $root.Values.infrastructure.azure.servicebus }}
@@ -12,7 +12,7 @@
 {{- end -}}
 {{- $sbProviderConfigRef := $sbInstance.providerConfigRef | default $defaultProviderConfigRef -}}
 {{- if $sbInstance.managementPolicies }}
-{{- if has "Delete" $sbInstance.managementPolicies }}
+{{- if or (has "Delete" $sbInstance.managementPolicies) (has "*" $sbInstance.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus namespace '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbName) }}
 {{- end }}
 {{- end }}
@@ -25,6 +25,7 @@ metadata:
   namespace: {{ $sbNamespace }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
+    servicebus.mycarrier.io/namespace: {{ $sbName }}
   {{- if $sbInstance.annotations }}
   annotations:
     {{- toYaml $sbInstance.annotations | nindent 4 }}
@@ -45,7 +46,7 @@ spec:
     resourceGroupNameSelector:
       {{- toYaml $sbInstance.resourceGroupNameSelector | nindent 6 }}
     {{- else }}
-    resourceGroupName: {{ printf "rg-%s-%s" $root.Values.global.appStack $root.Values.environment.name }}
+    resourceGroupName: {{ include "helm.azure.resourceGroup.defaultName" (dict "root" $root) }}
     {{- end }}
     {{- if $sbInstance.capacity }}
     capacity: {{ $sbInstance.capacity }}
@@ -59,7 +60,7 @@ spec:
 {{- end }}
 {{- range $topicIndex, $topic := $sbInstance.topics }}
 {{- if $topic.managementPolicies }}
-{{- if has "Delete" $topic.managementPolicies }}
+{{- if or (has "Delete" $topic.managementPolicies) (has "*" $topic.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus topic '%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbName $topic.name) }}
 {{- end }}
 {{- end }}
@@ -93,6 +94,7 @@ spec:
     namespaceIdSelector:
       matchLabels:
         {{- toYaml $cachedLabels | nindent 8 }}
+        servicebus.mycarrier.io/namespace: {{ $sbName }}
     {{- end }}
     {{- if $topic.maxSizeInMegabytes }}
     maxSizeInMegabytes: {{ $topic.maxSizeInMegabytes }}
@@ -126,7 +128,7 @@ spec:
 {{- end }}
 {{- range $subIndex, $subscription := $topic.subscriptions }}
 {{- if $subscription.managementPolicies }}
-{{- if has "Delete" $subscription.managementPolicies }}
+{{- if or (has "Delete" $subscription.managementPolicies) (has "*" $subscription.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus subscription '%s/%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbName $topic.name $subscription.name) }}
 {{- end }}
 {{- end }}
@@ -195,7 +197,7 @@ spec:
 {{- if $subscription.rules }}
 {{- range $ruleIndex, $rule := $subscription.rules }}
 {{- if $rule.managementPolicies }}
-{{- if has "Delete" $rule.managementPolicies }}
+{{- if or (has "Delete" $rule.managementPolicies) (has "*" $rule.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus subscription rule '%s/%s/%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $sbName $topic.name $subscription.name $rule.name) }}
 {{- end }}
 {{- end }}
