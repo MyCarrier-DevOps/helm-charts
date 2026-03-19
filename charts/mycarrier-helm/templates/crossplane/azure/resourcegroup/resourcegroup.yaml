@@ -23,7 +23,7 @@ metadata:
   annotations:
     crossplane.io/external-name: {{ $rgName }}
   {{- if $rgInstance.annotations }}
-    {{- toYaml $rgInstance.annotations | nindent 4 }}
+    {{- toYaml (omit $rgInstance.annotations "crossplane.io/external-name") | nindent 4 }}
   {{- end }}
 spec:
   providerConfigRef:

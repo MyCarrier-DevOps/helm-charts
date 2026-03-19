@@ -29,7 +29,7 @@ metadata:
   annotations:
     crossplane.io/external-name: {{ $sbName }}
   {{- if $sbInstance.annotations }}
-    {{- toYaml $sbInstance.annotations | nindent 4 }}
+    {{- toYaml (omit $sbInstance.annotations "crossplane.io/external-name") | nindent 4 }}
   {{- end }}
 spec:
   providerConfigRef:

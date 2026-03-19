@@ -1786,7 +1786,7 @@
                   },
                   "managementPolicies": {
                     "type": "array",
-                    "description": "Crossplane management policies (default: ['Observe']). 'Delete' is blocked.",
+                    "description": "Crossplane management policies (default: ['Observe']). 'Delete' and '*' (wildcard) are blocked.",
                     "items": {
                       "type": "string",
                       "enum": ["Create", "Update", "LateInitialize", "Observe"]
@@ -1934,7 +1934,7 @@
                   },
                   "managementPolicies": {
                     "type": "array",
-                    "description": "Crossplane management policies (default: ['Observe']). 'Delete' is blocked.",
+                    "description": "Crossplane management policies (default: ['Observe']). 'Delete' and '*' (wildcard) are blocked.",
                     "items": {
                       "type": "string",
                       "enum": ["Create", "Update", "LateInitialize", "Observe"]
