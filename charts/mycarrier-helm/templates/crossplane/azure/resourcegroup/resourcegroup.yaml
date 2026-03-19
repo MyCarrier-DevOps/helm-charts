@@ -1,10 +1,5 @@
 {{- if and .Values.infrastructure.azure.resourceGroup (not (hasPrefix "feature" .Values.environment.name)) }}
-{{- $defaultProviderConfigRef := "default" -}}
-{{- $defaultLocation := "" -}}
-{{- with .Values.infrastructure.azure.defaults -}}
-  {{- $defaultProviderConfigRef = .providerConfigRef | default $defaultProviderConfigRef -}}
-  {{- if .location }}{{ $defaultLocation = .location }}{{ end -}}
-{{- end -}}
+{{- $defaults := include "helm.crossplane.defaults" (dict "root" .) | fromJson -}}
 {{- range $rgIndex, $rgInstance := .Values.infrastructure.azure.resourceGroup }}
 {{- $rgName := $rgInstance.name | default (include "helm.azure.resourceGroup.defaultName" (dict "root" $)) -}}
 {{- if $rgInstance.managementPolicies }}
@@ -27,10 +22,10 @@ metadata:
   {{- end }}
 spec:
   providerConfigRef:
-    name: {{ $rgInstance.providerConfigRef | default $defaultProviderConfigRef }}
+    name: {{ $rgInstance.providerConfigRef | default $defaults.providerConfigRef }}
   {{- include "helm.crossplane.managementPolicies" (dict "policies" $rgInstance.managementPolicies) | nindent 2 }}
   forProvider:
-    location: {{ $rgInstance.location | default $defaultLocation | required "Resource Group location is required (set per-resource or infrastructure.azure.defaults.location)" }}
+    location: {{ $rgInstance.location | default $defaults.location | required "Resource Group location is required (set per-resource or infrastructure.azure.defaults.location)" }}
     {{- if $rgInstance.managedBy }}
     managedBy: {{ $rgInstance.managedBy }}
     {{- end }}

@@ -48,7 +48,7 @@ tests:
           value: "East US"
       - equal:
           path: spec.parameters.newResourceGroup.name
-          value: rg-exampletestapp-dev
+          value: inf-dev
 
   # Test 2: Minimal required configuration using fallback path
   - it: should work with minimal required configuration using fallback path
@@ -81,7 +81,7 @@ tests:
           value: "North Central US"
       - equal:
           path: spec.parameters.newResourceGroup.name
-          value: rg-minimal-dev
+          value: inf-dev
 
   # Test 3: No storage accounts configured (should not render)
   - it: should not create any resources when storage accounts are not configured

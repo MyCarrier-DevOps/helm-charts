@@ -17,17 +17,13 @@ Usage: {{ include "helm.azure.storage.name" . }}
 {{- end -}}
 
 {{/*
-Generate Azure resource group name (1-90 chars, alphanumeric, hyphens, underscores, periods, parentheses)
+Generate Azure resource group name using the default naming convention.
+Delegates to helm.azure.resourceGroup.defaultName for consistency.
+Kept for backward compatibility with storage claim template.
 Usage: {{ include "helm.azure.resourceGroup.name" . }}
 */}}
 {{- define "helm.azure.resourceGroup.name" -}}
-{{- $ctx := .ctx -}}
-{{- if not $ctx -}}
-	{{- $ctx = include "helm.context" . | fromJson -}}
-{{- end -}}
-{{- $appStack := $ctx.defaults.appStack -}}
-{{- $envName := $ctx.defaults.environmentName -}}
-{{- printf "rg-%s-%s" $appStack $envName -}}
+{{- include "helm.azure.resourceGroup.defaultName" (dict "root" .) -}}
 {{- end -}}
 
 {{/*
@@ -131,6 +127,21 @@ Usage: {{ include "helm.crossplane.namespace" (dict "namespace" $instance.namesp
 */}}
 {{- define "helm.crossplane.namespace" -}}
 {{- .namespace | default (include "helm.namespace" .root | trim) -}}
+{{- end -}}
+
+{{/*
+Resolve global Crossplane defaults (providerConfigRef, location).
+Returns a JSON object with defaults applied. Use once per template, cache the result.
+Usage: {{ $defaults := include "helm.crossplane.defaults" (dict "root" $root) | fromJson }}
+*/}}
+{{- define "helm.crossplane.defaults" -}}
+{{- $providerConfigRef := "default" -}}
+{{- $location := "" -}}
+{{- with .root.Values.infrastructure.azure.defaults -}}
+  {{- $providerConfigRef = .providerConfigRef | default $providerConfigRef -}}
+  {{- if .location }}{{ $location = .location }}{{ end -}}
+{{- end -}}
+{{- dict "providerConfigRef" $providerConfigRef "location" $location | toJson -}}
 {{- end -}}
 
 {{/*

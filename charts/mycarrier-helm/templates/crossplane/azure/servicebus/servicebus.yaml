@@ -1,16 +1,12 @@
 {{- if and .Values.infrastructure.azure.servicebus (not (hasPrefix "feature" .Values.environment.name)) }}
 {{- $root := . -}}
 {{- $cachedLabels := include "helm.labels.standard" $root | fromYaml -}}
+{{- $defaults := include "helm.crossplane.defaults" (dict "root" $root) | fromJson -}}
 {{- range $sbIndex, $sbInstance := $root.Values.infrastructure.azure.servicebus }}
 {{- $sbName := $sbInstance.name | default (include "helm.azure.servicebus.name" (dict "root" $root)) -}}
 {{- $sbNamespace := include "helm.crossplane.namespace" (dict "namespace" $sbInstance.namespace "root" $root) -}}
-{{- $defaultProviderConfigRef := "default" -}}
-{{- $defaultLocation := "" -}}
-{{- with $root.Values.infrastructure.azure.defaults -}}
-  {{- $defaultProviderConfigRef = .providerConfigRef | default $defaultProviderConfigRef -}}
-  {{- if .location }}{{ $defaultLocation = .location }}{{ end -}}
-{{- end -}}
-{{- $sbProviderConfigRef := $sbInstance.providerConfigRef | default $defaultProviderConfigRef -}}
+{{- $sbProviderConfigRef := $sbInstance.providerConfigRef | default $defaults.providerConfigRef -}}
+{{- $sbLocation := $sbInstance.location | default $defaults.location | required "Service Bus location is required (set per-resource or infrastructure.azure.defaults.location)" -}}
 {{- if $sbInstance.managementPolicies }}
 {{- if or (has "Delete" $sbInstance.managementPolicies) (has "*" $sbInstance.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus namespace '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] (wildcard) or explicit \"Delete\"." $sbName) }}
@@ -36,7 +32,7 @@ spec:
     name: {{ $sbProviderConfigRef }}
   {{- include "helm.crossplane.managementPolicies" (dict "policies" $sbInstance.managementPolicies) | nindent 2 }}
   forProvider:
-    location: {{ $sbInstance.location | default $defaultLocation | required "Service Bus location is required (set per-resource or infrastructure.azure.defaults.location)" }}
+    location: {{ $sbLocation }}
     sku: {{ $sbInstance.sku | default "Standard" }}
     {{- if $sbInstance.resourceGroupName }}
     resourceGroupName: {{ $sbInstance.resourceGroupName }}
@@ -60,6 +56,7 @@ spec:
 {{- fail "At least one topic with subscriptions is required when defining a Service Bus" }}
 {{- end }}
 {{- range $topicIndex, $topic := $sbInstance.topics }}
+{{- $topicFullname := include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) -}}
 {{- if $topic.managementPolicies }}
 {{- if or (has "Delete" $topic.managementPolicies) (has "*" $topic.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus topic '%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] (wildcard) or explicit \"Delete\"." $sbName $topic.name) }}
@@ -70,16 +67,16 @@ spec:
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: Topic
 metadata:
-  name: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+  name: {{ $topicFullname }}
   namespace: {{ $sbNamespace }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbName }}
-    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+    servicebus.mycarrier.io/topic: {{ $topicFullname }}
   annotations:
     crossplane.io/external-name: {{ $topic.name }}
   {{- if $topic.annotations }}
-    {{- toYaml $topic.annotations | nindent 4 }}
+    {{- toYaml (omit $topic.annotations "crossplane.io/external-name") | nindent 4 }}
   {{- end }}
 spec:
   providerConfigRef:
@@ -128,6 +125,7 @@ spec:
 {{- fail "At least one subscription is required when defining a topic" }}
 {{- end }}
 {{- range $subIndex, $subscription := $topic.subscriptions }}
+{{- $subFullname := include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbName "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) -}}
 {{- if $subscription.managementPolicies }}
 {{- if or (has "Delete" $subscription.managementPolicies) (has "*" $subscription.managementPolicies) }}
 {{- fail (printf "Delete management policy is not allowed for Service Bus subscription '%s/%s/%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] (wildcard) or explicit \"Delete\"." $sbName $topic.name $subscription.name) }}
@@ -138,17 +136,17 @@ spec:
 apiVersion: servicebus.azure.upbound.io/v1beta1
 kind: Subscription
 metadata:
-  name: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbName "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+  name: {{ $subFullname }}
   namespace: {{ $sbNamespace }}
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbName }}
-    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
-    servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbName "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+    servicebus.mycarrier.io/topic: {{ $topicFullname }}
+    servicebus.mycarrier.io/subscription: {{ $subFullname }}
   annotations:
     crossplane.io/external-name: {{ $subscription.name }}
   {{- if $subscription.annotations }}
-    {{- toYaml $subscription.annotations | nindent 4 }}
+    {{- toYaml (omit $subscription.annotations "crossplane.io/external-name") | nindent 4 }}
   {{- end }}
 spec:
   providerConfigRef:
@@ -165,7 +163,7 @@ spec:
       matchLabels:
         {{- toYaml $cachedLabels | nindent 8 }}
         servicebus.mycarrier.io/namespace: {{ $sbName }}
-        servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+        servicebus.mycarrier.io/topic: {{ $topicFullname }}
     {{- end }}
     maxDeliveryCount: {{ $subscription.maxDeliveryCount | default 10 }}
     {{- if $subscription.lockDuration }}
@@ -212,12 +210,12 @@ metadata:
   labels:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbName }}
-    servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
-    servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbName "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+    servicebus.mycarrier.io/topic: {{ $topicFullname }}
+    servicebus.mycarrier.io/subscription: {{ $subFullname }}
   annotations:
     crossplane.io/external-name: {{ $rule.name }}
   {{- if $rule.annotations }}
-    {{- toYaml $rule.annotations | nindent 4 }}
+    {{- toYaml (omit $rule.annotations "crossplane.io/external-name") | nindent 4 }}
   {{- end }}
 spec:
   providerConfigRef:
@@ -235,8 +233,8 @@ spec:
       matchLabels:
         {{- toYaml $cachedLabels | nindent 8 }}
         servicebus.mycarrier.io/namespace: {{ $sbName }}
-        servicebus.mycarrier.io/topic: {{ include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
-        servicebus.mycarrier.io/subscription: {{ include "helm.azure.servicebus.subscription.fullname" (dict "namespace" $sbName "topic" $topic.name "subscription" $subscription.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) }}
+        servicebus.mycarrier.io/topic: {{ $topicFullname }}
+        servicebus.mycarrier.io/subscription: {{ $subFullname }}
     {{- end }}
     {{- if $rule.sqlFilter }}
     sqlFilter: {{ $rule.sqlFilter | quote }}
