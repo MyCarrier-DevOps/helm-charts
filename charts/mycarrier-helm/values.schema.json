@@ -1920,7 +1920,7 @@
                   },
                   "resourceGroupName": {
                     "type": "string",
-                    "description": "Resource group name (default: rg-{appStack}-{env})"
+                    "description": "Resource group name (default: inf-{env}, e.g. inf-dev)"
                   },
                   "resourceGroupNameRef": {
                     "type": "object",

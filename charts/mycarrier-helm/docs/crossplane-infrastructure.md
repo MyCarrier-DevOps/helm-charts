@@ -34,7 +34,7 @@ infrastructure:
 
 Both examples produce fully configured Crossplane resources with auto-generated names, `Standard` SKU, `Observe` management policy, and `default` provider config. Location must be set either per-resource or via `infrastructure.azure.defaults.location`.
 
-**Note:** Crossplane resources are only created for `dev`, `preprod`, and `prod` environments. Feature environments (`feature-*`) do not provision infrastructure.
+**Note:** Feature environments (`feature-*`) are skipped and do not provision infrastructure. All other environments (dev, preprod, prod, qa, uat, etc.) create resources normally.
 
 ## Global Defaults
 

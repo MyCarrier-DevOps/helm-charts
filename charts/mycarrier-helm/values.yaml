@@ -610,7 +610,8 @@ secrets:
 
 infrastructure:
   azure:
-    # Default values shared across all Azure Crossplane resources.
+    # Default values shared across Resource Group and Service Bus resources.
+    # Storage uses Compositions and does not consume these defaults.
     # Per-resource values take precedence over these defaults.
     defaults:
       location: ""                  # Default Azure region (e.g., "East US"). Empty = must set per-resource.
