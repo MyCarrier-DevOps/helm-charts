@@ -4,7 +4,7 @@ Configure Azure infrastructure resources managed through Crossplane in the mycar
 
 ## Quick Start
 
-A Service Bus with a topic and subscription, using all defaults:
+A Service Bus with a topic and subscription:
 
 ```yaml
 infrastructure:
@@ -16,7 +16,23 @@ infrastructure:
               - name: "processor"
 ```
 
-This produces 3 Crossplane resources (ServiceBusNamespace, Topic, Subscription) with auto-generated names, `Standard` SKU, `Observe` management policy, and `default` provider config. Location must be set either per-resource or via `infrastructure.azure.defaults.location`.
+With subscription rules:
+
+```yaml
+infrastructure:
+  azure:
+    servicebus:
+      - topics:
+          - name: "orders"
+            subscriptions:
+              - name: "processor"
+                rules:
+                  - name: "high-priority"
+                    filterType: "SqlFilter"
+                    sqlFilter: "priority = 'high'"
+```
+
+Both examples produce fully configured Crossplane resources with auto-generated names, `Standard` SKU, `Observe` management policy, and `default` provider config. Location must be set either per-resource or via `infrastructure.azure.defaults.location`.
 
 ## Global Defaults
 
@@ -67,20 +83,24 @@ For an app with `global.appStack: myapp`:
 ### Minimal
 
 ```yaml
-resourceGroup:
-  - {}    # name: inf-dev, location from defaults, Observe policy
+infrastructure:
+  azure:
+    resourceGroup:
+      - {}    # name: inf-dev, location from defaults, Observe policy
 ```
 
 ### Explicit
 
 ```yaml
-resourceGroup:
-  - name: "rg-custom"
-    location: "West Europe"
-    providerConfigRef: "my-provider"
-    managementPolicies: ["Create", "Update", "LateInitialize", "Observe"]
-    tags:
-      environment: "dev"
+infrastructure:
+  azure:
+    resourceGroup:
+      - name: "rg-custom"
+        location: "West Europe"
+        providerConfigRef: "my-provider"
+        managementPolicies: ["Create", "Update", "LateInitialize", "Observe"]
+        tags:
+          environment: "dev"
 ```
 
 ## Service Bus
@@ -88,48 +108,52 @@ resourceGroup:
 ### Minimal
 
 ```yaml
-servicebus:
-  - topics:
-      - name: "orders"
-        subscriptions:
-          - name: "processor"
+infrastructure:
+  azure:
+    servicebus:
+      - topics:
+          - name: "orders"
+            subscriptions:
+              - name: "processor"
 ```
 
 ### Full Example
 
 ```yaml
-servicebus:
-  - name: "custom-servicebus"
-    location: "East US"
-    sku: "Premium"
-    capacity: 2
-    providerConfigRef: "my-provider"       # Inherited by topics, subscriptions, rules
-    resourceGroupName: "rg-app-dev"
-    managementPolicies: ["Create", "Update", "LateInitialize", "Observe"]
-    tags:
-      environment: "dev"
-    topics:
-      - name: "orders"
-        maxSizeInMegabytes: 2048
-        requiresDuplicateDetection: true
-        defaultMessageTtl: "P14D"
-        supportOrdering: true
-        subscriptions:
-          - name: "order-processor"
-            maxDeliveryCount: 5
-            lockDuration: "PT5M"
-            deadLetteringOnMessageExpiration: true
-            rules:
-              - name: "high-priority"
-                filterType: "SqlFilter"
-                sqlFilter: "priority = 'high'"
-              - name: "json-only"
-                filterType: "CorrelationFilter"
-                correlationFilter:
-                  contentType: "application/json"
-          - name: "order-archive"
-            maxDeliveryCount: 1
-            forwardDeadLetteredMessagesTo: "dlq-topic"
+infrastructure:
+  azure:
+    servicebus:
+      - name: "custom-servicebus"
+        location: "East US"
+        sku: "Premium"
+        capacity: 2
+        providerConfigRef: "my-provider"       # Inherited by topics, subscriptions, rules
+        resourceGroupName: "rg-app-dev"
+        managementPolicies: ["Create", "Update", "LateInitialize", "Observe"]
+        tags:
+          environment: "dev"
+        topics:
+          - name: "orders"
+            maxSizeInMegabytes: 2048
+            requiresDuplicateDetection: true
+            defaultMessageTtl: "P14D"
+            supportOrdering: true
+            subscriptions:
+              - name: "order-processor"
+                maxDeliveryCount: 5
+                lockDuration: "PT5M"
+                deadLetteringOnMessageExpiration: true
+                rules:
+                  - name: "high-priority"
+                    filterType: "SqlFilter"
+                    sqlFilter: "priority = 'high'"
+                  - name: "json-only"
+                    filterType: "CorrelationFilter"
+                    correlationFilter:
+                      contentType: "application/json"
+              - name: "order-archive"
+                maxDeliveryCount: 1
+                forwardDeadLetteredMessagesTo: "dlq-topic"
 ```
 
 ### ProviderConfigRef Inheritance
@@ -143,10 +167,12 @@ Storage uses Crossplane Compositions (Claims). `providerConfigRef` and `manageme
 ### New Account
 
 ```yaml
-storage:
-  accounts:
-    - newStorageAccount:
-        location: "East US"
+infrastructure:
+  azure:
+    storage:
+      accounts:
+        - newStorageAccount:
+            location: "East US"
 ```
 
 Name auto-generates as `st{appStack}{env}` (e.g., `stmyappdev`). Resource group defaults to `rg-{appStack}-{env}`.
@@ -154,15 +180,17 @@ Name auto-generates as `st{appStack}{env}` (e.g., `stmyappdev`). Resource group 
 ### Existing Account
 
 ```yaml
-storage:
-  accounts:
-    - existingStorageAccount:
-        name: "mystorageaccount"
-      existingResourceGroup:
-        name: "my-existing-rg"
-      containers:
-        - name: "uploads"
-          accessType: "private"
+infrastructure:
+  azure:
+    storage:
+      accounts:
+        - existingStorageAccount:
+            name: "mystorageaccount"
+          existingResourceGroup:
+            name: "my-existing-rg"
+          containers:
+            - name: "uploads"
+              accessType: "private"
 ```
 
 ## Management Policies
