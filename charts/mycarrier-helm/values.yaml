@@ -624,7 +624,7 @@ infrastructure:
       #                                                    # metaEnv maps feature-* to "dev", otherwise uses env name
       #                                                    # Examples: inf-dev, inf-preprod, inf-prod
       #   location: "East US"                             # Required: Azure region (or set infrastructure.azure.defaults.location)
-      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: "default")
+      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: infrastructure.azure.defaults.providerConfigRef, or "default")
       #
       #   # Optional: Manage resource lifecycle with managementPolicies
       #   # managementPolicies: ["Observe"]               # Optional: Management policies (default: ["Observe"] - import/read-only mode)
@@ -642,7 +642,7 @@ infrastructure:
       #     managed-by: "crossplane"
       #
       #   # Optional: Custom Kubernetes namespace
-      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: environment.name)
+      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: environment.name, or environment.namespaceOverride if set)
       #
       #   # Optional: Custom annotations
       #   annotations:
@@ -699,7 +699,7 @@ infrastructure:
       #                                                    # Examples: inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus
       #   location: "East US"                             # Required: Azure region (or set infrastructure.azure.defaults.location)
       #   sku: "Standard"                                 # Optional: Basic, Standard, or Premium (default: "Standard")
-      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: "default")
+      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: infrastructure.azure.defaults.providerConfigRef, or "default")
       #                                                    # Inherited by all child resources (topics, subscriptions, rules)
       #   resourceGroupName: "rg-app-dev"                 # Optional: Resource group name (default: inf-{env}, matching default RG name)
       #
@@ -718,7 +718,7 @@ infrastructure:
       #     purpose: "messaging"
       #
       #   # Optional: Custom Kubernetes namespace
-      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: environment.name)
+      #   namespace: "my-custom-namespace"                # Optional: Custom Kubernetes namespace (default: environment.name, or environment.namespaceOverride if set)
       #
       #   # Required: At least one topic with subscriptions
       #   topics:

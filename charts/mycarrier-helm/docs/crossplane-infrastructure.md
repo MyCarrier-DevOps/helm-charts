@@ -61,10 +61,10 @@ Per-resource values always take precedence over `defaults`.
 | `sku` | `Standard` | Service Bus |
 | `location` | From `defaults.location` | Resource Group, Service Bus |
 | `providerConfigRef` | `"default"` | Resource Group, Service Bus (+ all children) |
-| `managementPolicies` | `["Observe"]` | All Crossplane resources |
+| `managementPolicies` | `["Observe"]` | Resource Group, Service Bus (not Storage) |
 | `resourceGroupName` | `inf-{env}` | Service Bus |
 | `maxDeliveryCount` | `10` | Subscription |
-| `namespace` (K8s) | `environment.name` | All resources |
+| `namespace` (K8s) | `environment.name` (or `namespaceOverride`) | All resources |
 
 Feature environments (`feature-*`) are blocked from creating Crossplane resources entirely.
 

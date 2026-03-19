@@ -1803,7 +1803,7 @@
                   },
                   "namespace": {
                     "type": "string",
-                    "description": "Custom Kubernetes namespace (default: environment.name)"
+                    "description": "Custom Kubernetes namespace (default: environment.name, or environment.namespaceOverride if set)"
                   },
                   "annotations": {
                     "type": "object",
@@ -1877,6 +1877,8 @@
                       },
                       "namespace": { "type": "string" },
                       "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+                      "tier": { "type": "string", "description": "Legacy alias for accountTier", "enum": ["Standard", "Premium"] },
+                      "replicationType": { "type": "string", "description": "Legacy alias for accountReplicationType", "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"] },
                       "compositionRef": {
                         "type": "object",
                         "properties": {
@@ -1944,7 +1946,7 @@
                   },
                   "namespace": {
                     "type": "string",
-                    "description": "Custom Kubernetes namespace (default: environment.name)"
+                    "description": "Custom Kubernetes namespace (default: environment.name, or environment.namespaceOverride if set)"
                   },
                   "annotations": {
                     "type": "object",

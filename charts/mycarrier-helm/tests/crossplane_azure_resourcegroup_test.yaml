@@ -372,6 +372,9 @@ tests:
       - equal:
           path: metadata.name
           value: "dev-defrgname-inf-dev"
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "inf-dev"
 
   # Test 15: Feature environments should not create any resources
   - it: should not create any resources for feature environments

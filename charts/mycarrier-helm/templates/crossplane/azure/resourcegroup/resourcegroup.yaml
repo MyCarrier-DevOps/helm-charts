@@ -9,7 +9,7 @@
 {{- $rgName := $rgInstance.name | default (include "helm.azure.resourceGroup.defaultName" (dict "root" $)) -}}
 {{- if $rgInstance.managementPolicies }}
 {{- if or (has "Delete" $rgInstance.managementPolicies) (has "*" $rgInstance.managementPolicies) }}
-{{- fail (printf "Delete management policy is not allowed for Resource Group '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $rgName) }}
+{{- fail (printf "Delete management policy is not allowed for Resource Group '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] (wildcard) or explicit \"Delete\"." $rgName) }}
 {{- end }}
 {{- end }}
 ---
@@ -20,8 +20,9 @@ metadata:
   namespace: {{ include "helm.crossplane.namespace" (dict "namespace" $rgInstance.namespace "root" $) }}
   labels:
     {{- include "helm.labels.standard" $ | nindent 4 }}
-  {{- if $rgInstance.annotations }}
   annotations:
+    crossplane.io/external-name: {{ $rgName }}
+  {{- if $rgInstance.annotations }}
     {{- toYaml $rgInstance.annotations | nindent 4 }}
   {{- end }}
 spec:

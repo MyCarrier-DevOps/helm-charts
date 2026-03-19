@@ -939,6 +939,10 @@ tests:
           value: "dev-defname-inf-dev-servicebus"
         documentIndex: 0
       - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "inf-dev-servicebus"
+        documentIndex: 0
+      - equal:
           path: metadata.labels["servicebus.mycarrier.io/namespace"]
           value: "inf-dev-servicebus"
         documentIndex: 1
