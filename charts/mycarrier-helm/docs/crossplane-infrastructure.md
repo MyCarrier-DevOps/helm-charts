@@ -38,7 +38,7 @@ Both examples produce fully configured Crossplane resources with auto-generated 
 
 ## Global Defaults
 
-`infrastructure.azure.defaults` is a top-level configuration block in your values that sets shared defaults for **all** Crossplane resources (resource groups and service bus). These are not per-resource settings — they apply globally and eliminate repetition when multiple resources share the same location or provider.
+`infrastructure.azure.defaults` is a top-level configuration block in your values that sets shared defaults for **Resource Group, Service Bus, and Storage** Crossplane resources. These are not per-resource settings — they apply globally and eliminate repetition when multiple resources share the same location or provider.
 
 ```yaml
 infrastructure:
@@ -60,8 +60,8 @@ Per-resource values always take precedence over `defaults`.
 | `name` | `inf-{env}-servicebus` | Service Bus |
 | `sku` | `Standard` | Service Bus |
 | `location` | From `defaults.location` | Resource Group, Service Bus |
-| `providerConfigRef` | `"default"` | Resource Group, Service Bus (+ all children) |
-| `managementPolicies` | `["Observe"]` | Resource Group, Service Bus (not Storage) |
+| `providerConfigRef` | `"default"` | Resource Group, Service Bus (+ all children), Storage (via Composition) |
+| `managementPolicies` | `["Observe"]` | Resource Group, Service Bus (not Storage — managed by Composition) |
 | `resourceGroupName` | `inf-{env}` | Service Bus |
 | `maxDeliveryCount` | `10` | Subscription |
 | `namespace` (K8s) | `environment.name` (or `namespaceOverride`) | All resources |
@@ -164,7 +164,7 @@ Set `providerConfigRef` once on the servicebus entry. All child resources (topic
 
 ## Storage Accounts
 
-Storage uses Crossplane Compositions (Claims). `providerConfigRef` and `managementPolicies` are configured on the Composition, not here.
+Storage uses Crossplane Compositions (Claims). `providerConfigRef` is passed through to the Composition as a parameter and defaults to `"default"` (or `infrastructure.azure.defaults.providerConfigRef` if set). `managementPolicies` are configured on the Composition itself, not on the Claim.
 
 ### New Account
 
@@ -177,7 +177,7 @@ infrastructure:
             location: "East US"
 ```
 
-Name auto-generates as `st{appStack}{env}` (e.g., `stmyappdev`). Resource group defaults to `rg-{appStack}-{env}`.
+Name auto-generates as `st{appStack}{env}` (e.g., `stmyappdev`). Resource group defaults to `inf-{env}` (e.g., `inf-dev`).
 
 ### Existing Account
 

@@ -14,6 +14,8 @@ metadata:
   {{- end }}
 spec:
   parameters:
+    {{- $defaults := include "helm.crossplane.defaults" (dict "root" $) | fromJson }}
+    providerConfigRef: {{ $instance.providerConfigRef | default $defaults.providerConfigRef }}
     {{- if $instance.existingStorageAccount }}
     existingStorageAccount:
       name: {{ $instance.existingStorageAccount.name }}
