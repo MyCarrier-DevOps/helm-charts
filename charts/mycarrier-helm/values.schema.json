@@ -279,8 +279,8 @@
                       "description": "Reference to secrets needed for tests, can be a direct value or a vault reference"
                     },
                     "filters": {
-                      "type": "array",
-                      "description": "Test filters to select which tests to run",
+                      "type": ["array", "string"],
+                      "description": "Test filters to select which tests to run. Accepts a single string or an array of strings.",
                       "items": {
                         "type": "string"
                       },

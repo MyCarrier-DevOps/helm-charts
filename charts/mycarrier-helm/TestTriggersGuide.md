@@ -99,7 +99,7 @@ Each test definition under `testdefinitions` supports the following parameters:
 |-----------|-------------|----------|---------|---------|
 | `containerImage` | The container image containing the test code | Yes | None | `"testing/exampletestapp"` |
 | `containerTag` | The tag of the container image to use | Yes | None | `"abcd1234"` |
-| `filters` | Array of test filters to apply | No | `[]` (empty array) | `["TestCategory=coretests", "TestCategory=othercoretests"]` |
+| `filters` | Test filters to apply. Accepts a single string or an array of strings. | No | `[]` (empty array) | `"TestCategory=coretests"` or `["TestCategory=coretests", "TestCategory=othercoretests"]` |
 | `name` | Name of the test | Yes | None | `"apitests"` |
 | `secretId` | Secret ID for authentication, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/auth#secretid"` |
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
