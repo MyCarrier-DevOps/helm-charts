@@ -416,11 +416,30 @@ applications: {}
 #         containerTag: "1.10.2"
 #         secretId: "vault:Secrets/data/app_authentication#SecretId"
 #         additionalEnvVars: "key1=value1;key2=value2"
+#         legacyMode: "false"                    # Optional (default: "false")
+#         useDefaultNodeAffinity: "false"        # Optional (default: "false")
+#         spreadAcrossNodes: "true"              # Optional (default: "true")
+#         # Optional: Pod resources for test pods (defaults shown below)
+#         podResources:
+#           limits:
+#             cpu: "2000m"
+#             memory: "4Gi"
+#           requests:
+#             cpu: "250m"
+#             memory: "0.5Gi"
 #         filters:
 #           - "TestCategory=coretests"
 #           - "TestCategory=othercoretests"
 #         # Optional: Custom service address
 #         serviceAddress: "custom-address.dev-exampletestapp.svc.cluster.local"
+#         # Optional: Tolerations for test pods (default: spot instance toleration)
+#         tolerations:
+#           - key: "kubernetes.azure.com/scalesetpriority"
+#             operator: "Equal"
+#             value: "spot"
+#             effect: "NoSchedule"
+#         # Optional: Node affinity for test pods (default: [])
+#         nodeAffinity: []
 #       
 #       - name: "somedependencytest"
 #         containerImage: "myregistry.example.com/image/name"
