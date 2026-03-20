@@ -70,9 +70,18 @@ template:
             {{- $tolerations = .tolerations }}
           {{- end }}
           {{- $nodeAffinity := .nodeAffinity | default list }}
-          {{- $useDefaultNodeAffinity := .useDefaultNodeAffinity | default "false" }}
-          {{- $legacyMode := .legacyMode | default "false" }}
-          {{- $spreadAcrossNodes := .spreadAcrossNodes | default "true" }}
+          {{- $useDefaultNodeAffinity := "false" }}
+          {{- if hasKey . "useDefaultNodeAffinity" }}
+            {{- $useDefaultNodeAffinity = printf "%v" .useDefaultNodeAffinity }}
+          {{- end }}
+          {{- $legacyMode := "false" }}
+          {{- if hasKey . "legacyMode" }}
+            {{- $legacyMode = printf "%v" .legacyMode }}
+          {{- end }}
+          {{- $spreadAcrossNodes := "true" }}
+          {{- if hasKey . "spreadAcrossNodes" }}
+            {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
+          {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
             curl -X POST \

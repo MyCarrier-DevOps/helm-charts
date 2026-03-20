@@ -44,9 +44,9 @@ applications:
           secretId: "<secret-id-or-vault-reference>"
           serviceAddress: "<optional-service-address>"
           additionalEnvVars: "key1=value1;key2=value2"
-          legacyMode: "<true|false>"
-          useDefaultNodeAffinity: "<true|false>"
-          spreadAcrossNodes: "<true|false>"
+          legacyMode: <true|false>
+          useDefaultNodeAffinity: <true|false>
+          spreadAcrossNodes: <true|false>
           tolerations:
             - key: "<key>"
               operator: "<operator>"
@@ -105,11 +105,11 @@ Each test definition under `testdefinitions` supports the following parameters:
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
 | `releaseDefinitionName` | Optional release definition name - overrides default value = stack-component | No | stack-compoent | `"somestack-somecomponent"`
 | `additionalEnvVars` | Additional environment variables to pass to container as key-value pairs delimited by colon | No | `""` | `"key1=value1;key2=value2"` |
-| `legacyMode` | Enable legacy mode for test execution | No | `"false"` | `"true"` |
+| `legacyMode` | Enable legacy mode for test execution. Accepts boolean or string. | No | `false` | `true` |
 | `tolerations` | Tolerations for test pods scheduled by the test engine | No | Spot instance toleration* | See example below |
 | `nodeAffinity` | Node affinity rules for test pods scheduled by the test engine | No | `[]` (empty array) | See example below |
-| `useDefaultNodeAffinity` | Whether to use default node affinity for test pods | No | `"false"` | `"true"` |
-| `spreadAcrossNodes` | Whether to spread test pods across nodes | No | `"true"` | `"false"` |
+| `useDefaultNodeAffinity` | Whether to use default node affinity for test pods. Accepts boolean or string. | No | `false` | `true` |
+| `spreadAcrossNodes` | Whether to spread test pods across nodes. Accepts boolean or string. | No | `true` | `false` |
 | `podResources` | Resource requests and limits for test pods scheduled by the test engine | No | See below** | See example below |
 
 *Default tolerations:
@@ -215,9 +215,9 @@ testtrigger:
         - TestCategory=coretests
       name: apitests
       secretId: "vault:Secrets/data/auth#secretid"
-      legacyMode: "false"
-      spreadAcrossNodes: "true"
-      useDefaultNodeAffinity: "false"
+      legacyMode: false
+      spreadAcrossNodes: true
+      useDefaultNodeAffinity: false
       tolerations:
         - key: "kubernetes.azure.com/scalesetpriority"
           operator: "Equal"

@@ -514,7 +514,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"UseDefaultNodeAffinity":\s*"false"'
 
-  - it: should set UseDefaultNodeAffinity to true when specified
+  - it: should set UseDefaultNodeAffinity to true when specified as string
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -537,6 +537,38 @@ tests:
                 filters:
                   - "TestCategory=whatever"
                 useDefaultNodeAffinity: "true"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"UseDefaultNodeAffinity":\s*"true"'
+
+  - it: should preserve unquoted boolean true for UseDefaultNodeAffinity
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+                useDefaultNodeAffinity: true
     asserts:
       - isKind:
           of: Job
@@ -577,7 +609,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"SpreadAcrossNodes":\s*"true"'
 
-  - it: should set SpreadAcrossNodes to false when specified
+  - it: should set SpreadAcrossNodes to false when specified as string
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -600,6 +632,38 @@ tests:
                 filters:
                   - "TestCategory=whatever"
                 spreadAcrossNodes: "false"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"SpreadAcrossNodes":\s*"false"'
+
+  - it: should preserve unquoted boolean false for SpreadAcrossNodes
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+                spreadAcrossNodes: false
     asserts:
       - isKind:
           of: Job
@@ -709,7 +773,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"LegacyMode":\s*"false"'
 
-  - it: should set LegacyMode to true when specified
+  - it: should set LegacyMode to true when specified as string
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -732,6 +796,38 @@ tests:
                 filters:
                   - "TestCategory=whatever"
                 legacyMode: "true"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"LegacyMode":\s*"true"'
+
+  - it: should preserve unquoted boolean true for LegacyMode
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+                legacyMode: true
     asserts:
       - isKind:
           of: Job

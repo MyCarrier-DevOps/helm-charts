@@ -326,19 +326,19 @@
                       "default": []
                     },
                     "useDefaultNodeAffinity": {
-                      "type": "string",
-                      "description": "Whether to use default node affinity for test pods",
-                      "default": "false"
+                      "type": ["string", "boolean"],
+                      "description": "Whether to use default node affinity for test pods. Accepts boolean or string.",
+                      "default": false
                     },
                     "spreadAcrossNodes": {
-                      "type": "string",
-                      "description": "Whether to spread test pods across nodes",
-                      "default": "true"
+                      "type": ["string", "boolean"],
+                      "description": "Whether to spread test pods across nodes. Accepts boolean or string.",
+                      "default": true
                     },
                     "legacyMode": {
-                      "type": "string",
-                      "description": "Enable legacy mode for test execution",
-                      "default": "false"
+                      "type": ["string", "boolean"],
+                      "description": "Enable legacy mode for test execution. Accepts boolean or string.",
+                      "default": false
                     },
                     "podResources": {
                       "type": "object",

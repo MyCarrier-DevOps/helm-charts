@@ -416,9 +416,9 @@ applications: {}
 #         containerTag: "1.10.2"
 #         secretId: "vault:Secrets/data/app_authentication#SecretId"
 #         additionalEnvVars: "key1=value1;key2=value2"
-#         legacyMode: "false"                    # Optional (default: "false")
-#         useDefaultNodeAffinity: "false"        # Optional (default: "false")
-#         spreadAcrossNodes: "true"              # Optional (default: "true")
+#         legacyMode: false                      # Optional (default: false)
+#         useDefaultNodeAffinity: false          # Optional (default: false)
+#         spreadAcrossNodes: true                # Optional (default: true)
 #         # Optional: Pod resources for test pods (defaults shown below)
 #         podResources:
 #           limits:
