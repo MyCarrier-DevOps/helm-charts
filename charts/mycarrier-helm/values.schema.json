@@ -293,6 +293,72 @@
                     "additionalEnvVars": {
                       "type": "string",
                       "description": "Additional environment variables to pass to the test container"
+                    },
+                    "tolerations": {
+                      "type": "array",
+                      "description": "Tolerations for test pods scheduled by the test engine",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": { "type": "string" },
+                          "operator": { "type": "string" },
+                          "value": { "type": "string" },
+                          "effect": { "type": "string" }
+                        }
+                      },
+                      "default": [{"key": "kubernetes.azure.com/scalesetpriority", "operator": "Equal", "value": "spot", "effect": "NoSchedule"}]
+                    },
+                    "nodeAffinity": {
+                      "type": "array",
+                      "description": "Node affinity rules for test pods scheduled by the test engine",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": { "type": "string" },
+                          "operator": { "type": "string" },
+                          "type": { "type": "string" },
+                          "values": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                          }
+                        }
+                      },
+                      "default": []
+                    },
+                    "useDefaultNodeAffinity": {
+                      "type": "string",
+                      "description": "Whether to use default node affinity for test pods",
+                      "default": "false"
+                    },
+                    "spreadAcrossNodes": {
+                      "type": "string",
+                      "description": "Whether to spread test pods across nodes",
+                      "default": "true"
+                    },
+                    "legacyMode": {
+                      "type": "string",
+                      "description": "Enable legacy mode for test execution",
+                      "default": "false"
+                    },
+                    "podResources": {
+                      "type": "object",
+                      "description": "Resource requests and limits for test pods scheduled by the test engine",
+                      "properties": {
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "cpu": { "type": "string", "default": "2000m" },
+                            "memory": { "type": "string", "default": "4Gi" }
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "properties": {
+                            "cpu": { "type": "string", "default": "250m" },
+                            "memory": { "type": "string", "default": "0.5Gi" }
+                          }
+                        }
+                      }
                     }
                   }
                 }
