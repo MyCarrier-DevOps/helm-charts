@@ -1,32 +1,31 @@
-{{- if .Values.infrastructure.azure.resourceGroup }}
+{{- if and .Values.infrastructure.azure.resourceGroup (not (hasPrefix "feature" .Values.environment.name)) }}
+{{- $defaults := include "helm.crossplane.defaults" (dict "root" .) | fromJson -}}
 {{- range $rgIndex, $rgInstance := .Values.infrastructure.azure.resourceGroup }}
+{{- $rgName := $rgInstance.name | default (include "helm.azure.resourceGroup.defaultName" (dict "root" $)) -}}
 {{- if $rgInstance.managementPolicies }}
-{{- if has "Delete" $rgInstance.managementPolicies }}
-{{- fail (printf "Delete management policy is not allowed for Resource Group '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] or explicit \"Delete\"." $rgInstance.name) }}
+{{- if or (has "Delete" $rgInstance.managementPolicies) (has "*" $rgInstance.managementPolicies) }}
+{{- fail (printf "Delete management policy is not allowed for Resource Group '%s'. To protect infrastructure, use [\"Create\", \"Update\", \"LateInitialize\", \"Observe\"] instead of [\"*\"] (wildcard) or explicit \"Delete\"." $rgName) }}
 {{- end }}
 {{- end }}
 ---
 apiVersion: azure.upbound.io/v1beta1
 kind: ResourceGroup
 metadata:
-  name: {{ include "helm.crossplane.name" (dict "name" ($rgInstance.name | required "Resource Group name is required") "environment" $.Values.environment.name "appStack" $.Values.global.appStack) }}
-  namespace: {{ $rgInstance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  name: {{ include "helm.crossplane.name" (dict "name" $rgName "environment" $.Values.environment.name "appStack" $.Values.global.appStack) }}
+  namespace: {{ include "helm.crossplane.namespace" (dict "namespace" $rgInstance.namespace "root" $) }}
   labels:
     {{- include "helm.labels.standard" $ | nindent 4 }}
-  {{- if $rgInstance.annotations }}
   annotations:
-    {{- toYaml $rgInstance.annotations | nindent 4 }}
+    crossplane.io/external-name: {{ $rgName }}
+  {{- if $rgInstance.annotations }}
+    {{- toYaml (omit $rgInstance.annotations "crossplane.io/external-name") | nindent 4 }}
   {{- end }}
 spec:
-  {{- if $rgInstance.managementPolicies }}
-  managementPolicies:
-    {{- toYaml $rgInstance.managementPolicies | nindent 4 }}
-  {{- else }}
-  managementPolicies:
-    - "Observe"
-  {{- end }}
+  providerConfigRef:
+    name: {{ $rgInstance.providerConfigRef | default $defaults.providerConfigRef }}
+  {{- include "helm.crossplane.managementPolicies" (dict "policies" $rgInstance.managementPolicies) | nindent 2 }}
   forProvider:
-    location: {{ $rgInstance.location | required "Resource Group location is required" }}
+    location: {{ $rgInstance.location | default $defaults.location | required "Resource Group location is required (set per-resource or infrastructure.azure.defaults.location)" }}
     {{- if $rgInstance.managedBy }}
     managedBy: {{ $rgInstance.managedBy }}
     {{- end }}

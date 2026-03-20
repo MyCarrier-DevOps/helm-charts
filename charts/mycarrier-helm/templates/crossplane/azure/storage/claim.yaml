@@ -1,11 +1,11 @@
-{{- if .Values.infrastructure.azure.storage.accounts }}
+{{- if and .Values.infrastructure.azure.storage.accounts (not (hasPrefix "feature" .Values.environment.name)) }}
 {{- range $instance := .Values.infrastructure.azure.storage.accounts }}
 ---
 apiVersion: azure.platform.io/v1alpha1
 kind: AzureBlobStorage
 metadata:
   name: {{ include "helm.crossplane.name" (dict "name" (include "helm.azure.storage.instanceName" (dict "instance" $instance "root" $)) "environment" $.Values.environment.name "appStack" $.Values.global.appStack) }}
-  namespace: {{ $instance.namespace | default (printf "%s-%s" $.Values.environment.name $.Values.global.appStack) }}
+  namespace: {{ include "helm.crossplane.namespace" (dict "namespace" $instance.namespace "root" $) }}
   labels:
     {{- include "helm.labels.standard" $ | nindent 4 }}
   {{- if $instance.annotations }}
@@ -14,6 +14,8 @@ metadata:
   {{- end }}
 spec:
   parameters:
+    {{- $defaults := include "helm.crossplane.defaults" (dict "root" $) | fromJson }}
+    providerConfigRef: {{ $instance.providerConfigRef | default $defaults.providerConfigRef }}
     {{- if $instance.existingStorageAccount }}
     existingStorageAccount:
       name: {{ $instance.existingStorageAccount.name }}
@@ -31,7 +33,6 @@ spec:
       accessTier: {{ $instance.newStorageAccount.accessTier }}
       {{- end }}
     {{- else }}
-    # Default: create new storage account with auto-generated name (Azure compliant: 3-24 lowercase alphanumeric)
     newStorageAccount:
       name: {{ $instance.name | default (include "helm.azure.storage.name" $) }}
       location: {{ $instance.location | required "location is required for new storage accounts" }}
@@ -49,7 +50,6 @@ spec:
     existingResourceGroup:
       name: {{ $instance.existingResourceGroup.name }}
     {{- else }}
-    # Default: create new resource group with auto-generated name (Azure compliant: 1-90 chars, alphanumeric, hyphens, underscores, periods, parentheses)
     newResourceGroup:
       name: {{ ($instance.newResourceGroup).name | default (include "helm.azure.resourceGroup.name" $) }}
     {{- end }}

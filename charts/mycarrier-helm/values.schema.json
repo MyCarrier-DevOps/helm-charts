@@ -1742,6 +1742,312 @@
     },
     { "type": "null", "description": "Null value when no secrets are needed" }
       ]
+    },
+    "infrastructure": {
+      "type": "object",
+      "description": "Infrastructure resources provisioned via Crossplane",
+      "properties": {
+        "azure": {
+          "type": "object",
+          "description": "Azure infrastructure resources",
+          "properties": {
+            "defaults": {
+              "type": "object",
+              "description": "Default values shared across all Azure Crossplane resources",
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "Default Azure region for all resources (e.g., 'East US'). Empty string means per-resource location is required."
+                },
+                "providerConfigRef": {
+                  "type": "string",
+                  "description": "Default Crossplane ProviderConfig name",
+                  "default": "default"
+                }
+              }
+            },
+            "resourceGroup": {
+              "type": "array",
+              "description": "Azure Resource Group configurations",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Resource Group name (default: inf-{metaEnv})"
+                  },
+                  "location": {
+                    "type": "string",
+                    "description": "Azure region (or use infrastructure.azure.defaults.location)"
+                  },
+                  "providerConfigRef": {
+                    "type": "string",
+                    "description": "Crossplane ProviderConfig name (default: 'default')"
+                  },
+                  "managementPolicies": {
+                    "type": "array",
+                    "description": "Crossplane management policies (default: ['Observe']). 'Delete' and '*' (wildcard) are blocked.",
+                    "items": {
+                      "type": "string",
+                      "enum": ["Create", "Update", "LateInitialize", "Observe"]
+                    }
+                  },
+                  "managedBy": {
+                    "type": "string",
+                    "description": "ID of the resource that manages this resource group"
+                  },
+                  "tags": {
+                    "type": "object",
+                    "description": "Azure resource tags",
+                    "additionalProperties": { "type": "string" }
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "description": "Custom Kubernetes namespace (default: environment.name, or environment.namespaceOverride if set)"
+                  },
+                  "annotations": {
+                    "type": "object",
+                    "description": "Custom Kubernetes annotations",
+                    "additionalProperties": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "storage": {
+              "type": "object",
+              "description": "Azure Storage configuration",
+              "properties": {
+                "accounts": {
+                  "type": "array",
+                  "description": "Azure storage account configurations",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Storage account instance name"
+                      },
+                      "location": {
+                        "type": "string",
+                        "description": "Azure region for new storage accounts"
+                      },
+                      "existingResourceGroup": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string", "description": "Name of existing resource group" }
+                        }
+                      },
+                      "newResourceGroup": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string", "description": "Name for new resource group (auto-generated if omitted)" }
+                        }
+                      },
+                      "existingStorageAccount": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string", "description": "Name of existing storage account" }
+                        }
+                      },
+                      "newStorageAccount": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string", "description": "Name for new storage account" },
+                          "location": { "type": "string", "description": "Azure region" },
+                          "accountTier": { "type": "string", "enum": ["Standard", "Premium"] },
+                          "accountReplicationType": { "type": "string", "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"] },
+                          "accessTier": { "type": "string", "enum": ["Cool", "Hot", "Archive"] }
+                        }
+                      },
+                      "containers": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["name"],
+                          "properties": {
+                            "name": { "type": "string", "description": "Container name" },
+                            "accessType": { "type": "string", "enum": ["private", "blob", "container"] },
+                            "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+                          }
+                        }
+                      },
+                      "tags": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "namespace": { "type": "string" },
+                      "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+                      "tier": { "type": "string", "description": "Legacy alias for accountTier", "enum": ["Standard", "Premium"] },
+                      "replicationType": { "type": "string", "description": "Legacy alias for accountReplicationType", "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"] },
+                      "compositionRef": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "servicebus": {
+              "type": "array",
+              "description": "Azure Service Bus namespace configurations",
+              "items": {
+                "type": "object",
+                "required": ["topics"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Service Bus namespace name (default: inf-{metaEnv}-servicebus)"
+                  },
+                  "location": {
+                    "type": "string",
+                    "description": "Azure region (or use infrastructure.azure.defaults.location)"
+                  },
+                  "sku": {
+                    "type": "string",
+                    "description": "Service Bus SKU tier (default: Standard)",
+                    "enum": ["Basic", "Standard", "Premium"],
+                    "default": "Standard"
+                  },
+                  "providerConfigRef": {
+                    "type": "string",
+                    "description": "Crossplane ProviderConfig name, inherited by all child resources (default: 'default')"
+                  },
+                  "capacity": {
+                    "type": "integer",
+                    "description": "Messaging units for Premium SKU (1, 2, 4, 8, or 16)",
+                    "enum": [1, 2, 4, 8, 16]
+                  },
+                  "resourceGroupName": {
+                    "type": "string",
+                    "description": "Resource group name (default: inf-{env}, e.g. inf-dev)"
+                  },
+                  "resourceGroupNameRef": {
+                    "type": "object",
+                    "description": "Crossplane reference to a ResourceGroup resource"
+                  },
+                  "resourceGroupNameSelector": {
+                    "type": "object",
+                    "description": "Crossplane selector for a ResourceGroup resource"
+                  },
+                  "managementPolicies": {
+                    "type": "array",
+                    "description": "Crossplane management policies (default: ['Observe']). 'Delete' and '*' (wildcard) are blocked.",
+                    "items": {
+                      "type": "string",
+                      "enum": ["Create", "Update", "LateInitialize", "Observe"]
+                    }
+                  },
+                  "tags": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "description": "Custom Kubernetes namespace (default: environment.name, or environment.namespaceOverride if set)"
+                  },
+                  "annotations": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  },
+                  "topics": {
+                    "type": "array",
+                    "description": "Service Bus topics (at least one required)",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["name", "subscriptions"],
+                      "properties": {
+                        "name": { "type": "string", "description": "Topic name" },
+                        "managementPolicies": {
+                          "type": "array",
+                          "items": { "type": "string", "enum": ["Create", "Update", "LateInitialize", "Observe"] }
+                        },
+                        "namespaceId": { "type": "string", "description": "Azure resource ID of the Service Bus namespace" },
+                        "namespaceIdRef": { "type": "object", "description": "Crossplane reference to namespace" },
+                        "maxSizeInMegabytes": { "type": "integer" },
+                        "requiresDuplicateDetection": { "type": "boolean" },
+                        "defaultMessageTtl": { "type": "string", "description": "ISO 8601 duration" },
+                        "duplicateDetectionHistoryTimeWindow": { "type": "string", "description": "ISO 8601 duration" },
+                        "batchedOperationsEnabled": { "type": "boolean" },
+                        "expressEnabled": { "type": "boolean" },
+                        "partitioningEnabled": { "type": "boolean" },
+                        "supportOrdering": { "type": "boolean" },
+                        "autoDeleteOnIdle": { "type": "string", "description": "ISO 8601 duration" },
+                        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+                        "subscriptions": {
+                          "type": "array",
+                          "description": "Topic subscriptions (at least one required)",
+                          "minItems": 1,
+                          "items": {
+                            "type": "object",
+                            "required": ["name"],
+                            "properties": {
+                              "name": { "type": "string", "description": "Subscription name" },
+                              "managementPolicies": {
+                                "type": "array",
+                                "items": { "type": "string", "enum": ["Create", "Update", "LateInitialize", "Observe"] }
+                              },
+                              "topicId": { "type": "string" },
+                              "topicIdRef": { "type": "object" },
+                              "maxDeliveryCount": { "type": "integer", "description": "Maximum delivery attempts (default: 10)" },
+                              "lockDuration": { "type": "string", "description": "ISO 8601 duration" },
+                              "requiresSession": { "type": "boolean" },
+                              "defaultMessageTtl": { "type": "string", "description": "ISO 8601 duration" },
+                              "deadLetteringOnMessageExpiration": { "type": "boolean" },
+                              "deadLetteringOnFilterEvaluationError": { "type": "boolean" },
+                              "batchedOperationsEnabled": { "type": "boolean" },
+                              "autoDeleteOnIdle": { "type": "string", "description": "ISO 8601 duration" },
+                              "forwardTo": { "type": "string" },
+                              "forwardDeadLetteredMessagesTo": { "type": "string" },
+                              "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+                              "rules": {
+                                "type": "array",
+                                "description": "Subscription filter rules",
+                                "items": {
+                                  "type": "object",
+                                  "required": ["name", "filterType"],
+                                  "properties": {
+                                    "name": { "type": "string", "description": "Rule name" },
+                                    "filterType": { "type": "string", "enum": ["SqlFilter", "CorrelationFilter"] },
+                                    "sqlFilter": { "type": "string", "description": "SQL filter expression" },
+                                    "correlationFilter": {
+                                      "type": "object",
+                                      "properties": {
+                                        "contentType": { "type": "string" },
+                                        "correlationId": { "type": "string" },
+                                        "label": { "type": "string" },
+                                        "messageId": { "type": "string" },
+                                        "replyTo": { "type": "string" },
+                                        "replyToSessionId": { "type": "string" },
+                                        "sessionId": { "type": "string" },
+                                        "to": { "type": "string" },
+                                        "properties": { "type": "object", "additionalProperties": { "type": "string" } }
+                                      }
+                                    },
+                                    "action": { "type": "string", "description": "SQL action expression" },
+                                    "managementPolicies": {
+                                      "type": "array",
+                                      "items": { "type": "string", "enum": ["Create", "Update", "LateInitialize", "Observe"] }
+                                    },
+                                    "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

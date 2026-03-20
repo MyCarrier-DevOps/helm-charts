@@ -17,17 +17,13 @@ Usage: {{ include "helm.azure.storage.name" . }}
 {{- end -}}
 
 {{/*
-Generate Azure resource group name (1-90 chars, alphanumeric, hyphens, underscores, periods, parentheses)
+Generate Azure resource group name using the default naming convention.
+Delegates to helm.azure.resourceGroup.defaultName for consistency.
+Kept for backward compatibility with storage claim template.
 Usage: {{ include "helm.azure.resourceGroup.name" . }}
 */}}
 {{- define "helm.azure.resourceGroup.name" -}}
-{{- $ctx := .ctx -}}
-{{- if not $ctx -}}
-	{{- $ctx = include "helm.context" . | fromJson -}}
-{{- end -}}
-{{- $appStack := $ctx.defaults.appStack -}}
-{{- $envName := $ctx.defaults.environmentName -}}
-{{- printf "rg-%s-%s" $appStack $envName -}}
+{{- include "helm.azure.resourceGroup.defaultName" (dict "root" .) -}}
 {{- end -}}
 
 {{/*
@@ -100,4 +96,64 @@ Usage: {{ include "helm.azure.servicebus.rule.fullname" (dict "namespace" $sbIns
 */}}
 {{- define "helm.azure.servicebus.rule.fullname" -}}
 {{- include "helm.k8s.safename" (printf "%s-%s-%s" .environment .appStack .rule) -}}
+{{- end -}}
+
+{{/*
+Generate default Resource Group name based on environment.
+Uses metaEnvironment to map feature-* environments to "dev".
+Output: inf-{metaEnv} (e.g., inf-dev, inf-preprod, inf-prod)
+Usage: {{ include "helm.azure.resourceGroup.defaultName" (dict "root" $root) }}
+*/}}
+{{- define "helm.azure.resourceGroup.defaultName" -}}
+{{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- printf "inf-%s" $metaEnv -}}
+{{- end -}}
+
+{{/*
+Generate default Service Bus namespace name based on environment.
+Uses metaEnvironment to map feature-* environments to "dev".
+Output: inf-{metaEnv}-servicebus (e.g., inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus)
+Usage: {{ include "helm.azure.servicebus.name" (dict "root" $root) }}
+*/}}
+{{- define "helm.azure.servicebus.name" -}}
+{{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- printf "inf-%s-servicebus" $metaEnv -}}
+{{- end -}}
+
+{{/*
+Resolve the Kubernetes namespace for a Crossplane resource.
+Falls back to helm.namespace (environment.name or environment.namespaceOverride) if no explicit namespace is provided.
+Usage: {{ include "helm.crossplane.namespace" (dict "namespace" $instance.namespace "root" $root) }}
+*/}}
+{{- define "helm.crossplane.namespace" -}}
+{{- .namespace | default (include "helm.namespace" .root | trim) -}}
+{{- end -}}
+
+{{/*
+Resolve global Crossplane defaults (providerConfigRef, location).
+Returns a JSON object with defaults applied. Use once per template, cache the result.
+Usage: {{ $defaults := include "helm.crossplane.defaults" (dict "root" $root) | fromJson }}
+*/}}
+{{- define "helm.crossplane.defaults" -}}
+{{- $providerConfigRef := "default" -}}
+{{- $location := "" -}}
+{{- with .root.Values.infrastructure.azure.defaults -}}
+  {{- $providerConfigRef = .providerConfigRef | default $providerConfigRef -}}
+  {{- if .location }}{{ $location = .location }}{{ end -}}
+{{- end -}}
+{{- dict "providerConfigRef" $providerConfigRef "location" $location | toJson -}}
+{{- end -}}
+
+{{/*
+Render managementPolicies block with a default of ["Observe"].
+Usage: {{ include "helm.crossplane.managementPolicies" (dict "policies" $instance.managementPolicies) | nindent 2 }}
+*/}}
+{{- define "helm.crossplane.managementPolicies" -}}
+{{- if .policies -}}
+managementPolicies:
+  {{- toYaml .policies | nindent 2 }}
+{{- else -}}
+managementPolicies:
+  - "Observe"
+{{- end -}}
 {{- end -}}
