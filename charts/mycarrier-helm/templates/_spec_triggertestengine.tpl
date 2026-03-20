@@ -64,16 +64,41 @@ template:
           - |
           {{- range dig "testtrigger" "testdefinitions" list .application }}
           {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
+          {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
+          {{- $tolerations := $defaultTolerations }}
+          {{- if hasKey . "tolerations" }}
+            {{- $tolerations = .tolerations }}
+          {{- end }}
+          {{- $nodeAffinity := .nodeAffinity | default list }}
+          {{- $useDefaultNodeAffinity := "false" }}
+          {{- if hasKey . "useDefaultNodeAffinity" }}
+            {{- $useDefaultNodeAffinity = printf "%v" .useDefaultNodeAffinity }}
+          {{- end }}
+          {{- $legacyMode := "false" }}
+          {{- if hasKey . "legacyMode" }}
+            {{- $legacyMode = printf "%v" .legacyMode }}
+          {{- end }}
+          {{- $spreadAcrossNodes := "true" }}
+          {{- if hasKey . "spreadAcrossNodes" }}
+            {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
+          {{- end }}
+          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
+          {{- $podResources := .podResources | default $defaultPodResources }}
             curl -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
-            -d '{ 
-              "IsMonolith": false, 
-              "TestName": "{{ .name }}", 
-              "StackName": "{{ $stackname }}", 
+            -d '{
+              "IsMonolith": false,
+              "TestName": "{{ .name }}",
+              "StackName": "{{ $stackname }}",
               "ContainerImage": "{{ .containerImage }}",
               "ContainerTag": "{{ .containerTag }}",
               "TestFilters": {{ .filters | toJson }},
+              "Tolerations": {{ $tolerations | toJson }},
+              "NodeAffinity": {{ $nodeAffinity | toJson }},
+              "UseDefaultNodeAffinity": "{{ $useDefaultNodeAffinity }}",
+              "SpreadAcrossNodes": "{{ $spreadAcrossNodes }}",
+              "PodResources": {{ $podResources | toJson }},
               "TestEnvironmentVariables": {
                   "EnvironmentName": "{{ $namespace }}",
                   "ReleaseId": "{{ $imageTag }}",
@@ -82,7 +107,8 @@ template:
                   "ReleaseDefinitionName": "{{ .releaseDefinitionName | default $baseName }}",
                   "BranchName": "{{ $gitBranch }}",
                   "AdditionalEnvVars": "{{ .additionalEnvVars}}",
-                  "CorrelationId": "{{ $correlationId }}"
+                  "CorrelationId": "{{ $correlationId }}",
+                  "LegacyMode": "{{ $legacyMode }}"
                 }
               }' "$TESTENGINEHOOK_URL";
           {{- end }}
