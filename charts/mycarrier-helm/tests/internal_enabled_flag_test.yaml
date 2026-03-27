@@ -193,7 +193,7 @@ tests:
           path: spec.hosts
           content: app-test-app.dev.internal
 
-  - it: should include internal host in offload VS when internalEnabled is true (default)
+  - it: should NOT include internal host in offload VS to avoid conflict with dev VirtualService
     template: virtualService.yaml
     set:
       environment.name: feature-test-branch
@@ -208,6 +208,6 @@ tests:
     asserts:
       - isKind:
           of: VirtualService
-      - contains:
+      - notContains:
           path: spec.hosts
           content: app-test-app.dev.internal

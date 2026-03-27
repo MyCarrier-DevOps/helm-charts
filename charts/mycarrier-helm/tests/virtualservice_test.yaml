@@ -169,18 +169,14 @@ tests:
         documentIndex: 1
       - equal:
           path: spec.hosts[4]
-          value: app-test-app-api.dev.internal
-        documentIndex: 1
-      - equal:
-          path: spec.hosts[5]
           value: app-test-app-api.dev.svc
         documentIndex: 1
       - equal:
-          path: spec.hosts[6]
+          path: spec.hosts[5]
           value: app-test-app-api.dev.svc.cluster.local
         documentIndex: 1
       - equal:
-          path: spec.hosts[7]
+          path: spec.hosts[6]
           value: app-test-app-api.dev.mycarrier.dev
         documentIndex: 1
 
