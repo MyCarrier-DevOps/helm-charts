@@ -11,11 +11,12 @@
 {{- $baseFullName := include "helm.basename" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $metaenv := include "helm.metaEnvironment" $ }}
+{{- $offloadRouteName := printf "%s-%s" $baseFullName $envName | trunc 63 | trimSuffix "-" }}
 ---
 apiVersion: offload.mycarrier.dev/v1alpha1
 kind: OffloadRoute
 metadata:
-  name: {{ $baseFullName }}-{{ $envName }}
+  name: {{ $offloadRouteName }}
   namespace: {{ $namespace }}
   labels:
     {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
