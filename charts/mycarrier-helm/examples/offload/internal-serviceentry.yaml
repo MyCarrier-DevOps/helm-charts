@@ -1,0 +1,38 @@
+---
+# Source: mycarrier-helm/templates/internal-serviceentry.yaml
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: devopstest-routetester-feature28-internal
+  namespace: feature28
+  labels:
+    app.kubernetes.io/name: devopstest-routetester-feature28
+    app.kubernetes.io/instance: devopstest-routetester-feature28
+    app.kubernetes.io/part-of: devopstest
+    app.kubernetes.io/component: "routetester"
+    app: devopstest-routetester-feature28
+    mycarrier.tech/environment: feature28
+    mycarrier.tech/envscaling: "0"
+    mycarrier.tech/envType: "standard"
+    mycarrier.tech/service-namespace: feature28
+    mycarrier.tech/reference: ""
+    mycarrier.tech/commitDeployed: "c6ba942"
+    mycarrier.tech/correlationId: ""
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+spec:
+  hosts:
+    - devopstest-routetester.dev.internal
+  exportTo:
+    - "*"
+  location: MESH_INTERNAL
+  ports:
+    - number: 8080
+      name: http
+      protocol: HTTP
+  resolution: STATIC
+  workloadSelector:
+    labels:
+      app.kubernetes.io/name: devopstest-routetester-feature28
+      app.kubernetes.io/instance: devopstest-routetester-feature28

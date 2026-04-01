@@ -1,0 +1,47 @@
+applications:
+  routetester:
+    autoscaling:
+      enabled: false
+    deploymentType: deployment
+    env:
+      ENVIRONMENT:
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/routetester
+      tag: 26.14.f90d8fe
+    ports:
+      http: 8080
+    replicas: 2
+    securityContext:
+      readOnlyRootFilesystem: false
+deployment: deployment
+environment:
+  dependencyenv: dev
+  domainOverride:
+    domain: example.com
+    enabled: false
+  name: feature28
+global:
+  appStack: devopstest
+  branch: integration
+  commitDeployed: c6ba942
+  dependencies:
+    azureservicebus: false
+    chargify: false
+    clickhouse: false
+    elasticsearch: false
+    loadsure: false
+    mongodb: false
+    postgres: false
+    redis: false
+    redpanda: false
+    sqlserver: false
+  language: python
+jobs: []
+secrets:
+  bulk: {}
+  individual: []
+  mounted: []

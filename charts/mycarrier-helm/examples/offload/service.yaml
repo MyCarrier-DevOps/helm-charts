@@ -1,0 +1,36 @@
+---
+# Source: mycarrier-helm/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devopstest-routetester-feature28
+  namespace: feature28
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+  labels:
+    app.kubernetes.io/name: devopstest-routetester-feature28
+    app.kubernetes.io/instance: devopstest-routetester-feature28
+    app.kubernetes.io/part-of: devopstest
+    app.kubernetes.io/component: "routetester"
+    app: devopstest-routetester-feature28
+    mycarrier.tech/environment: feature28
+    mycarrier.tech/envscaling: "0"
+    mycarrier.tech/envType: "standard"
+    mycarrier.tech/service-namespace: feature28
+    mycarrier.tech/reference: ""
+    mycarrier.tech/commitDeployed: "c6ba942"
+    mycarrier.tech/correlationId: ""
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: devopstest-routetester-feature28
+    app.kubernetes.io/instance: devopstest-routetester-feature28
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 600

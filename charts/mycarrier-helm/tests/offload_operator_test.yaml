@@ -1,0 +1,209 @@
+suite: Offload Operator integration tests
+templates:
+  - virtualService.yaml
+  - offloadBase.yaml
+  - offloadRoute.yaml
+tests:
+  #
+  # VirtualService suppression when offloadOperatorEnabled = true
+  #
+  - it: should NOT render VirtualService when offloadOperatorEnabled is true in dev
+    template: virtualService.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.ingress.type: "istio"
+      applications.routetester.networking.istio.enabled: true
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should still render VirtualService when offloadOperatorEnabled is false (default)
+    template: virtualService.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.ingress.type: "istio"
+      applications.routetester.networking.istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+
+  - it: should NOT render offload VS in feature env when offloadOperatorEnabled is true
+    template: virtualService.yaml
+    set:
+      environment.name: "feature13"
+      global.appStack: "devopstest"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.ingress.type: "istio"
+      applications.routetester.networking.istio.enabled: true
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  #
+  # OffloadBase (dev only)
+  #
+  - it: should render OffloadBase in dev when offloadOperatorEnabled is true
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: OffloadBase
+      - equal:
+          path: metadata.name
+          value: devopstest-routetester
+      - equal:
+          path: metadata.namespace
+          value: dev
+      - equal:
+          path: spec.serviceName
+          value: devopstest-routetester
+      - equal:
+          path: spec.port
+          value: 8080
+      - equal:
+          path: spec.creationPolicy
+          value: CreateOrAdopt
+      - contains:
+          path: spec.hosts
+          content: devopstest-routetester.dev.internal
+      - contains:
+          path: spec.gateways
+          content: mesh
+      - contains:
+          path: spec.gateways
+          content: istio-system/default
+      - equal:
+          path: spec.responseHeaders["X-Frame-Options"]
+          value: "DENY"
+
+  - it: should NOT render OffloadBase when offloadOperatorEnabled is false
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should NOT render OffloadBase in feature environments
+    template: offloadBase.yaml
+    set:
+      environment.name: "feature13"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  #
+  # OffloadRoute (feature only)
+  #
+  - it: should render OffloadRoute in feature env when offloadOperatorEnabled is true
+    template: offloadRoute.yaml
+    set:
+      environment.name: "feature13"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: OffloadRoute
+      - equal:
+          path: metadata.namespace
+          value: feature13
+      - equal:
+          path: spec.offloadBaseRef.name
+          value: devopstest-routetester
+      - equal:
+          path: spec.offloadBaseRef.namespace
+          value: dev
+      - equal:
+          path: spec.environment
+          value: feature13
+      - equal:
+          path: spec.destination.host
+          value: devopstest-routetester-feature13.feature13.svc.cluster.local
+      - equal:
+          path: spec.destination.port
+          value: 8080
+
+  - it: should NOT render OffloadRoute when offloadOperatorEnabled is false
+    template: offloadRoute.yaml
+    set:
+      environment.name: "feature13"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should NOT render OffloadRoute in dev environment
+    template: offloadRoute.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 0

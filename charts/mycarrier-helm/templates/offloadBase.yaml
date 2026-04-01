@@ -1,0 +1,81 @@
+{{/* OffloadBase CRD — created by the dev release when offloadOperatorEnabled is true.
+     Instructs the offload-operator to manage a consolidated VirtualService for the service. */}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
+{{- $metaenv := include "helm.metaEnvironment" $ -}}
+{{- $envName := $.Values.environment.name -}}
+{{- $isFeatureEnv := hasPrefix "feature" $envName -}}
+{{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $offloadOperatorEnabled := dig "networking" "istio" "offloadOperatorEnabled" false $appValues }}
+{{- if $offloadOperatorEnabled }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
+{{- $baseFullName := include "helm.basename" $appContext }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $domain := include "helm.domain" $ }}
+{{- $domainPrefix := include "helm.domain.prefix" $ }}
+{{- $serviceDefaults := $globalCtx.chartDefaults.service }}
+{{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $appValues }}
+{{- $istioConfig := dig "networking" "istio" dict $appValues }}
+---
+apiVersion: offload.mycarrier.dev/v1alpha1
+kind: OffloadBase
+metadata:
+  name: {{ $baseFullName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  serviceName: {{ $baseFullName }}
+  port: {{ default 8080 (dig "ports" "http" nil $appValues) }}
+  creationPolicy: {{ dig "networking" "istio" "offloadCreationPolicy" "CreateOrAdopt" $appValues }}
+  hosts:
+  - {{ $baseFullName }}
+  {{- if $internalEnabled }}
+  - {{ $baseFullName }}.{{ $metaenv }}.internal
+  {{- end }}
+  {{- if $appValues.staticHostname }}
+  - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
+  {{- else }}
+  - {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
+  {{- end }}
+  {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts }}
+  {{- range $istioConfig.hosts }}
+  - {{ . }}
+  {{- end }}
+  {{- end }}
+  gateways:
+  - mesh
+  - istio-system/default
+  {{- if dig "networking" "istio" "offloadVirtualServiceAnnotations" nil $appValues }}
+  virtualServiceAnnotations:
+    {{- toYaml $appValues.networking.istio.offloadVirtualServiceAnnotations | nindent 4 }}
+  {{- end }}
+  {{- if dig "networking" "istio" "offloadVirtualServiceLabels" nil $appValues }}
+  virtualServiceLabels:
+    {{- toYaml $appValues.networking.istio.offloadVirtualServiceLabels | nindent 4 }}
+  {{- end }}
+  {{- /* responseHeaders expects a flat string->string map matching the OffloadBase CRD schema.
+       Do NOT use Istio-style nested format (response.set.X-Header). */ -}}
+  {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
+  responseHeaders:
+    {{- toYaml $istioConfig.responseHeaders | nindent 4 }}
+  {{- else }}
+  responseHeaders:
+    X-Frame-Options: "DENY"
+    X-XSS-Protection: "1; mode=block"
+    X-Content-Type-Options: "nosniff"
+    Referrer-Policy: "origin-when-cross-origin"
+    Strict-Transport-Security: "max-age=7884000; includeSubDomains; preload"
+    Content-Security-Policy: "default-src https: 'unsafe-eval' 'unsafe-inline' blob: data: wss:; object-src 'none'; img-src http://*.osm.org https: data: blob:;"
+  {{- end }}
+  timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $appValues }}
+  retries:
+    retryOn: {{ dig "service" "retryOn" $serviceDefaults.retryOn $appValues }}
+    attempts: {{ dig "service" "attempts" $serviceDefaults.attempts $appValues }}
+    perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout $appValues }}
+{{- end }}
+{{- end }}
+{{- end }}
