@@ -57,7 +57,8 @@ spec:
   virtualServiceLabels:
     {{- toYaml $appValues.networking.istio.offloadVirtualServiceLabels | nindent 4 }}
   {{- end }}
-  {{- $responseHeadersYaml := "" }}
+  {{- /* responseHeaders expects a flat string->string map matching the OffloadBase CRD schema.
+       Do NOT use Istio-style nested format (response.set.X-Header). */ -}}
   {{- if and (hasKey $istioConfig "responseHeaders") $istioConfig.responseHeaders }}
   responseHeaders:
     {{- toYaml $istioConfig.responseHeaders | nindent 4 }}
