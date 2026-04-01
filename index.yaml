@@ -3152,6 +3152,18 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mycarrier-helm-2.5.8/mycarrier-helm-2.5.8.tgz
     version: 2.5.8
+  offload-operator:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-04-01T18:22:55.834184629Z"
+    description: Kubernetes operator that manages consolidated Istio VirtualServices
+      for feature-environment offload routing
+    digest: 5c272e491944e2e93f86dedc2e022e44910a37c42dfafec904ff4c1dc8b6bc56
+    name: offload-operator
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/offload-operator-0.1.1/offload-operator-0.1.1.tgz
+    version: 0.1.1
   pgcat:
   - apiVersion: v2
     appVersion: v1
@@ -3839,4 +3851,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-04-01T18:22:20.816048759Z"
+generated: "2026-04-01T18:22:55.834631415Z"
