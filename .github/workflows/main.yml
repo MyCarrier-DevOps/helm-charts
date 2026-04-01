@@ -31,7 +31,7 @@ jobs:
       
       - name: Get specific changed files   
         id: changed-files-specific
-        uses: tj-actions/changed-files@v45.0.8
+        uses: tj-actions/changed-files@v47.0.5
         with:
           files: |
             charts/**
@@ -42,7 +42,7 @@ jobs:
       - name: generate file list
         if: steps.changed-files-specific.outputs.any_modified == 'true'
         id: file-list
-        uses: tj-actions/changed-files@v45.0.8
+        uses: tj-actions/changed-files@v47.0.5
         with:
           files: |
             charts/**
