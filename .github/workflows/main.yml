@@ -110,8 +110,8 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
       - run: echo "${{ matrix.manifest }}"
-      - name: 'cat package.json'
-        run: cat ./charts/${{ matrix.manifest }}/package.json
+      # - name: 'cat package.json'
+      #   run: cat ./charts/${{ matrix.manifest }}/package.json
 
       - name: Run read-yaml action
         id: yaml-data
