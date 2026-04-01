@@ -61,7 +61,7 @@ spec:
   {{- end }}
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
-  {{- if and $appValues.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
+  {{- if and $appValues.staticHostname (not ($.Values.isEnvironmentDeploy | default false)) }}
   - {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}
   {{- else }}
   - {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
