@@ -7,7 +7,7 @@ Deploys the offload-operator, which reconciles `OffloadBase` and `OffloadRoute` 
 | Parameter | Description | Default |
 |---|---|---|
 | `image.repository` | Container image repository | `ghcr.io/mycarrier-devops/offload-operator` |
-| `image.tag` | Container image tag | `""` (uses appVersion) |
+| `image.tag` | Container image tag | See `values.yaml` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `replicaCount` | Number of operator replicas | `1` |
 | `resources.limits.cpu` | CPU limit | `500m` |
