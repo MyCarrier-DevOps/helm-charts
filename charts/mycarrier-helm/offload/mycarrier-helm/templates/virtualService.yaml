@@ -1,0 +1,147 @@
+---
+# Source: mycarrier-helm/templates/virtualService.yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: devopstest-routetester-feature28
+  namespace: feature28
+  labels:
+    app.kubernetes.io/name: devopstest-routetester-feature28
+    app.kubernetes.io/instance: devopstest-routetester-feature28
+    app.kubernetes.io/part-of: devopstest
+    app.kubernetes.io/component: "routetester"
+    app: devopstest-routetester-feature28
+    mycarrier.tech/environment: feature28
+    mycarrier.tech/envscaling: "0"
+    mycarrier.tech/envType: "standard"
+    mycarrier.tech/service-namespace: feature28
+    mycarrier.tech/reference: ""
+    mycarrier.tech/commitDeployed: "c6ba942"
+    mycarrier.tech/correlationId: ""
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  hosts:
+  - devopstest-routetester-feature28
+  - devopstest-routetester-feature28.dev.mycarrier.dev
+  gateways:
+  - mesh
+  - istio-system/default
+  http:
+  
+  - name: devopstest-routetester-feature28
+    route:
+      - destination:
+          host: "devopstest-routetester-feature28.feature28.svc.cluster.local"
+          port:
+            number: 8080
+    match:
+      - headers:
+          environment:
+            exact: feature28
+  
+  
+  
+  
+  - name: devopstest-routetester-feature28-default
+    match:
+      - withoutHeaders:
+          environment: {}
+      - headers:
+          environment:
+            exact: feature28
+    route:
+    - destination:
+        host: "devopstest-routetester-feature28.feature28.svc.cluster.local"
+        port:
+          number: 8080
+      weight: 100
+    headers:
+      response:
+        set:
+          X-Frame-Options: "DENY"
+          X-XSS-Protection: "1; mode=block"
+          X-Content-Type-Options: "nosniff"
+          Referrer-Policy: "origin-when-cross-origin"
+          Strict-Transport-Security: "max-age=7884000; includeSubDomains; preload"
+          Content-Security-Policy: "default-src https: 'unsafe-eval' 'unsafe-inline' blob: data: wss:; object-src 'none'; img-src http://*.osm.org https: data: blob:;"
+    
+    timeout: 151s
+    retries:
+      retryOn: 5xx,reset
+      attempts: 3
+      perTryTimeout: 50s
+---
+# Source: mycarrier-helm/templates/virtualService.yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: devopstest-routetester-feature28-offload
+  namespace: feature28
+  labels:
+    app.kubernetes.io/name: devopstest-routetester-feature28
+    app.kubernetes.io/instance: devopstest-routetester-feature28
+    app.kubernetes.io/part-of: devopstest
+    app.kubernetes.io/component: "routetester"
+    app: devopstest-routetester-feature28
+    mycarrier.tech/environment: feature28
+    mycarrier.tech/envscaling: "0"
+    mycarrier.tech/envType: "standard"
+    mycarrier.tech/service-namespace: feature28
+    mycarrier.tech/reference: ""
+    mycarrier.tech/commitDeployed: "c6ba942"
+    mycarrier.tech/correlationId: ""
+  annotations:
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  exportTo:
+  - .
+  - dev
+  - istio-system
+  hosts:
+  - devopstest-routetester-feature28
+  - devopstest-routetester-feature28.feature28.svc
+  - devopstest-routetester-feature28.feature28.svc.cluster.local
+  - devopstest-routetester
+  - devopstest-routetester.dev.internal
+  - devopstest-routetester.dev.svc
+  - devopstest-routetester.dev.svc.cluster.local
+  - devopstest-routetester.dev.mycarrier.dev
+  gateways:
+  - mesh
+  - istio-system/default
+  http:
+  - name: devopstest-routetester-feature28
+    route:
+      - destination:
+          host: "devopstest-routetester-feature28.feature28.svc.cluster.local"
+          port:
+            number: 8080
+    match:
+      - headers:
+          environment:
+            exact: feature28
+  - name: devopstest-routetester-dev-fallback
+    match:
+      - withoutHeaders:
+          environment: {}
+      - headers:
+          environment:
+            exact: dev
+    route:
+      - destination:
+          host: "devopstest-routetester.dev.svc.cluster.local"
+          port:
+            number: 8080
+    headers:
+
+      response:
+        set:
+          X-Frame-Options: "DENY"
+          X-XSS-Protection: "1; mode=block"
+          X-Content-Type-Options: "nosniff"
+          Referrer-Policy: "origin-when-cross-origin"
+          Strict-Transport-Security: "max-age=7884000; includeSubDomains; preload"
+          Content-Security-Policy: "default-src https: 'unsafe-eval' 'unsafe-inline' blob: data: wss:; object-src 'none'; img-src http://*.osm.org https: data: blob:;"

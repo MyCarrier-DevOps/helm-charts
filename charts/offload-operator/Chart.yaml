@@ -1,0 +1,6 @@
+apiVersion: v2
+name: offload-operator
+description: Kubernetes operator that manages consolidated Istio VirtualServices for feature-environment offload routing
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

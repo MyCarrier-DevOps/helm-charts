@@ -1,0 +1,35 @@
+{{/* OffloadRoute CRD — created by feature releases when offloadOperatorEnabled is true.
+     Tells the offload-operator to add this feature environment's route to the consolidated VS. */}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
+{{- $envName := $.Values.environment.name -}}
+{{- if hasPrefix "feature" $envName }}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $offloadOperatorEnabled := dig "networking" "istio" "offloadOperatorEnabled" false $appValues }}
+{{- if $offloadOperatorEnabled }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
+{{- $fullName := include "helm.fullname" $appContext }}
+{{- $baseFullName := include "helm.basename" $appContext }}
+{{- $namespace := include "helm.namespace" $ }}
+{{- $metaenv := include "helm.metaEnvironment" $ }}
+---
+apiVersion: offload.mycarrier.dev/v1alpha1
+kind: OffloadRoute
+metadata:
+  name: {{ $baseFullName }}-{{ $envName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  offloadBaseRef:
+    name: {{ $baseFullName }}
+    namespace: {{ $metaenv }}
+  environment: {{ $envName }}
+  destination:
+    host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
+    port: {{ default 8080 (dig "ports" "http" nil $appValues) }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -15,7 +15,8 @@
 {{- $appIstioDisabled := dig "istioDisabled" false $appValues }}
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $appValues }}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $appValues }}
-{{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) }}
+{{- $offloadOperatorEnabled := and (dig "networking" "istio" "offloadOperatorEnabled" false $appValues) (eq $metaenv "dev") }}
+{{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (not $offloadOperatorEnabled) }}
 {{- if $renderVirtualService }}
 ---
 apiVersion: networking.istio.io/v1alpha3
@@ -32,7 +33,7 @@ metadata:
 spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
 {{- $offloadVSEnabled := dig "networking" "istio" "offloadVSEnabled" true $appValues }}
-{{- if and (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled }}
+{{- if and (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not $offloadOperatorEnabled) }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
