@@ -713,6 +713,31 @@
                             "description": "Enable the offload VirtualService for feature environments. When false, the offload VS is not rendered for this application.",
                             "default": true
                           },
+                          "offloadOperatorEnabled": {
+                            "type": "boolean",
+                            "description": "Enable offload-operator managed routing. When true, the standard VirtualService and offload VS are suppressed, and OffloadBase/OffloadRoute CRDs are rendered instead. Only effective when metaEnvironment is dev.",
+                            "default": false
+                          },
+                          "offloadCreationPolicy": {
+                            "type": "string",
+                            "description": "CreationPolicy for the OffloadBase CRD. Controls how the operator handles the target VirtualService.",
+                            "enum": ["CreateOrAdopt", "Adopt", "Create", "Orphan"],
+                            "default": "CreateOrAdopt"
+                          },
+                          "offloadVirtualServiceAnnotations": {
+                            "type": "object",
+                            "description": "Annotations to apply to the operator-managed VirtualService.",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "offloadVirtualServiceLabels": {
+                            "type": "object",
+                            "description": "Labels to apply to the operator-managed VirtualService.",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
                           "hosts": {
                             "type": "array",
                             "items": {
