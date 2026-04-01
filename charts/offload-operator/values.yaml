@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/mycarrier-devops/offload-operator
-  tag: ""
+  tag: "26.14.9a3ddf9"
   pullPolicy: IfNotPresent
 
 replicaCount: 1
