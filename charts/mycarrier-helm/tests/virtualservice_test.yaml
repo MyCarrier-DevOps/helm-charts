@@ -205,12 +205,12 @@ tests:
           path: spec.hosts
           content: app-test-app-api-feature-test.dev.mycarrier.dev
         documentIndex: 0
-      # Offload VS: staticHostname replaces default appstack-appname host
-      - contains:
+      # Offload VS: isEnvironmentDeploy=true so staticHostname absent, default host present
+      - notContains:
           path: spec.hosts
           content: api.custom.domain.mycarrier.dev
         documentIndex: 1
-      - notContains:
+      - contains:
           path: spec.hosts
           content: app-test-app-api.dev.mycarrier.dev
         documentIndex: 1
@@ -236,14 +236,14 @@ tests:
           path: spec.hosts
           content: api.custom.domain.mycarrier.dev
         documentIndex: 0
-      # Offload VS: default appstack-appname host present, static hostname absent
+      # Offload VS: isEnvironmentDeploy=false so staticHostname present, default host absent
       - contains:
           path: spec.hosts
-          content: app-test-app-api.dev.mycarrier.dev
+          content: api.custom.domain.mycarrier.dev
         documentIndex: 1
       - notContains:
           path: spec.hosts
-          content: api.custom.domain.mycarrier.dev
+          content: app-test-app-api.dev.mycarrier.dev
         documentIndex: 1
 
   - it: should not render virtual service when istio is explicitly disabled
@@ -629,7 +629,7 @@ tests:
           value: teststack-test-app-feature-test-branch-offload
         documentIndex: 1
 
-  - it: should use default hostname in offload VS hosts when staticHostname set but isEnvironmentDeploy is false
+  - it: should use staticHostname in offload VS hosts when isEnvironmentDeploy is false
     set:
       global.appStack: teststack
       global.language: csharp
@@ -644,14 +644,14 @@ tests:
     asserts:
       - contains:
           path: spec.hosts
-          content: teststack-test-app.dev.mycarrier.dev
+          content: api.custom.domain.mycarrier.dev
         documentIndex: 1
       - notContains:
           path: spec.hosts
-          content: api.custom.domain.mycarrier.dev
+          content: teststack-test-app.dev.mycarrier.dev
         documentIndex: 1
 
-  - it: should use staticHostname in offload VS hosts when isEnvironmentDeploy is true
+  - it: should use default hostname in offload VS hosts when isEnvironmentDeploy is true
     set:
       global.appStack: teststack
       global.language: csharp
@@ -666,9 +666,9 @@ tests:
     asserts:
       - contains:
           path: spec.hosts
-          content: api.custom.domain.mycarrier.dev
+          content: teststack-test-app.dev.mycarrier.dev
         documentIndex: 1
       - notContains:
           path: spec.hosts
-          content: teststack-test-app.dev.mycarrier.dev
+          content: api.custom.domain.mycarrier.dev
         documentIndex: 1
