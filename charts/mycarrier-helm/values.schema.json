@@ -715,8 +715,8 @@
                           },
                           "offloadOperatorEnabled": {
                             "type": "boolean",
-                            "description": "Enable offload-operator managed routing. When true, the standard VirtualService and offload VS are suppressed, and OffloadBase/OffloadRoute CRDs are rendered instead. Only effective when metaEnvironment is dev.",
-                            "default": false
+                            "description": "Enable offload-operator managed routing. When true, the standard VirtualService and offload VS are suppressed, and OffloadBase/OffloadRoute CRDs are rendered instead. Defaults to true when metaEnvironment is dev, false otherwise. Set explicitly to override.",
+                            "default": true
                           },
                           "offloadCreationPolicy": {
                             "type": "string",

@@ -15,7 +15,7 @@
 {{- $appIstioDisabled := dig "istioDisabled" false $appValues }}
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $appValues }}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $appValues }}
-{{- $offloadOperatorEnabled := and (dig "networking" "istio" "offloadOperatorEnabled" false $appValues) (eq $metaenv "dev") }}
+{{- $offloadOperatorEnabled := and (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
 {{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (not $offloadOperatorEnabled) }}
 {{- if $renderVirtualService }}
 ---

@@ -2,15 +2,15 @@
      Tells the offload-operator to add this feature environment's route to the consolidated VS. */}}
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- $envName := $.Values.environment.name -}}
+{{- $metaenv := include "helm.metaEnvironment" $ -}}
 {{- if hasPrefix "feature" $envName }}
 {{- range $appName, $appValues := .Values.applications }}
-{{- $offloadOperatorEnabled := dig "networking" "istio" "offloadOperatorEnabled" false $appValues }}
+{{- $offloadOperatorEnabled := dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues }}
 {{- if $offloadOperatorEnabled }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $baseFullName := include "helm.basename" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
-{{- $metaenv := include "helm.metaEnvironment" $ }}
 {{- $offloadRouteName := printf "%s-%s" $baseFullName $envName | trunc 63 | trimSuffix "-" }}
 ---
 apiVersion: offload.mycarrier.dev/v1alpha1

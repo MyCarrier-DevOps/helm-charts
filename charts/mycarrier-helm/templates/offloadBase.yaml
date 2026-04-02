@@ -6,7 +6,7 @@
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
 {{- range $appName, $appValues := .Values.applications }}
-{{- $offloadOperatorEnabled := dig "networking" "istio" "offloadOperatorEnabled" false $appValues }}
+{{- $offloadOperatorEnabled := dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues }}
 {{- if $offloadOperatorEnabled }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- $baseFullName := include "helm.basename" $appContext }}

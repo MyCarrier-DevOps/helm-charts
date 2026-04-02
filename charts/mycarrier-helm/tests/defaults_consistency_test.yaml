@@ -33,6 +33,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
     asserts:
       - template: deployment.yaml
         isKind:

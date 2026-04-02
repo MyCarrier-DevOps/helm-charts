@@ -24,7 +24,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should still render VirtualService when offloadOperatorEnabled is false (default)
+  - it: should still render VirtualService when offloadOperatorEnabled is explicitly false in dev
     template: virtualService.yaml
     set:
       environment.name: "dev"
@@ -36,6 +36,7 @@ tests:
       applications.routetester.ports.http: 8080
       applications.routetester.networking.ingress.type: "istio"
       applications.routetester.networking.istio.enabled: true
+      applications.routetester.networking.istio.offloadOperatorEnabled: false
     asserts:
       - hasDocuments:
           count: 1
@@ -107,7 +108,7 @@ tests:
           path: spec.responseHeaders["X-Frame-Options"]
           value: "DENY"
 
-  - it: should NOT render OffloadBase when offloadOperatorEnabled is false
+  - it: should NOT render OffloadBase when offloadOperatorEnabled is explicitly false
     template: offloadBase.yaml
     set:
       environment.name: "dev"
@@ -118,6 +119,7 @@ tests:
       applications.routetester.image.repository: "mycarrier/routetester"
       applications.routetester.image.tag: "1.0.0"
       applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: false
     asserts:
       - hasDocuments:
           count: 0
@@ -177,7 +179,7 @@ tests:
           path: spec.destination.port
           value: 8080
 
-  - it: should NOT render OffloadRoute when offloadOperatorEnabled is false
+  - it: should NOT render OffloadRoute when offloadOperatorEnabled is explicitly false
     template: offloadRoute.yaml
     set:
       environment.name: "feature13"
@@ -188,6 +190,7 @@ tests:
       applications.routetester.image.repository: "mycarrier/routetester"
       applications.routetester.image.tag: "1.0.0"
       applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: false
     asserts:
       - hasDocuments:
           count: 0
@@ -207,3 +210,56 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  #
+  # Default-enabled in dev metaenv (no explicit offloadOperatorEnabled set)
+  #
+  - it: should suppress VirtualService by default in dev (offloadOperatorEnabled defaults to true)
+    template: virtualService.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.ingress.type: "istio"
+      applications.routetester.networking.istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render OffloadBase by default in dev (offloadOperatorEnabled defaults to true)
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: OffloadBase
+
+  - it: should render OffloadRoute by default in feature env (offloadOperatorEnabled defaults to true)
+    template: offloadRoute.yaml
+    set:
+      environment.name: "feature13"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: OffloadRoute

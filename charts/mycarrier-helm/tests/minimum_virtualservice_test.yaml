@@ -20,6 +20,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
               hosts:
                 - "minimal-vs-app.example.com"
     asserts:
