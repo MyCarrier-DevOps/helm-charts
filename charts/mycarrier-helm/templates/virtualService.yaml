@@ -56,9 +56,6 @@ spec:
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
   - {{ $baseFullName }}
-  {{- if $internalEnabled }}
-  - {{ $baseFullName }}.{{ $metaNamespace }}.internal
-  {{- end }}
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc
   - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
   {{- if and $appValues.staticHostname (not ($.Values.isEnvironmentDeploy | default false)) }}
