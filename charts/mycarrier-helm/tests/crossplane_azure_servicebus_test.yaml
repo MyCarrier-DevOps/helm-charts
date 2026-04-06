@@ -1297,3 +1297,53 @@ tests:
           path: spec.forProvider.namespaceIdSelector.matchLabels["servicebus.mycarrier.io/namespace"]
           value: "labeled-sb"
         documentIndex: 1
+
+  # Test 31: Topic without subscriptions (forward-target pattern)
+  - it: should create namespace, two topics, and only a source-topic subscription when the forward-target topic has no subscriptions
+    set:
+      global.appStack: fwdtarget
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "fwdtarget-sb"
+              location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "address-integrationevents"
+                - name: "source-topic"
+                  subscriptions:
+                    - name: "forwarder"
+                      forwardTo: "address-integrationevents"
+    asserts:
+      - hasDocuments:
+          count: 4  # ServiceBusNamespace + 2 Topics + 1 Subscription (no Subscription for forward-target)
+      - isKind:
+          of: ServiceBusNamespace
+        documentIndex: 0
+      - isKind:
+          of: Topic
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "address-integrationevents"
+        documentIndex: 1
+      - isKind:
+          of: Topic
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "source-topic"
+        documentIndex: 2
+      - isKind:
+          of: Subscription
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.forwardTo
+          value: "address-integrationevents"
+        documentIndex: 3
