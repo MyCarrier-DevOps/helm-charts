@@ -58,7 +58,7 @@
         },
         "domainOverride": {
           "oneOf": [
-            { 
+            {
               "type": "object",
               "properties": {
                 "enabled": {
@@ -94,7 +94,7 @@
     },
     "tolerations": {
       "oneOf": [
-        { "type": "array", "description": "Default tolerations for all applications", 
+        { "type": "array", "description": "Default tolerations for all applications",
           "items": {
             "type": "object",
             "properties": {
@@ -2049,7 +2049,7 @@
                     "minItems": 1,
                     "items": {
                       "type": "object",
-                      "required": ["name", "subscriptions"],
+                      "required": ["name"],
                       "properties": {
                         "name": { "type": "string", "description": "Topic name" },
                         "managementPolicies": {
@@ -2070,8 +2070,7 @@
                         "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
                         "subscriptions": {
                           "type": "array",
-                          "description": "Topic subscriptions (at least one required)",
-                          "minItems": 1,
+                          "description": "Topic subscriptions",
                           "items": {
                             "type": "object",
                             "required": ["name"],
