@@ -1299,7 +1299,7 @@ tests:
         documentIndex: 1
 
   # Test 31: Topic without subscriptions (forward-target pattern)
-  - it: should create only ServiceBusNamespace and Topic when topic has no subscriptions
+  - it: should create namespace, two topics, and only a source-topic subscription when the forward-target topic has no subscriptions
     set:
       global.appStack: fwdtarget
       global.language: csharp
