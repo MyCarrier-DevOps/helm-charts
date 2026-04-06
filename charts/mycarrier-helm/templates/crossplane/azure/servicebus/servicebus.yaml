@@ -53,7 +53,7 @@ spec:
       {{- toYaml $sbInstance.tags | nindent 6 }}
     {{- end }}
 {{- if not $sbInstance.topics }}
-{{- fail "At least one topic is required when defining a Service Bus" }}
+{{- fail (printf "At least one topic is required when defining Service Bus namespace '%s'." $sbName) }}
 {{- end }}
 {{- range $topicIndex, $topic := $sbInstance.topics }}
 {{- $topicFullname := include "helm.azure.servicebus.topic.fullname" (dict "namespace" $sbName "topic" $topic.name "environment" $root.Values.environment.name "appStack" $root.Values.global.appStack) -}}

@@ -2070,7 +2070,7 @@
                         "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
                         "subscriptions": {
                           "type": "array",
-                          "description": "Topic subscriptions",
+                          "description": "Optional topic subscriptions. Omit this field or provide an empty array to create a topic without subscriptions.",
                           "items": {
                             "type": "object",
                             "required": ["name"],
