@@ -56,7 +56,7 @@ tests:
           value: batch/v1
       - hasDocuments:
           count: 2
-          
+
   - it: should only create jobs for enabled applications
     set:
       fullnameOverride: app
@@ -87,7 +87,7 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: ^app-app1-trigger$
-          
+
   - it: should have proper labels and annotations
     set:
       fullnameOverride: app
@@ -119,7 +119,7 @@ tests:
           path: metadata.labels
       - exists:
           path: metadata.annotations
-            
+
   - it: should use testenginehook spec
     set:
       fullnameOverride: app
@@ -145,7 +145,7 @@ tests:
     asserts:
       - exists:
           path: spec
-          
+
   # Edge case tests for testdefinitions
   - it: should handle multiple test definitions correctly
     set:
@@ -189,7 +189,7 @@ tests:
           count: 1
       - exists:
           path: spec
-          
+
   - it: should handle special characters in filter values correctly
     set:
       fullnameOverride: app
@@ -221,7 +221,7 @@ tests:
           count: 1
       - exists:
           path: spec
-          
+
   - it: should handle custom TTL values correctly
     set:
       fullnameOverride: app
@@ -251,7 +251,7 @@ tests:
           count: 1
       - exists:
           path: spec
-          
+
   - it: should include CorrelationId in test engine payload
     set:
       fullnameOverride: app
@@ -895,3 +895,107 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"TestFilters":\s*"TestCategory=coretests"'
+
+  # ── TestEngine webhook URL selection tests ────────────────────────────────
+
+  - it: should use global.testengineWebhookUrl when injected and no explicit webhook_url
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.testengineWebhookUrl: "vault:DevOps/data/testengine/api#dev_url"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#dev_url"
+
+  - it: should fall back to prod vault key when global.testengineWebhookUrl is not set
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#url"
+
+  - it: should prefer explicit webhook_url over global.testengineWebhookUrl
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.testengineWebhookUrl: "vault:DevOps/data/testengine/api#dev_url"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            webhook_url: "vault:DevOps/data/testengine/api#url"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#url"
