@@ -23,6 +23,7 @@
 {{- end }}
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
+{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default "vault:DevOps/data/testengine/api#url" }}
 {{- if dig "testtrigger" false .application }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
@@ -46,7 +47,6 @@ template:
         - name: TESTENGINE_APIKEY
           value: {{ dig "testtrigger" "apikey" "" .application | quote }}
         - name: TESTENGINEHOOK_URL
-          {{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default "vault:DevOps/data/testengine/api#url" }}
           value: {{ dig "testtrigger" "webhook_url" $defaultWebhookUrl .application | quote }}
         resources:
           {{- if .application.testtrigger.resources }}

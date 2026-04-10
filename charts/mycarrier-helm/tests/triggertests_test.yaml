@@ -926,12 +926,11 @@ tests:
           of: Job
       - hasDocuments:
           count: 1
-      - equal:
-          path: spec.template.spec.containers[0].env[1].name
-          value: TESTENGINEHOOK_URL
-      - equal:
-          path: spec.template.spec.containers[0].env[1].value
-          value: "vault:DevOps/data/testengine/api#dev_url"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#dev_url"
 
   - it: should fall back to prod vault key when global.testengineWebhookUrl is not set
     set:
@@ -960,12 +959,11 @@ tests:
           of: Job
       - hasDocuments:
           count: 1
-      - equal:
-          path: spec.template.spec.containers[0].env[1].name
-          value: TESTENGINEHOOK_URL
-      - equal:
-          path: spec.template.spec.containers[0].env[1].value
-          value: "vault:DevOps/data/testengine/api#url"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#url"
 
   - it: should prefer explicit webhook_url over global.testengineWebhookUrl
     set:
@@ -996,9 +994,8 @@ tests:
           of: Job
       - hasDocuments:
           count: 1
-      - equal:
-          path: spec.template.spec.containers[0].env[1].name
-          value: TESTENGINEHOOK_URL
-      - equal:
-          path: spec.template.spec.containers[0].env[1].value
-          value: "vault:DevOps/data/testengine/api#url"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#url"
