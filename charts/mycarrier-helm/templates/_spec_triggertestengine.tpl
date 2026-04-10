@@ -46,7 +46,8 @@ template:
         - name: TESTENGINE_APIKEY
           value: {{ dig "testtrigger" "apikey" "" .application | quote }}
         - name: TESTENGINEHOOK_URL
-          value: {{ dig "testtrigger" "webhook_url" "" .application | quote }}
+          {{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default "vault:DevOps/data/testengine/api#url" }}
+          value: {{ dig "testtrigger" "webhook_url" $defaultWebhookUrl .application | quote }}
         resources:
           {{- if .application.testtrigger.resources }}
           {{ toYaml .application.testtrigger.resources | indent 10 | trim }}
