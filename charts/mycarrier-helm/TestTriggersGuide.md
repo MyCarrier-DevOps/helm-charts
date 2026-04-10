@@ -25,7 +25,8 @@ applications:
       activeDeadlineSeconds: "<seconds>"
       ttlSecondsAfterFinished: "<seconds>"
       apikey: "<api-key-or-vault-reference>"
-      webhook_url: "<webhook-url-or-vault-reference>"
+      # webhook_url: "<webhook-url-or-vault-reference>"  # Optional — auto-injected by CI/CD render step;
+                                                          # falls back to vault:DevOps/data/testengine/api#url
       backoffLimit: <number>
       resources:
         requests:
@@ -78,7 +79,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference. **Optional** — when omitted, the chart uses `global.testengineWebhookUrl` injected by the CI/CD render step, which auto-selects the dev or prod testengine endpoint based on the Argo workflow namespace. | No | `global.testengineWebhookUrl` (injected by render) | `"vault:Secrets/data/path/to/secret#url"` |
+| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference. **Optional** — when omitted, the chart uses `global.testengineWebhookUrl` injected by the CI/CD render step, which auto-selects the dev or prod testengine endpoint based on the Argo workflow namespace. | No | `global.testengineWebhookUrl` (injected by render); hard fallback to `vault:DevOps/data/testengine/api#url` when absent (e.g. local render) | `"vault:Secrets/data/path/to/secret#url"` |
 
 *Default resource values:
 ```yaml

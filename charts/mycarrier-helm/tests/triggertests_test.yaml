@@ -894,7 +894,7 @@ tests:
           count: 1
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "TestCategory=coretests"
+          pattern: '"TestFilters":\s*"TestCategory=coretests"'
 
   # ── TestEngine webhook URL selection tests ────────────────────────────────
 
@@ -1002,4 +1002,3 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[1].value
           value: "vault:DevOps/data/testengine/api#url"
-          pattern: '"TestFilters":\s*"TestCategory=coretests"'
