@@ -25,7 +25,7 @@ applications:
       activeDeadlineSeconds: "<seconds>"
       ttlSecondsAfterFinished: "<seconds>"
       apikey: "<api-key-or-vault-reference>"
-      # webhook_url: "<webhook-url-or-vault-reference>"  # Optional — auto-injected by CI/CD render step;
+      # webhook_url: "<webhook-url-or-vault-reference>"   # Optional — auto-injected by CI/CD render step;
                                                           # falls back to vault:DevOps/data/testengine/api#url
       backoffLimit: <number>
       resources:
