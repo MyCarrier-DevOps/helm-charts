@@ -194,6 +194,52 @@ tests:
       - failedTemplate:
           errorPattern: 'requires networking.istio.internalEnabled=true'
 
+  - it: should fail when networking.istio.enabled=false
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: false
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'requires networking.istio.enabled=true'
+
+  - it: should fail when istioDisabled=true
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.istioDisabled: true
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'incompatible with istioDisabled=true'
+
+  - it: should fail when service.istioDisabled=true
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.service.istioDisabled: true
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'incompatible with service.istioDisabled=true'
+
   - it: should fail when gatewayRef.name is missing
     set:
       environment.name: dev

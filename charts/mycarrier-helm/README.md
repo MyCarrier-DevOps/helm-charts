@@ -1065,14 +1065,15 @@ The rendered CR **only ever references internal addresses**:
 
 ### Required prerequisites
 
-KAC rendering requires BOTH of the following — the chart fails the render
-otherwise:
+KAC rendering requires **all** of the following — the chart fails the render
+otherwise. These conditions mirror the gating on the `.internal` ServiceEntry
+that the CR depends on.
 
 1. `environment.name` is **not** a feature environment.
-2. `networking.istio.internalEnabled` is `true` for the application.
-
-Both are prerequisites for the `.internal` ServiceEntry that the CR depends
-on.
+2. `networking.istio.enabled` is `true`.
+3. `istioDisabled` (top-level application flag) is not `true`.
+4. `service.istioDisabled` is not `true`.
+5. `networking.istio.internalEnabled` is `true`.
 
 ### Development workflow
 

@@ -14,8 +14,20 @@ Guarantees:
 
 {{/*
 helm.krakend.enabled returns "true" when the application has opted in to
-KrakenDAutoConfig rendering AND the required `.internal` ServiceEntry will
-be rendered (non-feature environment, internalEnabled = true).
+KrakenDAutoConfig rendering AND every prerequisite for the `.internal`
+ServiceEntry is satisfied. This mirrors the gating in
+templates/internal-serviceentry.yaml so we never emit a KrakenDAutoConfig
+that points at an internal host that was never created.
+
+Prerequisites (all must hold):
+  - networking.krakend.enabled == true
+  - not a feature environment
+  - networking.istio.enabled == true
+  - istioDisabled != true (top-level application flag)
+  - service.istioDisabled != true
+  - networking.istio.internalEnabled == true
+
+Any violation fails the render with a clear, targeted error.
 
 Usage:
   {{- if eq (include "helm.krakend.enabled" $appContext) "true" }}
@@ -28,9 +40,18 @@ Usage:
 false
 {{- else -}}
 {{- $envName := .Values.environment.name | default "dev" -}}
+{{- $istioEnabled := dig "networking" "istio" "enabled" true $app -}}
+{{- $appIstioDisabled := dig "istioDisabled" false $app -}}
+{{- $serviceIstioDisabled := dig "service" "istioDisabled" false $app -}}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $app -}}
 {{- if hasPrefix "feature" $envName -}}
 {{- fail (printf "networking.krakend.enabled=true is not supported in feature environments (got environment=%q). The `.internal` ServiceEntry only exists in non-feature environments; new public API endpoints must be developed and released directly to dev." $envName) -}}
+{{- else if not $istioEnabled -}}
+{{- fail (printf "networking.krakend.enabled=true requires networking.istio.enabled=true. The KrakenDAutoConfig spec.openapi.url relies on the application's `.internal` ServiceEntry, which is not rendered when Istio is disabled.") -}}
+{{- else if $appIstioDisabled -}}
+{{- fail (printf "networking.krakend.enabled=true is incompatible with istioDisabled=true. The KrakenDAutoConfig spec.openapi.url relies on the application's `.internal` ServiceEntry, which is not rendered when istioDisabled=true.") -}}
+{{- else if $serviceIstioDisabled -}}
+{{- fail (printf "networking.krakend.enabled=true is incompatible with service.istioDisabled=true. The KrakenDAutoConfig spec.openapi.url relies on the application's `.internal` ServiceEntry, which is not rendered when service.istioDisabled=true.") -}}
 {{- else if not $internalEnabled -}}
 {{- fail (printf "networking.krakend.enabled=true requires networking.istio.internalEnabled=true. The KrakenDAutoConfig spec.openapi.url relies on the application's `.internal` ServiceEntry, which is not rendered when internalEnabled is false.") -}}
 {{- else -}}
