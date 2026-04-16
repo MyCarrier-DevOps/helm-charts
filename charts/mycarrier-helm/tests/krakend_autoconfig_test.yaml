@@ -1,0 +1,450 @@
+suite: KrakenDAutoConfig template tests
+templates:
+  - krakendAutoConfig.yaml
+release:
+  name: test
+  namespace: dev
+tests:
+  - it: should not render anything when networking.krakend.enabled is false
+    set:
+      environment.name: dev
+      applications.routingguide-publicapi.image.registry: myregistry.example.com
+      applications.routingguide-publicapi.image.repository: routingguide-publicapi
+      applications.routingguide-publicapi.image.tag: "1.0.0"
+      applications.routingguide-publicapi.ports.http: 8080
+      applications.routingguide-publicapi.networking.istio.enabled: true
+      applications.routingguide-publicapi.networking.istio.internalEnabled: true
+      applications.routingguide-publicapi.networking.krakend.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render anything when networking.krakend is absent
+    set:
+      environment.name: dev
+      applications.routingguide-publicapi.image.registry: myregistry.example.com
+      applications.routingguide-publicapi.image.repository: routingguide-publicapi
+      applications.routingguide-publicapi.image.tag: "1.0.0"
+      applications.routingguide-publicapi.ports.http: 8080
+      applications.routingguide-publicapi.networking.istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a minimal KrakenDAutoConfig pointing at the internal address
+    set:
+      environment.name: dev
+      applications.routingguide-publicapi.image.registry: myregistry.example.com
+      applications.routingguide-publicapi.image.repository: routingguide-publicapi
+      applications.routingguide-publicapi.image.tag: "1.0.0"
+      applications.routingguide-publicapi.ports.http: 8080
+      applications.routingguide-publicapi.networking.istio.enabled: true
+      applications.routingguide-publicapi.networking.istio.internalEnabled: true
+      applications.routingguide-publicapi.networking.krakend.enabled: true
+      applications.routingguide-publicapi.networking.krakend.gatewayRef.name: mycarrier-public-api
+      applications.routingguide-publicapi.networking.krakend.gatewayRef.namespace: krakend
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: KrakenDAutoConfig
+      - equal:
+          path: apiVersion
+          value: gateway.krakend.io/v1alpha1
+      - equal:
+          path: metadata.name
+          value: app-routingguide-publicapi-autoconfig
+      - equal:
+          path: metadata.namespace
+          value: krakend
+      - equal:
+          path: spec.gatewayRef.name
+          value: mycarrier-public-api
+      - equal:
+          path: spec.gatewayRef.namespace
+          value: krakend
+      - equal:
+          path: spec.trigger
+          value: OnChange
+      - equal:
+          path: spec.openapi.url
+          value: http://app-routingguide-publicapi.dev.internal/swagger/v1/swagger.json
+      - equal:
+          path: spec.openapi.allowClusterLocal
+          value: true
+      - equal:
+          path: spec.urlTransform.hostMapping[0].from
+          value: http://app-routingguide-publicapi.dev.internal
+      - equal:
+          path: spec.urlTransform.hostMapping[0].to
+          value: http://app-routingguide-publicapi.dev.internal
+
+  - it: should include catch-all hostMapping entries for external hosts
+    set:
+      environment.name: dev
+      global.appStack: mycarrier
+      applications.routingguide-publicapi.image.registry: myregistry.example.com
+      applications.routingguide-publicapi.image.repository: routingguide-publicapi
+      applications.routingguide-publicapi.image.tag: "1.0.0"
+      applications.routingguide-publicapi.ports.http: 8080
+      applications.routingguide-publicapi.networking.istio.enabled: true
+      applications.routingguide-publicapi.networking.istio.internalEnabled: true
+      applications.routingguide-publicapi.networking.istio.hosts:
+        - custom.example.com
+      applications.routingguide-publicapi.networking.krakend.enabled: true
+      applications.routingguide-publicapi.networking.krakend.gatewayRef.name: mycarrier-public-api
+    asserts:
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: http://mycarrier-routingguide-publicapi.dev.mycarrier.dev
+            to: http://mycarrier-routingguide-publicapi.dev.internal
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: https://mycarrier-routingguide-publicapi.dev.mycarrier.dev
+            to: http://mycarrier-routingguide-publicapi.dev.internal
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: http://custom.example.com
+            to: http://mycarrier-routingguide-publicapi.dev.internal
+
+  - it: should honor a custom openapi.path
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.openapi.path: /openapi.json
+    asserts:
+      - equal:
+          path: spec.openapi.url
+          value: http://app-api.dev.internal/openapi.json
+
+  - it: should emit periodic interval when trigger=Periodic
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.trigger: Periodic
+      applications.api.networking.krakend.periodic.interval: 5m
+    asserts:
+      - equal:
+          path: spec.trigger
+          value: Periodic
+      - equal:
+          path: spec.periodic.interval
+          value: 5m
+
+  - it: should fail when trigger=Periodic without an interval
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.trigger: Periodic
+    asserts:
+      - failedTemplate:
+          errorMessage: 'application "api": networking.krakend.periodic.interval is required when trigger=Periodic'
+
+  - it: should fail in feature environments
+    set:
+      environment.name: feature-x
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'not supported in feature environments'
+
+  - it: should fail when internalEnabled=false
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: false
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'requires networking.istio.internalEnabled=true'
+
+  - it: should fail when networking.istio.enabled=false
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: false
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'requires networking.istio.enabled=true'
+
+  - it: should fail when istioDisabled=true
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.istioDisabled: true
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'incompatible with istioDisabled=true'
+
+  - it: should fail when service.istioDisabled=true
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.service.istioDisabled: true
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - failedTemplate:
+          errorPattern: 'incompatible with service.istioDisabled=true'
+
+  - it: should fail when gatewayRef.name is missing
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: 'networking.krakend.gatewayRef.name is required'
+
+  - it: should fail when extraHostMapping.to contains the external domain
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://legacy.mycarrier.dev
+    asserts:
+      - failedTemplate:
+          errorPattern: 'contains the external domain'
+
+  - it: should fail when extraHostMapping.to contains the external domain in mixed case
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://Foo.MyCarrier.Dev
+    asserts:
+      - failedTemplate:
+          errorPattern: 'contains the external domain'
+
+  - it: should fail when extraHostMapping.to is a non-internal host (no external domain)
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: 'is not an internal address'
+
+  - it: should fail when extraHostMapping.to is an IP literal
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://10.0.0.5:8080
+    asserts:
+      - failedTemplate:
+          errorPattern: 'is not an internal address'
+
+  - it: should accept extraHostMapping.to ending in .internal or .svc.cluster.local
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy-a
+          to: http://other.dev.internal
+        - from: http://legacy-b
+          to: other-service.dev.svc.cluster.local:8080
+    asserts:
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: http://legacy-a
+            to: http://other.dev.internal
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: http://legacy-b
+            to: other-service.dev.svc.cluster.local:8080
+
+  - it: should normalize openapi.path when the leading slash is missing
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.openapi.path: openapi.json
+    asserts:
+      - equal:
+          path: spec.openapi.url
+          value: http://app-api.dev.internal/openapi.json
+
+  - it: should passthrough defaults, overrides, and filter
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.defaults.endpoint.timeout: 30s
+      applications.api.networking.krakend.defaults.endpoint.inputHeaders:
+        - Authorization
+      applications.api.networking.krakend.overrides:
+        - operationId: GetFoo
+          endpoint: /foo
+          timeout: 10s
+      applications.api.networking.krakend.filter.includePaths:
+        - /api/v1/*
+    asserts:
+      - equal:
+          path: spec.defaults.endpoint.timeout
+          value: 30s
+      - equal:
+          path: spec.defaults.endpoint.inputHeaders[0]
+          value: Authorization
+      - equal:
+          path: spec.overrides[0].operationId
+          value: GetFoo
+      - equal:
+          path: spec.overrides[0].endpoint
+          value: /foo
+      - equal:
+          path: spec.filter.includePaths[0]
+          value: /api/v1/*
+
+  - it: should honor autoConfigNamespace override
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.autoConfigNamespace: custom-kac-ns
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.gatewayRef.namespace: krakend
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-kac-ns
+      - equal:
+          path: spec.gatewayRef.namespace
+          value: krakend
+
+  - it: should fall back to global.krakendGatewayNamespace for gatewayRef.namespace
+    set:
+      environment.name: dev
+      global.krakendGatewayNamespace: krakend
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+    asserts:
+      - equal:
+          path: spec.gatewayRef.namespace
+          value: krakend
+      - equal:
+          path: metadata.namespace
+          value: krakend

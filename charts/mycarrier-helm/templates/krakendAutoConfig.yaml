@@ -1,0 +1,42 @@
+{{/*
+KrakenDAutoConfig — one per application that sets networking.krakend.enabled: true.
+
+The operator (gateway.krakend.io/v1alpha1) watches this CR and generates
+KrakenD endpoints from the referenced OpenAPI spec. The spec.openapi.url is
+always built from the application's `.internal` host — never the public
+domain — and urlTransform.hostMapping auto-rewrites any external host the
+OpenAPI `servers:` block may advertise back to the internal URL.
+
+NOTE: KAC rendering currently requires a non-feature environment,
+networking.istio.enabled=true, networking.istio.internalEnabled=true, and
+neither istioDisabled nor service.istioDisabled set to true. Feature
+environments are intentionally excluded (see helm.krakend.enabled for the
+exact gating logic and rationale).
+*/}}
+{{- $globalCtx := include "helm.context" $ | fromJson -}}
+{{- range $appName, $appValues := .Values.applications }}
+{{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
+{{- if eq (include "helm.krakend.enabled" $appContext) "true" }}
+{{- $kacName := include "helm.krakend.autoConfigName" $appContext }}
+{{- $kacNamespace := include "helm.krakend.autoConfigNamespace" $appContext }}
+---
+apiVersion: gateway.krakend.io/v1alpha1
+kind: KrakenDAutoConfig
+metadata:
+  name: {{ $kacName }}
+  namespace: {{ $kacNamespace }}
+  labels:
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+    {{- with dig "networking" "krakend" "labels" dict $appValues }}
+    {{ toYaml . | indent 4 | trim }}
+    {{- end }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+    {{- with dig "networking" "krakend" "annotations" dict $appValues }}
+    {{ toYaml . | indent 4 | trim }}
+    {{- end }}
+spec:
+  {{ include "helm.specs.krakendautoconfig" $appContext | indent 2 | trim }}
+{{- end }}
+{{- end }}
