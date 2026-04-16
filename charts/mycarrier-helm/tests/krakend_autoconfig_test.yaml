@@ -226,6 +226,87 @@ tests:
       - failedTemplate:
           errorPattern: 'contains the external domain'
 
+  - it: should fail when extraHostMapping.to is a non-internal host (no external domain)
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: 'is not an internal address'
+
+  - it: should fail when extraHostMapping.to is an IP literal
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://10.0.0.5:8080
+    asserts:
+      - failedTemplate:
+          errorPattern: 'is not an internal address'
+
+  - it: should accept extraHostMapping.to ending in .internal or .svc.cluster.local
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy-a
+          to: http://other.dev.internal
+        - from: http://legacy-b
+          to: other-service.dev.svc.cluster.local:8080
+    asserts:
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: http://legacy-a
+            to: http://other.dev.internal
+      - contains:
+          path: spec.urlTransform.hostMapping
+          content:
+            from: http://legacy-b
+            to: other-service.dev.svc.cluster.local:8080
+
+  - it: should normalize openapi.path when the leading slash is missing
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.openapi.path: openapi.json
+    asserts:
+      - equal:
+          path: spec.openapi.url
+          value: http://app-api.dev.internal/openapi.json
+
   - it: should passthrough defaults, overrides, and filter
     set:
       environment.name: dev

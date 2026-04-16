@@ -301,7 +301,7 @@ applications: {}
 #         addPathPrefix: /api/v1/routing  # optional
 #         # extraHostMapping:             # optional; additional mappings appended after the auto-generated ones.
 #         #   - from: "http://some-other-host"
-#         #     to:   "http://<app>.dev.internal"   # must NOT contain the public domain
+#         #     to:   "http://<app>.dev.internal"   # host MUST end in .internal or .svc.cluster.local
 #       defaults:                         # optional; matches KrakenDAutoConfigSpec.Defaults
 #         endpoint:
 #           timeout: 30s

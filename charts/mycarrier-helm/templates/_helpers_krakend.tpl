@@ -156,8 +156,15 @@ Priority:
 
 {{/*
 helm.krakend.validateExtraHostMapping fails the render when any user-supplied
-`extraHostMapping` entry's `to:` value contains the external domain. This
-enforces the internal-only invariant at template time.
+`extraHostMapping` entry's `to:` value is not an internal address.
+
+Internal-only invariant: `to:` must either
+  - be a bare hostname ending in `.internal` or `.svc.cluster.local`, or
+  - be an http(s) URL whose host ends in `.internal` or `.svc.cluster.local`.
+
+Values that contain the configured external domain are rejected with a
+dedicated error for clarity. Any other value (example.com, an IP literal,
+https://public-site, etc.) is rejected as non-internal.
 */}}
 {{- define "helm.krakend.validateExtraHostMapping" -}}
 {{- $app := .application -}}
@@ -167,7 +174,18 @@ enforces the internal-only invariant at template time.
 {{- range $i, $entry := $extra -}}
 {{- $to := $entry.to | default "" -}}
 {{- if contains $domain $to -}}
-{{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q contains the external domain %q. The KrakenDAutoConfig must only map to internal addresses (svc.cluster.local or .internal)." $appName $i $to $domain) -}}
+{{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q contains the external domain %q. The KrakenDAutoConfig must only map to internal addresses (.internal or .svc.cluster.local)." $appName $i $to $domain) -}}
+{{- end -}}
+{{- /* Extract the host portion: strip scheme and path/port. */ -}}
+{{- $host := $to -}}
+{{- if contains "://" $host -}}
+{{- $host = (splitList "://" $host | last) -}}
+{{- end -}}
+{{- $host = (splitList "/" $host | first) -}}
+{{- $host = (splitList ":" $host | first) -}}
+{{- $isInternal := or (hasSuffix ".internal" $host) (hasSuffix ".svc.cluster.local" $host) -}}
+{{- if not $isInternal -}}
+{{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q is not an internal address. The host portion must end in .internal or .svc.cluster.local." $appName $i $to) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -201,9 +219,12 @@ trigger: {{ $trigger }}
 periodic:
   interval: {{ $interval | quote }}
 {{- end }}
-{{- /* openapi — always internal */ -}}
+{{- /* openapi — always internal. Normalize path to ensure a leading slash. */ -}}
 {{- $openapi := dig "openapi" dict $krakend -}}
-{{- $path := dig "path" "/swagger/v1/swagger.json" $openapi }}
+{{- $path := dig "path" "/swagger/v1/swagger.json" $openapi -}}
+{{- if and $path (not (hasPrefix "/" $path)) -}}
+{{- $path = printf "/%s" $path -}}
+{{- end }}
 openapi:
   url: {{ printf "%s%s" $internalURL $path | quote }}
   allowClusterLocal: {{ dig "allowClusterLocal" true $openapi }}

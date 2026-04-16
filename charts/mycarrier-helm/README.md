@@ -1120,7 +1120,7 @@ See the commented example under `networking.krakend` in
 | `openapi.allowClusterLocal` | Default `true`. |
 | `openapi.auth` | Optional bearer/basic auth for the spec fetch. |
 | `urlTransform.stripPathPrefix` / `addPathPrefix` | Path rewrites. |
-| `urlTransform.extraHostMapping` | Additional mappings (appended after auto-generated entries). `to:` **must not** contain the external domain. |
+| `urlTransform.extraHostMapping` | Additional mappings (appended after auto-generated entries). `to:` host **must** end in `.internal` or `.svc.cluster.local`; values containing the external domain or non-internal hosts (e.g. IP literals, public hostnames) are rejected at render time. |
 | `defaults` | Endpoint/backend defaults (mirrors `KrakenDAutoConfigSpec.Defaults`). |
 | `overrides` | Per-operation overrides. |
 | `filter` | Include/exclude by path/method/tag/operationId. |
