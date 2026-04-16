@@ -45,7 +45,7 @@ false
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $app -}}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $app -}}
 {{- if hasPrefix "feature" $envName -}}
-{{- fail (printf "networking.krakend.enabled=true is not supported in feature environments (got environment=%q). The `.internal` ServiceEntry only exists in non-feature environments; new public API endpoints must be developed and released directly to dev." $envName) -}}
+{{- fail (printf "networking.krakend.enabled=true is not supported in feature environments (got environment=%q). Each KrakenDAutoConfig registers endpoints on the shared KrakenDGateway, so per-feature-env variants would collide with the dev-env KrakenDAutoConfig for the same application. New public API endpoints must be developed and released directly to dev." $envName) -}}
 {{- else if not $istioEnabled -}}
 {{- fail (printf "networking.krakend.enabled=true requires networking.istio.enabled=true. The KrakenDAutoConfig spec.openapi.url relies on the application's `.internal` ServiceEntry, which is not rendered when Istio is disabled.") -}}
 {{- else if $appIstioDisabled -}}
@@ -194,17 +194,21 @@ https://public-site, etc.) is rejected as non-internal.
 {{- $extra := dig "networking" "krakend" "urlTransform" "extraHostMapping" (list) $app -}}
 {{- range $i, $entry := $extra -}}
 {{- $to := $entry.to | default "" -}}
-{{- if contains $domain $to -}}
+{{- $domainLower := lower $domain -}}
+{{- $toLower := lower $to -}}
+{{- if contains $domainLower $toLower -}}
 {{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q contains the external domain %q. The KrakenDAutoConfig must only map to internal addresses (.internal or .svc.cluster.local)." $appName $i $to $domain) -}}
 {{- end -}}
-{{- /* Extract the host portion: strip scheme and path/port. */ -}}
+{{- /* Extract the host portion: strip scheme and path/port. Lower-case for
+       suffix comparison so values like `Foo.DEV.Internal` are still accepted. */ -}}
 {{- $host := $to -}}
 {{- if contains "://" $host -}}
 {{- $host = (splitList "://" $host | last) -}}
 {{- end -}}
 {{- $host = (splitList "/" $host | first) -}}
 {{- $host = (splitList ":" $host | first) -}}
-{{- $isInternal := or (hasSuffix ".internal" $host) (hasSuffix ".svc.cluster.local" $host) -}}
+{{- $hostLower := lower $host -}}
+{{- $isInternal := or (hasSuffix ".internal" $hostLower) (hasSuffix ".svc.cluster.local" $hostLower) -}}
 {{- if not $isInternal -}}
 {{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q is not an internal address. The host portion must end in .internal or .svc.cluster.local." $appName $i $to) -}}
 {{- end -}}

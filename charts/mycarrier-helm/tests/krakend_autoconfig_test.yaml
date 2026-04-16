@@ -272,6 +272,24 @@ tests:
       - failedTemplate:
           errorPattern: 'contains the external domain'
 
+  - it: should fail when extraHostMapping.to contains the external domain in mixed case
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.urlTransform.extraHostMapping:
+        - from: http://legacy
+          to: http://Foo.MyCarrier.Dev
+    asserts:
+      - failedTemplate:
+          errorPattern: 'contains the external domain'
+
   - it: should fail when extraHostMapping.to is a non-internal host (no external domain)
     set:
       environment.name: dev

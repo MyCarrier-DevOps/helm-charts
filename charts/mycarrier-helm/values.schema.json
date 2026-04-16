@@ -832,7 +832,7 @@
                   },
                   "krakend": {
                     "type": "object",
-                    "description": "KrakenDAutoConfig CR configuration. When enabled=true the chart renders a gateway.krakend.io/v1alpha1 KrakenDAutoConfig for the application. Requires a non-feature environment AND networking.istio.internalEnabled=true.",
+                    "description": "KrakenDAutoConfig CR configuration. When enabled=true the chart renders a gateway.krakend.io/v1alpha1 KrakenDAutoConfig for the application. Requires a non-feature environment, networking.istio.enabled=true, networking.istio.internalEnabled=true, and neither istioDisabled nor service.istioDisabled may be true. See the helm.krakend.enabled helper for the exact gating.",
                     "additionalProperties": false,
                     "properties": {
                       "enabled": {

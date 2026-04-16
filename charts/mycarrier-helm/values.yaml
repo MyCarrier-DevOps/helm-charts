@@ -258,18 +258,24 @@ applications: {}
 #     # ------------------------------------------------------------------------
 #     # KrakenD AutoConfig
 #     # ------------------------------------------------------------------------
-#     # Opt the application in to generating a `gateway.krakend.io/v1alpha1`
+#     # Opt the application into generating a `gateway.krakend.io/v1alpha1`
 #     # KrakenDAutoConfig CR. The operator uses the CR to generate KrakenD
 #     # endpoints from the referenced OpenAPI spec.
 #     #
 #     # Requirements (enforced at template time):
 #     #   - environment.name is NOT a feature environment (rendering fails)
+#     #   - networking.istio.enabled is true (rendering fails otherwise)
 #     #   - networking.istio.internalEnabled is true (rendering fails otherwise)
+#     #   - istioDisabled is not true (rendering fails otherwise)
+#     #   - service.istioDisabled is not true (rendering fails otherwise)
+#     # See `helm.krakend.enabled` for the exact gating logic.
 #     #
-#     # Development workflow: because the `.internal` ServiceEntry only exists
-#     # in non-feature environments, new public API endpoints must be developed
-#     # and released directly to dev. Feature environments cannot host a
-#     # KrakenDAutoConfig.
+#     # Development workflow: feature environments are intentionally excluded
+#     # from KrakenDAutoConfig rendering. New public API endpoints must be
+#     # developed and released directly to dev rather than validated via a
+#     # feature environment, because each KrakenDAutoConfig registers
+#     # endpoints on the shared KrakenDGateway and per-feature-env variants
+#     # would collide on the same gateway.
 #     #
 #     # Guarantees:
 #     #   - spec.openapi.url is always http://<app>.<metaEnv>.internal/<path>

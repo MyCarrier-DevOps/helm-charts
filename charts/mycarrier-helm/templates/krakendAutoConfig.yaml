@@ -7,9 +7,11 @@ always built from the application's `.internal` host — never the public
 domain — and urlTransform.hostMapping auto-rewrites any external host the
 OpenAPI `servers:` block may advertise back to the internal URL.
 
-NOTE: KAC rendering requires a non-feature environment AND
-networking.istio.internalEnabled=true, since both conditions are required
-for the `.internal` ServiceEntry to exist. See helm.krakend.enabled.
+NOTE: KAC rendering currently requires a non-feature environment,
+networking.istio.enabled=true, networking.istio.internalEnabled=true, and
+neither istioDisabled nor service.istioDisabled set to true. Feature
+environments are intentionally excluded (see helm.krakend.enabled for the
+exact gating logic and rationale).
 */}}
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- range $appName, $appValues := .Values.applications }}

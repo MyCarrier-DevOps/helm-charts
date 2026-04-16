@@ -1078,10 +1078,12 @@ that the CR depends on.
 ### Development workflow
 
 **New public API endpoints must be developed and released directly to `dev`.**
-Because the `.internal` ServiceEntry only exists in non-feature environments,
-feature environments cannot host a `KrakenDAutoConfig` — attempting to render
-one there will fail the Helm template. Iterate on new gateway endpoints
-against `dev` and promote through the normal preprod/prod pipeline.
+Feature environments are intentionally excluded from `KrakenDAutoConfig`
+rendering — attempting to render one there will fail the Helm template.
+Each KAC registers endpoints on the shared `KrakenDGateway`, so per‑feature‑env
+variants of the same application would collide with the dev‑env KAC for
+that application. Iterate on new gateway endpoints against `dev` and
+promote through the normal preprod/prod pipeline.
 
 ### Minimal configuration
 
