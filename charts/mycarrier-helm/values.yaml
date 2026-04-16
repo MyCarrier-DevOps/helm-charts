@@ -254,7 +254,80 @@ applications: {}
 #       #   - "/custom-endpoint"
 #       #   - "/api/v1/*"
 #       # disableDefaultEndpoints: false  # Set true to disable auto C# endpoints
-#   
+#
+#     # ------------------------------------------------------------------------
+#     # KrakenD AutoConfig
+#     # ------------------------------------------------------------------------
+#     # Opt the application in to generating a `gateway.krakend.io/v1alpha1`
+#     # KrakenDAutoConfig CR. The operator uses the CR to generate KrakenD
+#     # endpoints from the referenced OpenAPI spec.
+#     #
+#     # Requirements (enforced at template time):
+#     #   - environment.name is NOT a feature environment (rendering fails)
+#     #   - networking.istio.internalEnabled is true (rendering fails otherwise)
+#     #
+#     # Development workflow: because the `.internal` ServiceEntry only exists
+#     # in non-feature environments, new public API endpoints must be developed
+#     # and released directly to dev. Feature environments cannot host a
+#     # KrakenDAutoConfig.
+#     #
+#     # Guarantees:
+#     #   - spec.openapi.url is always http://<app>.<metaEnv>.internal/<path>
+#     #   - spec.urlTransform.hostMapping auto-includes catch-all entries that
+#     #     rewrite any external host from the OpenAPI `servers:` block back
+#     #     to the internal URL.
+#     krakend:
+#       enabled: false
+#       # name: custom-kac-name            # optional; defaults to <fullName>-autoconfig
+#       # autoConfigNamespace: krakend     # optional; defaults to gatewayRef.namespace → global.krakendGatewayNamespace → app namespace
+#       # labels: {}                       # extra labels for the KAC metadata
+#       # annotations: {}                  # extra annotations for the KAC metadata
+#       gatewayRef:
+#         name: mycarrier-public-api      # required: KrakenDGateway metadata.name
+#         # namespace: krakend            # optional; falls back to global.krakendGatewayNamespace or app namespace
+#       trigger: OnChange                 # OnChange (default) or Periodic
+#       # periodic:
+#       #   interval: 5m                  # required when trigger=Periodic
+#       openapi:
+#         path: /swagger/v1/swagger.json  # optional; default /swagger/v1/swagger.json
+#         # format: json                  # optional: json | yaml (auto-detected if omitted)
+#         # allowClusterLocal: true       # default true
+#         # auth:                         # optional authentication for the spec fetch
+#         #   bearerTokenSecret:
+#         #     name: my-secret
+#         #     key: token
+#       urlTransform:
+#         stripPathPrefix: /api/v1        # optional
+#         addPathPrefix: /api/v1/routing  # optional
+#         # extraHostMapping:             # optional; additional mappings appended after the auto-generated ones.
+#         #   - from: "http://some-other-host"
+#         #     to:   "http://<app>.dev.internal"   # must NOT contain the public domain
+#       defaults:                         # optional; matches KrakenDAutoConfigSpec.Defaults
+#         endpoint:
+#           timeout: 30s
+#           inputHeaders:
+#             - Authorization
+#             - Content-Type
+#         # backend:
+#         #   encoding: json
+#         # policyRef:
+#         #   name: default-policy
+#       overrides: []                     # optional; list of OperationOverride
+#       # overrides:
+#       #   - operationId: GetFoo
+#       #     endpoint: /foo
+#       #     timeout: 10s
+#       filter: {}                        # optional; include/exclude paths/methods/tags/operationIds
+#       # filter:
+#       #   includePaths: ["/api/v1/*"]
+#       #   excludeOperationIds: ["debug-only"]
+#       cue: {}                           # optional; custom CUE definitions ref / environment
+#       # cue:
+#       #   environment: dev
+#       #   definitionsConfigMapRef:
+#       #     name: my-cue-defs
+#       #     key: defs.cue
+#
 #   # ----------------------------------------------------------------------------
 #   # Service Account
 #   # ----------------------------------------------------------------------------

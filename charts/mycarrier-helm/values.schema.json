@@ -831,7 +831,153 @@
                     ]
                   },
                   "krakend": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "KrakenDAutoConfig CR configuration. When enabled=true the chart renders a gateway.krakend.io/v1alpha1 KrakenDAutoConfig for the application. Requires a non-feature environment AND networking.istio.internalEnabled=true.",
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Render a KrakenDAutoConfig CR for this application."
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Override the KrakenDAutoConfig metadata.name. Defaults to <fullName>-autoconfig."
+                      },
+                      "autoConfigNamespace": {
+                        "type": "string",
+                        "description": "Namespace the KrakenDAutoConfig CR is rendered into. Defaults to gatewayRef.namespace → global.krakendGatewayNamespace → application namespace."
+                      },
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "annotations": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "gatewayRef": {
+                        "type": "object",
+                        "required": ["name"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "KrakenDGateway metadata.name to attach generated endpoints to."
+                          },
+                          "namespace": {
+                            "type": "string",
+                            "description": "Gateway namespace. Falls back to global.krakendGatewayNamespace or the application namespace."
+                          }
+                        }
+                      },
+                      "trigger": {
+                        "type": "string",
+                        "enum": ["OnChange", "Periodic"],
+                        "default": "OnChange"
+                      },
+                      "periodic": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "interval": {
+                            "type": "string",
+                            "description": "Poll interval (Go duration, e.g. 5m). Required when trigger=Periodic."
+                          }
+                        }
+                      },
+                      "openapi": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "description": "OpenAPI spec source. Note: the URL itself is auto-generated from the application's `.internal` address; only the path component is user-configurable.",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "default": "/swagger/v1/swagger.json",
+                            "description": "Path portion appended to http://<app>.<metaEnv>.internal. Defaults to /swagger/v1/swagger.json."
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": ["json", "yaml"],
+                            "description": "Spec format. Auto-detected if omitted."
+                          },
+                          "allowClusterLocal": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "auth": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "Optional authentication configuration for the spec fetch (BearerTokenSecret or BasicAuthSecret)."
+                          }
+                        }
+                      },
+                      "urlTransform": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "stripPathPrefix": { "type": "string" },
+                          "addPathPrefix": { "type": "string" },
+                          "extraHostMapping": {
+                            "type": "array",
+                            "description": "Additional host mappings appended AFTER the auto-generated identity + catch-all entries. The `to:` value must not contain the external domain; rendering fails otherwise.",
+                            "items": {
+                              "type": "object",
+                              "required": ["from", "to"],
+                              "additionalProperties": false,
+                              "properties": {
+                                "from": { "type": "string" },
+                                "to": { "type": "string" }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "defaults": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Default values for generated endpoints and backends. Mirrors KrakenDAutoConfigSpec.Defaults."
+                      },
+                      "overrides": {
+                        "type": "array",
+                        "description": "Per-operation overrides. Mirrors KrakenDAutoConfigSpec.Overrides.",
+                        "items": {
+                          "type": "object",
+                          "required": ["operationId"],
+                          "additionalProperties": true,
+                          "properties": {
+                            "operationId": { "type": "string" }
+                          }
+                        }
+                      },
+                      "filter": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "includePaths": { "type": "array", "items": { "type": "string" } },
+                          "excludePaths": { "type": "array", "items": { "type": "string" } },
+                          "includeMethods": { "type": "array", "items": { "type": "string" } },
+                          "excludeOperationIds": { "type": "array", "items": { "type": "string" } },
+                          "includeTags": { "type": "array", "items": { "type": "string" } },
+                          "excludeTags": { "type": "array", "items": { "type": "string" } }
+                        }
+                      },
+                      "cue": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "environment": { "type": "string" },
+                          "definitionsConfigMapRef": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": { "type": "string" },
+                              "key": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               },
