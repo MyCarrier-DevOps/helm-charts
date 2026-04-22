@@ -6,6 +6,8 @@ global:
   branchlabel: main
   language: nodejs
   v2migration: false
+  correlationId: "test-corr-id-123"
+  commitDeployed: "abc1234"
   env:
     LOG_LEVEL: info
     FEATURE_FLAG: "true"
