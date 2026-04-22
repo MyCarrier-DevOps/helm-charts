@@ -6,6 +6,8 @@ global:
   branchlabel: ""
   language: nodejs
   v2migration: false
+  correlationId: ""
+  commitDeployed: ""
   env: {}
   dependencies:
     mongodb: false

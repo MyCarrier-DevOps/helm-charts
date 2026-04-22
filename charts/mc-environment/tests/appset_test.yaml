@@ -47,6 +47,12 @@ tests:
           path: spec.generators[0].list.elements[0].Values.global.env.LOG_LEVEL
           value: info
       - equal:
+          path: spec.generators[0].list.elements[0].Values.global.correlationId
+          value: test-corr-id-123
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.commitDeployed
+          value: abc1234
+      - equal:
           path: spec.generators[0].list.elements[0].Values.infrastructure.azure.storage.accounts[0].newStorageAccount.name
           value: shipmentsdata
       - equal:
@@ -80,6 +86,23 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.tolerations
           value: []
+  - it: forwards empty correlationId and commitDeployed when not set
+    set:
+      global.appStack: carriers
+      global.correlationId: ""
+      global.commitDeployed: ""
+      environments:
+        - name: dev
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.correlationId
+          value: ""
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.commitDeployed
+          value: ""
   - it: configures template with chart source and sync policies
     values:
       - fixtures/basic-environments.yaml
