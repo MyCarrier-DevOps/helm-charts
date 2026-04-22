@@ -23,6 +23,8 @@ spec:
                   branchlabel: {{ $.Values.global.branchlabel }}
                   language: {{ $.Values.global.language }}
                   v2migration: {{ $.Values.global.v2migration }}
+                  correlationId: {{ $.Values.global.correlationId }}
+                  commitDeployed: {{ $.Values.global.commitDeployed }}
                   {{- $mergedEnv := deepCopy ($.Values.global.env | default dict) }}
                   {{- if $env.global }}{{- if $env.global.env }}{{- $mergedEnv = mustMergeOverwrite $mergedEnv $env.global.env }}{{- end }}{{- end }}
                   {{- if $mergedEnv }}
