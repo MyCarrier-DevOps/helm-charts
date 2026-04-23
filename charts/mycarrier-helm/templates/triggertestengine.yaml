@@ -20,6 +20,7 @@ metadata:
     argocd.argoproj.io/sync-options: Replace=true
     argocd.argoproj.io/sync-wave: "1000"
     argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     {{ include "helm.annotations.vault" . | indent 4 | trim }}
 spec:
   {{ include "helm.specs.testenginehook" $appContext | indent 2 | trim }}
