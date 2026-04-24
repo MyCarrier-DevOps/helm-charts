@@ -889,12 +889,26 @@
                       "openapi": {
                         "type": "object",
                         "additionalProperties": false,
-                        "description": "OpenAPI spec source. Note: the URL itself is auto-generated from the application's `.internal` address; only the path component is user-configurable.",
+                        "description": "OpenAPI spec source. By default the URL is auto-generated from the application's `.internal` address using `path`. To bypass auto-generation, set `url` (or `configMapRef`) directly; the supplied value is passed through to the CR.",
                         "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "Explicit OpenAPI spec URL. When set, overrides the auto-generated http://<app>.<metaEnv>.internal<path> URL. Must point to an internal address (.internal or .svc.cluster.local) and must not contain the external domain."
+                          },
                           "path": {
                             "type": "string",
                             "default": "/swagger/v1/swagger.json",
-                            "description": "Path portion appended to http://<app>.<metaEnv>.internal. Defaults to /swagger/v1/swagger.json."
+                            "description": "Path portion appended to http://<app>.<metaEnv>.internal. Ignored when `url` is set. Defaults to /swagger/v1/swagger.json."
+                          },
+                          "configMapRef": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["name", "key"],
+                            "description": "Load the OpenAPI spec from a ConfigMap key instead of fetching a URL.",
+                            "properties": {
+                              "name": { "type": "string" },
+                              "key": { "type": "string" }
+                            }
                           },
                           "format": {
                             "type": "string",
@@ -918,9 +932,22 @@
                         "properties": {
                           "stripPathPrefix": { "type": "string" },
                           "addPathPrefix": { "type": "string" },
+                          "hostMapping": {
+                            "type": "array",
+                            "description": "Direct passthrough of KrakenDAutoConfigSpec.urlTransform.hostMapping. Equivalent to extraHostMapping; provided so users can paste rendered CR values verbatim. Each `to:` value must point to an internal address and must not contain the external domain.",
+                            "items": {
+                              "type": "object",
+                              "required": ["from", "to"],
+                              "additionalProperties": false,
+                              "properties": {
+                                "from": { "type": "string" },
+                                "to": { "type": "string" }
+                              }
+                            }
+                          },
                           "extraHostMapping": {
                             "type": "array",
-                            "description": "Additional host mappings appended AFTER the auto-generated identity + catch-all entries. The `to:` value must not contain the external domain; rendering fails otherwise.",
+                            "description": "Alias for hostMapping retained for backward compatibility. Entries are appended to any `hostMapping` entries. Each `to:` value must not contain the external domain.",
                             "items": {
                               "type": "object",
                               "required": ["from", "to"],
