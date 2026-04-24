@@ -34,6 +34,8 @@ infrastructure:
 
 Both examples produce fully configured Crossplane resources with auto-generated names, `Standard` SKU, `Observe` management policy, and `default` provider config. Location must be set either per-resource or via `infrastructure.azure.defaults.location`.
 
+**Note:** The default Service Bus name for `prod` is `inf-prod-servicebus-prem` (Premium SKU namespace). For all other environments it follows the `inf-{env}-servicebus` pattern.
+
 **Note:** Feature environments (`feature-*`) are skipped and do not provision infrastructure. All other environments (dev, preprod, prod, qa, uat, etc.) create resources normally.
 
 ## Global Defaults
@@ -75,7 +77,7 @@ For an app with `global.appStack: myapp`:
 | Resource | dev | preprod | prod |
 |----------|-----|---------|------|
 | Resource Group name | `inf-dev` | `inf-preprod` | `inf-prod` |
-| Service Bus name | `inf-dev-servicebus` | `inf-preprod-servicebus` | `inf-prod-servicebus` |
+| Service Bus name | `inf-dev-servicebus` | `inf-preprod-servicebus` | `inf-prod-servicebus-prem` |
 | Service Bus RG ref | `inf-dev` | `inf-preprod` | `inf-prod` |
 | Storage account | `stmyappdev` | `stmyapppreprod` | `stmyappprod` |
 | K8s namespace | `dev` | `preprod` | `prod` |

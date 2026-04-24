@@ -1001,7 +1001,46 @@ tests:
           value: "preprod-prepname-inf-preprod-servicebus"
         documentIndex: 0
 
-  # Test 23: Global defaults for providerConfigRef
+  # Test 23: Default servicebus name for prod environment (Premium namespace)
+  - it: should default servicebus name to inf-prod-servicebus-prem for prod
+    set:
+      global.appStack: prodname
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              sku: "Premium"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.name
+          value: "prod-prodname-inf-prod-servicebus-prem"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "inf-prod-servicebus-prem"
+        documentIndex: 0
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "inf-prod-servicebus-prem"
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "prod-prodname-inf-prod-servicebus-prem-orders"
+        documentIndex: 1
+
+  # Test 24: Global defaults for providerConfigRef
   - it: should use global defaults for providerConfigRef when set
     set:
       global.appStack: gdeftest
@@ -1039,7 +1078,7 @@ tests:
           value: "global-provider"
         documentIndex: 2
 
-  # Test 24: Per-resource providerConfigRef overrides global default
+  # Test 25: Per-resource providerConfigRef overrides global default
   - it: should override global providerConfigRef with per-resource value
     set:
       global.appStack: overtest
@@ -1070,7 +1109,7 @@ tests:
           value: "specific-provider"
         documentIndex: 0
 
-  # Test 25: Global default location
+  # Test 26: Global default location
   - it: should use global default location when per-resource location is omitted
     set:
       global.appStack: loctest
@@ -1099,7 +1138,7 @@ tests:
           value: "West Europe"
         documentIndex: 0
 
-  # Test 26: SKU defaults to Standard
+  # Test 27: SKU defaults to Standard
   - it: should default SKU to Standard when not specified
     set:
       global.appStack: skutest
@@ -1125,7 +1164,7 @@ tests:
           value: "Standard"
         documentIndex: 0
 
-  # Test 27: Fully minimal config - all defaults
+  # Test 28: Fully minimal config - all defaults
   - it: should work with fully minimal config using all defaults
     set:
       global.appStack: minimal
@@ -1199,7 +1238,7 @@ tests:
           value: 10
         documentIndex: 2
 
-  # Test 28: Namespace defaults to environment.name
+  # Test 29: Namespace defaults to environment.name
   - it: should default namespace to environment name not env-appStack
     set:
       global.appStack: nsdeftest
@@ -1241,7 +1280,7 @@ tests:
           value: preprod
         documentIndex: 3
 
-  # Test 29: Wildcard (*) managementPolicies should be blocked (schema rejects before template)
+  # Test 30: Wildcard (*) managementPolicies should be blocked (schema rejects before template)
   - it: should fail when wildcard managementPolicies is used on namespace
     set:
       global.appStack: wildcard
@@ -1265,7 +1304,7 @@ tests:
     asserts:
       - failedTemplate: {}
 
-  # Test 30: ServiceBusNamespace should have servicebus.mycarrier.io/namespace label
+  # Test 31: ServiceBusNamespace should have servicebus.mycarrier.io/namespace label
   - it: should add namespace label to ServiceBusNamespace for topic selector disambiguation
     set:
       global.appStack: nslabel
@@ -1298,7 +1337,7 @@ tests:
           value: "labeled-sb"
         documentIndex: 1
 
-  # Test 31: Topic without subscriptions (forward-target pattern)
+  # Test 32: Topic without subscriptions (forward-target pattern)
   - it: should create namespace, two topics, and only a source-topic subscription when the forward-target topic has no subscriptions
     set:
       global.appStack: fwdtarget
