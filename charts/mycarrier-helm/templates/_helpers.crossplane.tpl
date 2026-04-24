@@ -112,12 +112,17 @@ Usage: {{ include "helm.azure.resourceGroup.defaultName" (dict "root" $root) }}
 {{/*
 Generate default Service Bus namespace name based on environment.
 Uses metaEnvironment to map feature-* environments to "dev".
-Output: inf-{metaEnv}-servicebus (e.g., inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus)
+Output: inf-{metaEnv}-servicebus (e.g., inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus-prem)
+Note: prod uses the Premium-tier namespace inf-prod-servicebus-prem.
 Usage: {{ include "helm.azure.servicebus.name" (dict "root" $root) }}
 */}}
 {{- define "helm.azure.servicebus.name" -}}
 {{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- if eq $metaEnv "prod" -}}
+{{- printf "inf-%s-servicebus-prem" $metaEnv -}}
+{{- else -}}
 {{- printf "inf-%s-servicebus" $metaEnv -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
