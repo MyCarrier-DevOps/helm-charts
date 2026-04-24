@@ -72,14 +72,10 @@ tests:
       - equal:
           path: spec.openapi.allowClusterLocal
           value: true
-      - equal:
-          path: spec.urlTransform.hostMapping[0].from
-          value: http://app-routingguide-publicapi.dev.internal
-      - equal:
-          path: spec.urlTransform.hostMapping[0].to
-          value: http://app-routingguide-publicapi.dev.internal
+      - notExists:
+          path: spec.urlTransform
 
-  - it: should include catch-all hostMapping entries for external hosts
+  - it: should not emit urlTransform when no transforms are configured
     set:
       environment.name: dev
       global.appStack: mycarrier
@@ -94,21 +90,8 @@ tests:
       applications.routingguide-publicapi.networking.krakend.enabled: true
       applications.routingguide-publicapi.networking.krakend.gatewayRef.name: mycarrier-public-api
     asserts:
-      - contains:
-          path: spec.urlTransform.hostMapping
-          content:
-            from: http://mycarrier-routingguide-publicapi.dev.mycarrier.dev
-            to: http://mycarrier-routingguide-publicapi.dev.internal
-      - contains:
-          path: spec.urlTransform.hostMapping
-          content:
-            from: https://mycarrier-routingguide-publicapi.dev.mycarrier.dev
-            to: http://mycarrier-routingguide-publicapi.dev.internal
-      - contains:
-          path: spec.urlTransform.hostMapping
-          content:
-            from: http://custom.example.com
-            to: http://mycarrier-routingguide-publicapi.dev.internal
+      - notExists:
+          path: spec.urlTransform
 
   - it: should honor a custom openapi.path
     set:

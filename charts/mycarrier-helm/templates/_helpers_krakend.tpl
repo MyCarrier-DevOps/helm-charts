@@ -80,36 +80,6 @@ application's http port.
 {{- end -}}
 
 {{/*
-helm.krakend.externalHosts returns a newline-separated list of external
-hostnames that the application may advertise in its OpenAPI `servers:` block.
-Used to emit catch-all hostMapping entries that rewrite external URLs → the
-internal URL.
-
-Sources (all deduplicated):
-- staticHostname.<domain>         (when .application.staticHostname is set)
-- <appStack>-<appName>.<domainPrefix>.<domain>  (standard external host)
-- every entry in .application.networking.istio.hosts
-*/}}
-{{- define "helm.krakend.externalHosts" -}}
-{{- $app := .application -}}
-{{- $appName := .appName -}}
-{{- $domain := include "helm.domain" . -}}
-{{- $domainPrefix := include "helm.domain.prefix" . -}}
-{{- $appStack := .Values.global.appStack | default "app" -}}
-{{- $hosts := list -}}
-{{- if $app.staticHostname -}}
-{{- $hosts = append $hosts (printf "%s.%s" (trimSuffix "." $app.staticHostname) $domain) -}}
-{{- end -}}
-{{- $standard := printf "%s.%s.%s" ((list $appStack $appName) | join "-" | lower | trunc 63 | trimSuffix "-") $domainPrefix $domain -}}
-{{- $hosts = append $hosts $standard -}}
-{{- $istioHosts := dig "networking" "istio" "hosts" (list) $app -}}
-{{- range $istioHosts -}}
-{{- $hosts = append $hosts . -}}
-{{- end -}}
-{{- $hosts | uniq | join "\n" -}}
-{{- end -}}
-
-{{/*
 helm.krakend.autoConfigName returns the metadata.name for the KAC CR.
 Defaults to <fullName>-autoconfig, truncated to 63 chars.
 */}}
@@ -260,35 +230,32 @@ openapi:
   auth:
 {{ toYaml $openapi.auth | indent 4 }}
 {{- end }}
-{{- /* urlTransform — always emitted: identity + catch-all external-host mappings */ -}}
+{{- /* urlTransform — only emitted when the user actually configured something.
+       The previously auto-generated identity entry was a no-op, and the
+       auto-generated external-host catch-all entries were never matched in
+       practice (.NET swagger specs advertise the host they were fetched from,
+       which is already the internal address). Users who do need to rewrite
+       extra hosts can supply them via networking.krakend.urlTransform.extraHostMapping. */ -}}
 {{- $urlTransform := dig "urlTransform" dict $krakend -}}
-{{- $externalHostsStr := include "helm.krakend.externalHosts" . -}}
-{{- $externalHosts := list -}}
-{{- if $externalHostsStr -}}
-{{- $externalHosts = splitList "\n" $externalHostsStr -}}
-{{- end -}}
-{{- $extra := dig "extraHostMapping" (list) $urlTransform }}
+{{- $extra := dig "extraHostMapping" (list) $urlTransform -}}
+{{- $hasStripPath := hasKey $urlTransform "stripPathPrefix" -}}
+{{- $hasAddPath := hasKey $urlTransform "addPathPrefix" -}}
+{{- $hasExtra := gt (len $extra) 0 -}}
+{{- if or $hasStripPath $hasAddPath $hasExtra }}
 urlTransform:
+{{- if $hasExtra }}
   hostMapping:
-    - from: {{ $internalURL | quote }}
-      to: {{ $internalURL | quote }}
-{{- range $host := $externalHosts }}
-{{- if $host }}
-    - from: {{ printf "http://%s" $host | quote }}
-      to: {{ $internalURL | quote }}
-    - from: {{ printf "https://%s" $host | quote }}
-      to: {{ $internalURL | quote }}
-{{- end }}
-{{- end }}
 {{- range $entry := $extra }}
     - from: {{ $entry.from | quote }}
       to: {{ $entry.to | quote }}
 {{- end }}
-{{- if hasKey $urlTransform "stripPathPrefix" }}
+{{- end }}
+{{- if $hasStripPath }}
   stripPathPrefix: {{ $urlTransform.stripPathPrefix | quote }}
 {{- end }}
-{{- if hasKey $urlTransform "addPathPrefix" }}
+{{- if $hasAddPath }}
   addPathPrefix: {{ $urlTransform.addPathPrefix | quote }}
+{{- end }}
 {{- end }}
 {{- /* defaults passthrough */ -}}
 {{- if hasKey $krakend "defaults" }}

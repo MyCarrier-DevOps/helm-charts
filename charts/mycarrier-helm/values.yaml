@@ -279,9 +279,9 @@ applications: {}
 #     #
 #     # Guarantees:
 #     #   - spec.openapi.url is always http://<app>.<metaEnv>.internal/<path>
-#     #   - spec.urlTransform.hostMapping auto-includes catch-all entries that
-#     #     rewrite any external host from the OpenAPI `servers:` block back
-#     #     to the internal URL.
+#     #   - spec.urlTransform.hostMapping is only emitted when the user
+#     #     configures extraHostMapping; auto-generated catch-all entries
+#     #     are intentionally not produced.
 #     krakend:
 #       enabled: false
 #       # name: custom-kac-name            # optional; defaults to <fullName>-autoconfig

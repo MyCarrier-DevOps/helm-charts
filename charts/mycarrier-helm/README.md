@@ -1056,11 +1056,11 @@ The rendered CR **only ever references internal addresses**:
   ```
 
   e.g. `http://app-routingguide-publicapi.dev.internal/swagger/v1/swagger.json`.
-- `spec.urlTransform.hostMapping` auto-includes catch-all entries that rewrite
-  any external hostname the OpenAPI `servers:` block may advertise back to the
-  internal URL. This means generated backends stay internal even when the
-  upstream spec lists the public domain.
+- The chart does **not** auto-generate `urlTransform.hostMapping` entries.
+  The block is omitted entirely unless the user configures `stripPathPrefix`,
+  `addPathPrefix`, or `extraHostMapping`.
 - User-supplied `extraHostMapping` entries are validated at template time:
+  the `to:` host **must** end in `.internal` or `.svc.cluster.local`, and
   rendering **fails** if any `to:` value contains the external domain.
 
 ### Required prerequisites
@@ -1123,7 +1123,7 @@ See the commented example under `networking.krakend` in
 | `openapi.allowClusterLocal` | Default `true`. |
 | `openapi.auth` | Optional bearer/basic auth for the spec fetch. |
 | `urlTransform.stripPathPrefix` / `addPathPrefix` | Path rewrites. |
-| `urlTransform.extraHostMapping` | Additional mappings (appended after auto-generated entries). `to:` host **must** end in `.internal` or `.svc.cluster.local`; values containing the external domain or non-internal hosts (e.g. IP literals, public hostnames) are rejected at render time. |
+| `urlTransform.extraHostMapping` | Additional host mappings emitted under `spec.urlTransform.hostMapping`. `to:` host **must** end in `.internal` or `.svc.cluster.local`; values containing the external domain or non-internal hosts (e.g. IP literals, public hostnames) are rejected at render time. When omitted, no `hostMapping` is emitted. |
 | `defaults` | Endpoint/backend defaults (mirrors `KrakenDAutoConfigSpec.Defaults`). |
 | `overrides` | Per-operation overrides. |
 | `filter` | Include/exclude by path/method/tag/operationId. |
