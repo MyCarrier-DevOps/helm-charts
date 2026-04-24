@@ -80,36 +80,6 @@ application's http port.
 {{- end -}}
 
 {{/*
-helm.krakend.externalHosts returns a newline-separated list of external
-hostnames that the application may advertise in its OpenAPI `servers:` block.
-Used to emit catch-all hostMapping entries that rewrite external URLs → the
-internal URL.
-
-Sources (all deduplicated):
-- staticHostname.<domain>         (when .application.staticHostname is set)
-- <appStack>-<appName>.<domainPrefix>.<domain>  (standard external host)
-- every entry in .application.networking.istio.hosts
-*/}}
-{{- define "helm.krakend.externalHosts" -}}
-{{- $app := .application -}}
-{{- $appName := .appName -}}
-{{- $domain := include "helm.domain" . -}}
-{{- $domainPrefix := include "helm.domain.prefix" . -}}
-{{- $appStack := .Values.global.appStack | default "app" -}}
-{{- $hosts := list -}}
-{{- if $app.staticHostname -}}
-{{- $hosts = append $hosts (printf "%s.%s" (trimSuffix "." $app.staticHostname) $domain) -}}
-{{- end -}}
-{{- $standard := printf "%s.%s.%s" ((list $appStack $appName) | join "-" | lower | trunc 63 | trimSuffix "-") $domainPrefix $domain -}}
-{{- $hosts = append $hosts $standard -}}
-{{- $istioHosts := dig "networking" "istio" "hosts" (list) $app -}}
-{{- range $istioHosts -}}
-{{- $hosts = append $hosts . -}}
-{{- end -}}
-{{- $hosts | uniq | join "\n" -}}
-{{- end -}}
-
-{{/*
 helm.krakend.autoConfigName returns the metadata.name for the KAC CR.
 Defaults to <fullName>-autoconfig, truncated to 63 chars.
 */}}
@@ -191,17 +161,38 @@ https://public-site, etc.) is rejected as non-internal.
 {{- $app := .application -}}
 {{- $appName := .appName -}}
 {{- $domain := include "helm.domain" . -}}
-{{- $extra := dig "networking" "krakend" "urlTransform" "extraHostMapping" (list) $app -}}
-{{- range $i, $entry := $extra -}}
+{{- $urlTransform := dig "networking" "krakend" "urlTransform" dict $app -}}
+{{- $entries := concat (dig "hostMapping" (list) $urlTransform) (dig "extraHostMapping" (list) $urlTransform) -}}
+{{- range $i, $entry := $entries -}}
 {{- $to := $entry.to | default "" -}}
-{{- $domainLower := lower $domain -}}
-{{- $toLower := lower $to -}}
-{{- if contains $domainLower $toLower -}}
-{{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q contains the external domain %q. The KrakenDAutoConfig must only map to internal addresses (.internal or .svc.cluster.local)." $appName $i $to $domain) -}}
+{{- include "helm.krakend.validateInternalAddress" (dict "value" $to "domain" $domain "context" (printf "application %q: networking.krakend.urlTransform[%d].to" $appName $i)) -}}
 {{- end -}}
-{{- /* Extract the host portion: strip scheme and path/port. Lower-case for
-       suffix comparison so values like `Foo.DEV.Internal` are still accepted. */ -}}
-{{- $host := $to -}}
+{{- /* Validate user-supplied openapi.url is also internal-only. */ -}}
+{{- $url := dig "networking" "krakend" "openapi" "url" "" $app -}}
+{{- if $url -}}
+{{- include "helm.krakend.validateInternalAddress" (dict "value" $url "domain" $domain "context" (printf "application %q: networking.krakend.openapi.url" $appName)) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+helm.krakend.validateInternalAddress fails the render when `value` is not an
+internal address. Internal-only invariant: value must either
+  - be a bare hostname ending in `.internal` or `.svc.cluster.local`, or
+  - be an http(s) URL whose host ends in `.internal` or `.svc.cluster.local`.
+
+Values that contain the configured external domain are rejected with a
+dedicated error for clarity.
+*/}}
+{{- define "helm.krakend.validateInternalAddress" -}}
+{{- $value := .value -}}
+{{- $domain := .domain -}}
+{{- $context := .context -}}
+{{- $domainLower := lower $domain -}}
+{{- $valueLower := lower $value -}}
+{{- if and $domain (contains $domainLower $valueLower) -}}
+{{- fail (printf "%s=%q contains the external domain %q. The KrakenDAutoConfig must only reference internal addresses (.internal or .svc.cluster.local)." $context $value $domain) -}}
+{{- end -}}
+{{- $host := $value -}}
 {{- if contains "://" $host -}}
 {{- $host = (splitList "://" $host | last) -}}
 {{- end -}}
@@ -210,8 +201,7 @@ https://public-site, etc.) is rejected as non-internal.
 {{- $hostLower := lower $host -}}
 {{- $isInternal := or (hasSuffix ".internal" $hostLower) (hasSuffix ".svc.cluster.local" $hostLower) -}}
 {{- if not $isInternal -}}
-{{- fail (printf "application %q: networking.krakend.urlTransform.extraHostMapping[%d].to=%q is not an internal address. The host portion must end in .internal or .svc.cluster.local." $appName $i $to) -}}
-{{- end -}}
+{{- fail (printf "%s=%q is not an internal address. The host portion must end in .internal or .svc.cluster.local." $context $value) -}}
 {{- end -}}
 {{- end -}}
 
@@ -244,14 +234,26 @@ trigger: {{ $trigger }}
 periodic:
   interval: {{ $interval | quote }}
 {{- end }}
-{{- /* openapi — always internal. Normalize path to ensure a leading slash. */ -}}
+{{- /* openapi — URL is auto-generated from the application's `.internal`
+       address by default. Users may override by supplying `openapi.url`
+       (passthrough of the CRD field) or load from a ConfigMap via
+       `openapi.configMapRef`. Path is normalized to ensure a leading slash. */ -}}
 {{- $openapi := dig "openapi" dict $krakend -}}
+{{- $userURL := dig "url" "" $openapi -}}
+{{- $configMapRef := dig "configMapRef" dict $openapi -}}
 {{- $path := dig "path" "/swagger/v1/swagger.json" $openapi -}}
 {{- if and $path (not (hasPrefix "/" $path)) -}}
 {{- $path = printf "/%s" $path -}}
 {{- end }}
 openapi:
+{{- if $userURL }}
+  url: {{ $userURL | quote }}
+{{- else if not (empty $configMapRef) }}
+  configMapRef:
+{{ toYaml $configMapRef | indent 4 }}
+{{- else }}
   url: {{ printf "%s%s" $internalURL $path | quote }}
+{{- end }}
   allowClusterLocal: {{ dig "allowClusterLocal" true $openapi }}
 {{- if hasKey $openapi "format" }}
   format: {{ $openapi.format }}
@@ -260,35 +262,31 @@ openapi:
   auth:
 {{ toYaml $openapi.auth | indent 4 }}
 {{- end }}
-{{- /* urlTransform — always emitted: identity + catch-all external-host mappings */ -}}
+{{- /* urlTransform — emitted only when the user actually configured something.
+       Both `hostMapping` (CRD passthrough) and `extraHostMapping` (legacy alias)
+       are accepted; entries are concatenated in that order. The chart never
+       auto-generates host mapping entries — .NET swagger specs advertise the
+       host they were fetched from, which is already the internal address. */ -}}
 {{- $urlTransform := dig "urlTransform" dict $krakend -}}
-{{- $externalHostsStr := include "helm.krakend.externalHosts" . -}}
-{{- $externalHosts := list -}}
-{{- if $externalHostsStr -}}
-{{- $externalHosts = splitList "\n" $externalHostsStr -}}
-{{- end -}}
-{{- $extra := dig "extraHostMapping" (list) $urlTransform }}
+{{- $hostMappings := concat (dig "hostMapping" (list) $urlTransform) (dig "extraHostMapping" (list) $urlTransform) -}}
+{{- $hasStripPath := hasKey $urlTransform "stripPathPrefix" -}}
+{{- $hasAddPath := hasKey $urlTransform "addPathPrefix" -}}
+{{- $hasHostMapping := gt (len $hostMappings) 0 -}}
+{{- if or $hasStripPath $hasAddPath $hasHostMapping }}
 urlTransform:
+{{- if $hasHostMapping }}
   hostMapping:
-    - from: {{ $internalURL | quote }}
-      to: {{ $internalURL | quote }}
-{{- range $host := $externalHosts }}
-{{- if $host }}
-    - from: {{ printf "http://%s" $host | quote }}
-      to: {{ $internalURL | quote }}
-    - from: {{ printf "https://%s" $host | quote }}
-      to: {{ $internalURL | quote }}
-{{- end }}
-{{- end }}
-{{- range $entry := $extra }}
+{{- range $entry := $hostMappings }}
     - from: {{ $entry.from | quote }}
       to: {{ $entry.to | quote }}
 {{- end }}
-{{- if hasKey $urlTransform "stripPathPrefix" }}
+{{- end }}
+{{- if $hasStripPath }}
   stripPathPrefix: {{ $urlTransform.stripPathPrefix | quote }}
 {{- end }}
-{{- if hasKey $urlTransform "addPathPrefix" }}
+{{- if $hasAddPath }}
   addPathPrefix: {{ $urlTransform.addPathPrefix | quote }}
+{{- end }}
 {{- end }}
 {{- /* defaults passthrough */ -}}
 {{- if hasKey $krakend "defaults" }}

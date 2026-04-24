@@ -4,8 +4,9 @@ KrakenDAutoConfig — one per application that sets networking.krakend.enabled: 
 The operator (gateway.krakend.io/v1alpha1) watches this CR and generates
 KrakenD endpoints from the referenced OpenAPI spec. The spec.openapi.url is
 always built from the application's `.internal` host — never the public
-domain — and urlTransform.hostMapping auto-rewrites any external host the
-OpenAPI `servers:` block may advertise back to the internal URL.
+domain. urlTransform.hostMapping is only emitted when the user supplies
+extraHostMapping (or stripPathPrefix/addPathPrefix); the chart does not
+auto-generate catch-all rewrite entries.
 
 NOTE: KAC rendering currently requires a non-feature environment,
 networking.istio.enabled=true, networking.istio.internalEnabled=true, and
