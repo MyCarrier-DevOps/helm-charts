@@ -34,7 +34,7 @@ spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
 {{- end }}
 {{- $offloadVSEnabled := dig "networking" "istio" "offloadVSEnabled" true $appValues }}
-{{- if and (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not (dig "networking" "krakend" "enabled" false $appValues)) (not ($.Values.isEnvironmentDeploy | default false)) }}
+{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not (dig "networking" "krakend" "enabled" false $appValues)) (not ($.Values.isEnvironmentDeploy | default false)) }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService

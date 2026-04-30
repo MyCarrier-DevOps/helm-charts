@@ -183,7 +183,7 @@ tests:
           path: spec.http[2].match[0].withoutHeaders
 
   # ==========================================
-  # FEATURE ENVIRONMENT - withoutHeaders only in offload VS targeting dev
+  # FEATURE ENVIRONMENT - offload VS has no dev-fallback route, so no withoutHeaders
   # ==========================================
   - it: should NOT include withoutHeaders in feature environment offload virtualservice (no dev fallback)
     set:
