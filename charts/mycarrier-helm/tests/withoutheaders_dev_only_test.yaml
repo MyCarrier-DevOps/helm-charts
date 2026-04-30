@@ -185,7 +185,7 @@ tests:
   # ==========================================
   # FEATURE ENVIRONMENT - withoutHeaders only in offload VS targeting dev
   # ==========================================
-  - it: should include withoutHeaders in feature environment offload virtualservice dev fallback
+  - it: should NOT include withoutHeaders in feature environment offload virtualservice (no dev fallback)
     set:
       global:
         appStack: test-stack
@@ -213,9 +213,9 @@ tests:
       - equal:
           path: metadata.name
           value: test-stack-test-app-feature-abc-offload
-      # Feature offload VS should have withoutHeaders in dev-fallback route (http[2] is dev-fallback in offload VS)
-      - exists:
-          path: spec.http[1].match[0].withoutHeaders.environment
+      # Offload VS no longer has dev-fallback route, so no withoutHeaders
+      - notExists:
+          path: spec.http[1]
 
   - it: should NOT include withoutHeaders in feature environment primary virtualservice
     set:
