@@ -43,7 +43,7 @@ tests:
       - isKind:
           of: VirtualService
 
-  - it: should NOT render offload VS in feature env when offloadOperatorEnabled is true
+  - it: should render offload VS in feature env even when offloadOperatorEnabled is true (no longer gated by it)
     template: virtualService.yaml
     set:
       environment.name: "feature13"
@@ -58,7 +58,12 @@ tests:
       applications.routetester.networking.istio.offloadOperatorEnabled: true
     asserts:
       - hasDocuments:
-          count: 0
+          count: 1
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: devopstest-routetester-feature13-offload
 
   #
   # OffloadBase (dev only)
