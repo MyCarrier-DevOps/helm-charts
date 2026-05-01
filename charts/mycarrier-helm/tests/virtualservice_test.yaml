@@ -165,9 +165,9 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.networking.istio.offloadOperatorEnabled: false
     asserts:
-      # Only main VS renders (offload VS suppressed when isEnvironmentDeploy=true)
+      # Both main VS and offload VS render
       - hasDocuments:
-          count: 1
+          count: 2
       # Primary VS: staticHostname included alongside feature hostname
       - contains:
           path: spec.hosts
@@ -177,6 +177,39 @@ tests:
           path: spec.hosts
           content: app-test-app-api-feature-test.dev.mycarrier.dev
         documentIndex: 0
+      # Offload VS: staticHostname replaces feature URL when isEnvironmentDeploy=true
+      - contains:
+          path: spec.hosts
+          content: api.custom.domain.mycarrier.dev
+        documentIndex: 1
+      - notContains:
+          path: spec.hosts
+          content: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 1
+
+  - it: should render offload VS with feature URL when isEnvironmentDeploy is true and no staticHostname
+    set:
+      environment.name: "feature-test"
+      isEnvironmentDeploy: true
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      # Offload VS renders with feature URL (no staticHostname to swap in)
+      - contains:
+          path: spec.hosts
+          content: app-test-app-api-feature-test.dev.mycarrier.dev
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: app-test-app-api-feature-test-offload
+        documentIndex: 1
 
   - it: should not include staticHostname in feature environment when isEnvironmentDeploy is false
     set:

@@ -34,7 +34,7 @@ spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
 {{- end }}
 {{- $offloadVSEnabled := dig "networking" "istio" "offloadVSEnabled" true $appValues }}
-{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not (dig "networking" "krakend" "enabled" false $appValues)) (not ($.Values.isEnvironmentDeploy | default false)) }}
+{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not (dig "networking" "krakend" "enabled" false $appValues)) }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -53,7 +53,11 @@ spec:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
+  {{- if and ($.Values.isEnvironmentDeploy | default false) $appValues.staticHostname }}
+  - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
+  {{- else }}
   - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
+  {{- end }}
   {{- /* Include additional custom hosts from networking.istio.hosts */ -}}
   {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
   {{- range $istioConfig.hosts }}
