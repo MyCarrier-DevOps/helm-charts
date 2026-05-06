@@ -540,6 +540,12 @@
               { "type": "null" }
             ]
           },
+          "extraObjects": {
+            "type": "array",
+            "description": "List of additional Kubernetes objects to render verbatim into the child mycarrier-helm release. Forwarded to Values.extraObjects.",
+            "items": { "type": "object" },
+            "default": []
+          },
           "deployment": {
             "type": "string",
             "description": "Default workload controller for applications",
