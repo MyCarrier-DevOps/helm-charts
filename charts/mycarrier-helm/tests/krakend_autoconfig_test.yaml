@@ -147,7 +147,7 @@ tests:
       - failedTemplate:
           errorMessage: 'application "api": networking.krakend.periodic.interval is required when trigger=Periodic'
 
-  - it: should fail in feature environments
+  - it: should silently skip rendering in feature environments
     set:
       environment.name: feature-x
       applications.api.image.registry: r
@@ -159,8 +159,8 @@ tests:
       applications.api.networking.krakend.enabled: true
       applications.api.networking.krakend.gatewayRef.name: gw
     asserts:
-      - failedTemplate:
-          errorPattern: 'not supported in feature environments'
+      - hasDocuments:
+          count: 0
 
   - it: should fail when internalEnabled=false
     set:
