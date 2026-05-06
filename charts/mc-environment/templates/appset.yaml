@@ -54,6 +54,9 @@ spec:
                 {{ with $env.infrastructure }}infrastructure:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
+                {{ with $env.extraObjects }}extraObjects:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
   template:
     metadata:
       name: "{{ $.Values.global.appStack | lower }}-{{`{{`}} .Values.environment.name {{`}}`}}"
