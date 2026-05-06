@@ -21,13 +21,15 @@ that points at an internal host that was never created.
 
 Prerequisites (all must hold):
   - networking.krakend.enabled == true
-  - not a feature environment
+  - not a feature environment (feature envs return "false" — render is silently
+    skipped, no hard failure)
   - networking.istio.enabled == true
   - istioDisabled != true (top-level application flag)
   - service.istioDisabled != true
   - networking.istio.internalEnabled == true
 
-Any violation fails the render with a clear, targeted error.
+Feature environments silently return "false" (skip). All other violations
+fail the render with a clear, targeted error.
 
 Usage:
   {{- if eq (include "helm.krakend.enabled" $appContext) "true" }}
@@ -45,7 +47,7 @@ false
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $app -}}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $app -}}
 {{- if hasPrefix "feature" $envName -}}
-{{- fail (printf "networking.krakend.enabled=true is not supported in feature environments (got environment=%q). Each KrakenDAutoConfig registers endpoints on the shared KrakenDGateway, so per-feature-env variants would collide with the dev-env KrakenDAutoConfig for the same application. New public API endpoints must be developed and released directly to dev." $envName) -}}
+false
 {{- else if not $istioEnabled -}}
 {{- fail (printf "networking.krakend.enabled=true requires networking.istio.enabled=true. The KrakenDAutoConfig spec.openapi.url relies on the application's `.internal` ServiceEntry, which is not rendered when Istio is disabled.") -}}
 {{- else if $appIstioDisabled -}}
