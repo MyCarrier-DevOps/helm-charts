@@ -25,7 +25,8 @@ applications:
       activeDeadlineSeconds: "<seconds>"
       ttlSecondsAfterFinished: "<seconds>"
       apikey: "<api-key-or-vault-reference>"
-      webhook_url: "<webhook-url-or-vault-reference>"
+      # webhook_url: "<webhook-url-or-vault-reference>"   # Optional — auto-injected by CI/CD render step;
+                                                          # falls back to vault:DevOps/data/testengine/api#url
       backoffLimit: <number>
       resources:
         requests:
@@ -44,6 +45,27 @@ applications:
           secretId: "<secret-id-or-vault-reference>"
           serviceAddress: "<optional-service-address>"
           additionalEnvVars: "key1=value1;key2=value2"
+          legacyMode: <true|false>
+          useDefaultNodeAffinity: <true|false>
+          spreadAcrossNodes: <true|false>
+          tolerations:
+            - key: "<key>"
+              operator: "<operator>"
+              value: "<value>"
+              effect: "<effect>"
+          nodeAffinity:
+            - key: "<key>"
+              operator: "<operator>"
+              type: "<type>"
+              values:
+                - "<value>"
+          podResources:
+            limits:
+              cpu: "<cpu-limit>"
+              memory: "<memory-limit>"
+            requests:
+              cpu: "<cpu-request>"
+              memory: "<memory-request>"
 ```
 
 ## Configuration Parameters
@@ -57,7 +79,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/path/to/secret#url"` |
+| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference. **Optional** — when omitted, the chart uses `global.testengineWebhookUrl` injected by the CI/CD render step, which auto-selects the dev or prod testengine endpoint based on the Argo workflow namespace. | No | `global.testengineWebhookUrl` (injected by render); hard fallback to `vault:DevOps/data/testengine/api#url` when absent (e.g. local render) | `"vault:Secrets/data/path/to/secret#url"` |
 
 *Default resource values:
 ```yaml
@@ -78,12 +100,38 @@ Each test definition under `testdefinitions` supports the following parameters:
 |-----------|-------------|----------|---------|---------|
 | `containerImage` | The container image containing the test code | Yes | None | `"testing/exampletestapp"` |
 | `containerTag` | The tag of the container image to use | Yes | None | `"abcd1234"` |
-| `filters` | Array of test filters to apply | No | `[]` (empty array) | `["TestCategory=coretests", "TestCategory=othercoretests"]` |
+| `filters` | Test filters to apply. Accepts a single string or an array of strings. | No | `[]` (empty array) | `"TestCategory=coretests"` or `["TestCategory=coretests", "TestCategory=othercoretests"]` |
 | `name` | Name of the test | Yes | None | `"apitests"` |
 | `secretId` | Secret ID for authentication, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/auth#secretid"` |
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
 | `releaseDefinitionName` | Optional release definition name - overrides default value = stack-component | No | stack-compoent | `"somestack-somecomponent"`
 | `additionalEnvVars` | Additional environment variables to pass to container as key-value pairs delimited by colon | No | `""` | `"key1=value1;key2=value2"` |
+| `legacyMode` | Enable legacy mode for test execution. Accepts boolean or string. | No | `false` | `true` |
+| `tolerations` | Tolerations for test pods scheduled by the test engine | No | Spot instance toleration* | See example below |
+| `nodeAffinity` | Node affinity rules for test pods scheduled by the test engine | No | `[]` (empty array) | See example below |
+| `useDefaultNodeAffinity` | Whether to use default node affinity for test pods. Accepts boolean or string. | No | `false` | `true` |
+| `spreadAcrossNodes` | Whether to spread test pods across nodes. Accepts boolean or string. | No | `true` | `false` |
+| `podResources` | Resource requests and limits for test pods scheduled by the test engine | No | See below** | See example below |
+
+*Default tolerations:
+```yaml
+tolerations:
+  - key: "kubernetes.azure.com/scalesetpriority"
+    operator: "Equal"
+    value: "spot"
+    effect: "NoSchedule"
+```
+
+**Default pod resources:
+```yaml
+podResources:
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+  requests:
+    cpu: "250m"
+    memory: "0.5Gi"
+```
 
 ## Example Configurations
 
@@ -150,6 +198,45 @@ testtrigger:
       secretId: "vault:Secrets/data/auth#secretid"
       serviceAddress: "custom-service.custom-namespace.svc.cluster.local:8080"
       additionalEnvVars: "key1=value1"
+```
+
+### Configuration with Pod Scheduling and Resources
+
+```yaml
+testtrigger:
+  activeDeadlineSeconds: "300"
+  ttlSecondsAfterFinished: "3600"
+  apikey: "vault:Secrets/data/path/to/secret#apikey"
+  webhook_url: "vault:Secrets/data/path/to/secret#url"
+  backoffLimit: 0
+  testdefinitions:
+    - containerImage: testing/exampletestapp
+      containerTag: abcd1234
+      filters:
+        - TestCategory=coretests
+      name: apitests
+      secretId: "vault:Secrets/data/auth#secretid"
+      legacyMode: false
+      spreadAcrossNodes: true
+      useDefaultNodeAffinity: false
+      tolerations:
+        - key: "kubernetes.azure.com/scalesetpriority"
+          operator: "Equal"
+          value: "spot"
+          effect: "NoSchedule"
+      nodeAffinity:
+        - key: "agentpool"
+          operator: "In"
+          type: "nodeSelector"
+          values:
+            - "testpool"
+      podResources:
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+        requests:
+          cpu: "250m"
+          memory: "0.5Gi"
 ```
 
 ### Multiple Applications with Multiple Tests

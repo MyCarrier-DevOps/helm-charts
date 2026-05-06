@@ -19,6 +19,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
     asserts:
       - isKind:
           of: VirtualService
@@ -44,6 +45,7 @@ tests:
             istio:
               enabled: true
               cloudflareProxied: true
+              offloadOperatorEnabled: false
     asserts:
       - isKind:
           of: VirtualService
@@ -69,6 +71,7 @@ tests:
             istio:
               enabled: true
               cloudflareProxied: false
+              offloadOperatorEnabled: false
     asserts:
       - isKind:
           of: VirtualService
@@ -94,6 +97,7 @@ tests:
             istio:
               enabled: true
               cloudflareProxied: true
+              offloadOperatorEnabled: false
     asserts:
       - hasDocuments:
           count: 2
@@ -126,6 +130,7 @@ tests:
             istio:
               enabled: true
               cloudflareProxied: false
+              offloadOperatorEnabled: false
     asserts:
       - hasDocuments:
           count: 2
@@ -157,6 +162,7 @@ tests:
             istio:
               enabled: true
               cloudflareProxied: true
+              offloadOperatorEnabled: false
         api-not-proxied:
           image:
             registry: "registry.example.com"
@@ -168,6 +174,7 @@ tests:
             istio:
               enabled: true
               cloudflareProxied: false
+              offloadOperatorEnabled: false
     asserts:
       - hasDocuments:
           count: 2

@@ -20,6 +20,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
               allowedEndpoints:
                 - "/api/health"
                 - "/api/status"
@@ -69,6 +70,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
               allowedEndpoints:
                 - "/api/health"
                 - "/api/status"
@@ -190,6 +192,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
               # No custom allowedEndpoints, but C# has defaults: /liveness, /health, /api
           service:
             ports:
@@ -237,6 +240,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
               # No allowedEndpoints
           service:
             ports:
@@ -321,6 +325,7 @@ tests:
           networking:
             istio:
               enabled: true
+              offloadOperatorEnabled: false
               # C# has default endpoints: /liveness, /health, /api
           service:
             ports:

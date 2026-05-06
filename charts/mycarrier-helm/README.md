@@ -1038,6 +1038,97 @@ cronjobs:
 - `"0 0 1 * *"` - Monthly on the 1st
 - `"0 9 * * 1-5"` - Weekdays at 9 AM
 
+## KrakenD AutoConfig
+
+The chart can render a `gateway.krakend.io/v1alpha1` **`KrakenDAutoConfig`** CR
+for any application that opts in via `networking.krakend.enabled: true`. The
+KrakenD operator watches the CR and generates KrakenD endpoints from the
+referenced OpenAPI spec.
+
+### Internal-only guarantee
+
+The rendered CR **only ever references internal addresses**:
+
+- `spec.openapi.url` is always built from the application's `.internal` host:
+
+  ```text
+  http://<baseFullName>.<metaEnv>.internal<path>
+  ```
+
+  e.g. `http://app-routingguide-publicapi.dev.internal/swagger/v1/swagger.json`.
+- The chart does **not** auto-generate `urlTransform.hostMapping` entries.
+  The block is omitted entirely unless the user configures `stripPathPrefix`,
+  `addPathPrefix`, or `extraHostMapping`.
+- User-supplied `extraHostMapping` entries are validated at template time:
+  the `to:` host **must** end in `.internal` or `.svc.cluster.local`, and
+  rendering **fails** if any `to:` value contains the external domain.
+
+### Required prerequisites
+
+KAC rendering requires **all** of the following — the chart fails the render
+otherwise. These conditions mirror the gating on the `.internal` ServiceEntry
+that the CR depends on.
+
+1. `environment.name` is **not** a feature environment.
+2. `networking.istio.enabled` is `true`.
+3. `istioDisabled` (top-level application flag) is not `true`.
+4. `service.istioDisabled` is not `true`.
+5. `networking.istio.internalEnabled` is `true`.
+
+### Development workflow
+
+**New public API endpoints must be developed and released directly to `dev`.**
+Feature environments are intentionally excluded from `KrakenDAutoConfig`
+rendering — attempting to render one there will fail the Helm template.
+Each KAC registers endpoints on the shared `KrakenDGateway`, so per‑feature‑env
+variants of the same application would collide with the dev‑env KAC for
+that application. Iterate on new gateway endpoints against `dev` and
+promote through the normal preprod/prod pipeline.
+
+### Minimal configuration
+
+```yaml
+applications:
+  routingguide-publicapi:
+    # ... standard deployment configuration ...
+    networking:
+      istio:
+        enabled: true
+        internalEnabled: true
+      krakend:
+        enabled: true
+        gatewayRef:
+          name: mycarrier-public-api
+          namespace: krakend
+```
+
+### Full configuration reference
+
+See the commented example under `networking.krakend` in
+[`values.yaml`](./values.yaml) and the schema in
+[`values.schema.json`](./values.schema.json). Supported fields:
+
+| Field | Description |
+|-------|-------------|
+| `enabled` | Render the KAC CR. Default `false`. |
+| `name` | Override `metadata.name`. Default `<fullName>-autoconfig`. |
+| `autoConfigNamespace` | KAC namespace. Defaults to `gatewayRef.namespace` → `global.krakendGatewayNamespace` → app namespace. |
+| `labels` / `annotations` | Extra metadata merged into the KAC CR. |
+| `gatewayRef.name` | **Required.** `KrakenDGateway` name. |
+| `gatewayRef.namespace` | Gateway namespace. Falls back to `global.krakendGatewayNamespace` or the app namespace. |
+| `trigger` | `OnChange` (default) or `Periodic`. |
+| `periodic.interval` | Required when `trigger=Periodic` (e.g. `5m`). |
+| `openapi.path` | Path appended to the internal host. Default `/swagger/v1/swagger.json`. |
+| `openapi.format` | `json` or `yaml`. Auto-detected if omitted. |
+| `openapi.allowClusterLocal` | Default `true`. |
+| `openapi.auth` | Optional bearer/basic auth for the spec fetch. |
+| `urlTransform.stripPathPrefix` / `addPathPrefix` | Path rewrites. |
+| `urlTransform.extraHostMapping` | Additional host mappings emitted under `spec.urlTransform.hostMapping`. `to:` host **must** end in `.internal` or `.svc.cluster.local`; values containing the external domain or non-internal hosts (e.g. IP literals, public hostnames) are rejected at render time. When omitted, no `hostMapping` is emitted. |
+| `defaults` | Endpoint/backend defaults (mirrors `KrakenDAutoConfigSpec.Defaults`). |
+| `overrides` | Per-operation overrides. |
+| `filter` | Include/exclude by path/method/tag/operationId. |
+| `cue` | Optional CUE definitions / environment. |
+
 ## ArgoCD Integration
 
 The chart includes ArgoCD sync waves and options for better GitOps workflows:
@@ -1169,14 +1260,15 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Infrastructure Resources
 
-| Name                                    | Description                                | Value |
-| --------------------------------------- | ------------------------------------------ | ----- |
-| `infrastructure`                        | Infrastructure configuration               |       |
-| `infrastructure.azure`                  | Azure infrastructure resources             |       |
-| `infrastructure.azure.resourceGroup`    | Azure Resource Group configurations        | `[]`  |
-| `infrastructure.azure.storage`          | Azure Storage configuration                |       |
-| `infrastructure.azure.storage.accounts` | Azure storage account configurations       | `[]`  |
-| `infrastructure.azure.servicebus`       | Azure Service Bus namespace configurations | `[]`  |
+Azure infrastructure resources managed through Crossplane. See [Infrastructure Guide](docs/crossplane-infrastructure.md) for detailed configuration examples.
+
+| Name                                          | Description                                              | Value       |
+| --------------------------------------------- | -------------------------------------------------------- | ----------- |
+| `infrastructure.azure.defaults.location`      | Default Azure region for all resources                   | `""`        |
+| `infrastructure.azure.defaults.providerConfigRef` | Default Crossplane ProviderConfig name               | `"default"` |
+| `infrastructure.azure.resourceGroup`          | Azure Resource Group configurations                     | `[]`        |
+| `infrastructure.azure.storage.accounts`       | Azure storage account configurations                    | `[]`        |
+| `infrastructure.azure.servicebus`             | Azure Service Bus namespace configurations              | `[]`        |
 
 ### Deployment Settings
 

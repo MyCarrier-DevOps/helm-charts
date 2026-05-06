@@ -114,6 +114,7 @@ tests:
       applications.test-app.image.registry: myregistry.example.com
       applications.test-app.image.repository: mycarrier/test-app
       applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.offloadOperatorEnabled: false
     documentIndex: 0
     asserts:
       - isKind:
@@ -135,6 +136,7 @@ tests:
       applications.test-app.image.registry: myregistry.example.com
       applications.test-app.image.repository: mycarrier/test-app
       applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.offloadOperatorEnabled: false
     documentIndex: 0
     asserts:
       - isKind:
@@ -157,6 +159,7 @@ tests:
       applications.test-app.image.registry: myregistry.example.com
       applications.test-app.image.repository: mycarrier/test-app
       applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.offloadOperatorEnabled: false
     documentIndex: 0
     asserts:
       - isKind:
@@ -182,6 +185,7 @@ tests:
       applications.test-app.image.registry: myregistry.example.com
       applications.test-app.image.repository: mycarrier/test-app
       applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.offloadOperatorEnabled: false
     documentIndex: 1
     asserts:
       - isKind:
@@ -193,7 +197,7 @@ tests:
           path: spec.hosts
           content: app-test-app.dev.internal
 
-  - it: should include internal host in offload VS when internalEnabled is true (default)
+  - it: should not include dev internal host in offload VS (no dev refs in offload)
     template: virtualService.yaml
     set:
       environment.name: feature-test-branch
@@ -204,10 +208,11 @@ tests:
       applications.test-app.image.registry: myregistry.example.com
       applications.test-app.image.repository: mycarrier/test-app
       applications.test-app.image.tag: "1.0.0"
+      applications.test-app.networking.istio.offloadOperatorEnabled: false
     documentIndex: 1
     asserts:
       - isKind:
           of: VirtualService
-      - contains:
+      - notContains:
           path: spec.hosts
           content: app-test-app.dev.internal

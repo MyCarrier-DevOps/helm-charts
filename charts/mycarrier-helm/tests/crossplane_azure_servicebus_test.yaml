@@ -30,11 +30,11 @@ tests:
         documentIndex: 0
       - equal:
           path: metadata.name
-          value: "test-servicebus"
+          value: "dev-exampletestapp-test-servicebus"
         documentIndex: 0
       - equal:
           path: metadata.namespace
-          value: dev-exampletestapp
+          value: dev
         documentIndex: 0
       - equal:
           path: spec.forProvider.location
@@ -46,14 +46,14 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.forProvider.resourceGroupName
-          value: "rg-exampletestapp-dev"
+          value: "inf-dev"
         documentIndex: 0
       - isKind:
           of: Topic
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: "test-servicebus-orders"
+          value: "dev-exampletestapp-test-servicebus-orders"
         documentIndex: 1
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/namespace"]
@@ -64,7 +64,7 @@ tests:
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: "test-servicebus-orders-processor"
+          value: "dev-exampletestapp-orders-processor"
         documentIndex: 2
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/namespace"]
@@ -72,7 +72,7 @@ tests:
         documentIndex: 2
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/topic"]
-          value: "test-servicebus-orders"
+          value: "dev-exampletestapp-test-servicebus-orders"
         documentIndex: 2
 
   # Test 2: Service Bus with subscription rules (SqlFilter)
@@ -108,7 +108,7 @@ tests:
         documentIndex: 3
       - equal:
           path: metadata.name
-          value: "filtered-sub-high-priority"
+          value: "dev-ruletest-high-priority"
         documentIndex: 3
       - equal:
           path: spec.forProvider.filterType
@@ -124,11 +124,11 @@ tests:
         documentIndex: 3
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/topic"]
-          value: "test-sb-rules-events"
+          value: "dev-ruletest-test-sb-rules-events"
         documentIndex: 3
       - equal:
           path: metadata.labels["servicebus.mycarrier.io/subscription"]
-          value: "test-sb-rules-events-filtered-sub"
+          value: "dev-ruletest-events-filtered-sub"
         documentIndex: 3
 
   # Test 3: Service Bus with subscription rules (CorrelationFilter)
@@ -268,42 +268,42 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: "multi-sb-orders"
+          value: "dev-exampletestapp-multi-sb-orders"
         documentIndex: 1
       - isKind:
           of: Subscription
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: "multi-sb-orders-processor"
+          value: "dev-exampletestapp-orders-processor"
         documentIndex: 2
       - isKind:
           of: Subscription
         documentIndex: 3
       - equal:
           path: metadata.name
-          value: "multi-sb-orders-archiver"
+          value: "dev-exampletestapp-orders-archiver"
         documentIndex: 3
       - isKind:
           of: Topic
         documentIndex: 4
       - equal:
           path: metadata.name
-          value: "multi-sb-notifications"
+          value: "dev-exampletestapp-multi-sb-notifications"
         documentIndex: 4
       - isKind:
           of: Subscription
         documentIndex: 5
       - equal:
           path: metadata.name
-          value: "multi-sb-notifications-email-sender"
+          value: "dev-exampletestapp-notifications-email-sender"
         documentIndex: 5
       - isKind:
           of: Subscription
         documentIndex: 6
       - equal:
           path: metadata.name
-          value: "multi-sb-notifications-sms-sender"
+          value: "dev-exampletestapp-notifications-sms-sender"
         documentIndex: 6
 
   # Test 6: Service Bus with subscription properties
@@ -790,20 +790,20 @@ tests:
     asserts:
       - hasDocuments:
           count: 4
-      # Topic: lowercased
+      # Topic: environment-appStack-namespace-topic, lowercased
       - equal:
           path: metadata.name
-          value: "my-servicebus-integrationevents"
+          value: "dev-castest-my-servicebus-integrationevents"
         documentIndex: 1
-      # Subscription: lowercased
+      # Subscription: environment-appStack-topic-subscription, lowercased (namespace dropped)
       - equal:
           path: metadata.name
-          value: "my-servicebus-integrationevents-mc.carrier.orderservice"
+          value: "dev-castest-integrationevents-mc.carrier.orderservice"
         documentIndex: 2
-      # Rule: subscription-rule, lowercased, underscores replaced with hyphens
+      # Rule: environment-appStack-rule, lowercased, underscores replaced with hyphens
       - equal:
           path: metadata.name
-          value: "mc.carrier.orderservice-carrier-updated-filter"
+          value: "dev-castest-carrier-updated-filter"
         documentIndex: 3
       # All names must match RFC 1123 subdomain pattern
       - matchRegex:
@@ -817,4 +817,572 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: "^[a-z0-9]([a-z0-9.\\-]*[a-z0-9])?$"
+        documentIndex: 3
+
+  # Test 18: providerConfigRef defaults to "default" on all resources
+  - it: should set providerConfigRef to default on all resources
+    set:
+      global.appStack: provtest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "provider-sb"
+              location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+                      rules:
+                        - name: "test-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+    asserts:
+      - hasDocuments:
+          count: 4
+      # ServiceBusNamespace
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 0
+      # Topic
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 1
+      # Subscription
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 2
+      # SubscriptionRule
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 3
+
+  # Test 19: Custom providerConfigRef inherited by all child resources
+  - it: should use custom providerConfigRef on all child resources
+    set:
+      global.appStack: custprov
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "custom-prov-sb"
+              location: "West US"
+              sku: "Standard"
+              providerConfigRef: "my-custom-provider"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+                      rules:
+                        - name: "test-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+    asserts:
+      - hasDocuments:
+          count: 4
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "my-custom-provider"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "my-custom-provider"
+        documentIndex: 1
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "my-custom-provider"
+        documentIndex: 2
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "my-custom-provider"
+        documentIndex: 3
+
+  # Test 20: Default servicebus name (inf-{metaEnv}-servicebus)
+  - it: should default servicebus name to inf-dev-servicebus for dev environment
+    set:
+      global.appStack: defname
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.name
+          value: "dev-defname-inf-dev-servicebus"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "inf-dev-servicebus"
+        documentIndex: 0
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "inf-dev-servicebus"
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "dev-defname-inf-dev-servicebus-orders"
+        documentIndex: 1
+
+  # Test 21: Feature environments should not create any resources
+  - it: should not create any resources for feature environments
+    set:
+      global.appStack: featname
+      global.language: csharp
+      environment.name: feature42
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Test 22: Default servicebus name for preprod environment
+  - it: should default servicebus name to inf-preprod-servicebus for preprod
+    set:
+      global.appStack: prepname
+      global.language: csharp
+      environment.name: preprod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.name
+          value: "preprod-prepname-inf-preprod-servicebus"
+        documentIndex: 0
+
+  # Test 23: Default servicebus name for prod environment (Premium namespace)
+  - it: should default servicebus name to inf-prod-servicebus-prem for prod
+    set:
+      global.appStack: prodname
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              sku: "Premium"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.name
+          value: "prod-prodname-inf-prod-servicebus-prem"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "inf-prod-servicebus-prem"
+        documentIndex: 0
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "inf-prod-servicebus-prem"
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "prod-prodname-inf-prod-servicebus-prem-orders"
+        documentIndex: 1
+
+  # Test 24: Global defaults for providerConfigRef
+  - it: should use global defaults for providerConfigRef when set
+    set:
+      global.appStack: gdeftest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          defaults:
+            providerConfigRef: "global-provider"
+          servicebus:
+            - name: "global-def-sb"
+              location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "global-provider"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "global-provider"
+        documentIndex: 1
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "global-provider"
+        documentIndex: 2
+
+  # Test 25: Per-resource providerConfigRef overrides global default
+  - it: should override global providerConfigRef with per-resource value
+    set:
+      global.appStack: overtest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          defaults:
+            providerConfigRef: "global-provider"
+          servicebus:
+            - name: "override-sb"
+              location: "East US"
+              sku: "Standard"
+              providerConfigRef: "specific-provider"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "specific-provider"
+        documentIndex: 0
+
+  # Test 26: Global default location
+  - it: should use global default location when per-resource location is omitted
+    set:
+      global.appStack: loctest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          defaults:
+            location: "West Europe"
+          servicebus:
+            - name: "loc-sb"
+              sku: "Standard"
+              topics:
+                - name: "test-topic"
+                  subscriptions:
+                    - name: "test-sub"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.location
+          value: "West Europe"
+        documentIndex: 0
+
+  # Test 27: SKU defaults to Standard
+  - it: should default SKU to Standard when not specified
+    set:
+      global.appStack: skutest
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.forProvider.sku
+          value: "Standard"
+        documentIndex: 0
+
+  # Test 28: Fully minimal config - all defaults
+  - it: should work with fully minimal config using all defaults
+    set:
+      global.appStack: minimal
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          defaults:
+            location: "East US"
+          servicebus:
+            - topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      # ServiceBusNamespace defaults
+      - equal:
+          path: metadata.name
+          value: "dev-minimal-inf-dev-servicebus"
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: dev
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 0
+      - equal:
+          path: spec.managementPolicies[0]
+          value: "Observe"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.location
+          value: "East US"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.sku
+          value: "Standard"
+        documentIndex: 0
+      - equal:
+          path: spec.forProvider.resourceGroupName
+          value: "inf-dev"
+        documentIndex: 0
+      # Topic defaults
+      - equal:
+          path: metadata.namespace
+          value: dev
+        documentIndex: 1
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 1
+      # Subscription defaults
+      - equal:
+          path: metadata.namespace
+          value: dev
+        documentIndex: 2
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 2
+      - equal:
+          path: spec.forProvider.maxDeliveryCount
+          value: 10
+        documentIndex: 2
+
+  # Test 29: Namespace defaults to environment.name
+  - it: should default namespace to environment name not env-appStack
+    set:
+      global.appStack: nsdeftest
+      global.language: csharp
+      environment.name: preprod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - location: "East US"
+              topics:
+                - name: "events"
+                  subscriptions:
+                    - name: "handler"
+                      rules:
+                        - name: "filter"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+    asserts:
+      - hasDocuments:
+          count: 4
+      - equal:
+          path: metadata.namespace
+          value: preprod
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: preprod
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: preprod
+        documentIndex: 2
+      - equal:
+          path: metadata.namespace
+          value: preprod
+        documentIndex: 3
+
+  # Test 30: Wildcard (*) managementPolicies should be blocked (schema rejects before template)
+  - it: should fail when wildcard managementPolicies is used on namespace
+    set:
+      global.appStack: wildcard
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wildcard-sb"
+              location: "East US"
+              managementPolicies:
+                - "*"
+              topics:
+                - name: "test"
+                  subscriptions:
+                    - name: "sub"
+    asserts:
+      - failedTemplate: {}
+
+  # Test 31: ServiceBusNamespace should have servicebus.mycarrier.io/namespace label
+  - it: should add namespace label to ServiceBusNamespace for topic selector disambiguation
+    set:
+      global.appStack: nslabel
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "labeled-sb"
+              location: "East US"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      # ServiceBusNamespace has the namespace label
+      - equal:
+          path: metadata.labels["servicebus.mycarrier.io/namespace"]
+          value: "labeled-sb"
+        documentIndex: 0
+      # Topic selector includes the namespace label
+      - equal:
+          path: spec.forProvider.namespaceIdSelector.matchLabels["servicebus.mycarrier.io/namespace"]
+          value: "labeled-sb"
+        documentIndex: 1
+
+  # Test 32: Topic without subscriptions (forward-target pattern)
+  - it: should create namespace, two topics, and only a source-topic subscription when the forward-target topic has no subscriptions
+    set:
+      global.appStack: fwdtarget
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "fwdtarget-sb"
+              location: "East US"
+              sku: "Standard"
+              topics:
+                - name: "address-integrationevents"
+                - name: "source-topic"
+                  subscriptions:
+                    - name: "forwarder"
+                      forwardTo: "address-integrationevents"
+    asserts:
+      - hasDocuments:
+          count: 4  # ServiceBusNamespace + 2 Topics + 1 Subscription (no Subscription for forward-target)
+      - isKind:
+          of: ServiceBusNamespace
+        documentIndex: 0
+      - isKind:
+          of: Topic
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "address-integrationevents"
+        documentIndex: 1
+      - isKind:
+          of: Topic
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations["crossplane.io/external-name"]
+          value: "source-topic"
+        documentIndex: 2
+      - isKind:
+          of: Subscription
+        documentIndex: 3
+      - equal:
+          path: spec.forProvider.forwardTo
+          value: "address-integrationevents"
         documentIndex: 3

@@ -1,0 +1,72 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "offload-operator.fullname" . }}-manager
+  labels:
+    {{- include "offload-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - virtualservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - offload.mycarrier.dev
+  resources:
+  - offloadbases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - offload.mycarrier.dev
+  resources:
+  - offloadbases/finalizers
+  - offloadroutes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - offload.mycarrier.dev
+  resources:
+  - offloadbases/status
+  - offloadroutes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - offload.mycarrier.dev
+  resources:
+  - offloadroutes
+  verbs:
+  - get
+  - list
+  - update
+  - patch
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "offload-operator.fullname" . }}-manager
+  labels:
+    {{- include "offload-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "offload-operator.fullname" . }}-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ include "offload-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

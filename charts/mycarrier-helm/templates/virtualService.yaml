@@ -15,7 +15,8 @@
 {{- $appIstioDisabled := dig "istioDisabled" false $appValues }}
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false $appValues }}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true $appValues }}
-{{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) }}
+{{- $offloadOperatorEnabled := and (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
+{{- $renderVirtualService := and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (not $offloadOperatorEnabled) }}
 {{- if $renderVirtualService }}
 ---
 apiVersion: networking.istio.io/v1alpha3
@@ -31,8 +32,9 @@ metadata:
     {{ include "helm.annotations.virtualservice" $appContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
+{{- end }}
 {{- $offloadVSEnabled := dig "networking" "istio" "offloadVSEnabled" true $appValues }}
-{{- if and (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled }}
+{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not (dig "networking" "krakend" "enabled" false $appValues)) }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -44,29 +46,19 @@ metadata:
   annotations:
     {{ include "helm.annotations.virtualservice" $appContext | indent 4 | trim }}
 spec:
-  {{- $baseFullName := include "helm.basename" $appContext }}
-  {{- $metaNamespace := include "helm.metaEnvironment" $ }}
   exportTo:
   - .
-  - {{ $metaNamespace }}
   - istio-system
   hosts:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
-  - {{ $baseFullName }}
-  {{- if $internalEnabled }}
-  - {{ $baseFullName }}.{{ $metaNamespace }}.internal
-  {{- end }}
-  - {{ $baseFullName }}.{{ $metaNamespace }}.svc
-  - {{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local
-  {{- if and $appValues.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
-  - {{ $appValues.staticHostname | trimSuffix "."}}.{{ $domain }}
+  {{- if and ($.Values.isEnvironmentDeploy | default false) $appValues.staticHostname }}
+  - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
   {{- else }}
-  - {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
+  - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
   {{- end }}
   {{- /* Include additional custom hosts from networking.istio.hosts */ -}}
-  {{- $istioConfig := dig "networking" "istio" dict $appValues -}}
   {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
   {{- range $istioConfig.hosts }}
   - {{ . }}
@@ -82,24 +74,5 @@ spec:
           host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
-    match:
-      - headers:
-          environment:
-            exact: {{ $.Values.environment.name }}
-  - name: {{ $baseFullName }}-dev-fallback
-    match:
-      - withoutHeaders:
-          environment: {}
-      - headers:
-          environment:
-            exact: {{ $metaNamespace }}
-    route:
-      - destination:
-          host: "{{ $baseFullName }}.{{ $metaNamespace }}.svc.cluster.local"
-          port:
-            number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
-    headers:
-{{ include "helm.istioIngress.responseHeaders" $ | nindent 6 }}
-{{- end }}
 {{- end }}
 {{- end }}
