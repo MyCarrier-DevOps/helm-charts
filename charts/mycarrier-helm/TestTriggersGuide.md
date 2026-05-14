@@ -2,7 +2,7 @@
 
 ## Overview
 
-Test triggers are configured in the Helm values files (e.g., `values.dev.yaml`, `values.prod.yaml`) and are processed by the Helm templates to create Kubernetes jobs that execute test triggers. Each test definition configures a curl call to the test engine API. This means that each test trigger can have an array of test definitions, and each application can have its own configuration of test triggers with their respective test definitions.
+Test triggers are configured in the Helm values files (e.g., `values.dev.yaml`, `values.prod.yaml`) and are processed by the Helm templates to create Kubernetes jobs that execute test triggers. For each application, all of its test definitions are bundled into a single curl call to the test engine API with a `{"Tests": [...]}` payload. Each application can have its own configuration of test triggers with their respective test definitions.
 
 ### ArgoCD Integration
 
@@ -35,6 +35,7 @@ applications:
         limits:
           memory: "<memory-limit>"
           cpu: "<cpu-limit>"
+      enableV1: <true|false>         # Optional — see enableV1 section below
       testdefinitions:
         - containerImage: <image-name>
           containerTag: <tag>
@@ -79,7 +80,8 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference. **Optional** — when omitted, the chart uses `global.testengineWebhookUrl` injected by the CI/CD render step, which auto-selects the dev or prod testengine endpoint based on the Argo workflow namespace. | No | `global.testengineWebhookUrl` (injected by render); hard fallback to `vault:DevOps/data/testengine/api#url` when absent (e.g. local render) | `"vault:Secrets/data/path/to/secret#url"` |
+| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false` (default), each test definition sends a separate POST to the legacy `api` endpoint. | No | `false` | `true` |
+| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference. **Optional** — when omitted, the chart selects the default based on `enableV1`: `vault:DevOps/data/testengine/api/v1#url` when `enableV1: true`, `vault:DevOps/data/testengine/api#url` otherwise. `global.testengineWebhookUrl` (injected by the CI/CD render step) overrides both defaults. | No | `vault:DevOps/data/testengine/api/v1#url` (enableV1) / `vault:DevOps/data/testengine/api#url` (legacy) | `"vault:Secrets/data/path/to/secret#url"` |
 
 *Default resource values:
 ```yaml
@@ -286,7 +288,7 @@ applications:
           name: internalapitests
           secretId: "vault:Secrets/data/auth#secretid"
 ```
-Explanation: This configuration will create test jobs for both the `api` and `internal-api` applications. The `api` application will have two separate test jobs, while the `internal-api` application will have one. The `api` test jobs have custom resource requirements and the first test definition specifies a custom service address.
+Explanation: This configuration creates one test trigger Job per application: one Job for `api` and one Job for `internal-api`. Each Job sends a single curl POST to the test engine API whose payload bundles all of that application's test definitions in a `Tests` array — so the `api` Job's payload contains two test entries and the `internal-api` Job's payload contains one. The `api` Job has custom resource requirements and the first test definition specifies a custom service address.
 
 ## Usage Notes
 
@@ -294,7 +296,7 @@ Explanation: This configuration will create test jobs for both the `api` and `in
 
 2. **Test Filters**: The `filters` array allows you to specify which tests to run. If no filters are provided (empty array), all tests in the container will be executed.
 
-3. **Multiple Test Definitions**: You can define multiple test definitions under a single `testtrigger` configuration, each with its own container image, tag, and filters.
+3. **Multiple Test Definitions**: You can define multiple test definitions under a single `testtrigger` configuration, each with its own container image, tag, and filters. All test definitions for one application are bundled into a single curl POST to the test engine API; the request body is `{"Tests": [...]}` containing each definition as an entry.
 
 4. **Application-Specific Tests**: Each application in your deployment can have its own `testtrigger` configuration, allowing for application-specific tests.
 

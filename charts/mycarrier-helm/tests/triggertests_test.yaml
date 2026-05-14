@@ -146,8 +146,118 @@ tests:
       - exists:
           path: spec
 
-  # Edge case tests for testdefinitions
-  - it: should handle multiple test definitions correctly
+  # enableV1 / legacy mode tests
+  - it: should bundle all test definitions into a single curl when enableV1 is true
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=api"
+              - name: "uitests"
+                containerImage: "cypress/included"
+                containerTag: "12.8.1"
+                secretId: "vault:Secret/data/ui#SecretId"
+                filters:
+                  - "TestCategory=ui"
+                  - "TestPriority=high"
+              - name: "performancetests"
+                containerImage: "k6/operator"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/performance#SecretId"
+                filters:
+                  - "TestCategory=performance"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Tests":\s*\['
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName":\s*"apitests"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName":\s*"uitests"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName":\s*"performancetests"'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)curl -X POST.*curl -X POST'
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "vault:DevOps/data/testengine/api/v1#url"
+
+  - it: should emit a separate curl per test definition when enableV1 is false
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: false
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=api"
+              - name: "uitests"
+                containerImage: "cypress/included"
+                containerTag: "12.8.1"
+                secretId: "vault:Secret/data/ui#SecretId"
+                filters:
+                  - "TestCategory=ui"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Tests":\['
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName": "apitests"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName": "uitests"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)curl -X POST.*curl -X POST'
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "vault:DevOps/data/testengine/api#url"
+
+  - it: should default to legacy mode when enableV1 is omitted
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -175,6 +285,51 @@ tests:
                 secretId: "vault:Secret/data/ui#SecretId"
                 filters:
                   - "TestCategory=ui"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Tests":\['
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)curl -X POST.*curl -X POST'
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "vault:DevOps/data/testengine/api#url"
+
+  # Edge case tests for testdefinitions
+  - it: should handle multiple test definitions correctly
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=api"
+              - name: "uitests"
+                containerImage: "cypress/included"
+                containerTag: "12.8.1"
+                secretId: "vault:Secret/data/ui#SecretId"
+                filters:
+                  - "TestCategory=ui"
                   - "TestPriority=high"
               - name: "performancetests"
                 containerImage: "k6/operator"
@@ -189,6 +344,21 @@ tests:
           count: 1
       - exists:
           path: spec
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Tests":\s*\['
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName":\s*"apitests"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName":\s*"uitests"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestName":\s*"performancetests"'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)curl -X POST.*curl -X POST'
 
   - it: should handle special characters in filter values correctly
     set:

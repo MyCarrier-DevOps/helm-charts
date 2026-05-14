@@ -255,6 +255,11 @@
                   }
                 }
               },
+              "enableV1": {
+                "type": "boolean",
+                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false (default), each test definition generates a separate curl call to the legacy endpoint.",
+                "default": false
+              },
               "testdefinitions": {
                 "type": "array",
                 "description": "Test definitions to run",

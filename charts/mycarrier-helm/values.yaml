@@ -480,7 +480,8 @@ applications: {}
 #     backoffLimit: 0
 #     apikey: "vault:Secrets/data/testengine#apikey"
 #     webhook_url: "vault:Secrets/data/testengine#webhook_url"
-#     
+#     enableV1: true                             # true: single bundled POST {"Tests":[...]} to api/v1 endpoint
+#                                                # false (default): one POST per testdefinition to legacy endpoint
 #     resources:
 #       requests:
 #         cpu: "50m"
@@ -488,7 +489,7 @@ applications: {}
 #       limits:
 #         cpu: "500m"
 #         memory: "512Mi"
-#     
+#
 #     testdefinitions:
 #       - name: "apitests"
 #         containerImage: "myregistry.example.com/image/name"
@@ -519,7 +520,7 @@ applications: {}
 #             effect: "NoSchedule"
 #         # Optional: Node affinity for test pods (default: [])
 #         nodeAffinity: []
-#       
+#
 #       - name: "somedependencytest"
 #         containerImage: "myregistry.example.com/image/name"
 #         containerTag: "1.10.2"
