@@ -23,7 +23,8 @@
 {{- end }}
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
-{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default "vault:DevOps/data/testengine/api#url" }}
+{{- $enableV1 := dig "testtrigger" "enableV1" false .application }}
+{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (ternary "vault:DevOps/data/testengine/api/v1#url" "vault:DevOps/data/testengine/api#url" $enableV1) }}
 {{- if dig "testtrigger" false .application }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
@@ -40,7 +41,7 @@ template:
       - name: {{ dig "testtrigger" "imagePullSecret" $imagePullSecret .application | quote }}
     restartPolicy: {{ dig "testtrigger" "restartPolicy" $restartPolicy .application | quote  }}
     containers:
-      - image: "alpine/curl:latest"
+      - image: "alpine/curl:8.17.0"
         imagePullPolicy: {{ dig "testtrigger" "imagePullPolicy" "IfNotPresent" .application | quote }}
         name: testtrigger
         env:
@@ -63,6 +64,39 @@ template:
           - /bin/sh
           - -c
           - |
+          {{- if $enableV1 }}
+          {{- $tests := list }}
+          {{- range dig "testtrigger" "testdefinitions" list .application }}
+          {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
+          {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
+          {{- $tolerations := $defaultTolerations }}
+          {{- if hasKey . "tolerations" }}
+            {{- $tolerations = .tolerations }}
+          {{- end }}
+          {{- $nodeAffinity := .nodeAffinity | default list }}
+          {{- $useDefaultNodeAffinity := "false" }}
+          {{- if hasKey . "useDefaultNodeAffinity" }}
+            {{- $useDefaultNodeAffinity = printf "%v" .useDefaultNodeAffinity }}
+          {{- end }}
+          {{- $legacyMode := "false" }}
+          {{- if hasKey . "legacyMode" }}
+            {{- $legacyMode = printf "%v" .legacyMode }}
+          {{- end }}
+          {{- $spreadAcrossNodes := "true" }}
+          {{- if hasKey . "spreadAcrossNodes" }}
+            {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
+          {{- end }}
+          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
+          {{- $podResources := .podResources | default $defaultPodResources }}
+          {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
+          {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
+          {{- $tests = append $tests $test }}
+          {{- end }}
+            curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $TESTENGINE_APIKEY" \
+            -d '{{ dict "Tests" $tests | toPrettyJson | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL"
+          {{- else }}
           {{- range dig "testtrigger" "testdefinitions" list .application }}
           {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
           {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
@@ -112,6 +146,7 @@ template:
                   "LegacyMode": "{{ $legacyMode }}"
                 }
               }' "$TESTENGINEHOOK_URL";
+          {{- end }}
           {{- end }}
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
