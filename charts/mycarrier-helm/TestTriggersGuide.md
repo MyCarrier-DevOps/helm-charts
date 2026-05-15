@@ -25,8 +25,6 @@ applications:
       activeDeadlineSeconds: "<seconds>"
       ttlSecondsAfterFinished: "<seconds>"
       apikey: "<api-key-or-vault-reference>"
-      # webhook_url: "<webhook-url-or-vault-reference>"   # Optional — auto-injected by CI/CD render step;
-                                                          # falls back to vault:DevOps/data/testengine/api#url
       backoffLimit: <number>
       resources:
         requests:
@@ -80,8 +78,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false` (default), each test definition sends a separate POST to the legacy `api` endpoint. | No | `false` | `true` |
-| `webhook_url` | URL of the test engine webhook, can be a direct value or a vault reference. **Optional** — when omitted, the chart selects the default based on `enableV1`: `vault:DevOps/data/testengine/api/v1#url` when `enableV1: true`, `vault:DevOps/data/testengine/api#url` otherwise. `global.testengineWebhookUrl` (injected by the CI/CD render step) overrides both defaults. | No | `vault:DevOps/data/testengine/api/v1#url` (enableV1) / `vault:DevOps/data/testengine/api#url` (legacy) | `"vault:Secrets/data/path/to/secret#url"` |
+| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false` (default), each test definition sends a separate POST to the legacy `api` endpoint. The webhook URL is set automatically based on this flag; use `global.testengineWebhookUrl` (injected by the CI/CD render step) to override. | No | `false` | `true` |
 
 *Default resource values:
 ```yaml
@@ -252,7 +249,7 @@ applications:
       activeDeadlineSeconds: "300"
       ttlSecondsAfterFinished: "3600"
       apikey: "vault:Secrets/data/path/to/secret#apikey"
-      webhook_url: "vault:Secrets/data/path/to/secret#url"
+
       backoffLimit: 0
       resources:
         requests:
@@ -278,7 +275,7 @@ applications:
   internal-api:
     testtrigger:
       apikey: "vault:Secrets/data/path/to/secret#apikey"
-      webhook_url: "vault:Secrets/data/path/to/secret#url"
+
       backoffLimit: 0
       testdefinitions:
         - containerImage: testing/internalapitests
@@ -292,7 +289,7 @@ Explanation: This configuration creates one test trigger Job per application: on
 
 ## Usage Notes
 
-1. **Vault References**: Parameters like `apikey`, `secretId`, and `webhook_url` can reference values stored in a vault using the format `vault:<path>#<key>`.
+1. **Vault References**: Parameters like `apikey` and `secretId` can reference values stored in a vault using the format `vault:<path>#<key>`.
 
 2. **Test Filters**: The `filters` array allows you to specify which tests to run. If no filters are provided (empty array), all tests in the container will be executed.
 

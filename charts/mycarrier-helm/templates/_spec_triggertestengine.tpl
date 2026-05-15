@@ -24,7 +24,8 @@
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
 {{- $enableV1 := dig "testtrigger" "enableV1" false .application }}
-{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (ternary "vault:DevOps/data/testengine/api/v1#url" "vault:DevOps/data/testengine/api#url" $enableV1) }}
+{{- $urlKey := ternary "test_url" "url" (eq $stackname "example") }}
+{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (ternary (printf "vault:DevOps/data/testengine/api/v1#%s" $urlKey) (printf "vault:DevOps/data/testengine/api#%s" $urlKey) $enableV1) }}
 {{- if dig "testtrigger" false .application }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
@@ -48,7 +49,7 @@ template:
         - name: TESTENGINE_APIKEY
           value: {{ dig "testtrigger" "apikey" "" .application | quote }}
         - name: TESTENGINEHOOK_URL
-          value: {{ dig "testtrigger" "webhook_url" $defaultWebhookUrl .application | quote }}
+          value: {{ $defaultWebhookUrl | quote }}
         resources:
           {{- if .application.testtrigger.resources }}
           {{ toYaml .application.testtrigger.resources | indent 10 | trim }}
