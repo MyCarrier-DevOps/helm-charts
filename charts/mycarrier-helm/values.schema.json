@@ -219,10 +219,6 @@
                 "type": "string",
                 "description": "API key for the test engine, can be a direct value or a vault reference"
               },
-              "webhook_url": {
-                "type": "string",
-                "description": "URL of the test engine webhook, can be a direct value or a vault reference"
-              },
               "resources": {
                 "type": "object",
                 "description": "Resource requests and limits for the test job pod",

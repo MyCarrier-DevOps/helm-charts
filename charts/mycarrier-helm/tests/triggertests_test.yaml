@@ -1135,12 +1135,11 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api#url"
 
-  - it: should prefer explicit webhook_url over global.testengineWebhookUrl
+  - it: should ignore explicit webhook_url and use the enableV1-based default
     set:
       fullnameOverride: app
       namespace: dev-app
       metaEnvironment: dev
-      global.testengineWebhookUrl: "vault:DevOps/data/testengine/api#dev_url"
       applications:
         app1:
           version: 1.0.0
@@ -1151,6 +1150,7 @@ tests:
             tag: "1.0.0"
           testtrigger:
             ttlSecondsAfterFinished: "300"
+            enableV1: true
             webhook_url: "vault:DevOps/data/testengine/api#url"
             testdefinitions:
               - name: "apitests"
@@ -1168,4 +1168,73 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#url"
+            value: "vault:DevOps/data/testengine/api/v1#url"
+
+  - it: should use test_url key when appStack is example (legacy mode)
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.appStack: "example"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#test_url"
+
+  - it: should use v1 test_url key when appStack is example and enableV1 is true
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.appStack: "example"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api/v1#test_url"
