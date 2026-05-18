@@ -1067,11 +1067,14 @@ tests:
           pattern: '"TestFilters":\s*"TestCategory=coretests"'
 
   # ── TestEngine webhook URL selection tests ────────────────────────────────
-  # URL is computed from (argoEventsInstance x enableV1 x appStack).
-  #   argoEventsInstance=argo-events-test OR appStack=="example" -> dev_url
-  #   else (argo-events / unset)                                  -> url
-  #   enableV1=true                                               -> .../api/v1#<key>
-  #   enableV1=false (default)                                    -> .../api#<key>
+  # URL is computed from (argoEventsInstance x enableV1).
+  #   argoEventsInstance=argo-events-test -> dev_url
+  #   argoEventsInstance=argo-events / unset (default) -> url
+  #   enableV1=true  -> .../api/v1#<key>
+  #   enableV1=false -> .../api#<key>
+  # appStack=example is NOT a URL signal: MC.Example runs in both workflow-core
+  # (argo-events) and workflow-dev (argo-events-test), so its TestEngine target
+  # is driven purely by the source cluster.
   # Legacy global.testengineWebhookUrl override still wins when set (back-compat 3.1.9).
 
   - it: prod argo-events + enableV1=false -> api#url
@@ -1245,7 +1248,7 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api#url"
 
-  - it: appStack=example routes to dev_url (same key as argo-events-test)
+  - it: appStack=example + argo-events -> api#url (cluster wins, appStack is not a URL signal)
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1278,14 +1281,15 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#dev_url"
+            value: "vault:DevOps/data/testengine/api#url"
 
-  - it: appStack=example + enableV1=true -> api/v1#dev_url
+  - it: appStack=example + argo-events-test + enableV1=true -> api/v1#dev_url
     set:
       fullnameOverride: app
       namespace: dev-app
       metaEnvironment: dev
       global.appStack: "example"
+      global.argoEventsInstance: "argo-events-test"
       applications:
         app1:
           version: 1.0.0

@@ -25,8 +25,7 @@
 {{- $imageTag :=  .application.image.tag }}
 {{- $enableV1 := dig "testtrigger" "enableV1" false .application }}
 {{- $argoInst := $.Values.global.argoEventsInstance | default "argo-events" }}
-{{- $isDev := or (eq $argoInst "argo-events-test") (eq $stackname "example") }}
-{{- $urlKey := ternary "dev_url" "url" $isDev }}
+{{- $urlKey := ternary "dev_url" "url" (eq $argoInst "argo-events-test") }}
 {{- $apiPath := ternary "testengine/api/v1" "testengine/api" $enableV1 }}
 {{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (printf "vault:DevOps/data/%s#%s" $apiPath $urlKey) }}
 {{- if dig "testtrigger" false .application }}
