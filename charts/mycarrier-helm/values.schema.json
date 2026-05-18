@@ -32,6 +32,12 @@
           "type": "boolean",
           "description": "Force autoscaling to be enabled regardless of environment",
           "default": false
+        },
+        "argoEventsInstance": {
+          "type": "string",
+          "description": "Argo Events namespace the render pipeline runs in. Selects which TestEngine deployment (prod vs dev) receives test trigger payloads.",
+          "enum": ["argo-events", "argo-events-test"],
+          "default": "argo-events"
         }
       }
     },
