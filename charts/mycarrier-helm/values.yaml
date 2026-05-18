@@ -12,6 +12,7 @@
 ## @param global.v2migration Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
 ## @param global.commitDeployed Label for the deployed commit (used for tracking deployments)
 ## @param global.correlationId Correlation ID for tracking deployments across systems
+## @param global.argoEventsInstance Argo Events namespace the render pipeline runs in (argo-events|argo-events-test); selects TestEngine deployment
 ## @param global.env [object] Global environment variables shared across all applications
 ## @extra global.dependencies Dependency flags to control infrastructure resources
 ## @param global.dependencies.mongodb Enable MongoDB dependency
@@ -32,6 +33,7 @@ global:
   v2migration: false # Set to true to enable ArgoCD sync options for v2 migration (e.g., skip schema validation, ignore certain fields)
   commitDeployed: "" # Optional: Git commit hash or identifier for the deployed code (used for tracking deployments)
   correlationId: "" # Optional: Correlation ID for tracking deployments across systems
+  argoEventsInstance: "argo-events" # Argo Events namespace the render pipeline runs in (argo-events|argo-events-test). Selects which TestEngine deployment receives test trigger payloads. Set by render-deploy-core.yaml from K8S_NAMESPACE.
   env: {}
   dependencies:
     mongodb: false

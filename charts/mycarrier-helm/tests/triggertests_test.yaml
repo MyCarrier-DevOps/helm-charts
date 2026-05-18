@@ -1067,13 +1067,91 @@ tests:
           pattern: '"TestFilters":\s*"TestCategory=coretests"'
 
   # ── TestEngine webhook URL selection tests ────────────────────────────────
+  # URL is computed from (argoEventsInstance x enableV1).
+  #   argoEventsInstance=argo-events-test -> dev_url
+  #   argoEventsInstance=argo-events / unset (default) -> url
+  #   enableV1=true  -> .../api/v1#<key>
+  #   enableV1=false -> .../api#<key>
+  # appStack=example is NOT a URL signal: MC.Example runs in both workflow-core
+  # (argo-events) and workflow-dev (argo-events-test), so its TestEngine target
+  # is driven purely by the source cluster.
+  # Legacy global.testengineWebhookUrl override still wins when set (back-compat 3.1.9).
 
-  - it: should use global.testengineWebhookUrl when injected and no explicit webhook_url
+  - it: prod argo-events + enableV1=false -> api#url
     set:
       fullnameOverride: app
       namespace: dev-app
       metaEnvironment: dev
-      global.testengineWebhookUrl: "vault:DevOps/data/testengine/api#dev_url"
+      global.argoEventsInstance: "argo-events"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#url"
+
+  - it: prod argo-events + enableV1=true -> api/v1#url
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.argoEventsInstance: "argo-events"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api/v1#url"
+
+  - it: dev argo-events-test + enableV1=false -> api#dev_url
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.argoEventsInstance: "argo-events-test"
       applications:
         app1:
           version: 1.0.0
@@ -1102,7 +1180,42 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api#dev_url"
 
-  - it: should fall back to prod vault key when global.testengineWebhookUrl is not set
+  - it: dev argo-events-test + enableV1=true -> api/v1#dev_url
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.argoEventsInstance: "argo-events-test"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api/v1#dev_url"
+
+  - it: default (argoEventsInstance unset) -> argo-events behaviour -> api#url
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1135,47 +1248,13 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api#url"
 
-  - it: should ignore explicit webhook_url and use the enableV1-based default
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            ttlSecondsAfterFinished: "300"
-            enableV1: true
-            webhook_url: "vault:DevOps/data/testengine/api#url"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                filters:
-                  - "TestCategory=whatever"
-    asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api/v1#url"
-
-  - it: should use test_url key when appStack is example (legacy mode)
+  - it: appStack=example + argo-events -> api#url (cluster wins, appStack is not a URL signal)
     set:
       fullnameOverride: app
       namespace: dev-app
       metaEnvironment: dev
       global.appStack: "example"
+      global.argoEventsInstance: "argo-events"
       applications:
         app1:
           version: 1.0.0
@@ -1202,14 +1281,15 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#test_url"
+            value: "vault:DevOps/data/testengine/api#url"
 
-  - it: should use v1 test_url key when appStack is example and enableV1 is true
+  - it: appStack=example + argo-events-test + enableV1=true -> api/v1#dev_url
     set:
       fullnameOverride: app
       namespace: dev-app
       metaEnvironment: dev
       global.appStack: "example"
+      global.argoEventsInstance: "argo-events-test"
       applications:
         app1:
           version: 1.0.0
@@ -1237,4 +1317,40 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api/v1#test_url"
+            value: "vault:DevOps/data/testengine/api/v1#dev_url"
+
+  - it: back-compat — legacy global.testengineWebhookUrl still wins when set (3.1.9 transitional)
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      global.argoEventsInstance: "argo-events"
+      global.testengineWebhookUrl: "vault:DevOps/data/testengine/api#legacy_override"
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api#legacy_override"

@@ -24,8 +24,10 @@
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
 {{- $enableV1 := dig "testtrigger" "enableV1" false .application }}
-{{- $urlKey := ternary "test_url" "url" (eq $stackname "example") }}
-{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (ternary (printf "vault:DevOps/data/testengine/api/v1#%s" $urlKey) (printf "vault:DevOps/data/testengine/api#%s" $urlKey) $enableV1) }}
+{{- $argoInst := $.Values.global.argoEventsInstance | default "argo-events" }}
+{{- $urlKey := ternary "dev_url" "url" (eq $argoInst "argo-events-test") }}
+{{- $apiPath := ternary "testengine/api/v1" "testengine/api" $enableV1 }}
+{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (printf "vault:DevOps/data/%s#%s" $apiPath $urlKey) }}
 {{- if dig "testtrigger" false .application }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
