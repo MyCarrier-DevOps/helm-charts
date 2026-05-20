@@ -1081,6 +1081,31 @@
               }
             ]
           },
+          "podDisruptionBudget": {
+            "type": "object",
+            "description": "Optional PodDisruptionBudget for this application. Set exactly one of minAvailable or maxUnavailable. Omit the block entirely to disable (the default).",
+            "properties": {
+              "minAvailable": {
+                "description": "Minimum number (or percentage string like \"50%\") of pods that must remain available during voluntary disruptions.",
+                "oneOf": [
+                  { "type": "integer", "minimum": 0 },
+                  { "type": "string", "pattern": "^[0-9]+%?$" }
+                ]
+              },
+              "maxUnavailable": {
+                "description": "Maximum number (or percentage string like \"25%\") of pods that may be unavailable during voluntary disruptions.",
+                "oneOf": [
+                  { "type": "integer", "minimum": 0 },
+                  { "type": "string", "pattern": "^[0-9]+%?$" }
+                ]
+              }
+            },
+            "oneOf": [
+              { "required": ["minAvailable"] },
+              { "required": ["maxUnavailable"] }
+            ],
+            "additionalProperties": false
+          },
           "updateStrategy": {
             "type": "object",
             "properties": {

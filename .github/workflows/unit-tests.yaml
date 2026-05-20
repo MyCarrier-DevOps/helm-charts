@@ -73,7 +73,7 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.0
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.0
 
       - name: Run unit tests
         id: runtests
@@ -82,14 +82,97 @@ jobs:
         run: |
           chart_name="$CHART_PATH"
           safe_name=$(echo "$chart_name" | tr '/' '-')
+          results_dir="results-${safe_name}"
           echo "chart_safe_name=$safe_name" >> "$GITHUB_OUTPUT"
-          helm unittest "$chart_name" --color --output-type JUnit --output-file "results-${safe_name}.xml"
+          echo "results_dir=$results_dir" >> "$GITHUB_OUTPUT"
+
+          mkdir -p "$results_dir"
+          shopt -s nullglob
+          test_files=("$chart_name"/tests/*_test.yaml)
+
+          # No discoverable suites — fall back to a single invocation so we still get a result file.
+          if [[ ${#test_files[@]} -eq 0 ]]; then
+            helm unittest "$chart_name" --color \
+              --output-type JUnit \
+              --output-file "$results_dir/merged.xml"
+            exit $?
+          fi
+
+          # Fan out one helm-unittest process per suite to use all available cores.
+          workers="$(nproc)"
+          export chart_name results_dir
+          start_ns=$(date +%s%N)
+          set +e
+          printf '%s\n' "${test_files[@]}" | \
+            xargs -P "$workers" -I {} bash -c '
+              suite_path="$1"
+              suite_rel="${suite_path#${chart_name}/}"
+              suite_name="$(basename "$suite_path" .yaml)"
+              helm unittest "$chart_name" --color \
+                -f "$suite_rel" \
+                --output-type JUnit \
+                --output-file "$results_dir/${suite_name}.xml"
+            ' _ {}
+          xargs_status=$?
+          set -e
+          end_ns=$(date +%s%N)
+          wall_seconds=$(awk -v s="$start_ns" -v e="$end_ns" 'BEGIN { printf "%.6f", (e - s) / 1000000000 }')
+
+          # Per-process JUnit times include each invocation's chart-parse overhead, so summing
+          # them across parallel runs over-reports the run. Merge into a single XML and rescale
+          # per-suite/test times so they sum to the actual wall time.
+          python3 - "$results_dir" "$wall_seconds" <<'PYEOF'
+          import glob
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          results_dir = sys.argv[1]
+          wall_seconds = float(sys.argv[2])
+
+          suite_xmls = sorted(
+              p for p in glob.glob(os.path.join(results_dir, "*.xml"))
+              if os.path.basename(p) != "merged.xml"
+          )
+
+          merged = ET.Element("testsuites")
+          totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+          sum_time = 0.0
+          for path in suite_xmls:
+              root = ET.parse(path).getroot()
+              for ts in root.iter("testsuite"):
+                  merged.append(ts)
+                  for key in totals:
+                      totals[key] += int(ts.get(key, "0") or "0")
+                  sum_time += float(ts.get("time", "0") or "0")
+
+          scale = (wall_seconds / sum_time) if sum_time > 0 else 1.0
+          for ts in merged.iter("testsuite"):
+              ts.set("time", f"{float(ts.get('time', '0') or '0') * scale:.6f}")
+              for tc in ts.iter("testcase"):
+                  tc.set("time", f"{float(tc.get('time', '0') or '0') * scale:.6f}")
+
+          for key, val in totals.items():
+              merged.set(key, str(val))
+          merged.set("time", f"{wall_seconds:.6f}")
+
+          ET.ElementTree(merged).write(
+              os.path.join(results_dir, "merged.xml"),
+              xml_declaration=True,
+              encoding="utf-8",
+          )
+
+          for path in suite_xmls:
+              os.remove(path)
+          PYEOF
+
+          exit "$xargs_status"
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: results-${{ steps.runtests.outputs.chart_safe_name }}.xml
+          files: ${{ steps.runtests.outputs.results_dir }}/merged.xml
           check_name: Helm Unit Test Results - ${{ matrix.chart }}
           comment_title: Helm Unit Test Results - ${{ matrix.chart }}
 
