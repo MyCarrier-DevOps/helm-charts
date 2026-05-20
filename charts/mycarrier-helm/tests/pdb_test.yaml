@@ -87,4 +87,4 @@ tests:
       applications.test-app-api.podDisruptionBudget.maxUnavailable: 1
     asserts:
       - failedTemplate:
-          errorPattern: "applications/test-app-api/podDisruptionBudget"
+          errorPattern: "applications[./]test-app-api[./]podDisruptionBudget"

@@ -73,7 +73,7 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.0
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.0
 
       - name: Run unit tests
         id: runtests
@@ -82,14 +82,41 @@ jobs:
         run: |
           chart_name="$CHART_PATH"
           safe_name=$(echo "$chart_name" | tr '/' '-')
+          results_dir="results-${safe_name}"
           echo "chart_safe_name=$safe_name" >> "$GITHUB_OUTPUT"
-          helm unittest "$chart_name" --color --output-type JUnit --output-file "results-${safe_name}.xml"
+          echo "results_dir=$results_dir" >> "$GITHUB_OUTPUT"
+
+          mkdir -p "$results_dir"
+          shopt -s nullglob
+          test_files=("$chart_name"/tests/*_test.yaml)
+
+          # No discoverable suites — fall back to a single invocation so we still get a result file.
+          if [[ ${#test_files[@]} -eq 0 ]]; then
+            helm unittest "$chart_name" --color \
+              --output-type JUnit \
+              --output-file "$results_dir/all.xml"
+            exit $?
+          fi
+
+          # Fan out one helm-unittest process per suite to use all available cores.
+          workers="$(nproc)"
+          export chart_name results_dir
+          printf '%s\n' "${test_files[@]}" | \
+            xargs -P "$workers" -I {} bash -c '
+              suite_path="$1"
+              suite_rel="${suite_path#${chart_name}/}"
+              suite_name="$(basename "$suite_path" .yaml)"
+              helm unittest "$chart_name" --color \
+                -f "$suite_rel" \
+                --output-type JUnit \
+                --output-file "$results_dir/${suite_name}.xml"
+            ' _ {}
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: results-${{ steps.runtests.outputs.chart_safe_name }}.xml
+          files: ${{ steps.runtests.outputs.results_dir }}/*.xml
           check_name: Helm Unit Test Results - ${{ matrix.chart }}
           comment_title: Helm Unit Test Results - ${{ matrix.chart }}
 
