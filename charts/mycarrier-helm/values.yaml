@@ -350,6 +350,18 @@ applications: {}
 #   # priorityClassName: "high-priority"
 #   
 #   # ----------------------------------------------------------------------------
+#   # Pod Disruption Budget
+#   # ----------------------------------------------------------------------------
+#   # When set, a PodDisruptionBudget is created for this application. Set exactly
+#   # one of minAvailable or maxUnavailable (integer or percentage string).
+#   # Default: no PDB is created.
+#   # Only applies to deploymentType: deployment, statefulset, or rollout.
+#   # podDisruptionBudget:
+#   #   minAvailable: 1
+#   #   # OR:
+#   #   # maxUnavailable: "25%"
+#
+#   # ----------------------------------------------------------------------------
 #   # Update Strategy
 #   # ----------------------------------------------------------------------------
 #   updateStrategy:
