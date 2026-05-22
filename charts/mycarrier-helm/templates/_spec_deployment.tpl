@@ -75,8 +75,8 @@ template:
     {{ include "helm.podDefaultAffinity" . | indent 4 | trim }}
     {{ include "helm.podSecurityContext" $ | indent 4 | trim }}
     {{ include "helm.podDefaultToleration" $ | indent 4 | trim }}
-    {{- include "helm.podDefaultNodeSelector" . | indent 4 | trim }}
-    {{- include "helm.podDefaultPriorityClassName" . | indent 4 | trim }}
+    {{ include "helm.podDefaultNodeSelector" . | indent 4 | trim }}
+    {{ include "helm.podDefaultPriorityClassName" . | indent 4 | trim }}
     {{- with .application.serviceAccount }}
     serviceAccountName: {{ .name | default $fullName }}
     {{- end }}
