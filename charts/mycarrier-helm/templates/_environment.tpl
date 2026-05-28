@@ -116,3 +116,45 @@ They use a straightforward default route without header matching requirements.
 {{- printf "false" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Renders the merged env block for an application container.
+Combines .Values.global.env and .application.env into a single, deduplicated set,
+where keys defined on the application override matching keys from global.
+Keys managed by other helpers (otel/vault/keyvault/computed) are stripped from
+both sources so they cannot be redefined here.
+
+Usage: {{ include "helm.application.env" . | indent <N> | trim }}
+where the call-site dot exposes both `.Values.global.env` and `.application.env`.
+*/}}
+{{- define "helm.application.env" -}}
+{{- $omitKeys := list "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl" -}}
+{{- $merged := dict -}}
+{{- with $.Values.global.env -}}
+{{- range $k, $v := . -}}
+{{- if not (has $k $omitKeys) -}}
+{{- $_ := set $merged $k $v -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and .application.env (not (kindIs "invalid" .application.env)) -}}
+{{- range $k, $v := .application.env -}}
+{{- if not (has $k $omitKeys) -}}
+{{- $_ := set $merged $k $v -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- range $key, $value := $merged }}
+- name: "{{ $key }}"
+  {{- if kindIs "map" $value }}
+  {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
+  {{ toYaml $value | indent 2 | trim }}
+  {{- else }}
+  valueFrom:
+    {{ toYaml $value | indent 4 | trim }}
+  {{- end }}
+  {{- else }}
+  value: "{{ tpl (toString $value) $ }}"
+  {{- end }}
+{{- end -}}
+{{- end -}}
