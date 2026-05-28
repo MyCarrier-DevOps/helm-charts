@@ -153,30 +153,7 @@ template:
           {{ include "helm.lang.vars" . | indent 10 | trim }}
           {{ include "helm.otel.language" $ | indent 10 | trim }}
           {{ include "helm.otel.envVars" $ | indent 10 | trim }}
-          {{- range $key, $value := $.Values.global.env }}
-          - name: "{{ $key }}"
-            {{- if kindIs "map" $value }}
-            valueFrom: 
-              {{ toYaml $value | indent 14 | trim}}
-            {{- else }}
-            value: "{{ tpl (toString $value) $ }}"
-            {{- end }}
-          {{- end }}
-          {{- if .application.env }}
-          {{- range $key, $value := omit .application.env "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl" }}
-          - name: "{{ $key }}"
-            {{- if kindIs "map" $value }}
-            {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
-            {{ toYaml $value | indent 12 | trim }}
-            {{- else }}
-            valueFrom:
-              {{ toYaml $value | indent 14 | trim}}
-            {{- end }}
-            {{- else }}
-            value: "{{ tpl (toString $value) $ }}"
-            {{- end }}
-          {{- end }}
-          {{- end }}
+          {{ include "helm.application.env" . | indent 10 | trim }}
           
           {{ include "helm.vault" $ | indent 10 | trim }}
         {{- if or $.Values.configmap $.Values.useSecret }}

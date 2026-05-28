@@ -211,3 +211,82 @@ tests:
           content:
             name: ComputedEnvironmentName
             value: "uat"
+
+  - it: should let application env override global env for matching keys
+    set:
+      environment.name: "dev"
+      global:
+        env:
+          SHARED_VAR: "global-value"
+          GLOBAL_ONLY: "global-only-value"
+      applications.merge-env-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "merge-env-app"
+          tag: "1.0.0"
+        env:
+          SHARED_VAR: "app-value"
+          APP_ONLY: "app-only-value"
+    asserts:
+      - isKind:
+          of: Deployment
+      # Application value wins for the shared key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SHARED_VAR
+            value: "app-value"
+      # The global value for the same key is not emitted
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SHARED_VAR
+            value: "global-value"
+      # Global-only keys still pass through
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GLOBAL_ONLY
+            value: "global-only-value"
+      # Application-only keys still pass through
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_ONLY
+            value: "app-only-value"
+
+  - it: should let application valueFrom override a literal global env value
+    set:
+      environment.name: "dev"
+      global:
+        env:
+          OVERRIDE_ME: "from-global"
+      applications.valuefrom-override-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "valuefrom-override-app"
+          tag: "1.0.0"
+        env:
+          OVERRIDE_ME:
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OVERRIDE_ME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OVERRIDE_ME
+            value: "from-global"
