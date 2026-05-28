@@ -1191,32 +1191,35 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Global Settings
 
-| Name                                  | Description                                                                            | Value    |
-| ------------------------------------- | -------------------------------------------------------------------------------------- | -------- |
-| `global.appStack`                     | Application stack name, used for naming resources and grouping applications            | `app`    |
-| `global.gitbranch`                    | Name of the git branch (used for feature branches)                                     | `""`     |
-| `global.branchlabel`                  | Label for the branch, used for reference label                                         | `""`     |
-| `global.language`                     | Default programming language for applications (can be overridden at application level) | `csharp` |
-| `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)       | `false`  |
-| `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                          | `""`     |
-| `global.env`                          | Global environment variables shared across all applications                            | `{}`     |
-| `global.dependencies`                 | Dependency flags to control infrastructure resources                                   |          |
-| `global.dependencies.mongodb`         | Enable MongoDB dependency                                                              | `false`  |
-| `global.dependencies.elasticsearch`   | Enable Elasticsearch dependency                                                        | `false`  |
-| `global.dependencies.redis`           | Enable Redis dependency                                                                | `false`  |
-| `global.dependencies.postgres`        | Enable PostgreSQL dependency                                                           | `false`  |
-| `global.dependencies.sqlserver`       | Enable SQL Server dependency                                                           | `false`  |
-| `global.dependencies.clickhouse`      | Enable ClickHouse dependency                                                           | `false`  |
-| `global.dependencies.azureservicebus` | Enable Azure Service Bus dependency                                                    | `false`  |
-| `global.dependencies.redpanda`        | Enable Redpanda dependency                                                             | `false`  |
-| `global.dependencies.loadsure`        | Enable Loadsure dependency                                                             | `false`  |
-| `global.dependencies.chargify`        | Enable Chargify dependency                                                             | `false`  |
+| Name                                  | Description                                                                                                     | Value         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
+| `global.appStack`                     | Application stack name, used for naming resources and grouping applications                                     | `app`         |
+| `global.gitbranch`                    | Name of the git branch (used for feature branches)                                                              | `""`          |
+| `global.branchlabel`                  | Label for the branch, used for reference label                                                                  | `""`          |
+| `global.language`                     | Default programming language for applications (can be overridden at application level)                          | `csharp`      |
+| `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)                                | `false`       |
+| `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                                                   | `""`          |
+| `global.correlationId`                | Correlation ID for tracking deployments across systems                                                          | `""`          |
+| `global.argoEventsInstance`           | Argo Events namespace the render pipeline runs in (argo-events|argo-events-test); selects TestEngine deployment | `argo-events` |
+| `global.env`                          | Global environment variables shared across all applications                                                     | `{}`          |
+| `global.dependencies`                 | Dependency flags to control infrastructure resources                                                            |               |
+| `global.dependencies.mongodb`         | Enable MongoDB dependency                                                                                       | `false`       |
+| `global.dependencies.elasticsearch`   | Enable Elasticsearch dependency                                                                                 | `false`       |
+| `global.dependencies.redis`           | Enable Redis dependency                                                                                         | `false`       |
+| `global.dependencies.postgres`        | Enable PostgreSQL dependency                                                                                    | `false`       |
+| `global.dependencies.sqlserver`       | Enable SQL Server dependency                                                                                    | `false`       |
+| `global.dependencies.clickhouse`      | Enable ClickHouse dependency                                                                                    | `false`       |
+| `global.dependencies.azureservicebus` | Enable Azure Service Bus dependency                                                                             | `false`       |
+| `global.dependencies.redpanda`        | Enable Redpanda dependency                                                                                      | `false`       |
+| `global.dependencies.loadsure`        | Enable Loadsure dependency                                                                                      | `false`       |
+| `global.dependencies.chargify`        | Enable Chargify dependency                                                                                      | `false`       |
 
 ### Environment Settings
 
 | Name                                 | Description                                                                                                     | Value         |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------- |
 | `environment.name`                   | Environment name (dev, preprod, prod, or feature-*)                                                             | `dev`         |
+| `environment.namespaceOverride`      | Override the Kubernetes namespace (defaults to environment.name if not set)                                     | `""`          |
 | `environment.dependencyenv`          | Environment name for dependencies                                                                               | `dev`         |
 | `environment.domainOverride`         | Domain override configuration                                                                                   |               |
 | `environment.domainOverride.enabled` | Whether to override the default domain (default domains: mycarrier.dev for non-prod, mycarriertms.com for prod) | `false`       |
@@ -1260,21 +1263,23 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Infrastructure Resources
 
-Azure infrastructure resources managed through Crossplane. See [Infrastructure Guide](docs/crossplane-infrastructure.md) for detailed configuration examples.
-
-| Name                                          | Description                                              | Value       |
-| --------------------------------------------- | -------------------------------------------------------- | ----------- |
-| `infrastructure.azure.defaults.location`      | Default Azure region for all resources                   | `""`        |
-| `infrastructure.azure.defaults.providerConfigRef` | Default Crossplane ProviderConfig name               | `"default"` |
-| `infrastructure.azure.resourceGroup`          | Azure Resource Group configurations                     | `[]`        |
-| `infrastructure.azure.storage.accounts`       | Azure storage account configurations                    | `[]`        |
-| `infrastructure.azure.servicebus`             | Azure Service Bus namespace configurations              | `[]`        |
+| Name                                              | Description                                                            | Value |
+| ------------------------------------------------- | ---------------------------------------------------------------------- | ----- |
+| `infrastructure`                                  | Infrastructure configuration                                           |       |
+| `infrastructure.azure`                            | Azure infrastructure resources                                         |       |
+| `infrastructure.azure.defaults`                   | Default values shared across all Azure resources                       |       |
+| `infrastructure.azure.defaults.location`          | Default Azure region for all resources (empty = must set per-resource) | `""`  |
+| `infrastructure.azure.defaults.providerConfigRef` | Default Crossplane ProviderConfig name                                 | `""`  |
+| `infrastructure.azure.resourceGroup`              | Azure Resource Group configurations                                    | `[]`  |
+| `infrastructure.azure.storage`                    | Azure Storage configuration                                            |       |
+| `infrastructure.azure.storage.accounts`           | Azure storage account configurations                                   | `[]`  |
+| `infrastructure.azure.servicebus`                 | Azure Service Bus namespace configurations                             | `[]`  |
 
 ### Deployment Settings
 
 | Name                  | Description                                                                            | Value   |
 | --------------------- | -------------------------------------------------------------------------------------- | ------- |
-| `isEnvironmentDeploy` | Whether this is an environment-level deployment. When `true`: suppresses the offload `ApplicationSet` generator, and enables `staticHostname` to be included in VirtualService hosts for feature environments. | `false` |
+| `isEnvironmentDeploy` | Whether this is an environment-level deployment (affects resource naming and behavior) | `false` |
 
 ## License
 
