@@ -355,6 +355,74 @@ tests:
             name: KeyVault_SplitIoProxyApiKey
             value: SomeValue
 
+  # PR #88 review edge case: for csharp apps the redis pair
+  # (KeyVault_RedisConnection / Auth_KeyVault_RedisConnection) is only re-injected
+  # by helm.lang.vars.csharp when global.dependencies.redis is true. With redis
+  # OFF (the default), nothing re-injects them, so stripping them would silently
+  # delete a user-supplied value. They must survive when redis is disabled.
+  - it: should keep csharp global.env KeyVault_RedisConnection when redis dependency off (PR #88)
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: csharp
+        dependencies:
+          redis: false
+        env:
+          KeyVault_RedisConnection: SomeRedisVal
+      applications.csharp-redis-off-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "csharp-redis-off-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      # redis off: lang.vars does NOT inject it, so the user-supplied value survives
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KeyVault_RedisConnection
+            value: SomeRedisVal
+
+  # When redis IS enabled for a csharp app, helm.lang.vars.csharp injects the
+  # redis pair (KeyVault_RedisConnection = "RedisConnectionDev" for dev metaenv),
+  # so the helper must strip the user-supplied global.env copy to avoid a duplicate.
+  - it: should strip csharp global.env KeyVault_RedisConnection when redis dependency on (PR #88)
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: csharp
+        dependencies:
+          redis: true
+        env:
+          KeyVault_RedisConnection: SomeRedisVal
+      applications.csharp-redis-on-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "csharp-redis-on-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      # redis on: the csharp lang.vars injection is the single source for this key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KeyVault_RedisConnection
+            value: RedisConnectionDev
+      # The user-supplied global.env copy is stripped (no duplicate)
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KeyVault_RedisConnection
+            value: SomeRedisVal
+
   # The 3 computed keys (otel endpoint / ComputedEnvironmentName / ActiveOffloads)
   # are injected by other helpers for ALL languages, so the unconditional omit of
   # a global.env copy must still apply even for nodejs.
