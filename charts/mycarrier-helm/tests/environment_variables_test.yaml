@@ -290,3 +290,95 @@ tests:
           content:
             name: OVERRIDE_ME
             value: "from-global"
+
+  # Regression (chart 3.1.12): the env-merge helper omitted the 5 KeyVault_* keys
+  # from BOTH global.env and application.env, unconditionally. For nodejs apps,
+  # nothing re-injects them (helm.lang.vars.csharp only emits for csharp), so the
+  # keys were deleted entirely, breaking deployment. They must now pass through.
+  - it: should keep global.env KeyVault_* keys for nodejs apps (regression 3.1.12)
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          KeyVault_SplitIoProxyApiKey: SomeValue
+      applications.nodejs-keyvault-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "nodejs-keyvault-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      # nodejs: nothing re-injects KeyVault_*, so the user-supplied value survives
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KeyVault_SplitIoProxyApiKey
+            value: SomeValue
+
+  # For csharp apps, helm.lang.vars.csharp injects KeyVault_* (as vault pointers),
+  # so the helper must still strip the user-supplied global.env copy to avoid a
+  # duplicate. We assert the lang.vars-injected value is present and the
+  # user-supplied value is NOT (the csharp injection is the single source).
+  - it: should strip user global.env KeyVault_* for csharp apps (lang.vars is source)
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: csharp
+        env:
+          KeyVault_SplitIoProxyApiKey: SomeValue
+      applications.csharp-keyvault-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "csharp-keyvault-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      # The csharp lang.vars injection is the single source for this key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KeyVault_SplitIoProxyApiKey
+            value: SplitIoProxyApiKey_dev
+      # The user-supplied global.env copy is stripped (no duplicate)
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KeyVault_SplitIoProxyApiKey
+            value: SomeValue
+
+  # The 3 computed keys (otel endpoint / ComputedEnvironmentName / ActiveOffloads)
+  # are injected by other helpers for ALL languages, so the unconditional omit of
+  # a global.env copy must still apply even for nodejs.
+  - it: should still omit global.env ComputedEnvironmentName for nodejs apps
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          ComputedEnvironmentName: "user-override-bad"
+      applications.nodejs-computed-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "nodejs-computed-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      # The user-supplied override from global.env must not appear in the merged block
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ComputedEnvironmentName
+            value: "user-override-bad"

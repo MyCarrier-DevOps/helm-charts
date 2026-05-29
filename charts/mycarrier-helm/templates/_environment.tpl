@@ -121,14 +121,21 @@ They use a straightforward default route without header matching requirements.
 Renders the merged env block for an application container.
 Combines .Values.global.env and .application.env into a single, deduplicated set,
 where keys defined on the application override matching keys from global.
-Keys managed by other helpers (otel/vault/keyvault/computed) are stripped from
-both sources so they cannot be redefined here.
+Keys managed by other helpers (otel/computed) are stripped from both sources so
+they cannot be redefined here.
+The KeyVault_* keys are ONLY stripped for csharp apps, because the
+`helm.lang.vars.csharp` helper re-injects them and only emits when
+`.Values.global.language == "csharp"`. For non-csharp apps (e.g. nodejs) nothing
+re-injects them, so they must pass through from global.env / application.env.
 
 Usage: {{ include "helm.application.env" . | indent <N> | trim }}
 where the call-site dot exposes both `.Values.global.env` and `.application.env`.
 */}}
 {{- define "helm.application.env" -}}
-{{- $omitKeys := list "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl" -}}
+{{- $omitKeys := list "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" -}}
+{{- if eq (lower (toString $.Values.global.language)) "csharp" -}}
+{{- $omitKeys = concat $omitKeys (list "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl") -}}
+{{- end -}}
 {{- $merged := dict -}}
 {{- with $.Values.global.env -}}
 {{- range $k, $v := . -}}
