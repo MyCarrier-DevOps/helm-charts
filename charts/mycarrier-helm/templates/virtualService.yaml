@@ -61,13 +61,26 @@ spec:
   {{- /* Include additional custom hosts from networking.istio.hosts */ -}}
   {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
   {{- range $istioConfig.hosts }}
-  - {{ . }}
+  - {{ tpl . $ }}
   {{- end -}}
   {{- end }}
   gateways:
   - mesh
   - istio-system/default
   http:
+  {{- /* Custom routes (networking.istio.routes) - most specific first, before the catch-all */ -}}
+  {{- if and (hasKey $istioConfig "routes") $istioConfig.routes }}
+  {{- range $key, $value := $istioConfig.routes }}
+  {{- $routeSpec := omit $value "destination" "port" }}
+  - name: {{ $key }}
+    {{- tpl (toYaml $routeSpec) $ | nindent 4 }}
+    route:
+      - destination:
+          host: "{{ tpl (default (printf "%s.%s.svc.cluster.local" $fullName $namespace) $value.destination) $ }}"
+          port:
+            number: {{ default (default 8080 (dig "ports" "http" nil $appValues)) $value.port }}
+  {{- end }}
+  {{- end }}
   - name: {{ $fullName }}
     route:
       - destination:
