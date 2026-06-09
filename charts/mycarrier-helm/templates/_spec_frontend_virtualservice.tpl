@@ -36,7 +36,7 @@ hosts:
 {{- $istioConfig := dig "networking" "istio" dict $primaryAppValues -}}
 {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
 {{- range $istioConfig.hosts }}
-- {{ . }}
+- {{ tpl . $ }}
 {{- end -}}
 {{- end -}}
 {{- end }}
@@ -123,10 +123,10 @@ http:
 {{- range $key, $value := $appValues.networking.istio.routes }}
 {{- $routeSpec := omit $value "destination" }}
 - name: {{ $key }}-custom-route
-  {{- toYaml $routeSpec | nindent 2 }}
+  {{- tpl (toYaml $routeSpec) $ | nindent 2 }}
   route:
   - destination:
-      host: "{{ default (printf "%s.%s.svc.cluster.local" $routeFullName $namespace) $value.destination }}"
+      host: "{{ tpl (default (printf "%s.%s.svc.cluster.local" $routeFullName $namespace) $value.destination) $ }}"
       port:
         number: 80
   {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
@@ -311,13 +311,33 @@ hosts:
 {{- $istioConfig := dig "networking" "istio" dict $primaryAppValues -}}
 {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts -}}
 {{- range $istioConfig.hosts }}
-- {{ . }}
+- {{ tpl . $ }}
 {{- end -}}
 {{- end }}
 gateways:
 - mesh
 - istio-system/default
 http:
+{{/* Custom routes (networking.istio.routes) for any frontend app - env-gated, most specific first.
+     The offload VS also binds the shared frontend host, so every route must match the environment
+     header to avoid hijacking shared traffic for all environments. */}}
+{{- range $appName, $appValues := $frontendApps }}
+{{- $routes := dig "networking" "istio" "routes" dict $appValues }}
+{{- range $key, $value := $routes }}
+{{- $routeFullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
+- name: {{ $key }}-offload-custom-route
+  match:
+  {{- range $mi := ($value.match | default (list (dict))) }}
+  {{- $headers := merge (dict "environment" (dict "exact" $.Values.environment.name)) (deepCopy (dig "headers" dict $mi)) }}
+  - {{ tpl (toYaml (merge (dict "headers" $headers) (deepCopy (omit $mi "headers")))) $ | nindent 4 }}
+  {{- end }}
+  route:
+  - destination:
+      host: "{{ tpl (default (printf "%s.%s.svc.cluster.local" $routeFullName $namespace) $value.destination) $ }}"
+      port:
+        number: {{ default (default 4200 (dig "ports" "http" nil $appValues)) $value.port }}
+{{- end }}
+{{- end }}
 {{/* Path-based routing for feature environments */}}
 {{- range $appName, $appValues := $frontendApps }}
 {{- if and $appValues.routePrefix (ne $appValues.routePrefix "/") (not $appValues.isPrimary) }}

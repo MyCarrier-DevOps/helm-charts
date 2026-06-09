@@ -43,7 +43,7 @@ spec:
   {{- end }}
   {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts }}
   {{- range $istioConfig.hosts }}
-  - {{ . }}
+  - {{ tpl . $ }}
   {{- end }}
   {{- end }}
   gateways:

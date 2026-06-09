@@ -35,7 +35,7 @@ hosts:
 {{- $istioConfig := dig "networking" "istio" dict .application -}}
 {{- if and (hasKey $istioConfig "hosts") $istioConfig.hosts }}
 {{- range $istioConfig.hosts }}
-- {{ . }}
+- {{ tpl . $ }}
 {{- end }}
 {{- end }}
 gateways:
@@ -72,10 +72,10 @@ http:
 {{- range $key, $value := .application.networking.istio.routes }}
 {{- $routeSpec := omit $value "destination" "port" }}
 - name: {{ $key }}
-  {{- toYaml $routeSpec | nindent 2 }}
+  {{- tpl (toYaml $routeSpec) $ | nindent 2 }}
   route:
   - destination:
-      host: "{{ default (printf "%s.%s.svc.cluster.local" $fullName $namespace) $value.destination }}"
+      host: "{{ tpl (default (printf "%s.%s.svc.cluster.local" $fullName $namespace) $value.destination) $ }}"
       port:
         number: {{ default (default 8080 (dig "ports" "http" nil $.application)) $value.port }}
   {{- $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
