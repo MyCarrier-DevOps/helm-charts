@@ -233,6 +233,10 @@ applications: {}
 #       internalEnabled: true  # Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host (default: true)
 #       offloadVSEnabled: true  # Enable the offload VirtualService for feature environments (default: true)
 #       cloudflareProxied: true  # Enable Cloudflare proxy for VirtualService DNS records (external-dns annotation, default: true)
+#       # Whitelabel hosts can use the helm.whitelabelHost helper to derive the domain:
+#       #   hosts:
+#       #     - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+#       # Renders estes.<domain> in prod/preprod/dev and estes.<env>.<domain> elsewhere.
 #       hosts: []
 #       redirects: {}
 #       routes: {}  # Custom routes; destination defaults to the app's service. Override with 'destination' field per route.
