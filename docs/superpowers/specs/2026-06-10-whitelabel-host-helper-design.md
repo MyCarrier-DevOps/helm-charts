@@ -98,7 +98,14 @@ app whose `networking.istio.hosts` uses the helper with label `estes`:
 4. `environment.name: feature20` → contains `estes.feature20.mycarrier.dev` (infix).
 5. `environment.name: qa` → contains `estes.qa.mycarrier.dev` (infix — pins the skip-set boundary).
 6. `environment.name: feature20` + `domainOverride{enabled:true, domain: integratedtm.dev}` →
-   contains `estes.feature20.integratedtm.dev` (override honored).
+   contains `estes.feature20.integratedtm.dev` (override honored on the infix branch).
+7. `environment.name: dev` + `domainOverride{enabled:true, domain: integratedtm.dev}` →
+   contains `estes.integratedtm.dev` (override honored on the no-infix branch).
+8. `environment.name: dev` + `domainOverride{enabled:true, domain: integratedtm.dev}` +
+   app `staticHostname: api` + a `helm.whitelabelHost` entry with label `estes` →
+   `spec.hosts` contains BOTH `api.integratedtm.dev` (the static host) and `estes.integratedtm.dev`
+   (the whitelabel host), proving the helper coexists with `staticHostname` and both pick up the
+   overridden domain.
 
 (Each test sets a non-frontend deployment app with istio enabled and `offloadOperatorEnabled:
 false` so the single-app VirtualService renders; the host assertion uses `contains` on
