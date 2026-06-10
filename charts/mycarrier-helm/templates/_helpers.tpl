@@ -17,9 +17,14 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Build a whitelabel VirtualService host from a label and the environment-resolved domain.
+     Renders <label>.<domain> in prod/preprod/dev and <label>.<env>.<domain> elsewhere.
+     Call from a (tpl-evaluated) networking.istio.hosts entry:
+       {{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}
+     ctx must be the root context ($); domain follows environment.domainOverride. */}}
 {{- define "helm.whitelabelHost" -}}
 {{- $label := required "helm.whitelabelHost requires a label" .label -}}
-{{- $ctx := .ctx -}}
+{{- $ctx := required "helm.whitelabelHost requires ctx (pass \"ctx\" $)" .ctx -}}
 {{- $env := $ctx.Values.environment.name -}}
 {{- $domain := include "helm.domain" $ctx -}}
 {{- if has $env (list "prod" "preprod" "dev") -}}
