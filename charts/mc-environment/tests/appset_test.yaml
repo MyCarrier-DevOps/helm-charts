@@ -180,3 +180,23 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.global.appStack
           value: carriers
+  - it: accepts storage-account fields that mycarrier-helm permits
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+          infrastructure:
+            azure:
+              storage:
+                accounts:
+                  - name: shipmentsdata
+                    sku: Standard_LRS
+                    newStorageAccount:
+                      name: shipmentsdata
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.infrastructure.azure.storage.accounts[0].sku
+          value: Standard_LRS
