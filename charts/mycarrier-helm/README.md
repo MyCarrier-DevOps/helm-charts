@@ -422,6 +422,30 @@ networking:
       maxAge: "24h"
 ```
 
+#### Whitelabel hosts
+
+Use the `helm.whitelabelHost` helper to publish a label on the environment's domain without
+hardcoding it. It renders `<label>.<domain>` in `prod`/`preprod`/`dev` and `<label>.<env>.<domain>`
+in every other environment (`qa`, `uat`, `feature*`). The domain follows
+`environment.domainOverride`.
+
+```yaml
+networking:
+  istio:
+    hosts:
+      - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+```
+
+| environment | rendered host |
+|---|---|
+| `prod` | `estes.mycarriertms.com` |
+| `dev` / `preprod` | `estes.mycarrier.dev` |
+| `feature20` | `estes.feature20.mycarrier.dev` |
+| `feature20` + `domainOverride: integratedtm.dev` | `estes.feature20.integratedtm.dev` |
+
+> Note: `{{ $domain }}` does **not** resolve inside a host value (it is a template-internal
+> variable). Use `{{ include "helm.domain" $ }}` or the `helm.whitelabelHost` helper instead.
+
 ### Secrets Management
 
 The chart integrates with Vault for secrets management:

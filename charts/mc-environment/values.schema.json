@@ -118,6 +118,9 @@
         },
         "domainOverride": {
           "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/environment/properties/domainOverride"
+        },
+        "namespaceOverride": {
+          "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/environment/properties/namespaceOverride"
         }
       }
     },
@@ -311,13 +314,7 @@
       }
     },
     "infrastructure": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "azure": {
-          "$ref": "#/definitions/infrastructureAzure"
-        }
-      }
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/infrastructure"
     },
     "enableVaultCA": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/enableVaultCA"

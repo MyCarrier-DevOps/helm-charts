@@ -1,0 +1,167 @@
+suite: whitelabel host helper tests
+templates:
+  - virtualService.yaml
+tests:
+  - it: omits the env infix in dev
+    set:
+      environment.name: "dev"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - isKind:
+          of: VirtualService
+      - contains:
+          path: spec.hosts
+          content: estes.mycarrier.dev
+
+  - it: omits the env infix in prod (prod domain)
+    set:
+      environment.name: "prod"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: estes.mycarriertms.com
+
+  - it: omits the env infix in preprod
+    set:
+      environment.name: "preprod"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: estes.mycarrier.dev
+
+  - it: includes the env infix in a feature environment
+    set:
+      environment.name: "feature20"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: estes.feature20.mycarrier.dev
+
+  - it: includes the env infix in qa (skip-set boundary)
+    set:
+      environment.name: "qa"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: estes.qa.mycarrier.dev
+
+  - it: honors domainOverride on the infix branch
+    set:
+      environment.name: "feature20"
+      environment.domainOverride.enabled: true
+      environment.domainOverride.domain: "integratedtm.dev"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: estes.feature20.integratedtm.dev
+
+  - it: honors domainOverride on the no-infix branch
+    set:
+      environment.name: "dev"
+      environment.domainOverride.enabled: true
+      environment.domainOverride.domain: "integratedtm.dev"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: estes.integratedtm.dev
+
+  - it: coexists with staticHostname under a domainOverride
+    set:
+      environment.name: "dev"
+      environment.domainOverride.enabled: true
+      environment.domainOverride.domain: "integratedtm.dev"
+      applications.wl-api.deploymentType: deployment
+      applications.wl-api.isFrontend: false
+      applications.wl-api.staticHostname: "api"
+      applications.wl-api.image.registry: "r"
+      applications.wl-api.image.repository: "mycarrier/wl-api"
+      applications.wl-api.image.tag: "1.0.0"
+      applications.wl-api.ports.http: 8080
+      applications.wl-api.networking.ingress.type: "istio"
+      applications.wl-api.networking.istio.enabled: true
+      applications.wl-api.networking.istio.offloadOperatorEnabled: false
+      applications.wl-api.networking.istio.hosts:
+        - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: api.integratedtm.dev
+      - contains:
+          path: spec.hosts
+          content: estes.integratedtm.dev

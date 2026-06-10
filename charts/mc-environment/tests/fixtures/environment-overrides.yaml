@@ -1,0 +1,19 @@
+global:
+  appStack: carriers
+  gitbranch: main
+  language: nodejs
+environments:
+  - name: dev
+    environment:
+      dependencyenv: dev
+      namespaceOverride: platform-dev
+      domainOverride:
+        enabled: true
+        domain: example.dev
+    applications:
+      shipments-api:
+        staticHostname: api
+        image:
+          registry: ghcr.io
+          repository: mycarrier/shipments-api
+          tag: "1.12.3"

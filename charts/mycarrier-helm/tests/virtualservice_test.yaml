@@ -923,3 +923,25 @@ tests:
       - contains:
           path: spec.hosts
           content: teststack-test-app-feature-test-branch.dev.mycarrier.dev
+
+  - it: should combine staticHostname with an overridden domain
+    set:
+      environment.name: "prod"
+      environment.domainOverride.enabled: true
+      environment.domainOverride.domain: "custom.com"
+      applications.combo-api.deploymentType: deployment
+      applications.combo-api.isFrontend: false
+      applications.combo-api.staticHostname: "foo"
+      applications.combo-api.image.registry: "myregistry.example.com"
+      applications.combo-api.image.repository: "mycarrier/combo-api"
+      applications.combo-api.image.tag: "1.0.0"
+      applications.combo-api.ports.http: 8080
+      applications.combo-api.networking.ingress.type: "istio"
+      applications.combo-api.networking.istio.enabled: true
+      applications.combo-api.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - isKind:
+          of: VirtualService
+      - contains:
+          path: spec.hosts
+          content: foo.custom.com
