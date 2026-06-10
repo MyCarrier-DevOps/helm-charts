@@ -131,3 +131,28 @@ tests:
       - equal:
           path: spec.template.spec.syncPolicy.syncOptions[6]
           value: Replace=true
+  - it: forwards the environment block (dependencyenv, namespaceOverride, domainOverride)
+    values:
+      - fixtures/environment-overrides.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.environment.name
+          value: dev
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.environment.dependencyenv
+          value: dev
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.environment.namespaceOverride
+          value: platform-dev
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.environment.domainOverride.enabled
+          value: true
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.environment.domainOverride.domain
+          value: example.dev
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.applications.shipments-api.staticHostname
+          value: api
