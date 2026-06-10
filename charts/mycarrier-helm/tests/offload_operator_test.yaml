@@ -113,6 +113,31 @@ tests:
           path: spec.responseHeaders["X-Frame-Options"]
           value: "DENY"
 
+  - it: should interpolate tpl expressions in OffloadBase custom hosts
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+      applications.routetester.networking.istio.hosts:
+        - "tenant-{{ .Values.environment.name }}.example.com"
+    asserts:
+      - isKind:
+          of: OffloadBase
+      # Custom host runs through tpl, resolving the env placeholder rather than emitting it verbatim
+      - contains:
+          path: spec.hosts
+          content: tenant-dev.example.com
+      - notContains:
+          path: spec.hosts
+          content: "tenant-{{ .Values.environment.name }}.example.com"
+
   - it: should NOT render OffloadBase when offloadOperatorEnabled is explicitly false
     template: offloadBase.yaml
     set:

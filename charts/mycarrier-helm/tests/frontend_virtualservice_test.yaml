@@ -397,6 +397,67 @@ tests:
       - notExists:
           path: spec.http[2].destination
 
+  - it: should emit env-gated custom routes with interpolated host in offload VS
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "feature-abc"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              routes:
+                welcome:
+                  destination: "portal-{{ .Values.environment.name }}.shared.svc.cluster.local"
+                  match:
+                    - uri:
+                        prefix: /ui/welcome
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      # Main multifrontend VS + offload VS both render in a feature environment
+      - hasDocuments:
+          count: 2
+      # Offload VS (documentIndex 1) emits the custom route first, ahead of the default
+      - equal:
+          path: spec.http[0].name
+          value: welcome-offload-custom-route
+        documentIndex: 1
+      # Route is gated by the environment header so it cannot hijack shared traffic
+      - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: feature-abc
+        documentIndex: 1
+      - equal:
+          path: spec.http[0].match[0].uri.prefix
+          value: /ui/welcome
+        documentIndex: 1
+      # Destination override is interpolated through tpl
+      - equal:
+          path: spec.http[0].route[0].destination.host
+          value: portal-feature-abc.shared.svc.cluster.local
+        documentIndex: 1
+
   - it: should not include destination field in rendered route spec
     set:
       global:

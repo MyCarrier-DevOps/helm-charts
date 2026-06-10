@@ -705,6 +705,204 @@ tests:
           path: metadata.name
           value: teststack-test-app-feature-test-branch
 
+  # tpl interpolation tests — values-sourced host/route fields are run through `tpl`
+  # so `{{ }}` placeholders resolve against the render context instead of emitting verbatim.
+  - it: should interpolate tpl expressions in custom hosts
+    set:
+      environment.name: "dev"
+      applications.tpl-app.deploymentType: deployment
+      applications.tpl-app.isFrontend: false
+      applications.tpl-app.image.registry: "myregistry.example.com"
+      applications.tpl-app.image.repository: "mycarrier/tpl-app"
+      applications.tpl-app.image.tag: "1.0.0"
+      applications.tpl-app.ports.http: 8080
+      applications.tpl-app.networking.ingress.type: "istio"
+      applications.tpl-app.networking.istio.enabled: true
+      applications.tpl-app.networking.istio.hosts:
+        - "tenant-{{ .Values.environment.name }}.example.com"
+      applications.tpl-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - isKind:
+          of: VirtualService
+      # `{{ .Values.environment.name }}` resolves to the env name, not the literal placeholder
+      - contains:
+          path: spec.hosts
+          content: tenant-dev.example.com
+      - notContains:
+          path: spec.hosts
+          content: "tenant-{{ .Values.environment.name }}.example.com"
+
+  - it: should interpolate tpl expressions in custom route destination
+    set:
+      environment.name: "dev"
+      applications.tpl-app.deploymentType: deployment
+      applications.tpl-app.isFrontend: false
+      applications.tpl-app.image.registry: "myregistry.example.com"
+      applications.tpl-app.image.repository: "mycarrier/tpl-app"
+      applications.tpl-app.image.tag: "1.0.0"
+      applications.tpl-app.ports.http: 8080
+      applications.tpl-app.networking.ingress.type: "istio"
+      applications.tpl-app.networking.istio.enabled: true
+      applications.tpl-app.networking.istio.routes:
+        proxy:
+          destination: "svc-{{ .Values.environment.name }}.other-ns.svc.cluster.local"
+          match:
+            - uri:
+                prefix: /proxy
+      applications.tpl-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: proxy
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: "svc-dev.other-ns.svc.cluster.local"
+
+  - it: should interpolate tpl expressions in route match spec
+    set:
+      environment.name: "dev"
+      applications.tpl-app.deploymentType: deployment
+      applications.tpl-app.isFrontend: false
+      applications.tpl-app.image.registry: "myregistry.example.com"
+      applications.tpl-app.image.repository: "mycarrier/tpl-app"
+      applications.tpl-app.image.tag: "1.0.0"
+      applications.tpl-app.ports.http: 8080
+      applications.tpl-app.networking.ingress.type: "istio"
+      applications.tpl-app.networking.istio.enabled: true
+      applications.tpl-app.networking.istio.routes:
+        tenant-route:
+          match:
+            - uri:
+                prefix: /tenant
+              headers:
+                x-tenant:
+                  exact: "{{ .Values.environment.name }}"
+      applications.tpl-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: tenant-route
+      # Header value inside the route match spec is interpolated by tpl
+      - equal:
+          path: spec.http[1].match[0].headers.x-tenant.exact
+          value: dev
+
+  - it: should render custom routes and interpolated host in single-app offload VS
+    set:
+      environment.name: "feature-tpl"
+      applications.tpl-app.deploymentType: deployment
+      applications.tpl-app.isFrontend: false
+      applications.tpl-app.image.registry: "myregistry.example.com"
+      applications.tpl-app.image.repository: "mycarrier/tpl-app"
+      applications.tpl-app.image.tag: "1.0.0"
+      applications.tpl-app.ports.http: 8080
+      applications.tpl-app.networking.ingress.type: "istio"
+      applications.tpl-app.networking.istio.enabled: true
+      applications.tpl-app.networking.istio.hosts:
+        - "tenant-{{ .Values.environment.name }}.example.com"
+      applications.tpl-app.networking.istio.routes:
+        proxy:
+          match:
+            - uri:
+                prefix: /proxy
+      applications.tpl-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      # Both main VS and offload VS render in a feature environment
+      - hasDocuments:
+          count: 2
+      # Offload VS custom host is interpolated through tpl
+      - contains:
+          path: spec.hosts
+          content: tenant-feature-tpl.example.com
+        documentIndex: 1
+      # Custom route is emitted first, ahead of the catch-all
+      - equal:
+          path: spec.http[0].name
+          value: proxy
+        documentIndex: 1
+      - equal:
+          path: spec.http[0].route[0].destination.host
+          value: app-tpl-app-feature-tpl.feature-tpl.svc.cluster.local
+        documentIndex: 1
+      # Catch-all default route follows the custom route
+      - equal:
+          path: spec.http[1].name
+          value: app-tpl-app-feature-tpl
+        documentIndex: 1
+
+  # A route destination template that builds an FQDN from the environment name:
+  # the namespace segment is always the env name, while the hostname segment only
+  # gains a `-<env>` suffix outside the long-lived environments (prod/preprod/dev).
+  # Proves a single values entry renders correctly across every environment type.
+  - it: should suffix hostname and namespace via template in a feature environment
+    set:
+      environment:
+        name: "feature20"
+      applications: &tplFqdnApp
+        mycarrier-api:
+          deploymentType: deployment
+          isFrontend: false
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/mycarrier-api"
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            ingress:
+              type: "istio"
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+              routes:
+                passthrough:
+                  destination: 'mycarrier-api{{ if not (has .Values.environment.name (list "prod" "preprod" "dev")) }}-{{ .Values.environment.name }}{{ end }}.{{ .Values.environment.name }}.svc.cluster.local'
+                  match:
+                    - uri:
+                        prefix: /api
+    asserts:
+      - equal:
+          path: spec.http[1].name
+          value: passthrough
+        documentIndex: 0
+      # Non-reserved env: hostname gains -feature20 and namespace becomes feature20
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: mycarrier-api-feature20.feature20.svc.cluster.local
+        documentIndex: 0
+
+  - it: should not suffix hostname in dev while still setting the namespace
+    set:
+      environment:
+        name: "dev"
+      applications: *tplFqdnApp
+    asserts:
+      - equal:
+          path: spec.http[1].name
+          value: passthrough
+      # Reserved env: no hostname suffix, namespace segment is dev
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: mycarrier-api.dev.svc.cluster.local
+
+  - it: should not suffix hostname in prod while still setting the namespace
+    set:
+      environment:
+        name: "prod"
+      applications: *tplFqdnApp
+    asserts:
+      - equal:
+          path: spec.http[1].name
+          value: passthrough
+      # Reserved env: no hostname suffix, namespace segment is prod
+      - equal:
+          path: spec.http[1].route[0].destination.host
+          value: mycarrier-api.prod.svc.cluster.local
+
   - it: should render offload VS even when offloadOperator is enabled (no longer gated by it)
     set:
       global.appStack: teststack
