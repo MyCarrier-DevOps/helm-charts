@@ -171,8 +171,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: readme-generator-for-helm/package-lock.json
 
-      - name: Install readme-generator dependencies
-        run: cd readme-generator-for-helm && npm install
+      # - name: Install readme-generator dependencies
+      #   run: cd readme-generator-for-helm && npm install
 
       # - name: Generate README for chart
       #   run: |
