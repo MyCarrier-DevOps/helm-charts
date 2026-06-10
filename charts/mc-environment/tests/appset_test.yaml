@@ -156,3 +156,27 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.applications.shipments-api.staticHostname
           value: api
+  - it: merges per-environment global overrides over the base global
+    set:
+      global.appStack: Carriers
+      global.gitbranch: main
+      global.dependencies.redis: false
+      environments:
+        - name: dev
+          global:
+            gitbranch: dev
+            dependencies:
+              redis: true
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.gitbranch
+          value: dev
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.dependencies.redis
+          value: true
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.appStack
+          value: carriers

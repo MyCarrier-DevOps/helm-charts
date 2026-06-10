@@ -18,23 +18,9 @@ spec:
             - Values:
                 isEnvironmentDeploy: true
                 global:
-                  appStack: {{ $.Values.global.appStack | lower }}
-                  gitbranch: {{ $.Values.global.gitbranch }}
-                  branchlabel: {{ $.Values.global.branchlabel }}
-                  language: {{ $.Values.global.language }}
-                  v2migration: {{ $.Values.global.v2migration }}
-                  correlationId: {{ $.Values.global.correlationId | quote }}
-                  commitDeployed: {{ $.Values.global.commitDeployed | quote }}
-                  {{- $mergedEnv := deepCopy ($.Values.global.env | default dict) }}
-                  {{- if $env.global }}{{- if $env.global.env }}{{- $mergedEnv = mustMergeOverwrite $mergedEnv $env.global.env }}{{- end }}{{- end }}
-                  {{- if $mergedEnv }}
-                  env:
-                    {{- $mergedEnv | toYaml | nindent 20 }}
-                  {{- end }}
-                  {{ with $.Values.global.dependencies }}
-                  dependencies:
-                    {{- toYaml . | nindent 20 }}
-                  {{ end }}
+                  {{- $g := mustMergeOverwrite (deepCopy $.Values.global) ($env.global | default dict) }}
+                  {{- $_ := set $g "appStack" (lower ($g.appStack | default "")) }}
+                  {{- $g | toYaml | nindent 18 }}
                 environment:
                   {{- $envBlock := deepCopy ($env.environment | default dict) }}
                   {{- $_ := set $envBlock "name" $env.name }}
