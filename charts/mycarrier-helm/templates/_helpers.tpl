@@ -17,6 +17,18 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "helm.whitelabelHost" -}}
+{{- $label := required "helm.whitelabelHost requires a label" .label -}}
+{{- $ctx := .ctx -}}
+{{- $env := $ctx.Values.environment.name -}}
+{{- $domain := include "helm.domain" $ctx -}}
+{{- if has $env (list "prod" "preprod" "dev") -}}
+{{- printf "%s.%s" $label $domain -}}
+{{- else -}}
+{{- printf "%s.%s.%s" $label $env $domain -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "helm.domain.prefix" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
 {{- $ctx := .ctx -}}
