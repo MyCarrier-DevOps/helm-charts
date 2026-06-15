@@ -1,6 +1,8 @@
 {{- define "helm.lang.vars.csharp" -}}
 {{- $metaenv := (include "helm.metaEnvironment" . ) }}
 {{- if eq $metaenv "dev" }}
+- name: Auth_CustomerService_BaseUrl
+  value: "vault:secrets/data/dev/shared/auth_customerservice_baseurl#value"
 - name: Auth_IdentityApiKey_BaseUrl
   value: "vault:secrets/data/dev/shared/auth_identityapikey_baseurl#value"
 - name: Auth_MyCarrierCustomer_BaseUrl
@@ -15,6 +17,8 @@
   value: "Development"
 {{- end }}
 {{- if eq $metaenv "preprod" }}
+- name: Auth_CustomerService_BaseUrl
+  value: "vault:secrets/data/preprod/shared/auth_customerservice_baseurl#value"
 - name: Auth_IdentityApiKey_BaseUrl
   value: "vault:secrets/data/preprod/shared/auth_identityapikey_baseurl#value"
 - name: Auth_MyCarrierCustomer_BaseUrl
@@ -29,6 +33,8 @@
   value: "PreProd"
 {{- end }}
 {{- if eq $metaenv "prod" }}
+- name: Auth_CustomerService_BaseUrl
+  value: "vault:secrets/data/prod/shared/auth_customerservice_baseurl#value"
 - name: Auth_IdentityApiKey_BaseUrl
   value: "vault:secrets/data/prod/shared/auth_identityapikey_baseurl#value"
 - name: Auth_MyCarrierCustomer_BaseUrl
