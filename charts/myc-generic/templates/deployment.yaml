@@ -43,34 +43,40 @@ spec:
               protocol: {{ .protocol }}
               name: {{ .name }}
             {{- end }}
+          {{- with .Values.application.deployment.probes }}
+          {{- with .liveness }}
           livenessProbe:
-            {{- if eq (.Values.application.deployment.healthcheck.probeType | default "tcpSocket") "tcpSocket" }}
+            {{- if eq (.probeType | default "tcpSocket") "tcpSocket" }}
             tcpSocket:
-              port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
-            {{- else if eq .Values.application.deployment.healthcheck.probeType "httpGet" }}
+              port: {{ .port | default 8000 }}
+            {{- else if eq .probeType "httpGet" }}
             httpGet:
-              path: {{ .Values.application.deployment.healthcheck.path | default "/" }}
-              port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+              path: {{ .path | default "/" }}
+              port: {{ .port | default 8000 }}
             {{- end }}
-            initialDelaySeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.initialDelaySeconds | default 15 }}
-            periodSeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.application.deployment.healthcheck.livenessprobe.timeoutSeconds | default 3 }}
-            failureThreshold: {{ .Values.application.deployment.healthcheck.livenessprobe.failureThreshold | default 6 }}
-            successThreshold: {{ .Values.application.deployment.healthcheck.livenessprobe.successThreshold | default 1 }}
+            initialDelaySeconds: {{ .initialDelaySeconds | default 15 }}
+            periodSeconds: {{ .periodSeconds | default 10 }}
+            timeoutSeconds: {{ .timeoutSeconds | default 3 }}
+            failureThreshold: {{ .failureThreshold | default 6 }}
+            successThreshold: {{ .successThreshold | default 1 }}
+          {{- end }}
+          {{- with .readiness }}
           readinessProbe:
-            {{- if eq (.Values.application.deployment.healthcheck.probeType | default "tcpSocket") "tcpSocket" }}
+            {{- if eq (.probeType | default "tcpSocket") "tcpSocket" }}
             tcpSocket:
-              port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
-            {{- else if eq .Values.application.deployment.healthcheck.probeType "httpGet" }}
+              port: {{ .port | default 8000 }}
+            {{- else if eq .probeType "httpGet" }}
             httpGet:
-              path: {{ .Values.application.deployment.healthcheck.path | default "/" }}
-              port: {{ .Values.application.deployment.healthcheck.port | default 8000 }}
+              path: {{ .path | default "/" }}
+              port: {{ .port | default 8000 }}
             {{- end }}
-            initialDelaySeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.initialDelaySeconds | default 15 }}
-            periodSeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.application.deployment.healthcheck.readinessprobe.timeoutSeconds | default 3 }}
-            failureThreshold: {{ .Values.application.deployment.healthcheck.readinessprobe.failureThreshold | default 6 }}
-            successThreshold: {{ .Values.application.deployment.healthcheck.readinessprobe.successThreshold | default 1 }}
+            initialDelaySeconds: {{ .initialDelaySeconds | default 15 }}
+            periodSeconds: {{ .periodSeconds | default 10 }}
+            timeoutSeconds: {{ .timeoutSeconds | default 3 }}
+            failureThreshold: {{ .failureThreshold | default 6 }}
+            successThreshold: {{ .successThreshold | default 1 }}
+          {{- end }}
+          {{- end }}
           env:
           - name: APP_VERSION
             value: {{ .Values.image.tag | default .Chart.AppVersion }}

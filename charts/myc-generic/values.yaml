@@ -8,22 +8,25 @@ application:
   deploymentType: deployment
   deployment: 
     name: myApp
-    healthcheck:
-      path: "/healthz"
-      port: 8080
-      probeType: tcpSocket # or httpGet
-      livenessprobe: 
+    probes:
+      liveness: 
         initialDelaySeconds: 15
         periodSeconds: 30
         timeoutSeconds: 3
         failureThreshold: 6
         successThreshold: 1
-      readinessprobe:
+        path: "/healthz"
+        port: 8080
+        probeType: tcpSocket # or httpGet
+      readiness:
         initialDelaySeconds: 15
         periodSeconds: 30
         timeoutSeconds: 3
         failureThreshold: 6
         successThreshold: 1
+        path: "/readyz"
+        port: 8080
+        probeType: tcpSocket # or httpGet
   cronjob:
     name: myCronJob
     suspend: false
