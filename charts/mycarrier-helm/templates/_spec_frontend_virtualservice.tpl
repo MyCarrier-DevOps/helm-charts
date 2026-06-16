@@ -19,6 +19,7 @@ hosts:
 {{- $primaryAppValues := index $frontendApps $primaryApp }}
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
 {{- $baseFullName := include "helm.basename" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
+{{- include "helm.assertExternalHostConfig" (dict "appName" $primaryApp "application" $primaryAppValues) }}
 - {{ $fullName }}
 {{- if and $metaenv (not $isFeatureEnv) }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
@@ -26,11 +27,14 @@ hosts:
 {{- if $isFeatureEnv }}
 - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
 {{- end }}
-{{- if and (not $primaryAppValues.staticHostname) (not $isFeatureEnv) }}
+{{- if not $isFeatureEnv }}
+{{- if (dig "useRootDomain" false $primaryAppValues) }}
+- {{ $domain }}
+{{- else if $primaryAppValues.staticHostname }}
+- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}
+{{- else }}
 - {{ (list ($.Values.global.appStack) ("frontend")) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}
 {{- end }}
-{{- if and ($primaryAppValues.staticHostname) (not $isFeatureEnv) }}
-- {{ $primaryAppValues.staticHostname | trimSuffix "."}}.{{ $domain }}
 {{- end }}
 {{- /* Include additional custom hosts from primary app's networking.istio.hosts */ -}}
 {{- $istioConfig := dig "networking" "istio" dict $primaryAppValues -}}
@@ -157,10 +161,10 @@ http:
 - name: {{ $key }}-redirect
   match:
   - authority:
-      prefix: {{ if and (not (contains "prod" $namespace)) (not $appValues.staticHostname) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
+      prefix: {{ if and (not (contains "prod" $namespace)) (not $appValues.staticHostname) (not (dig "useRootDomain" false $appValues)) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
   redirect:
     uri: /
-    authority: {{ if and (not (contains "prod" $namespace)) (not $appValues.staticHostname) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
+    authority: {{ if and (not (contains "prod" $namespace)) (not $appValues.staticHostname) (not (dig "useRootDomain" false $appValues)) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
 {{- end }}
 {{- end }}
 {{- end }}
