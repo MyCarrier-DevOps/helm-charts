@@ -14,8 +14,6 @@ The cached version should be used in loops to avoid recomputation.
 {{- $_ := set $defaults "correlationId" "" -}}
 {{/* forceAutoscaling has no default - nil means "not set" and allows prod auto-scaling */}}
 
-{{- $context := deepCopy . -}}
-
 {{/* Get environment name if available, otherwise use default */}}
 {{- if and .Values .Values.environment .Values.environment.name -}}
   {{- $_ := set $defaults "environmentName" .Values.environment.name -}}
@@ -46,12 +44,13 @@ The cached version should be used in loops to avoid recomputation.
   {{- $_ := set $defaults "forceAutoscaling" .Values.global.forceAutoscaling -}}
 {{- end -}}
 
-{{/* Add defaults to context */}}
+{{/* Assemble a SLIM context: only defaults + chartDefaults. Deliberately does NOT carry a
+     deepCopy of the whole root (.Values) — serializing and re-parsing the full values tree on
+     every helm.context call (53+ call sites) was the dominant chart-render cost. Callers read
+     only .defaults.* and .chartDefaults.* off .ctx; root values are accessed off the original
+     context object, never via .ctx. */}}
 {{- $chartDefaults := include "helm.chartDefaults.raw" . | fromJson -}}
-{{- $_ := set $context "defaults" $defaults -}}
-{{- $_ := set $context "chartDefaults" $chartDefaults -}}
-
-{{- $context | toJson -}}
+{{- dict "defaults" $defaults "chartDefaults" $chartDefaults | toJson -}}
 {{- end -}}
 
 {{/*
