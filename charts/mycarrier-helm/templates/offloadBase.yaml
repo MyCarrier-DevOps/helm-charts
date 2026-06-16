@@ -31,12 +31,15 @@ spec:
   serviceName: {{ $baseFullName }}
   port: {{ default 8080 (dig "ports" "http" nil $appValues) }}
   creationPolicy: {{ dig "networking" "istio" "offloadCreationPolicy" "CreateOrAdopt" $appValues }}
+  {{- include "helm.assertExternalHostConfig" (dict "appName" $appName "application" $appValues) }}
   hosts:
   - {{ $baseFullName }}
   {{- if $internalEnabled }}
   - {{ $baseFullName }}.{{ $metaenv }}.internal
   {{- end }}
-  {{- if $appValues.staticHostname }}
+  {{- if (dig "useRootDomain" false $appValues) }}
+  - {{ $domain }}
+  {{- else if $appValues.staticHostname }}
   - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
   {{- else }}
   - {{ (list ($.Values.global.appStack) ($appName)) | join "-" | lower | trunc 63 | trimSuffix "-" }}.{{ $domainPrefix }}.{{ $domain }}

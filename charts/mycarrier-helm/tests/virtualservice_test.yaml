@@ -945,3 +945,94 @@ tests:
       - contains:
           path: spec.hosts
           content: foo.custom.com
+
+  - it: should publish at the apex domain when useRootDomain is true (prod)
+    set:
+      environment.name: "prod"
+      global.appStack: "test"
+      applications.apex-app.deploymentType: deployment
+      applications.apex-app.isFrontend: false
+      applications.apex-app.useRootDomain: true
+      applications.apex-app.image.registry: "myregistry.example.com"
+      applications.apex-app.image.repository: "mycarrier/apex-app"
+      applications.apex-app.image.tag: "1.0.0"
+      applications.apex-app.ports.http: 8080
+      applications.apex-app.networking.ingress.type: "istio"
+      applications.apex-app.networking.istio.enabled: true
+      applications.apex-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - isKind:
+          of: VirtualService
+      # external host is the bare apex domain, not the generated appstack-app host
+      - contains:
+          path: spec.hosts
+          content: mycarriertms.com
+      - notContains:
+          path: spec.hosts
+          content: test-apex-app.api.mycarriertms.com
+
+  - it: should ignore useRootDomain in feature environments
+    set:
+      environment.name: "feature-x"
+      global.appStack: "test"
+      applications.apex-app.deploymentType: deployment
+      applications.apex-app.isFrontend: false
+      applications.apex-app.useRootDomain: true
+      applications.apex-app.image.registry: "myregistry.example.com"
+      applications.apex-app.image.repository: "mycarrier/apex-app"
+      applications.apex-app.image.tag: "1.0.0"
+      applications.apex-app.ports.http: 8080
+      applications.apex-app.networking.ingress.type: "istio"
+      applications.apex-app.networking.istio.enabled: true
+      applications.apex-app.networking.istio.offloadOperatorEnabled: false
+      applications.apex-app.networking.istio.offloadVSEnabled: false
+    asserts:
+      # feature env keeps its normal feature hostname; the bare apex is NOT emitted
+      - contains:
+          path: spec.hosts
+          content: test-apex-app-feature-x.dev.mycarrier.dev
+        documentIndex: 0
+      - notContains:
+          path: spec.hosts
+          content: mycarrier.dev
+        documentIndex: 0
+
+  - it: should honor domainOverride for the apex host
+    set:
+      environment.name: "prod"
+      global.appStack: "test"
+      environment.domainOverride.enabled: true
+      environment.domainOverride.domain: "custom.com"
+      applications.apex-app.deploymentType: deployment
+      applications.apex-app.isFrontend: false
+      applications.apex-app.useRootDomain: true
+      applications.apex-app.image.registry: "myregistry.example.com"
+      applications.apex-app.image.repository: "mycarrier/apex-app"
+      applications.apex-app.image.tag: "1.0.0"
+      applications.apex-app.ports.http: 8080
+      applications.apex-app.networking.ingress.type: "istio"
+      applications.apex-app.networking.istio.enabled: true
+      applications.apex-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - contains:
+          path: spec.hosts
+          content: custom.com
+
+  - it: should fail the render when both useRootDomain and staticHostname are set
+    set:
+      environment.name: "prod"
+      global.appStack: "test"
+      applications.apex-app.deploymentType: deployment
+      applications.apex-app.isFrontend: false
+      applications.apex-app.useRootDomain: true
+      applications.apex-app.staticHostname: "foo"
+      applications.apex-app.image.registry: "myregistry.example.com"
+      applications.apex-app.image.repository: "mycarrier/apex-app"
+      applications.apex-app.image.tag: "1.0.0"
+      applications.apex-app.ports.http: 8080
+      applications.apex-app.networking.ingress.type: "istio"
+      applications.apex-app.networking.istio.enabled: true
+      applications.apex-app.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: 'application "apex-app": set either useRootDomain or staticHostname, not both'

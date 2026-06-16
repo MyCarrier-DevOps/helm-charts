@@ -510,3 +510,48 @@ tests:
       # destination should NOT leak as a top-level field on the http route
       - notExists:
           path: spec.http[2].destination
+
+  - it: should publish the multifrontend VS at the apex domain when the primary app uses useRootDomain
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "prod"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          useRootDomain: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      # primary app published at the bare apex domain
+      - contains:
+          path: spec.hosts
+          content: mycarriertms.com
+      - notContains:
+          path: spec.hosts
+          content: test-stack-frontend.api.mycarriertms.com

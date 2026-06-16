@@ -16,6 +16,7 @@
 {{- $envName := $.Values.environment.name -}}
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true .application -}}
+{{- include "helm.assertExternalHostConfig" (dict "appName" .appName "application" .application) -}}
 hosts:
 - {{ $fullName }}
 {{- if and $metaenv (not $isFeatureEnv) $internalEnabled }}
@@ -26,6 +27,8 @@ hosts:
 {{- if and .application.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
 - {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}
 {{- end }}
+{{- else if (dig "useRootDomain" false .application) }}
+- {{ $domain }}
 {{- else if .application.staticHostname }}
 - {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}
 {{- else }}
@@ -62,10 +65,10 @@ http:
 - name: {{ $key }}
   match:
   - authority:
-      prefix: {{ if and (not (contains "prod" $namespace)) ( not $.application.staticHostname) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
+      prefix: {{ if and (not (contains "prod" $namespace)) ( not $.application.staticHostname) (not (dig "useRootDomain" false $.application)) }}{{ $namespace }}-{{ end }}{{ $key }}.{{ $domain }}
   redirect:
     uri: /
-    authority: {{ if and (not (contains "prod" $namespace)) ( not $.application.staticHostname) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
+    authority: {{ if and (not (contains "prod" $namespace)) ( not $.application.staticHostname) (not (dig "useRootDomain" false $.application)) }}{{ $namespace }}-{{ end }}{{ $value }}.{{ $domain }}
 {{- end }}
 {{- end }}
 {{- if and .application.networking .application.networking.istio .application.networking.istio.routes }}

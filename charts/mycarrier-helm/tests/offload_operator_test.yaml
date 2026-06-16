@@ -293,3 +293,26 @@ tests:
           count: 1
       - isKind:
           of: OffloadRoute
+
+  - it: should publish OffloadBase at the apex domain when useRootDomain is true
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.apex.deploymentType: deployment
+      applications.apex.image.registry: "myregistry.example.com"
+      applications.apex.image.repository: "mycarrier/apex"
+      applications.apex.image.tag: "1.0.0"
+      applications.apex.ports.http: 8080
+      applications.apex.useRootDomain: true
+      applications.apex.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - isKind:
+          of: OffloadBase
+      - contains:
+          path: spec.hosts
+          content: mycarrier.dev
+      - notContains:
+          path: spec.hosts
+          content: devopstest-apex.dev.mycarrier.dev

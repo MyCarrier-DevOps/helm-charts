@@ -17,6 +17,16 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Validate an application's external-host configuration. useRootDomain (publish at the apex
+     domain with no hostname) and staticHostname are mutually exclusive; setting both is a
+     misconfiguration and fails the render with a clear message.
+     Usage: {{ include "helm.assertExternalHostConfig" (dict "appName" $name "application" $values) }} */}}
+{{- define "helm.assertExternalHostConfig" -}}
+{{- if and (dig "useRootDomain" false .application) (dig "staticHostname" "" .application) -}}
+{{- fail (printf "application %q: set either useRootDomain or staticHostname, not both" .appName) -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Build a whitelabel VirtualService host from a label and the environment-resolved domain.
      Renders <label>.<domain> in prod/preprod/dev and <label>.<env>.<domain> elsewhere.
      Call from a (tpl-evaluated) networking.istio.hosts entry:
