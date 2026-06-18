@@ -129,3 +129,32 @@ environments:
         selfHeal: true
       syncOptions:
         - ApplyOutOfSyncOnly=true
+
+  # A custom environment. "demo" is not one of the built-in names
+  # (dev/preprod/prod/qa/uat/feature-*), but any DNS-1123 label is now an
+  # allowed environment name. It is treated as a generic environment (its own
+  # "demo" namespace and hostnames), so supply its configuration explicitly via
+  # global.env / application.env / secrets — the same way qa/uat are configured.
+  - name: demo
+    global:
+      gitbranch: main
+      dependencies:
+        redis: true
+        postgres: true
+      env:
+        AuthEnvironment: Preprod
+        MyCarrierServiceBusNamespace: inf-preprod-servicebus.servicebus.windows.net
+    environment:
+      dependencyenv: preprod
+    applications:
+      shipments-api:
+        image:
+          registry: ghcr.io
+          repository: ghcr.io/mycarrier/shipments-api
+          tag: "1.12.3"
+        service:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 80
+              targetPort: 8080

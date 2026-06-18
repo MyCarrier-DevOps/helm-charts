@@ -50,7 +50,7 @@ global:
 ## @section Environment Settings
 ## Environment-specific settings
 
-## @param environment.name Environment name (dev, preprod, prod, or feature-*)
+## @param environment.name Environment name / namespace (DNS-1123 label). Standard names (dev, preprod, prod, qa, uat, feature-*) have built-in behavior; any other name (e.g. demo) is allowed and treated as a generic environment — configure it explicitly via global.env / application.env / secrets (the same way qa/uat are configured).
 ## @param environment.namespaceOverride Override the Kubernetes namespace (defaults to environment.name if not set)
 ## @param environment.dependencyenv Environment name for dependencies
 ## @extra environment.domainOverride Domain override configuration
