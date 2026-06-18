@@ -1,0 +1,197 @@
+suite: Environment Tier Tests
+templates:
+  - deployment.yaml
+  - keda-scaledobject.yaml
+  - virtualService.yaml
+  - autoscaler.yaml
+tests:
+  # --- Tier drives secrets/auth (preprod-tier "demo" behaves like preprod) ---
+  - it: preprod-tier demo resolves auth + vault paths to preprod
+    template: deployment.yaml
+    set:
+      global:
+        appStack: "s"
+        language: "csharp"
+        dependencies:
+          mongodb: true
+      environment:
+        name: "demo"
+        tier: "preprod"
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: AuthEnvironment, value: "PreProd" }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: Auth_Environment, value: "PreProd" }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MongoConnection_preprod
+            value: "vault:secrets/data/preprod/s/shared/mongodb-s-preprod#value"
+      # Identity is preserved: the app still knows its own env name, not the tier
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: ComputedEnvironmentName, value: "demo" }
+
+  - it: preprod-tier demo resolves individual secret path to preprod
+    template: deployment.yaml
+    set:
+      global: { appStack: "s", language: "csharp" }
+      environment: { name: "demo", tier: "preprod" }
+      secrets:
+        individual:
+          - envVarName: MySecret
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MySecret
+            value: "vault:secrets/data/preprod/s/MySecret#value"
+
+  - it: preprod-tier demo resolves KEDA clusterAuthRef to preprod
+    template: keda-scaledobject.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo", tier: "preprod" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+        keda: { enabled: true, type: queue, queueName: myqueue }
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-preprod
+
+  # --- Tier drives routing mode (isSimpleEnvironment) ---
+  - it: preprod-tier demo uses simple catch-all routing and an identity-scoped header
+    template: virtualService.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo", tier: "preprod" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+        ports: { http: 8080 }
+        networking:
+          istio:
+            enabled: true
+            offloadOperatorEnabled: false
+            hosts: ["a.example.com"]
+    asserts:
+      # The environment header identifies THIS env by name (not the preprod qa/uat regex)
+      - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: demo
+      # Simple env => the default route is an unconditional catch-all (no match block)
+      - notExists:
+          path: spec.http[1].match
+
+  # --- Tier drives autoscaling (envScaling) ---
+  - it: preprod-tier demo does not create an HPA (autoscaling off, like preprod)
+    template: autoscaler.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo", tier: "preprod" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: prod-tier demo creates an HPA (autoscaling on, like prod)
+    template: autoscaler.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo", tier: "prod" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HorizontalPodAutoscaler
+
+  # --- Identity stays keyed on the env name, not the tier ---
+  - it: namespace stays the env name regardless of tier
+    template: deployment.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo", tier: "preprod" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: demo
+
+  # --- Backward compatibility: unset tier == current logic (falls back to metaEnvironment) ---
+  - it: standard name without tier keeps current behavior (preprod paths)
+    template: deployment.yaml
+    set:
+      global:
+        appStack: "s"
+        language: "csharp"
+        dependencies: { mongodb: true }
+      environment:
+        name: "preprod"
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MongoConnection_preprod
+            value: "vault:secrets/data/preprod/s/shared/mongodb-s-preprod#value"
+
+  - it: feature env without tier still maps to dev (metaEnvironment fallback)
+    template: deployment.yaml
+    set:
+      global:
+        appStack: "s"
+        language: "csharp"
+        dependencies: { mongodb: true }
+      environment:
+        name: "feature99"
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MongoConnection_dev
+            value: "vault:secrets/data/dev/s/shared/mongodb-s-dev#value"
+
+  # --- Schema / validation guards ---
+  - it: a non-standard name requires an explicit tier
+    template: deployment.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - failedTemplate: {}
+
+  - it: an invalid tier value is rejected
+    template: deployment.yaml
+    set:
+      global: { appStack: "s", language: "nodejs" }
+      environment: { name: "demo", tier: "bogus" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - failedTemplate: {}

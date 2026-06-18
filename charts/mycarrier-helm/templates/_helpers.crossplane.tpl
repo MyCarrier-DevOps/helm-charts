@@ -105,7 +105,7 @@ Output: inf-{metaEnv} (e.g., inf-dev, inf-preprod, inf-prod)
 Usage: {{ include "helm.azure.resourceGroup.defaultName" (dict "root" $root) }}
 */}}
 {{- define "helm.azure.resourceGroup.defaultName" -}}
-{{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- $metaEnv := include "helm.environmentTier" .root -}}
 {{- printf "inf-%s" $metaEnv -}}
 {{- end -}}
 
@@ -117,7 +117,7 @@ Note: prod uses the Premium-tier namespace inf-prod-servicebus-prem.
 Usage: {{ include "helm.azure.servicebus.name" (dict "root" $root) }}
 */}}
 {{- define "helm.azure.servicebus.name" -}}
-{{- $metaEnv := include "helm.metaEnvironment" .root -}}
+{{- $metaEnv := include "helm.environmentTier" .root -}}
 {{- if eq $metaEnv "prod" -}}
 {{- printf "inf-%s-servicebus-prem" $metaEnv -}}
 {{- else -}}

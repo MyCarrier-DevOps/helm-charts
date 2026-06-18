@@ -73,6 +73,32 @@
 {{- end -}}
 
 {{/*
+Resolve the behavioral environment "tier" — the profile that drives secrets, auth, scaling and
+routing mode (as opposed to identity: namespace/hostnames, which stay keyed on the env name via
+helm.metaEnvironment).
+
+- If environment.tier is explicitly set, it is validated against dev|preprod|prod and returned.
+  This lets a new namespace (e.g. "demo") behave like an existing tier (e.g. preprod) while keeping
+  its own name/namespace/hosts.
+- If environment.tier is NOT set, this falls back to helm.metaEnvironment, so every existing
+  environment renders byte-identical (the tier mechanism is strictly opt-in).
+*/}}
+{{- define "helm.environmentTier" -}}
+{{- $tier := "" -}}
+{{- if and .Values .Values.environment .Values.environment.tier -}}
+{{- $tier = .Values.environment.tier -}}
+{{- end -}}
+{{- if $tier -}}
+{{- if not (has $tier (list "dev" "preprod" "prod")) -}}
+{{- fail (printf "environment.tier %q is invalid; must be one of dev, preprod, prod" $tier) -}}
+{{- end -}}
+{{- $tier -}}
+{{- else -}}
+{{- include "helm.metaEnvironment" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Helper to get the environment header value for routing.
 - For preprod environment, returns a regex pattern matching "preprod", "uat", or "qa"
 - For feature environments, the actual environment name is used (e.g., "feature20")
@@ -109,7 +135,7 @@ Simple environments don't require complex header-based routing with withoutHeade
 They use a straightforward default route without header matching requirements.
 */}}
 {{- define "helm.isSimpleEnvironment" -}}
-{{- $metaenv := include "helm.metaEnvironment" . -}}
+{{- $metaenv := include "helm.environmentTier" . -}}
 {{- if or (eq $metaenv "prod") (eq $metaenv "preprod") -}}
 {{- printf "true" -}}
 {{- else -}}

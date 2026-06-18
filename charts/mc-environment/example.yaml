@@ -129,3 +129,30 @@ environments:
         selfHeal: true
       syncOptions:
         - ApplyOutOfSyncOnly=true
+
+  # A non-standard environment. "demo" is not one of the built-in names
+  # (dev/preprod/prod/qa/uat/feature-*), so it MUST declare environment.tier.
+  # With tier: preprod it behaves exactly like preprod — shares preprod's
+  # secrets, auth and backing services, no autoscaling, simple catch-all
+  # routing — while keeping its own "demo" namespace and hostnames.
+  - name: demo
+    global:
+      gitbranch: main
+      dependencies:
+        redis: true
+        postgres: true
+    environment:
+      tier: preprod
+      dependencyenv: preprod
+    applications:
+      shipments-api:
+        image:
+          registry: ghcr.io
+          repository: ghcr.io/mycarrier/shipments-api
+          tag: "1.12.3"
+        service:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 80
+              targetPort: 8080

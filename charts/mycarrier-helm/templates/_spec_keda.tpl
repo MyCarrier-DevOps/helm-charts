@@ -32,7 +32,7 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
 {{- $kedaDefaults := $ctx.chartDefaults.keda -}}
 {{- $kedaConfig := .application.keda -}}
 {{/* Resolve clusterAuthRef: use configured value or default based on environment */}}
-{{- $metaEnv := include "helm.metaEnvironment" . | trim -}}
+{{- $metaEnv := include "helm.environmentTier" . | trim -}}
 {{- $defaultClusterAuthRef := printf "servicebus-connectionstring-%s" $metaEnv -}}
 {{- $clusterAuthRef := dig "clusterAuthRef" $defaultClusterAuthRef $kedaConfig -}}
 {{/* Compute min/max replica counts - use kindIs "invalid" to allow 0 */}}

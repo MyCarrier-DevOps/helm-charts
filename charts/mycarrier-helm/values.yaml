@@ -50,7 +50,8 @@ global:
 ## @section Environment Settings
 ## Environment-specific settings
 
-## @param environment.name Environment name (dev, preprod, prod, or feature-*)
+## @param environment.name Environment name / namespace (DNS-1123 label). Standard names (dev, preprod, prod, qa, uat, feature-*) work with no tier; any other name (e.g. demo, prod-acme) is allowed but MUST set environment.tier.
+## @param environment.tier [string,nullable] Behavioral environment tier (dev, preprod, prod). Drives secrets, auth, scaling and routing mode while identity (name/namespace/hostnames) stays keyed on environment.name. Optional for standard names (derived from the name); REQUIRED for any non-standard name. A new namespace "demo" with tier "preprod" behaves like preprod (shares preprod secrets/backing services) but keeps its own namespace and hostnames.
 ## @param environment.namespaceOverride Override the Kubernetes namespace (defaults to environment.name if not set)
 ## @param environment.dependencyenv Environment name for dependencies
 ## @extra environment.domainOverride Domain override configuration
@@ -58,6 +59,7 @@ global:
 ## @param environment.domainOverride.domain Domain to use when override is enabled
 environment:
   name: "dev"
+  # tier: ""              # dev | preprod | prod — required only for non-standard names
   namespaceOverride: ""
   dependencyenv: "dev"
   domainOverride:
