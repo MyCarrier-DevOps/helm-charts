@@ -44,25 +44,11 @@
     "environment": {
       "type": "object",
       "required": ["name"],
-      "if": {
-        "properties": {
-          "name": { "pattern": "^(dev|preprod|prod|qa|uat|feature.+)$" }
-        }
-      },
-      "then": {},
-      "else": {
-        "required": ["tier"]
-      },
       "properties": {
         "name": {
           "type": "string",
-          "description": "Environment name / namespace (DNS-1123 label). The standard names dev, preprod, prod, qa, uat and feature* keep their built-in behavior with no tier required. Any other name (e.g. demo, prod-acme) is allowed but MUST set environment.tier to declare which behavioral profile it uses.",
+          "description": "Environment name / namespace (DNS-1123 label). The standard names dev, preprod, prod, qa, uat and feature* have built-in behavior; any other name (e.g. demo) is allowed and treated as a generic environment, so supply its configuration explicitly via global.env / application.env / secrets (the same way qa/uat are configured).",
           "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-        },
-        "tier": {
-          "type": "string",
-          "description": "Behavioral environment tier. Drives secrets, auth, scaling and routing mode, while identity (name/namespace/hostnames) stays keyed on environment.name. Optional for the standard names (defaults to a value derived from the name); REQUIRED for any non-standard name.",
-          "enum": ["dev", "preprod", "prod"]
         },
         "namespaceOverride": {
           "oneOf": [

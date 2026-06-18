@@ -142,13 +142,11 @@
 {{- if not $ctx -}}
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
+{{- $envName := $ctx.defaults.environmentName -}}
 {{- $forceAutoscaling := $ctx.defaults.forceAutoscaling -}}
-{{- $tier := include "helm.environmentTier" . -}}
 
-{{/* environmentTier already maps feature-* -> dev, so the explicit hasPrefix "feature" clause
-     is no longer needed: dev/preprod tiers (and feature, which resolves to dev) skip autoscaling. */}}
 {{- $envList := list "dev" "preprod" -}}
-{{- if and (has $tier $envList) (not $forceAutoscaling) -}}
+{{- if and (or (has $envName $envList) (hasPrefix "feature" $envName)) (not $forceAutoscaling) -}}
   {{- 0 -}}
 {{- else -}}
   {{- 1 -}}

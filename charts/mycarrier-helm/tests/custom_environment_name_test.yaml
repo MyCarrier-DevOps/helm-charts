@@ -1,0 +1,47 @@
+suite: Custom Environment Name Tests
+templates:
+  - deployment.yaml
+tests:
+  - it: allows a non-standard environment name and uses it as the namespace
+    set:
+      global: { appStack: s, language: nodejs }
+      environment: { name: demo }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.namespace
+          value: demo
+
+  - it: a custom environment is configured via user-provided env (like qa/uat)
+    set:
+      global:
+        appStack: s
+        language: nodejs
+        env:
+          AuthEnvironment: "Preprod"
+          MyCarrierServiceBusNamespace: "inf-preprod-servicebus.servicebus.windows.net"
+      environment: { name: demo }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: AuthEnvironment, value: "Preprod" }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MyCarrierServiceBusNamespace, value: "inf-preprod-servicebus.servicebus.windows.net" }
+
+  - it: rejects an invalid environment name (not a DNS-1123 label)
+    set:
+      global: { appStack: s, language: nodejs }
+      environment: { name: "Demo_Env" }
+      applications.a:
+        deploymentType: deployment
+        image: { registry: r, repository: a, tag: "1.0.0" }
+    asserts:
+      - failedTemplate: {}

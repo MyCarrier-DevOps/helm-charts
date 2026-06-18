@@ -17,7 +17,7 @@ vault.security.banzaicloud.io/vault-env-from-path: "{{ .Values.secrets.bulk.path
 {{- define "helm.vault" -}}
 {{- $fullname := (include "helm.fullname" . ) }}
 {{- $envDependency := (include "helm.envDependency" . ) }}
-{{- $metaenv := (include "helm.environmentTier" . ) }}
+{{- $metaenv := (include "helm.metaEnvironment" . ) }}
 {{- if and .Values (hasKey .Values "secrets") (hasKey .Values.secrets "individual") }}
 {{- range .Values.secrets.individual }}
 {{- $keyname := .keyName | default "value"}}

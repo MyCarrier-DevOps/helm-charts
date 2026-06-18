@@ -1242,8 +1242,7 @@ When contributing to this chart, please follow the coding standards defined in t
 
 | Name                                 | Description                                                                                                     | Value         |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------- |
-| `environment.name`                   | Environment name / namespace (DNS-1123 label). Standard names (dev, preprod, prod, qa, uat, feature-*) work with no tier; any other name (e.g. demo, prod-acme) is allowed but MUST set environment.tier. | `dev`         |
-| `environment.tier`                   | Behavioral environment tier (dev, preprod, prod). Drives secrets, auth, scaling and routing mode while identity (name/namespace/hostnames) stays keyed on environment.name. Optional for standard names (derived from the name); REQUIRED for any non-standard name. | `nil`         |
+| `environment.name`                   | Environment name / namespace (DNS-1123 label). Standard names (dev, preprod, prod, qa, uat, feature-*) have built-in behavior; any other name (e.g. demo) is allowed and treated as a generic environment — configure it explicitly via global.env / application.env / secrets (the same way qa/uat are configured). | `dev`         |
 | `environment.namespaceOverride`      | Override the Kubernetes namespace (defaults to environment.name if not set)                                     | `""`          |
 | `environment.dependencyenv`          | Environment name for dependencies                                                                               | `dev`         |
 | `environment.domainOverride`         | Domain override configuration                                                                                   |               |

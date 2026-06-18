@@ -1,5 +1,5 @@
 {{- define "helm.lang.vars.csharp" -}}
-{{- $metaenv := (include "helm.environmentTier" . ) }}
+{{- $metaenv := (include "helm.metaEnvironment" . ) }}
 {{- if eq $metaenv "dev" }}
 - name: Auth_CustomerService_BaseUrl
   value: "vault:secrets/data/dev/shared/auth_customerservice_baseurl#value"
@@ -187,7 +187,7 @@
   value: "false"
 {{- end -}}
 {{- define "helm.lang.vars.js" -}}
-{{- $metaenv := (include "helm.environmentTier" . ) }}
+{{- $metaenv := (include "helm.metaEnvironment" . ) }}
 {{- if eq $metaenv "dev" }}
 {{- end }}
 {{- if eq $metaenv "preprod" }}
