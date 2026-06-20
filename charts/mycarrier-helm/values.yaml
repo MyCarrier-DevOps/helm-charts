@@ -340,6 +340,7 @@ applications: {}
 #       #     name: my-cue-defs
 #       #     key: defs.cue
 #       additionalEndpoints: []           # optional; endpoints not in the OpenAPI doc (liveness/readiness). Matches KrakenDAutoConfigSpec.AdditionalEndpoints
+#       additionalEndpointsBasePath: /api/v1/quote   # optional; overrides the operator's auto-derived base path for additionalEndpoints
 #       # additionalEndpoints:
 #       #   - endpoint: /liveness         # required (must start with /)
 #       #     encoding: no-op             # optional; no-op for pass-through health checks

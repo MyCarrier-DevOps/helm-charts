@@ -377,6 +377,7 @@ tests:
       applications.api.networking.krakend.additionalEndpoints:
         - endpoint: /liveness
           encoding: no-op
+      applications.api.networking.krakend.additionalEndpointsBasePath: /api/v1/quote
     asserts:
       - equal:
           path: spec.defaults.endpoint.timeout
@@ -399,6 +400,9 @@ tests:
       - equal:
           path: spec.additionalEndpoints[0].encoding
           value: no-op
+      - equal:
+          path: spec.additionalEndpointsBasePath
+          value: /api/v1/quote
 
   - it: should honor autoConfigNamespace override
     set:

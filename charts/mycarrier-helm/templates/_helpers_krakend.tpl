@@ -316,4 +316,8 @@ cue:
 additionalEndpoints:
 {{ toYaml $krakend.additionalEndpoints | indent 2 }}
 {{- end }}
+{{- /* additionalEndpointsBasePath passthrough — overrides the operator's auto-derived base path for scoping additionalEndpoints */ -}}
+{{- if hasKey $krakend "additionalEndpointsBasePath" }}
+additionalEndpointsBasePath: {{ $krakend.additionalEndpointsBasePath | quote }}
+{{- end }}
 {{- end -}}
