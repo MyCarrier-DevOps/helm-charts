@@ -1034,6 +1034,10 @@
                             "endpoint": { "type": "string" }
                           }
                         }
+                      },
+                      "additionalEndpointsBasePath": {
+                        "type": "string",
+                        "description": "Overrides the operator's auto-derived base path used to scope additionalEndpoints under the application. Must start with '/'. Mirrors KrakenDAutoConfigSpec.AdditionalEndpointsBasePath."
                       }
                     }
                   }
