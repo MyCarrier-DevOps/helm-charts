@@ -162,20 +162,22 @@ http:
     attempts: {{ dig "service" "attempts" $serviceDefaults.attempts .application }}
     perTryTimeout: {{ dig "service" "perTryTimeout" $serviceDefaults.perTryTimeout .application }}
 {{- end }}
-{{/* Default route: for simple environments (prod/preprod) this is a catch-all without match conditions.
-     For dev/feature environments, it uses complex routing with withoutHeaders fallback. */}}
+{{/* Default route. Simple environments (prod/preprod) use an unconditional catch-all.
+     Every other environment matches its own env header AND withoutHeaders, so host-only
+     requests still land here. */}}
 - name: {{ if (eq .application.deploymentType "rollout") }}canary{{ else }}{{ $fullName }}-default{{ end }}
 {{- if not $isSimpleEnv }}
+  {{- /* withoutHeaders fallback lets requests without an "environment" header reach this env's
+         default route — required for host-only requests since Cloudflare does not inject the env
+         header on host-root traffic. */}}
   match:
-    {{- /* withoutHeaders only applies to dev environment - allows requests without environment header to reach dev */ -}}
-    {{- if eq $metaenv "dev" }}
     - withoutHeaders:
         environment: {}
-    {{- end }}
     - headers:
         environment:
           exact: {{ $envHeaderValue }}
     {{- if and (not $isFeatureEnv) (eq $metaenv "dev") }}
+    {{- /* Dev only: also accept the feature-regex fallback on the default route. */}}
     - headers:
         environment:
           regex: "(?i)^feature.+$"

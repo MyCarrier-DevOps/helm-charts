@@ -1,0 +1,459 @@
+suite: withoutHeaders on the default route in non-simple envs (dev/feature*/uat/qa/demo); omitted in prod/preprod; allowedEndpoints rules remain URI-only in all envs
+templates:
+  - templates/virtualService.yaml
+tests:
+  # ==========================================
+  # DEV ENVIRONMENT - should HAVE withoutHeaders
+  # ==========================================
+  - it: should include withoutHeaders in dev environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      namespace: dev
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: dev
+      # Dev default route: http[2]. match[0]=withoutHeaders, match[1]=env-header exact,
+      # match[2]=feature-regex fallback (dev only). Pin all three so a regression that
+      # drops the OR-ed header arm still fails.
+      - exists:
+          path: spec.http[2].match[0].withoutHeaders.environment
+      - equal:
+          path: spec.http[2].match[1].headers.environment.exact
+          value: dev
+      - equal:
+          path: spec.http[2].match[2].headers.environment.regex
+          value: "(?i)^feature.+$"
+
+  # ==========================================
+  # UAT ENVIRONMENT - should HAVE withoutHeaders (always-emit fix)
+  # ==========================================
+  - it: should include withoutHeaders in uat environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: uat
+      namespace: uat
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: uat
+      # UAT has no feature-routing rule, so default route is http[1].
+      # match[0]=withoutHeaders, match[1]=env-header exact. Pin both arms so a
+      # regression that drops the header arm still fails.
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: uat
+
+  # ==========================================
+  # QA ENVIRONMENT - should HAVE withoutHeaders (always-emit fix)
+  # ==========================================
+  - it: should include withoutHeaders in qa environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: qa
+      namespace: qa
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: qa
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: qa
+
+  # ==========================================
+  # DEMO ENVIRONMENT - should HAVE withoutHeaders (always-emit fix)
+  # ==========================================
+  - it: should include withoutHeaders in demo environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: demo
+      namespace: demo
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: demo
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: demo
+
+  # ==========================================
+  # PREPROD ENVIRONMENT - simple env: default route is unconditional catch-all
+  # ==========================================
+  - it: should NOT include withoutHeaders in preprod environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: preprod
+      - notExists:
+          path: spec.http[0].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+
+  - it: should NOT include withoutHeaders in preprod allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: preprod
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+
+  # ==========================================
+  # PROD ENVIRONMENT - simple env: default route is unconditional catch-all
+  # ==========================================
+  - it: should NOT include withoutHeaders in prod environment default route
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: prod
+      - notExists:
+          path: spec.http[0].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+
+  - it: should NOT include withoutHeaders in prod allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: prod
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+
+  # ==========================================
+  # FEATURE ENVIRONMENT
+  # ==========================================
+  - it: should NOT include withoutHeaders in feature environment offload virtualservice (no dev fallback)
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature-abc
+      namespace: feature-abc
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: test-stack-test-app-feature-abc-offload
+      - notExists:
+          path: spec.http[1]
+
+  # ==========================================
+  # UAT ALLOWED-ENDPOINTS - allowed rules match by URI alone (no env header,
+  # no withoutHeaders). Matches prod/preprod GitOps ground-truth behavior.
+  # The helper deliberately does NOT emit withoutHeaders on AE rules so a
+  # caller hitting the URI in any env reaches its own backend.
+  # ==========================================
+  - it: should NOT add withoutHeaders to uat allowedEndpoints rules (URI-only match)
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: uat
+      namespace: uat
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowedEndpoints:
+                - "/api/health"
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: uat
+      # Rule layout in the allowedEndpoints path:
+      #   http[0] = env-header exact match (header-gated entry)
+      #   http[1] = first allowed rule (uri only)
+      #   http[2] = second allowed rule (uri only)
+      #   http[3] = forbidden (fault-injection, no match block)
+      # No standalone default route on the AE path.
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[3].match[0].withoutHeaders
+      - notExists:
+          path: spec.http[4]
+
+  # ==========================================
+  # ROLLOUT DEPLOYMENT TYPE - default route renamed to "canary"
+  # ==========================================
+  - it: should name default route "canary" and still emit withoutHeaders for rollout in uat
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: uat
+      namespace: uat
+      applications:
+        test-app:
+          deploymentType: rollout
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: uat
+      - equal:
+          path: spec.http[1].name
+          value: canary
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+
+  - it: should include withoutHeaders in feature environment primary virtualservice (always-emit)
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature-abc
+      namespace: feature-abc
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          ports:
+            http: 8080
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: test-stack-test-app-feature-abc
+      # Feature primary VS: $isFeatureEnv=true suppresses both the feature-routing
+      # rule and the feature-regex arm on the default route. So default route is
+      # http[1] with only two arms: match[0]=withoutHeaders, match[1]=env-header
+      # exact (the feature-env name itself). Pin both arms.
+      - exists:
+          path: spec.http[1].match[0].withoutHeaders.environment
+      - equal:
+          path: spec.http[1].match[1].headers.environment.exact
+          value: feature-abc
