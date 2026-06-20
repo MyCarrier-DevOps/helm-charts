@@ -310,4 +310,10 @@ filter:
 cue:
 {{ toYaml $krakend.cue | indent 2 }}
 {{- end }}
+{{- /* additionalEndpoints passthrough — endpoints not present in the OpenAPI
+       document (e.g. liveness/readiness). Mirrors KrakenDAutoConfigSpec.AdditionalEndpoints. */ -}}
+{{- if hasKey $krakend "additionalEndpoints" }}
+additionalEndpoints:
+{{ toYaml $krakend.additionalEndpoints | indent 2 }}
+{{- end }}
 {{- end -}}

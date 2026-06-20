@@ -354,7 +354,7 @@ tests:
           path: spec.openapi.url
           value: http://app-api.dev.internal/openapi.json
 
-  - it: should passthrough defaults, overrides, and filter
+  - it: should passthrough defaults, overrides, filter, and additionalEndpoints
     set:
       environment.name: dev
       applications.api.image.registry: r
@@ -374,6 +374,9 @@ tests:
           timeout: 10s
       applications.api.networking.krakend.filter.includePaths:
         - /api/v1/*
+      applications.api.networking.krakend.additionalEndpoints:
+        - endpoint: /liveness
+          encoding: no-op
     asserts:
       - equal:
           path: spec.defaults.endpoint.timeout
@@ -390,6 +393,12 @@ tests:
       - equal:
           path: spec.filter.includePaths[0]
           value: /api/v1/*
+      - equal:
+          path: spec.additionalEndpoints[0].endpoint
+          value: /liveness
+      - equal:
+          path: spec.additionalEndpoints[0].encoding
+          value: no-op
 
   - it: should honor autoConfigNamespace override
     set:

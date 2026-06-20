@@ -15,9 +15,18 @@ on:
 permissions:
   contents: write
 
+# Serialize releases targeting the same base branch so concurrent runs (rapid
+# merges) cannot race each other pushing the version bump to that branch.
+concurrency:
+  group: helm-release-${{ github.event.pull_request.base.ref }}
+  cancel-in-progress: false
+
 jobs:
   prep:
     runs-on: ubuntu-latest
+    # Only run for PRs that were actually merged (not closed-without-merge),
+    # so a closed-but-unmerged PR never triggers a doomed release run.
+    if: github.event.pull_request.merged == true
     outputs: 
         matrix: ${{ steps.set-matrix.outputs.matrix }}
         changes: ${{ steps.changed-files-specific.outputs.any_modified }}
@@ -26,7 +35,7 @@ jobs:
       - name: Checkout source code 
         uses: 'actions/checkout@v4'
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
       
       - name: Get specific changed files   
@@ -93,21 +102,25 @@ jobs:
 
       - name: commit the new package.json
         if: steps.packages.outputs.commitpackages == 'true'
-        uses: stefanzweifel/git-auto-commit-action@v4
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Automated Change-- Generated package.json for charts that were missing it.
+          branch: ${{ github.event.pull_request.base.ref }}
   release:
     needs: prep
     runs-on: ubuntu-latest
     if: ${{ needs.prep.outputs.matrix != '[]' && needs.prep.outputs.matrix != '' && needs.prep.outputs.changes == 'true' }}
     strategy:
+      # Serialize per-chart releases so parallel matrix jobs don't race each
+      # other pushing the version bump to the base branch.
+      max-parallel: 1
       matrix:
         manifest: ${{ fromJson(needs.prep.outputs.matrix) }}
     steps:
       - name: Checkout source code
         uses: 'actions/checkout@v4'
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
       - run: echo "${{ matrix.manifest }}"
       # - name: 'cat package.json'
@@ -137,9 +150,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       
       - name: commit the new Charts
-        uses: stefanzweifel/git-auto-commit-action@v4
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Automated Change
+          branch: ${{ github.event.pull_request.base.ref }}
 
       - name: Configure Git
         run: |

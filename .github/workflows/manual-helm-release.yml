@@ -95,7 +95,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit bumped chart
-        uses: stefanzweifel/git-auto-commit-action@v4
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Manual release for ${{ inputs.chart_name }}
           branch: ${{ inputs.target_branch }}

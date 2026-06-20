@@ -1022,6 +1022,18 @@
                             }
                           }
                         }
+                      },
+                      "additionalEndpoints": {
+                        "type": "array",
+                        "description": "Endpoints not present in the OpenAPI document (e.g. health/liveness probes). Mirrors KrakenDAutoConfigSpec.AdditionalEndpoints. Only `endpoint` is required; remaining fields are passed through and validated by the operator's CRD and admission webhook.",
+                        "items": {
+                          "type": "object",
+                          "required": ["endpoint"],
+                          "additionalProperties": true,
+                          "properties": {
+                            "endpoint": { "type": "string" }
+                          }
+                        }
                       }
                     }
                   }
