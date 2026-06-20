@@ -47,8 +47,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Environment name (dev, preprod, prod, qa, uat, or feature*)",
-          "pattern": "^(dev|preprod|prod|qa|uat|feature.+)$"
+          "description": "Environment name (e.g. dev, preprod, prod, qa, uat, or feature*)"
         },
         "namespaceOverride": {
           "oneOf": [
@@ -1020,6 +1019,18 @@
                               "name": { "type": "string" },
                               "key": { "type": "string" }
                             }
+                          }
+                        }
+                      },
+                      "additionalEndpoints": {
+                        "type": "array",
+                        "description": "Endpoints not present in the OpenAPI document (e.g. health/liveness probes). Mirrors KrakenDAutoConfigSpec.AdditionalEndpoints. Only `endpoint` is required; remaining fields are passed through and validated by the operator's CRD and admission webhook.",
+                        "items": {
+                          "type": "object",
+                          "required": ["endpoint"],
+                          "additionalProperties": true,
+                          "properties": {
+                            "endpoint": { "type": "string" }
                           }
                         }
                       }

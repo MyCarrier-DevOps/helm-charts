@@ -339,6 +339,12 @@ applications: {}
 #       #   definitionsConfigMapRef:
 #       #     name: my-cue-defs
 #       #     key: defs.cue
+#       additionalEndpoints: []           # optional; endpoints not in the OpenAPI doc (liveness/readiness). Matches KrakenDAutoConfigSpec.AdditionalEndpoints
+#       # additionalEndpoints:
+#       #   - endpoint: /liveness         # required (must start with /)
+#       #     encoding: no-op             # optional; no-op for pass-through health checks
+#       #   - endpoint: /readiness
+#       #     encoding: no-op
 #
 #   # ----------------------------------------------------------------------------
 #   # Service Account
