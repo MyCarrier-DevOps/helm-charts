@@ -26,7 +26,7 @@ mycarrier.tech/environment: {{ $envName }}
 mycarrier.tech/envscaling: {{ $envScaling | toString | quote }}
 mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
-mycarrier.tech/reference: {{ $branchLabel | toString | trunc 63 | quote }}
+mycarrier.tech/reference: {{ $branchLabel | toString | trunc 63 | regexReplaceAll "[^a-zA-Z0-9]+$" "" | quote }}
 mycarrier.tech/commitDeployed: {{ $commitDeployed | toString | trunc 63 | quote }}
 mycarrier.tech/correlationId: {{ $correlationId | toString | trunc 63 | quote }}
 {{- end -}}
@@ -135,7 +135,7 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
         {{ $_ := set $secDict "dependency.postgres" "true"}}
       {{- else if or (contains "sqlserver" (lower .envVarName)) (contains "sqlserver" (lower (.path | default "")))}}
         {{ $_ := set $secDict "dependency.sqlserver" "true"}}
-      {{- else if or (contains "clickhouse" (lower .envVarName)) (contains "clickhouse" (lower (.path | default "")))}}
+      {{- else if or (contains "clickhouse" (lower .envVarName)) (contains "clickhouse" (lower (.path | default ""))))}}
         {{ $_ := set $secDict "dependency.clickhouse" "true"}}
       {{- else if or (contains "redpanda" (lower .envVarName)) (contains "redpanda" (lower (.path | default ""))) }}
         {{ $_ := set $secDict "dependency.redpanda" "true"}}
