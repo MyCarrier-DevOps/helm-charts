@@ -135,7 +135,7 @@ app.kubernetes.io/instance: {{ $instance | trunc 63 }}
         {{ $_ := set $secDict "dependency.postgres" "true"}}
       {{- else if or (contains "sqlserver" (lower .envVarName)) (contains "sqlserver" (lower (.path | default "")))}}
         {{ $_ := set $secDict "dependency.sqlserver" "true"}}
-      {{- else if or (contains "clickhouse" (lower .envVarName)) (contains "clickhouse" (lower (.path | default ""))))}}
+      {{- else if or (contains "clickhouse" (lower .envVarName)) (contains "clickhouse" (lower (.path | default "")))}}
         {{ $_ := set $secDict "dependency.clickhouse" "true"}}
       {{- else if or (contains "redpanda" (lower .envVarName)) (contains "redpanda" (lower (.path | default ""))) }}
         {{ $_ := set $secDict "dependency.redpanda" "true"}}
