@@ -150,6 +150,36 @@ Usage: {{ $defaults := include "helm.crossplane.defaults" (dict "root" $root) | 
 {{- end -}}
 
 {{/*
+Resolve the Crossplane providerConfigRef for a Service Bus instance.
+Precedence:
+  1. per-instance .instance.providerConfigRef (if set)
+  2. explicit infrastructure.azure.defaults.providerConfigRef (if non-empty)
+  3. environment-aware default, keyed off metaEnvironment (feature-* maps to dev):
+       dev -> "default"; preprod/prod -> "baseitm"; any other env -> "default"
+Usage: {{ include "helm.azure.servicebus.providerConfigRef" (dict "instance" $sbInstance "root" $root) }}
+*/}}
+{{- define "helm.azure.servicebus.providerConfigRef" -}}
+{{- $instance := .instance -}}
+{{- $root := .root -}}
+{{- $explicitDefault := "" -}}
+{{- with $root.Values.infrastructure.azure.defaults -}}
+{{- $explicitDefault = .providerConfigRef | default "" -}}
+{{- end -}}
+{{- if $instance.providerConfigRef -}}
+{{- $instance.providerConfigRef -}}
+{{- else if $explicitDefault -}}
+{{- $explicitDefault -}}
+{{- else -}}
+{{- $metaEnv := include "helm.metaEnvironment" $root -}}
+{{- if or (eq $metaEnv "preprod") (eq $metaEnv "prod") -}}
+{{- "baseitm" -}}
+{{- else -}}
+{{- "default" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Render managementPolicies block with a default of ["Observe"].
 Usage: {{ include "helm.crossplane.managementPolicies" (dict "policies" $instance.managementPolicies) | nindent 2 }}
 */}}

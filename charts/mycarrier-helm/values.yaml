@@ -725,7 +725,7 @@ secrets:
 ## @extra infrastructure.azure Azure infrastructure resources
 ## @extra infrastructure.azure.defaults Default values shared across all Azure resources
 ## @param infrastructure.azure.defaults.location [string] Default Azure region for all resources (empty = must set per-resource)
-## @param infrastructure.azure.defaults.providerConfigRef [string] Default Crossplane ProviderConfig name
+## @param infrastructure.azure.defaults.providerConfigRef [string] Default Crossplane ProviderConfig name (empty = auto: resourceGroup/storage use "default"; servicebus is environment-aware — dev="default", preprod/prod="baseitm")
 ## @param infrastructure.azure.resourceGroup [array] Azure Resource Group configurations
 ## @extra infrastructure.azure.storage Azure Storage configuration
 ## @param infrastructure.azure.storage.accounts [array] Azure storage account configurations
@@ -738,7 +738,10 @@ infrastructure:
     # Per-resource values take precedence over these defaults.
     defaults:
       location: ""                  # Default Azure region (e.g., "East US"). Empty = must set per-resource.
-      providerConfigRef: "default"  # Default Crossplane ProviderConfig name
+      providerConfigRef: ""         # Default Crossplane ProviderConfig name. Empty = auto:
+                                    #   - resourceGroup & storage fall back to "default"
+                                    #   - servicebus is environment-aware: dev="default", preprod/prod="baseitm"
+                                    # Set a non-empty value here to force one ProviderConfig for all resources.
 
     # Azure Resource Group configurations
     resourceGroup: []
@@ -822,7 +825,9 @@ infrastructure:
       #                                                    # Examples: inf-dev-servicebus, inf-preprod-servicebus, inf-prod-servicebus
       #   location: "East US"                             # Required: Azure region (or set infrastructure.azure.defaults.location)
       #   sku: "Standard"                                 # Optional: Basic, Standard, or Premium (default: "Standard")
-      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name (default: infrastructure.azure.defaults.providerConfigRef, or "default")
+      #   providerConfigRef: "default"                    # Optional: Crossplane ProviderConfig name
+      #                                                    # Default: infrastructure.azure.defaults.providerConfigRef if set, else environment-aware:
+      #                                                    #   dev="default", preprod/prod="baseitm" (feature-* maps to dev)
       #                                                    # Inherited by all child resources (topics, subscriptions, rules)
       #   resourceGroupName: "rg-app-dev"                 # Optional: Resource group name (default: inf-{env}, matching default RG name)
       #

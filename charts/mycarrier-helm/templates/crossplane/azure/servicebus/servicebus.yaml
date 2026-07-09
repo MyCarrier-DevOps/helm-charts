@@ -5,7 +5,7 @@
 {{- range $sbIndex, $sbInstance := $root.Values.infrastructure.azure.servicebus }}
 {{- $sbName := $sbInstance.name | default (include "helm.azure.servicebus.name" (dict "root" $root)) -}}
 {{- $sbNamespace := include "helm.crossplane.namespace" (dict "namespace" $sbInstance.namespace "root" $root) -}}
-{{- $sbProviderConfigRef := $sbInstance.providerConfigRef | default $defaults.providerConfigRef -}}
+{{- $sbProviderConfigRef := include "helm.azure.servicebus.providerConfigRef" (dict "instance" $sbInstance "root" $root) -}}
 {{- $sbLocation := $sbInstance.location | default $defaults.location | required "Service Bus location is required (set per-resource or infrastructure.azure.defaults.location)" -}}
 {{- if $sbInstance.managementPolicies }}
 {{- if or (has "Delete" $sbInstance.managementPolicies) (has "*" $sbInstance.managementPolicies) }}
