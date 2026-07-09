@@ -1386,3 +1386,177 @@ tests:
           path: spec.forProvider.forwardTo
           value: "address-integrationevents"
         documentIndex: 3
+
+  # Test 33: providerConfigRef defaults to "default" in dev (env-aware default)
+  - it: should default providerConfigRef to default in dev when none is set
+    set:
+      global.appStack: envdefdev
+      global.language: csharp
+      environment.name: dev
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "env-dev-sb"
+              location: "East US"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 1
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "default"
+        documentIndex: 2
+
+  # Test 34: providerConfigRef defaults to "baseitm" in preprod (env-aware default)
+  - it: should default providerConfigRef to baseitm in preprod when none is set
+    set:
+      global.appStack: envdefpre
+      global.language: csharp
+      environment.name: preprod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "env-pre-sb"
+              location: "East US"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      # Env-aware default applies to namespace and all inherited child resources
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "baseitm"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "baseitm"
+        documentIndex: 1
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "baseitm"
+        documentIndex: 2
+
+  # Test 35: providerConfigRef defaults to "baseitm" in prod (env-aware default)
+  - it: should default providerConfigRef to baseitm in prod when none is set
+    set:
+      global.appStack: envdefprod
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "env-prod-sb"
+              location: "East US"
+              sku: "Premium"
+              capacity: 1
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "baseitm"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "baseitm"
+        documentIndex: 2
+
+  # Test 36: feature environments map to dev (default) via metaEnvironment
+  # NOTE: servicebus does not render for feature envs, so this is covered indirectly;
+  # metaEnvironment mapping is exercised by the dev/preprod/prod cases above.
+
+  # Test 37: per-instance providerConfigRef overrides the env-aware default in preprod
+  - it: should let per-instance providerConfigRef override the preprod env-aware default
+    set:
+      global.appStack: envovrpre
+      global.language: csharp
+      environment.name: preprod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "env-ovr-sb"
+              location: "East US"
+              providerConfigRef: "custom-provider"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "custom-provider"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "custom-provider"
+        documentIndex: 2
+
+  # Test 38: explicit infrastructure.azure.defaults.providerConfigRef overrides env-aware default in prod
+  - it: should let infrastructure.azure.defaults.providerConfigRef override the prod env-aware default
+    set:
+      global.appStack: envdefovr
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          defaults:
+            providerConfigRef: "explicit-default"
+          servicebus:
+            - name: "env-defovr-sb"
+              location: "East US"
+              sku: "Premium"
+              topics:
+                - name: "orders"
+                  subscriptions:
+                    - name: "processor"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "explicit-default"
+        documentIndex: 0
+      - equal:
+          path: spec.providerConfigRef.name
+          value: "explicit-default"
+        documentIndex: 2
