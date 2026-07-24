@@ -140,7 +140,7 @@ Usage: {{ include "helm.application.env" . | indent <N> | trim }}
 where the call-site dot exposes both `.Values.global.env` and `.application.env`.
 */}}
 {{- define "helm.application.env" -}}
-{{- $omitKeys := list "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" -}}
+{{- $omitKeys := list "ComputedEnvironmentName" "ActiveOffloads" -}}
 {{- if eq (lower (toString $.Values.global.language)) "csharp" -}}
 {{- $omitKeys = concat $omitKeys (list "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl") -}}
 {{- if dig "dependencies" "redis" false $.Values.global -}}

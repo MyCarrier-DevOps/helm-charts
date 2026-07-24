@@ -98,13 +98,12 @@ template:
         image: "{{ .image }}:{{ .tag | default $.Chart.AppVersion }}"
         command: {{ .command }}
         args:
-          {{ toYaml .args | indent 8 | trim }}
+          {{- toYaml .args | nindent 10 }}
         env:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
-          {{ include "helm.otel.language" $ | indent 10 | trim }}
-          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
+          {{ include "helm.otel.env" (merge (dict "otelUserEnv" .env) $) | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
-        {{- range $key, $value := omit .env "OTEL_EXPORTER_OTLP_ENDPOINT" "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
+        {{- range $key, $value := omit (.env | default dict) "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
           - name: "{{ $key }}"
             value: "{{ $value }}"
         {{- end }}
@@ -151,8 +150,7 @@ template:
         {{- end }}
         env:
           {{ include "helm.lang.vars" . | indent 10 | trim }}
-          {{ include "helm.otel.language" $ | indent 10 | trim }}
-          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
+          {{ include "helm.otel.env" $ | indent 10 | trim }}
           {{ include "helm.application.env" . | indent 10 | trim }}
           
           {{ include "helm.vault" $ | indent 10 | trim }}

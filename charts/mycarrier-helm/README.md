@@ -705,8 +705,11 @@ global:
   language: "nodejs"
   appStack: "api"
 
-disableOtelAutoinstrumentation: false  # Enables OpenTelemetry auto-instrumentation
+disableOtelAutoinstrumentation: false  # Opt in to operator auto-instrumentation (default true = off)
 ```
+
+The standard `OTEL_*` env block is injected regardless of this key; it is governed by
+`manualOtelConfig`. See [OpenTelemetry Integration](#opentelemetry-integration).
 
 ### Minimal Tolerations Configuration
 
@@ -1166,19 +1169,78 @@ metadata:
 
 ## OpenTelemetry Integration
 
-The chart provides built-in OpenTelemetry configuration for supported languages:
+The chart wires OpenTelemetry through two independent keys. They have **deliberately opposite
+defaults** and control different things:
+
+| Key | Default | Controls | Opt- |
+| --- | --- | --- | --- |
+| `manualOtelConfig` | `false` | the whole standard `OTEL_*` env block, the `otel-log` volume, and auto-instrumentation | **out** |
+| `disableOtelAutoinstrumentation` | `true` | the OTel Operator's automatic instrumentation only | **in** |
+
+For both keys, an unset or null value means the documented default, and an explicit `false` means
+`false`.
+
+### Chart-managed configuration (default)
+
+By default the chart injects a single contiguous `OTEL_*` env block into every container of every
+workload type — deployments, rollouts, statefulsets, jobs, cronjobs, and initContainers — pointing
+at the node-local collector:
 
 ```yaml
 global:
   language: "nodejs"  # Supported values: nodejs, java, python, csharp
-
-disableOtelAutoinstrumentation: false  # Set to true to disable auto-instrumentation
 ```
 
-This includes:
-- Auto-injected OpenTelemetry collector
-- Language-specific instrumentation
-- Standardized metrics and traces
+This includes the exporter protocol and endpoint, pod/node resource attributes, and
+language-specific exporter settings.
+
+### Overriding just the endpoint
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` yourself and the chart omits its own, so exactly one value
+reaches the container:
+
+```yaml
+global:
+  env:
+    OTEL_EXPORTER_OTLP_ENDPOINT: https://telemetry.example.com
+```
+
+Resolution is **per workload and mutually exclusive**, mirroring which env sources actually render
+into each container. `global.env` reaches main containers only; jobs read `jobs[].env`, cronjobs
+read `cronjobs[].env`, and initContainers read their own `env`. A job's endpoint therefore deviates
+from its application's rather than inheriting it — and setting only `global.env` leaves jobs,
+cronjobs, and initContainers on the injected default rather than stranding them with no endpoint.
+
+### Taking over completely
+
+```yaml
+manualOtelConfig: true
+global:
+  env:
+    OTEL_EXPORTER_OTLP_ENDPOINT: https://telemetry.example.com
+    OTEL_SERVICE_NAME: my-service
+```
+
+The chart then injects nothing OTel-related: no `OTEL_*` env vars, no
+`instrumentation.opentelemetry.io` / `sidecar.opentelemetry.io` annotations, and no `otel-log`
+volume or mount. Use this for browser-facing apps that publish their container env, where the
+injected node-local endpoint is unreachable and the pod metadata should not be exposed. It overrides
+`disableOtelAutoinstrumentation`.
+
+The `language` pod label is chart metadata rather than OTel wiring, so it is unaffected.
+
+### Operator auto-instrumentation
+
+```yaml
+global:
+  language: "nodejs"
+
+disableOtelAutoinstrumentation: false  # opt in; default true leaves it off
+```
+
+Adds the operator's injection annotations for `nodejs`/`java`/`python` and the nodejs
+`NODE_OPTIONS --require @opentelemetry/auto-instrumentations-node/register` hook. Note the operator
+may also set `NODE_OPTIONS` itself when it injects.
 
 ## Troubleshooting
 
@@ -1254,7 +1316,8 @@ When contributing to this chart, please follow the coding standards defined in t
 | Name                             | Description                                                                            | Value        |
 | -------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
 | `enableVaultCA`                  | Enable Vault CA certificate download during pod startup                                | `false`      |
-| `disableOtelAutoinstrumentation` | Disable OpenTelemetry automatic instrumentation (set to false to enable)               | `true`       |
+| `manualOtelConfig`               | Take over OpenTelemetry configuration from the chart (default false = chart-managed)   | `false`      |
+| `disableOtelAutoinstrumentation` | Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)      | `true`       |
 | `tolerations`                    | Default tolerations for all applications                                               | `[]`         |
 | `deployment`                     | Deployment folder name (should match the subfolder containing the specific deployment) | `deployment` |
 

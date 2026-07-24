@@ -1,0 +1,253 @@
+suite: OpenTelemetry block consistency across workload types
+templates:
+  - jobs.yaml
+  - cronjob.yaml
+tests:
+  - it: should render the exporter env vars into job containers
+    template: jobs.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      jobs:
+        - name: seed
+          image:
+            registry: r.example.com
+            repository: seed
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_EXPORTER
+            value: otlp
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+            value: test-stack
+
+  - it: should resolve a job env endpoint override instead of the node-local default
+    template: jobs.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      jobs:
+        - name: seed
+          image:
+            registry: r.example.com
+            repository: seed
+            tag: 1.0.0
+          env:
+            OTEL_EXPORTER_OTLP_ENDPOINT: https://job-telemetry.mycarrier.tech
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://job-telemetry.mycarrier.tech
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+
+  - it: should resolve a cronjob env endpoint override instead of the node-local default
+    template: cronjob.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      cronjobs:
+        - name: nightly
+          schedule: "0 0 * * *"
+          image:
+            registry: r.example.com
+            repository: nightly
+            tag: 1.0.0
+          env:
+            OTEL_EXPORTER_OTLP_ENDPOINT: https://cron-telemetry.mycarrier.tech
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://cron-telemetry.mycarrier.tech
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+
+  # global.env does not render into job containers, so it must not suppress the injected endpoint.
+  # Otherwise the job silently ends up with no endpoint at all.
+  - it: should still inject the default endpoint into a job when only global.env overrides it
+    template: jobs.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: https://fe-telemetry.mycarrier.tech
+      environment:
+        name: dev
+      jobs:
+        - name: seed
+          image:
+            registry: r.example.com
+            repository: seed
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://fe-telemetry.mycarrier.tech
+
+  - it: should still inject the default endpoint into a cronjob when only global.env overrides it
+    template: cronjob.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: https://fe-telemetry.mycarrier.tech
+      environment:
+        name: dev
+      cronjobs:
+        - name: nightly
+          schedule: "0 0 * * *"
+          image:
+            registry: r.example.com
+            repository: nightly
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+
+  # The sources are mutually exclusive rather than layered, so a job's telemetry config can deviate
+  # from its application's without either inheriting from or overriding the other.
+  - it: should let a job endpoint deviate from the application endpoint
+    template: jobs.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: https://app-telemetry.mycarrier.tech
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+      jobs:
+        - name: seed
+          image:
+            registry: r.example.com
+            repository: seed
+            tag: 1.0.0
+          env:
+            OTEL_EXPORTER_OTLP_ENDPOINT: https://job-telemetry.mycarrier.tech
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://job-telemetry.mycarrier.tech
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://app-telemetry.mycarrier.tech
+
+  - it: should inject no OTEL_ env var into a job when manualOtelConfig is true
+    template: jobs.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: true
+      jobs:
+        - name: seed
+          image:
+            registry: r.example.com
+            repository: seed
+            tag: 1.0.0
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env[*].name
+          pattern: ^OTEL_
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-log
+            emptyDir: {}
+
+  - it: should inject no OTEL_ env var into a cronjob when manualOtelConfig is true
+    template: cronjob.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: true
+      cronjobs:
+        - name: nightly
+          schedule: "0 0 * * *"
+          image:
+            registry: r.example.com
+            repository: nightly
+            tag: 1.0.0
+    asserts:
+      - notMatchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[*].name
+          pattern: ^OTEL_
+
+  - it: should render the exporter env vars into cronjob containers
+    template: cronjob.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      cronjobs:
+        - name: nightly
+          schedule: "0 0 * * *"
+          image:
+            registry: r.example.com
+            repository: nightly
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_EXPORTER
+            value: otlp
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+            value: test-stack

@@ -92,9 +92,15 @@
         { "type": "null" }
       ]
     },
+    "manualOtelConfig": {
+      "oneOf": [
+        { "type": "boolean", "description": "Take over OpenTelemetry configuration from the chart. When true the chart injects no OTEL_* env vars, no auto-instrumentation annotations and no otel-log volume, and overrides disableOtelAutoinstrumentation", "default": false },
+        { "type": "null" }
+      ]
+    },
     "disableOtelAutoinstrumentation": {
       "oneOf": [
-        { "type": "boolean", "description": "Disable OpenTelemetry automatic instrumentation", "default": true },
+        { "type": "boolean", "description": "Disable the OpenTelemetry Operator's automatic instrumentation (annotations and the nodejs NODE_OPTIONS hook) only; the standard OTEL_* env block is governed by manualOtelConfig", "default": true },
         { "type": "null" }
       ]
     },

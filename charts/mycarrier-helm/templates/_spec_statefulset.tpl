@@ -50,11 +50,10 @@ template:
         image: "{{ .image }}:{{ .tag | default $.Chart.AppVersion }}"
         command: {{ .command }}
         args:
-          {{ toYaml .args | indent 8 | trim }}
+          {{- toYaml .args | nindent 10 }}
         env:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
-          {{ include "helm.otel.language" $ | indent 10 | trim }}
-          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
+          {{ include "helm.otel.env" (merge (dict "otelUserEnv" .env) $) | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
         {{- range $key, $value := .env }}
           - name: "{{ $key }}"
@@ -114,8 +113,7 @@ template:
         {{- end }}
         env:
           {{ include "helm.lang.vars" . | indent 10 | trim }}
-          {{ include "helm.otel.language" $ | indent 10 | trim }}
-          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
+          {{ include "helm.otel.env" $ | indent 10 | trim }}
           {{ include "helm.application.env" . | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
         {{- if or $.Values.configmap $.Values.useSecret }}

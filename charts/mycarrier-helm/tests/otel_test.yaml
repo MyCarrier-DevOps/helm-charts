@@ -1,0 +1,351 @@
+suite: OpenTelemetry injection controls
+templates:
+  - deployment.yaml
+tests:
+  - it: should not render operator auto-instrumentation annotations when disableOtelAutoinstrumentation is true
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      disableOtelAutoinstrumentation: true
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["sidecar.opentelemetry.io/inject"]
+      - notExists:
+          path: spec.template.metadata.annotations["instrumentation.opentelemetry.io/container-names"]
+      - notExists:
+          path: spec.template.metadata.annotations["instrumentation.opentelemetry.io/inject-nodejs"]
+
+  - it: should render NODE_OPTIONS when disableOtelAutoinstrumentation is explicitly false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      disableOtelAutoinstrumentation: false
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_OPTIONS
+            value: "--require @opentelemetry/auto-instrumentations-node/register"
+
+  - it: should render auto-instrumentation annotations when disableOtelAutoinstrumentation is explicitly false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      disableOtelAutoinstrumentation: false
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.opentelemetry.io/inject"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["instrumentation.opentelemetry.io/inject-nodejs"]
+          value: test-stack-web
+
+  - it: should resolve a global.env endpoint override exactly once instead of the node-local default
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: https://fe-telemetry.mycarrier.tech
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://fe-telemetry.mycarrier.tech
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+      # With the block's own endpoint skipped, index 9 is vacated: OTEL_RESOURCE_ATTRIBUTES moves
+      # up into it. Proves the chart emitted no endpoint of its own, so the user's is the only one.
+      - equal:
+          path: spec.template.spec.containers[0].env[9].name
+          value: OTEL_RESOURCE_ATTRIBUTES
+
+  # global.env does not render into initContainers, so it must not suppress the injected endpoint
+  # there. Otherwise the initContainer ends up with no endpoint at all.
+  - it: should still inject the default endpoint into initContainers when only global.env overrides it
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: https://fe-telemetry.mycarrier.tech
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+          initContainers:
+            - name: migrate
+              image: r.example.com/migrate
+              command: ["/bin/sh"]
+              args: ["-c", "true"]
+              env:
+                INIT_ONLY: "yes"
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://fe-telemetry.mycarrier.tech
+
+  - it: should resolve an initContainer's own endpoint override instead of the node-local default
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+          initContainers:
+            - name: migrate
+              image: r.example.com/migrate
+              command: ["/bin/sh"]
+              args: ["-c", "true"]
+              env:
+                OTEL_EXPORTER_OTLP_ENDPOINT: https://init-telemetry.mycarrier.tech
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: https://init-telemetry.mycarrier.tech
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+
+  # values.schema.json permits null for both keys, so null must resolve to the documented default
+  # rather than tripping the kindIs "invalid" guard into the wrong branch.
+  - it: should treat a null manualOtelConfig as chart-managed
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: null
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_HOST_IP):4317
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-log
+            emptyDir: {}
+
+  - it: should inject no OTEL_ env var when manualOtelConfig is true
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: true
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env[*].name
+          pattern: ^OTEL_
+
+  - it: should suppress auto-instrumentation annotations when manualOtelConfig is true even if disableOtelAutoinstrumentation is false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: true
+      disableOtelAutoinstrumentation: false
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["sidecar.opentelemetry.io/inject"]
+      - notExists:
+          path: spec.template.metadata.annotations["instrumentation.opentelemetry.io/inject-nodejs"]
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_OPTIONS
+            value: "--require @opentelemetry/auto-instrumentations-node/register"
+
+  - it: should suppress the otel-log volume and mount when manualOtelConfig is true
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: true
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-log
+            emptyDir: {}
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: otel-log
+            mountPath: /var/log/opentelemetry
+
+  # `language` is a chart input driving language-specific defaults, not an OTel artifact. It merely
+  # happens to be defined in _otel.tpl, so it must survive the OTel kill switch.
+  - it: should keep the language pod label when manualOtelConfig is true
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      manualOtelConfig: true
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.language
+          value: nodejs
+
+  # Kubernetes $(VAR) expansion only resolves vars defined earlier in the same env list, so every
+  # fieldRef var must precede the vars interpolating it. Pins that contract.
+  - it: should order fieldRef vars before the vars that interpolate them
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[7].name
+          value: OTEL_HOST_IP
+      # interpolates $(OTEL_HOST_IP) from index 7
+      - equal:
+          path: spec.template.spec.containers[0].env[9].name
+          value: OTEL_EXPORTER_OTLP_ENDPOINT
+      # interpolates $(OTEL_RESOURCE_ATTRIBUTES_*) from indices 1,2,3,5,6
+      - equal:
+          path: spec.template.spec.containers[0].env[10].name
+          value: OTEL_RESOURCE_ATTRIBUTES
+
+  - it: should treat an unset disableOtelAutoinstrumentation as disabled
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["sidecar.opentelemetry.io/inject"]
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_OPTIONS
+            value: "--require @opentelemetry/auto-instrumentations-node/register"

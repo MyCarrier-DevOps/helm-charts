@@ -68,10 +68,33 @@ environment:
 ## Platform-wide settings
 
 ## @param enableVaultCA Enable Vault CA certificate download during pod startup
-## @param disableOtelAutoinstrumentation Disable OpenTelemetry automatic instrumentation (set to false to enable)
+## @param manualOtelConfig Take over OpenTelemetry configuration from the chart (default false = chart-managed)
+## @param disableOtelAutoinstrumentation Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)
 ## @param tolerations [array] Default tolerations for all applications
 ## @param deployment Deployment folder name (should match the subfolder containing the specific deployment)
 enableVaultCA: false
+
+## The two OTel keys below have DELIBERATELY OPPOSITE defaults. They are not interchangeable and do
+## not track each other:
+##
+##   manualOtelConfig               default false -> chart manages OTel config   (explicit opt-OUT)
+##   disableOtelAutoinstrumentation default true  -> operator injection is off   (explicit opt-IN)
+##
+## For both keys an unset/null value means the documented default above, and an explicit `false`
+## genuinely means false.
+##
+## manualOtelConfig: true means "I configure OpenTelemetry myself". The chart then injects nothing
+## OTel-related anywhere: no OTEL_* env vars (generic or language-specific), no operator
+## auto-instrumentation annotations, and no otel-log volume or mount. It overrides
+## disableOtelAutoinstrumentation, since a workload the chart does not configure must not receive
+## operator injection either. Supply your own OTEL_* values via global.env / application.env
+## (or jobs[].env / cronjobs[].env, which are resolved independently per workload).
+manualOtelConfig: false
+
+## disableOtelAutoinstrumentation controls ONLY the OpenTelemetry Operator's automatic
+## instrumentation feature -- the instrumentation.opentelemetry.io / sidecar.opentelemetry.io pod
+## annotations and the nodejs NODE_OPTIONS --require hook. It does not affect the standard OTEL_*
+## env block, which is governed by manualOtelConfig above.
 disableOtelAutoinstrumentation: true
 tolerations: []
 deployment: deployment

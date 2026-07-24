@@ -1,0 +1,148 @@
+# Guards two classes of `toYaml | indent N | trim` bugs where N did not match the literal column of
+# the template action. `indent` pads every line and `trim` strips only the first, so the literal
+# indentation must re-supply exactly N spaces or every line after the first is misaligned.
+suite: template indentation correctness
+templates:
+  - deployment.yaml
+  - rollout.yaml
+  - statefulset.yaml
+  - jobs.yaml
+  - cronjob.yaml
+tests:
+  - it: should render multi-element initContainer args as a valid list on a deployment
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: deployment
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+          initContainers:
+            - name: migrate
+              image: r.example.com/migrate
+              command: ["/bin/sh"]
+              args: ["-c", "echo hello"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].args
+          value: ["-c", "echo hello"]
+
+  # Rendered structurally valid but wrong: secretKeyRef became a sibling of valueFrom, so valueFrom
+  # was null and the env var silently resolved to nothing in-cluster.
+  - it: should nest secretKeyRef under valueFrom for a job env var
+    template: jobs.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      jobs:
+        - name: seed
+          image:
+            registry: r.example.com
+            repository: seed
+            tag: 1.0.0
+          env:
+            FROM_SECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: my-key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FROM_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: my-key
+
+  - it: should nest secretKeyRef under valueFrom for a cronjob env var
+    template: cronjob.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      cronjobs:
+        - name: nightly
+          schedule: "0 0 * * *"
+          image:
+            registry: r.example.com
+            repository: nightly
+            tag: 1.0.0
+          env:
+            FROM_SECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: my-key
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: FROM_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: my-key
+
+  - it: should render multi-element initContainer args as a valid list on a rollout
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: r.example.com
+            repository: web
+            tag: 1.0.0
+          initContainers:
+            - name: migrate
+              image: r.example.com/migrate
+              command: ["/bin/sh"]
+              args: ["-c", "echo hello"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].args
+          value: ["-c", "echo hello"]
+
+  - it: should render multi-element initContainer args as a valid list on a statefulset
+    template: statefulset.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: dev
+      applications:
+        data:
+          deploymentType: statefulset
+          image:
+            registry: r.example.com
+            repository: data
+            tag: 1.0.0
+          initContainers:
+            - name: migrate
+              image: r.example.com/migrate
+              command: ["/bin/sh"]
+              args: ["-c", "echo hello"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].args
+          value: ["-c", "echo hello"]

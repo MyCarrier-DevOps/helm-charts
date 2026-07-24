@@ -51,15 +51,12 @@ template:
         {{- end }}
         env:
           {{ include "helm.vault" . | indent 10 | trim }}
-          {{ include "helm.otel.envVars" $ | indent 10 | trim }}
-          {{- if hasKey $ "helm.otel.language" }}
-          {{ include "helm.otel.language" $ | indent 10 | trim }}
-          {{- end }}
+          {{ include "helm.otel.env" $ | indent 10 | trim }}
           {{- range $key, $value := .job.env }}
           - name: "{{ $key }}"
             {{- if kindIs "map" $value }}
             {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
-            {{ toYaml $value | indent 10 | trim }}
+            {{- toYaml $value | nindent 12 }}
             {{- else }}
             valueFrom:
               {{- toYaml $value | nindent 14 }}

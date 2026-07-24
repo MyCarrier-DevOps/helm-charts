@@ -67,15 +67,12 @@ jobTemplate:
             {{- end }}
             env:
               {{ include "helm.vault" . | indent 14 | trim }}
-              {{ include "helm.otel.envVars" $ | indent 14 | trim }}
-              {{- if hasKey $ "helm.otel.language" }}
-              {{ include "helm.otel.language" $ | indent 14 | trim }}
-              {{- end }}
+              {{ include "helm.otel.env" $ | indent 14 | trim }}
               {{- range $key, $value := $.cronjob.env }}
               - name: "{{ $key }}"
                 {{- if kindIs "map" $value }}
                 {{- if or (hasKey $value "valueFrom") (hasKey $value "value") }}
-                {{ toYaml $value | indent 14 | trim }}
+                {{- toYaml $value | nindent 16 }}
                 {{- else }}
                 valueFrom:
                   {{- toYaml $value | nindent 18 }}
