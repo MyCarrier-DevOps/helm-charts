@@ -320,10 +320,7 @@
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/enableVaultCA"
     },
     "manualOtelConfig": {
-      "oneOf": [
-        { "type": "boolean", "description": "Take over OpenTelemetry configuration from the chart. When true the chart injects no OTEL_* env vars, no auto-instrumentation annotations and no otel-log volume, and overrides disableOtelAutoinstrumentation", "default": false },
-        { "type": "null" }
-      ]
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/manualOtelConfig"
     },
     "disableOtelAutoinstrumentation": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/disableOtelAutoinstrumentation"
