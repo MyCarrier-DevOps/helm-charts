@@ -160,9 +160,10 @@ construction.
 
 ### 2. Placement: one call site per container, block before user env
 
-Each container and initContainer gets exactly one `{{ include "helm.otel.env" $ }}`, positioned
-immediately after `helm.lang.vars` and **before** the workload's user env
-(`helm.application.env` / `.job.env` / `.cronjob.env` / initContainer `.env`).
+Each container and initContainer gets exactly one `helm.otel.env` include, positioned immediately
+after `helm.lang.vars` and **before** the workload's user env (`helm.application.env` / `.job.env` /
+`.cronjob.env` / initContainer `.env`). Main containers and job/cronjob containers pass `$`;
+initContainers pass `(merge (dict "otelUserEnv" .env) $)` per §5.
 
 Four of the five workload types already order it this way; only deployment's main container
 currently trails it, so this is the minimum-churn choice. It also means user values can reference
@@ -224,17 +225,44 @@ the README table so no reader assumes they track each other:
 
 ### 5. Endpoint override: uniform skip-inject
 
-`helm.otel.env` resolves a consumer-supplied `OTEL_EXPORTER_OTLP_ENDPOINT` from whichever env
-source the current context exposes, most specific first:
+`helm.otel.env` omits its own `OTEL_EXPORTER_OTLP_ENDPOINT` when the consumer has supplied one;
+otherwise it emits `http://$(OTEL_HOST_IP):4317` as today.
 
-1. `.job.env` (job context)
-2. `.cronjob.env` (cronjob context)
-3. `.application.env` (app context)
-4. `.Values.global.env`
+Resolution is **per-container and mutually exclusive**, mirroring exactly which env sources render
+into that container. This is not a flat fallback chain, and it must not become one. Verified
+reachability:
 
-Contexts are mutually exclusive — a context carries `.job` xor `.cronjob` xor `.application` — so
-one helper covers all five workload types. When a value is found the block omits its own endpoint
-entirely; otherwise it emits `http://$(OTEL_HOST_IP):4317` as today.
+| container | env sources that actually render | skip trigger |
+| --- | --- | --- |
+| deployment / rollout / statefulset main | `global.env` + `application.env` (via `helm.application.env`) | `.application.env` then `.Values.global.env` |
+| initContainers (all three workload types) | that initContainer's own `.env` only | the initContainer's `.env` |
+| job | `.job.env` only | `.job.env` |
+| cronjob | `.cronjob.env` only | `.cronjob.env` |
+
+`global.env` does **not** reach jobs, cronjobs, or initContainers — verified by rendering marker
+vars into each. So `global.env` may only participate in the main-container branch. A flat chain
+ending at `global.env` would be actively harmful: a consumer setting
+`global.env.OTEL_EXPORTER_OTLP_ENDPOINT` — the frontend's exact case — would suppress the injected
+endpoint in jobs, cronjobs, and initContainers while the global value never renders there, leaving
+those containers with no endpoint at all. Silent telemetry loss in the workloads least able to
+report it.
+
+`.job.env`, `.cronjob.env`, and `.application.env` are therefore kept strictly mutually exclusive
+rather than layered, so a job's telemetry configuration can deviate from its application's without
+either inheriting from or overriding the other.
+
+Implemented as a `helm.otel.userEndpoint` helper returning the resolved value or `""`, with one
+branch per context selected by `hasKey`. Contexts are structurally exclusive — a context carries
+`.job` xor `.cronjob` xor `.application` — so the branches cannot collide. initContainer call sites
+pass their own env explicitly as `otelUserEnv`, since the initContainer's `.env` is not reachable
+from the app context otherwise:
+
+```
+{{ include "helm.otel.env" (merge (dict "otelUserEnv" .env) $) }}
+```
+
+`merge` takes a fresh `dict` as its destination, so `$` is not mutated — the same pattern the chart
+already uses to build `$appContext`.
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` is removed from all three omit lists (`_environment.tpl:143`,
 `_spec_deployment.tpl:97`, `_spec_rollout.tpl:107`) so the consumer's value flows through.
@@ -290,8 +318,15 @@ New `tests/otel_test.yaml` (helm-unittest 1.1.0, already a chart dev dependency 
 - `manualOtelConfig: true` — no `OTEL_*` env var, no `opentelemetry.io` annotation, no `otel-log`
   volume or mount
 - `manualOtelConfig: true` — the `language` pod label still renders
-- endpoint override from `global.env`, `application.env`, `.job.env`, `.cronjob.env` — user value
-  resolves and appears exactly once, with no duplicate env name
+- endpoint override from `global.env`, `application.env`, `.job.env`, `.cronjob.env`, and an
+  initContainer's own `.env` — user value resolves and appears exactly once, with no duplicate env
+  name
+- **mutual-exclusivity regression:** `global.env.OTEL_EXPORTER_OTLP_ENDPOINT` set, with a job, a
+  cronjob and an initContainer present — each of those still receives the injected
+  `http://$(OTEL_HOST_IP):4317` default, and the main container receives the global value. Guards
+  the silent-telemetry-loss failure mode described in §5
+- a job and an application whose endpoints differ — each renders its own value, neither inherits
+  from nor overrides the other
 - no override — the injected default still renders, for csharp and nodejs
 - block ordering — every field-ref var precedes the var interpolating it
 - jobs and cronjobs receive the exporter vars
