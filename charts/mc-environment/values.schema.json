@@ -393,9 +393,10 @@
   },
   "properties": {
     "mycarrierChartVersion": {
-      "type": "string",
-      "description": "Version of the mycarrier-helm chart to deploy",
-      "default": "2.5.100"
+      "oneOf": [
+        { "type": "string", "description": "Version of the mycarrier-helm chart to deploy. Leave null to use the chart's own default, defined once in appset.yaml" },
+        { "type": "null" }
+      ]
     },
     "isEnvironmentDeploy": {
       "$ref": "#/definitions/isEnvironmentDeploy"
