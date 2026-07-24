@@ -58,7 +58,7 @@ spec:
       source:
         repoURL: https://charts.mycarrier.dev
         chart: mycarrier-helm
-        targetRevision: "{{ $.Values.mycarrierChartVersion | default "3.0.44" }}"
+        targetRevision: "{{ $.Values.mycarrierChartVersion | default "3.4.0" }}"
         helm:
           values: |2+
             {{`{{`}} .Values | toYaml {{`}}`}}
