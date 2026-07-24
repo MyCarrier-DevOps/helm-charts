@@ -200,3 +200,31 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.infrastructure.azure.storage.accounts[0].sku
           value: Standard_LRS
+
+  # mycarrier-helm gained manualOtelConfig; the wrapper builds the subchart values from an explicit
+  # allowlist, so without a passthrough here the key is unreachable for every environment deploy.
+  - it: forwards manualOtelConfig to the subchart values when an environment opts out
+    values:
+      - fixtures/basic-environments.yaml
+    set:
+      environments:
+        - name: dev
+          manualOtelConfig: true
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.manualOtelConfig
+          value: true
+
+  - it: defaults manualOtelConfig to chart-managed when an environment omits it
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.manualOtelConfig
+          value: false
