@@ -47,6 +47,8 @@
   value: "Production"
 - name: Auth_Environment
   value: "Production"
+- name: production_tenants
+  value: "vault:secrets/data/prod/shared/production_tenants#value"
 {{- end }}
 {{- if .Values.global.dependencies.mongodb }}
 - name: KeyVault_MongoConnection
