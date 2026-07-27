@@ -87,24 +87,24 @@ template:
             containerPort: {{ $value }}
           {{- end }}
         {{- end }}
-        {{- if and .application.probes (hasKey .application.probes "enableLiveness") (.application.probes.enableLiveness)}}
-        {{- if .application.probes.livenessProbe }}
+        {{- if dig "probes" "enableLiveness" true .application }}
+        {{- if and (dig "probes" false .application) (dig "livenessProbe" false .application.probes) }}
         livenessProbe:
           {{ toYaml .application.probes.livenessProbe | indent 10 | trim }}
         {{- else }}
         {{ include "helm.defaultLivenessProbe" . | indent 8 | trim }}
         {{- end }}
         {{- end }}
-        {{- if and .application.probes (hasKey .application.probes "enableReadiness") (.application.probes.enableReadiness)}}
-        {{- if .application.probes.readinessProbe }}
+        {{- if dig "probes" "enableReadiness" true .application }}
+        {{- if and (dig "probes" false .application) (dig "readinessProbe" false .application.probes) }}
         readinessProbe:
           {{ toYaml .application.probes.readinessProbe | indent 10 | trim }}
         {{- else }}
         {{ include "helm.defaultReadinessProbe" . | indent 8 | trim }}
         {{- end }}
         {{- end }}
-        {{- if and .application.probes (hasKey .application.probes "enableStartup") (.application.probes.enableStartup)}}
-        {{- if .application.probes.startupProbe }}
+        {{- if dig "probes" "enableStartup" true .application }}
+        {{- if and (dig "probes" false .application) (dig "startupProbe" false .application.probes) }}
         startupProbe:
           {{ toYaml .application.probes.startupProbe | indent 10 | trim }}
         {{- else }}

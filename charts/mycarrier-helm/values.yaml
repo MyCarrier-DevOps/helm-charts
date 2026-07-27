@@ -108,7 +108,8 @@ deployment: deployment
 ## **Basic Settings**: enableDebugMode, isFrontend, language, forceOffload, staticHostname, deploymentType, version, replicas
 ## **Container**: image.registry, image.repository, image.tag, pullPolicy, pullSecret
 ## **Resources**: resources.requests.cpu/memory, resources.limits.cpu/memory
-## **Health Probes**: probes.enableLiveness, probes.enableReadiness, probes.enableStartup, custom probe configurations
+## **Health Probes**: probes.enableLiveness, probes.enableReadiness, probes.enableStartup (all default true; set to false to disable), custom probe configurations
+## **Security Context**: securityContext.readOnlyRootFilesystem (default false), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back)
 ## **Service**: service.type, service.ports, service.annotations, service.timeout, service.retryOn
 ## **Networking**: networking.ingress.type, networking.istio.enabled/hosts/routes/corsPolicy/allowedEndpoints
 ## **Autoscaling**: HPA (autoscaling.minReplicas/maxReplicas/targetCPU/targetMemory), VPA (vpa.enabled/updateMode/resources)
@@ -194,9 +195,13 @@ applications: {}
 #   
 #   securityContext:
 #     readOnlyRootFilesystem: false
-#   
+#     # All capabilities are dropped by default (drop: [ALL]). List specific
+#     # capabilities here to add them back for this application only:
+#     # addCapabilities:
+#     #   - NET_BIND_SERVICE
+#
 #   # ----------------------------------------------------------------------------
-#   # Health Probes
+#   # Health Probes (all default true; set to false to disable)
 #   # ----------------------------------------------------------------------------
 #   probes:
 #     enableLiveness: true

@@ -122,7 +122,7 @@ template:
         {{ include "helm.defaultLivenessProbe" . | indent 8 | trim }}
         {{- end }}
         {{- end }}
-        {{- if dig "probes" "enableReadiness" false .application }}
+        {{- if dig "probes" "enableReadiness" true .application }}
         {{- if and (dig "probes" false .application) (dig "readinessProbe" false .application.probes) }}
         readinessProbe:
           {{ toYaml .application.probes.readinessProbe | indent 10 | trim }}

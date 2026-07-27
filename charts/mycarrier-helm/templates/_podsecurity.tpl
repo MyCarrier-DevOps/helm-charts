@@ -16,6 +16,15 @@ securityContext:
   runAsNonRoot: true
   readOnlyRootFilesystem: {{ if and .application .application.securityContext .application.securityContext.readOnlyRootFilesystem }}true{{ else }}false{{ end }}
   allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+{{- if .application }}
+{{- with (dig "securityContext" "addCapabilities" (list) .application) }}
+    add:
+{{ toYaml . | indent 6 }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}
 
