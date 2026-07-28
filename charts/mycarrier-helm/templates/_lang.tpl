@@ -15,6 +15,8 @@
   value: "Development"
 - name: Auth_Environment
   value: "Development"
+- name: Auth_StrivacityIdentityStore_EnvironmentMapping
+  value: "vault:secrets/data/dev/shared/Auth_StrivacityIdentityStore_EnvironmentMapping#value"
 {{- end }}
 {{- if eq $metaenv "preprod" }}
 - name: Auth_CustomerService_BaseUrl
@@ -31,6 +33,8 @@
   value: "PreProd"
 - name: Auth_Environment
   value: "PreProd"
+- name: Auth_StrivacityIdentityStore_EnvironmentMapping
+  value: "vault:secrets/data/preprod/shared/Auth_StrivacityIdentityStore_EnvironmentMapping#value"
 {{- end }}
 {{- if eq $metaenv "prod" }}
 - name: Auth_CustomerService_BaseUrl
@@ -49,6 +53,8 @@
   value: "Production"
 - name: production_tenants
   value: "vault:secrets/data/prod/shared/production_tenants#value"
+- name: Auth_StrivacityIdentityStore_EnvironmentMapping
+  value: "vault:secrets/data/prod/shared/Auth_StrivacityIdentityStore_EnvironmentMapping#value"
 {{- end }}
 {{- if .Values.global.dependencies.mongodb }}
 - name: KeyVault_MongoConnection
