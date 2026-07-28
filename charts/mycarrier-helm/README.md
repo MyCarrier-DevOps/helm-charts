@@ -405,8 +405,7 @@ networking:
         paths:
           - path: "/"
             pathType: "Prefix"
-    gateways:
-      - "istio-system/ingressgateway"
+    gateway: "istio-system/default"        # Ingress gateway (namespace/name); e.g. istio-system/authenticated for the authenticated gateway
     redirects: {}
     routes: {}
     responseHeaders: {}
@@ -421,6 +420,8 @@ networking:
         - "Content-Type"
       maxAge: "24h"
 ```
+
+The `mesh` gateway is always included in rendered VirtualServices; `gateway` only replaces the ingress-gateway entry and defaults to `istio-system/default` when unset. Workload resources (Deployment/StatefulSet/Rollout) and their pods carry the resolved designation in a `mycarrier.io/gateway` annotation for troubleshooting, unless istio is disabled for the application.
 
 #### Whitelabel hosts
 

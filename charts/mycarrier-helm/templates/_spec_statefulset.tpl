@@ -29,6 +29,7 @@ template:
     annotations:
       {{ include "helm.annotations.vault" $ | indent 6 | trim }}
       {{ include "helm.annotations.istio" . | indent 6 | trim }}
+      {{ include "helm.annotations.gateway" . | indent 6 | trim }}
       {{ include "helm.otel.annotations" $ | indent 6 | trim }}
       {{- with .application.annotations }}
       {{ toYaml . |  indent 6 | trim }}

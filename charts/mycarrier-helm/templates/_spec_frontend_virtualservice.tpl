@@ -45,9 +45,8 @@ hosts:
 {{- end -}}
 {{- end }}
 
-gateways:
-- mesh
-- istio-system/default
+{{- $gatewaysAppValues := index $frontendApps $primaryApp }}
+{{ include "helm.virtualservice.gateways" $gatewaysAppValues | trim }}
 
 http:
 {{- if not $isFeatureEnv }}
@@ -318,9 +317,7 @@ hosts:
 - {{ tpl . $ }}
 {{- end -}}
 {{- end }}
-gateways:
-- mesh
-- istio-system/default
+{{ include "helm.virtualservice.gateways" $primaryAppValues | trim }}
 http:
 {{/* Custom routes (networking.istio.routes) for any frontend app - env-gated, most specific first.
      The offload VS also binds the shared frontend host, so every route must match the environment

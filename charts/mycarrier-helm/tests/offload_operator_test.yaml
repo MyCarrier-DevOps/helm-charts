@@ -113,6 +113,30 @@ tests:
           path: spec.responseHeaders["X-Frame-Options"]
           value: "DENY"
 
+  - it: should use custom gateway from networking.istio.gateway in OffloadBase
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+      applications.routetester.networking.istio.gateway: istio-system/authenticated
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: OffloadBase
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+
   - it: should interpolate tpl expressions in OffloadBase custom hosts
     template: offloadBase.yaml
     set:

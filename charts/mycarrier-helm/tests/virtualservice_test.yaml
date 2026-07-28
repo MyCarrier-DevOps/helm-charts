@@ -152,6 +152,53 @@ tests:
           value: app-test-app-api-feature-test.dev.mycarrier.dev
         documentIndex: 1
 
+  - it: should use custom gateway from networking.istio.gateway
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
+      applications.test-app-api.networking.istio.gateway: istio-system/authenticated
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+
+  - it: should apply custom gateway to the offload virtual service in feature environments
+    set:
+      environment.name: "feature-test"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
+      applications.test-app-api.networking.istio.gateway: istio-system/authenticated
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+        documentIndex: 0
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+        documentIndex: 1
+
   - it: should include staticHostname in feature environment when isEnvironmentDeploy is true
     set:
       environment.name: "feature-test"

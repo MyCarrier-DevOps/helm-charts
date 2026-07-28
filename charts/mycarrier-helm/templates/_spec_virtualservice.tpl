@@ -41,9 +41,7 @@ hosts:
 - {{ tpl . $ }}
 {{- end }}
 {{- end }}
-gateways:
-- mesh
-- istio-system/default
+{{ include "helm.virtualservice.gateways" .application | trim }}
 http:
 {{/* First route: explicit header match - routes traffic with environment header */}}
 - name: {{ $fullName }}
