@@ -47,6 +47,63 @@ tests:
           path: metadata.namespace
           value: prod
 
+  - it: should annotate statefulset with the default gateway
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.annotations["mycarrier.io/gateway"]
+          value: istio-system/default
+      - equal:
+          path: spec.template.metadata.annotations["mycarrier.io/gateway"]
+          value: istio-system/default
+
+  - it: should annotate statefulset with a custom gateway
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.networking.istio.gateway: istio-system/authenticated
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.annotations["mycarrier.io/gateway"]
+          value: istio-system/authenticated
+      - equal:
+          path: spec.template.metadata.annotations["mycarrier.io/gateway"]
+          value: istio-system/authenticated
+
+  - it: should not annotate statefulset with a gateway when istio is disabled
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.istioDisabled: true
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: metadata.annotations["mycarrier.io/gateway"]
+      - notExists:
+          path: spec.template.metadata.annotations["mycarrier.io/gateway"]
+
   - it: should configure volume mounts when volumes are specified
     set:
       environment.name: "dev"

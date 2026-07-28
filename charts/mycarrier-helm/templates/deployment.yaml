@@ -22,6 +22,7 @@ metadata:
     {{- else }}
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
     {{- end }}
+    {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.deployment" $appContext | indent 2 | trim }}
 ---

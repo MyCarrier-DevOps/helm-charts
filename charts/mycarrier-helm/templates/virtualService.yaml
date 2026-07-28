@@ -64,9 +64,7 @@ spec:
   - {{ tpl . $ }}
   {{- end -}}
   {{- end }}
-  gateways:
-  - mesh
-  - istio-system/default
+  {{ include "helm.virtualservice.gateways" $appValues | indent 2 | trim }}
   http:
   {{- /* Custom routes (networking.istio.routes) - most specific first, before the catch-all */ -}}
   {{- if and (hasKey $istioConfig "routes") $istioConfig.routes }}

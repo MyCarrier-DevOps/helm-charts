@@ -769,6 +769,11 @@
                               "type": "string"
                             }
                           },
+                          "gateway": {
+                            "type": "string",
+                            "description": "Ingress gateway designation (namespace/name) that replaces istio-system/default. The mesh gateway is always included.",
+                            "default": "istio-system/default"
+                          },
                           "redirects": {
                             "type": "object",
                             "additionalProperties": {

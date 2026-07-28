@@ -103,6 +103,97 @@ tests:
           path: spec.hosts
           content: test-stack-main-app.dev.internal
 
+  - it: should use primary apps custom gateway from networking.istio.gateway
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "dev"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              gateway: istio-system/authenticated
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+
+  - it: should apply primary apps custom gateway to the offload VS in feature environments
+    set:
+      global:
+        appStack: "test-stack"
+      environment:
+        name: "feature-abc"
+      applications:
+        main-app:
+          isFrontend: true
+          isPrimary: true
+          image:
+            registry: "registry.example.com"
+            repository: "main-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+              gateway: istio-system/authenticated
+        admin-app:
+          isFrontend: true
+          isPrimary: false
+          image:
+            registry: "registry.example.com"
+            repository: "admin-app"
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          networking:
+            istio:
+              enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+        documentIndex: 0
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/authenticated
+        documentIndex: 1
+
   - it: should omit internal host for feature frontend environments
     set:
       global:

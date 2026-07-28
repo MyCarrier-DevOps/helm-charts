@@ -266,6 +266,7 @@ applications: {}
 #       #     - '{{ include "helm.whitelabelHost" (dict "label" "estes" "ctx" $) }}'
 #       # Renders estes.<domain> in prod/preprod/dev and estes.<env>.<domain> elsewhere.
 #       hosts: []
+#       gateway: istio-system/default  # Ingress gateway (namespace/name) bound in addition to mesh, which is always included (default: istio-system/default)
 #       redirects: {}
 #       routes: {}  # Custom routes; destination defaults to the app's service. Override with 'destination' field per route.
 #       # routes:

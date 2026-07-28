@@ -49,9 +49,7 @@ spec:
   - {{ tpl . $ }}
   {{- end }}
   {{- end }}
-  gateways:
-  - mesh
-  - istio-system/default
+  {{ include "helm.virtualservice.gateways" $appValues | indent 2 | trim }}
   {{- if dig "networking" "istio" "offloadVirtualServiceAnnotations" nil $appValues }}
   virtualServiceAnnotations:
     {{- toYaml $appValues.networking.istio.offloadVirtualServiceAnnotations | nindent 4 }}

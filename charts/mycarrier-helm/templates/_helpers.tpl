@@ -208,6 +208,22 @@ sidecar.istio.io/inject: 'true'
 {{- end -}}
 {{- end -}}
 
+{{/*
+Ingress gateway annotation for workload resources and their pod templates.
+Context: an app context (dict containing .application).
+Emits the resolved gateway designation for troubleshooting; omitted when istio
+is disabled for the application (networking.istio.enabled false, istioDisabled,
+or service.istioDisabled).
+*/}}
+{{- define "helm.annotations.gateway" -}}
+{{- $istioEnabled := dig "networking" "istio" "enabled" true .application -}}
+{{- $appIstioDisabled := dig "istioDisabled" false .application -}}
+{{- $serviceIstioDisabled := dig "service" "istioDisabled" false .application -}}
+{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) -}}
+mycarrier.io/gateway: {{ include "helm.istio.gateway" .application }}
+{{- end -}}
+{{- end -}}
+
 {{- define "helm.annotations.virtualservice" -}}
 {{- /* Get cloudflareProxied from application's networking.istio.cloudflareProxied (default: true) */ -}}
 {{- $cloudflareProxied := true -}}

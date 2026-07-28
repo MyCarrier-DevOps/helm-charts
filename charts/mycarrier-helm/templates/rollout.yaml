@@ -18,6 +18,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "10"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+    {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.rollout" $appContext | indent 2 | trim }}
 ---

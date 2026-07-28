@@ -106,6 +106,26 @@ Centralized HTTP rule name and match rendering for all endpoint kinds
 {{- end }}
 
 {{/*
+Resolves the ingress gateway designation (namespace/name) for an application.
+Context: the application values dict.
+Returns networking.istio.gateway, defaulting to istio-system/default when unset or empty.
+*/}}
+{{- define "helm.istio.gateway" -}}
+{{- (dig "networking" "istio" "gateway" "" .) | default "istio-system/default" -}}
+{{- end -}}
+
+{{/*
+Renders the gateways block for VirtualService-style specs.
+Context: the application values dict.
+Always emits mesh first, then the resolved ingress gateway.
+*/}}
+{{- define "helm.virtualservice.gateways" -}}
+gateways:
+- mesh
+- {{ include "helm.istio.gateway" . }}
+{{- end -}}
+
+{{/*
 Helper template to generate VirtualService HTTP rules for language-specific and user-defined endpoints
 This template generates the complete HTTP rules as strings to avoid duplication
 */}}
