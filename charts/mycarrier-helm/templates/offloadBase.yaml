@@ -52,6 +52,7 @@ spec:
   {{ include "helm.virtualservice.gateways" $appValues | indent 2 | trim }}
   {{- if dig "networking" "istio" "offloadVirtualServiceAnnotations" nil $appValues }}
   virtualServiceAnnotations:
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
     {{- toYaml $appValues.networking.istio.offloadVirtualServiceAnnotations | nindent 4 }}
   {{- end }}
   {{- if dig "networking" "istio" "offloadVirtualServiceLabels" nil $appValues }}
