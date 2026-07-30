@@ -58,6 +58,14 @@ spec:
               - exit $(wget -O - localhost:3010/health/application 2>/dev/null | grep -E "\"healthy\":\s*false,{0,1}" -o | wc -w;)
             initialDelaySeconds: 5
             timeoutSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 30
           env:
           {{- if .Values.environment }}
           {{- range $key, $value := .Values.environment }}
