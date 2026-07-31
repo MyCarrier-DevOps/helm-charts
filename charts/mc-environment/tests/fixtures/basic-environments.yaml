@@ -47,6 +47,17 @@ environments:
           - npm
           - run
           - migrate
+    cronjobs:
+      - name: shipments-db-cleanup
+        schedule: "0 3 * * *"
+        image:
+          registry: ghcr.io
+          repository: mycarrier/migrations
+          tag: "1.12.3"
+        command:
+          - npm
+          - run
+          - cleanup
     secrets:
       individual:
         - envVarName: SHIPMENTS_DB_PASSWORD
