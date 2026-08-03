@@ -89,10 +89,14 @@ template:
           {{- if hasKey . "spreadAcrossNodes" }}
             {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
           {{- end }}
+          {{- $hardenedSecurityContext := false }}
+          {{- if hasKey . "hardenedSecurityContext" }}
+            {{- $hardenedSecurityContext = .hardenedSecurityContext }}
+          {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
           {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
-          {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
+          {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
           {{- $tests = append $tests $test }}
           {{- end }}
             curl -X POST \
@@ -120,6 +124,10 @@ template:
           {{- if hasKey . "spreadAcrossNodes" }}
             {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
           {{- end }}
+          {{- $hardenedSecurityContext := false }}
+          {{- if hasKey . "hardenedSecurityContext" }}
+            {{- $hardenedSecurityContext = .hardenedSecurityContext }}
+          {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
             curl -X POST \
@@ -131,6 +139,7 @@ template:
               "StackName": "{{ $stackname }}",
               "ContainerImage": "{{ .containerImage }}",
               "ContainerTag": "{{ .containerTag }}",
+              "HardenedSecurityContext": {{ $hardenedSecurityContext }},
               "TestFilters": {{ .filters | toJson }},
               "Tolerations": {{ $tolerations | toJson }},
               "NodeAffinity": {{ $nodeAffinity | toJson }},
