@@ -228,3 +228,29 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.manualOtelConfig
           value: false
+
+  # mycarrier-helm gained cronjobs; the wrapper builds the subchart values from an explicit
+  # allowlist, so without a passthrough here the key is unreachable for every environment deploy.
+  - it: forwards cronjobs to the subchart values when an environment defines them
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.cronjobs[0].name
+          value: shipments-db-cleanup
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.cronjobs[0].schedule
+          value: "0 3 * * *"
+
+  - it: omits cronjobs from the subchart values when an environment doesn't define them
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-prod
+    asserts:
+      - notExists:
+          path: spec.generators[0].list.elements[0].Values.cronjobs

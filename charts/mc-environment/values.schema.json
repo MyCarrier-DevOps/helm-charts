@@ -334,6 +334,9 @@
     "jobs": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/jobs"
     },
+    "cronjobs": {
+      "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/cronjobs"
+    },
     "secrets": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/secrets"
     },
@@ -511,6 +514,12 @@
           "jobs": {
             "oneOf": [
               { "$ref": "#/definitions/jobs" },
+              { "type": "null" }
+            ]
+          },
+          "cronjobs": {
+            "oneOf": [
+              { "$ref": "#/definitions/cronjobs" },
               { "type": "null" }
             ]
           },

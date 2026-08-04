@@ -36,6 +36,9 @@ spec:
                 {{ with $env.jobs }}jobs:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
+                {{ with $env.cronjobs }}cronjobs:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
                 {{ with $env.secrets }}secrets:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
