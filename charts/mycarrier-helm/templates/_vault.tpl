@@ -4,6 +4,11 @@ vault.security.banzaicloud.io/mutate-probes: "true"
 vault.security.banzaicloud.io/vault-auth-method: azure
 vault.security.banzaicloud.io/vault-path: clusterauth
 vault.security.banzaicloud.io/vault-role: appcluster
+vault.security.banzaicloud.io/run-as-non-root: "true"
+vault.security.banzaicloud.io/run-as-user: "100"
+vault.security.banzaicloud.io/run-as-group: "1000"
+vault.security.banzaicloud.io/vault-agent-env-variables: >-
+  [{"Name":"SKIP_CHOWN","Value":"true"},{"Name":"SKIP_SETCAP","Value":"true"}]
 {{- if and .Values (hasKey .Values "secrets") }}
 vault.security.banzaicloud.io/vault-env-daemon: "true"
 {{- if hasKey .Values.secrets "bulk" }}
