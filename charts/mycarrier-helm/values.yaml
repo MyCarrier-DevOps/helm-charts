@@ -651,6 +651,11 @@ jobs: []
 ## seccompProfile.type `RuntimeDefault` (or `runtime/default`) — `Localhost` renders fine from this
 ## chart but is hard-rejected at admission. Stick to `RuntimeDefault`.
 ##
+## `annotations` now also render onto the CronJob pod template (in addition to the CronJob resource
+## itself), so it can be used to set per-cronjob pod annotations — e.g. `sidecar.istio.io/inject: "false"`
+## to opt a CronJob's pods out of Istio sidecar injection in istio-injection=enabled namespaces (a
+## never-exiting sidecar container otherwise hangs the Job).
+##
 ## See the example configuration below for complete cronjob specification details.
 
 ## @param cronjobs [array] List of Kubernetes CronJobs to run

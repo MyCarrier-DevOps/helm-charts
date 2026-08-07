@@ -176,6 +176,28 @@ tests:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
           value: "Prune=true"
 
+  - it: should render custom annotations onto the pod template too (e.g. istio sidecar opt-out)
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          annotations:
+            sidecar.istio.io/inject: "false"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+
   - it: should set job deadline and backoff limit
     set:
       environment.name: "dev"

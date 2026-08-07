@@ -48,6 +48,9 @@ jobTemplate:
         annotations:
           {{ include "helm.annotations.vault" . | indent 10 | trim }}
           {{ include "helm.otel.annotations" . | indent 10 | trim }}
+          {{- with .cronjob.annotations }}
+          {{ toYaml . | indent 10 | trim }}
+          {{- end }}
       spec:
         {{ include "helm.podSecurityContext" . | indent 8 | trim }}
         serviceAccountName: default
