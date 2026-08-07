@@ -109,7 +109,7 @@ deployment: deployment
 ## **Container**: image.registry, image.repository, image.tag, pullPolicy, pullSecret
 ## **Resources**: resources.requests.cpu/memory, resources.limits.cpu/memory
 ## **Health Probes**: probes.enableLiveness, probes.enableReadiness, probes.enableStartup (all default true; set to false to disable), custom probe configurations
-## **Security Context**: securityContext.readOnlyRootFilesystem (default false), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back)
+## **Security Context**: securityContext.readOnlyRootFilesystem (default false), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back), securityContext.fsGroup (opt-in pod-level fsGroup; previously ignored/silently dropped, now honored), securityContext.seccompProfile (opt-in pod-level seccompProfile; previously ignored/silently dropped, now honored)
 ## **Service**: service.type, service.ports, service.annotations, service.timeout, service.retryOn
 ## **Networking**: networking.ingress.type, networking.istio.enabled/hosts/routes/corsPolicy/allowedEndpoints
 ## **Autoscaling**: HPA (autoscaling.minReplicas/maxReplicas/targetCPU/targetMemory), VPA (vpa.enabled/updateMode/resources)
@@ -638,7 +638,23 @@ jobs: []
 ## Each cronjob supports: name, schedule (required), timeZone, concurrencyPolicy, suspend,
 ## successfulJobsHistoryLimit, failedJobsHistoryLimit, startingDeadlineSeconds, activeDeadlineSeconds,
 ## backoffLimit, restartPolicy, labels, annotations, image (registry/repository/tag), imagePullPolicy,
-## imagePullSecret, command, args, env, configMapName, secretName, resources (requests/limits), volumes
+## imagePullSecret, command, args, env, configMapName, secretName, resources (requests/limits), volumes,
+## securityContext (opt-in hardened security context, see below)
+##
+## **Security Context (opt-in)**: securityContext.readOnlyRootFilesystem (default false; sets the
+## container's readOnlyRootFilesystem), securityContext.fsGroup (unset by default; sets the pod-level
+## fsGroup), securityContext.seccompProfile (unset by default; sets the pod-level seccompProfile, e.g.
+## {type: RuntimeDefault}). All three are opt-in per cronjob item — omitting securityContext entirely
+## preserves the chart's existing default rendering.
+##
+## IMPORTANT: the cluster's kyverno `restrict-seccomp` policy is Enforce and only allows
+## seccompProfile.type `RuntimeDefault` (or `runtime/default`) — `Localhost` renders fine from this
+## chart but is hard-rejected at admission. Stick to `RuntimeDefault`.
+##
+## `annotations` now also render onto the CronJob pod template (in addition to the CronJob resource
+## itself), so it can be used to set per-cronjob pod annotations — e.g. `sidecar.istio.io/inject: "false"`
+## to opt a CronJob's pods out of Istio sidecar injection in istio-injection=enabled namespaces (a
+## never-exiting sidecar container otherwise hangs the Job).
 ##
 ## See the example configuration below for complete cronjob specification details.
 
@@ -691,7 +707,14 @@ cronjobs: []
 #     limits:
 #       cpu: "500m"
 #       memory: "512Mi"
-#   
+#
+#   # Optional: Hardened security context (opt-in; omit entirely to keep default rendering)
+#   # securityContext:
+#   #   readOnlyRootFilesystem: true
+#   #   fsGroup: 3000
+#   #   seccompProfile:
+#   #     type: RuntimeDefault
+#
 #   # Optional: Volume mounts
 #   # volumes:
 #   #   - name: backup-storage
