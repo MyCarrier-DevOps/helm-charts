@@ -606,7 +606,8 @@
               },
               "fsGroup": {
                 "type": "integer",
-                "description": "Pod-level fsGroup (opt-in; unset by default)"
+                "description": "Pod-level fsGroup (opt-in; unset by default; must be >= 1 — fsGroup 0 is the root group and is rejected)",
+                "minimum": 1
               },
               "seccompProfile": {
                 "type": "object",
@@ -1988,7 +1989,8 @@
               },
               "fsGroup": {
                 "type": "integer",
-                "description": "Pod-level fsGroup (opt-in; unset by default)"
+                "description": "Pod-level fsGroup (opt-in; unset by default; must be >= 1 — fsGroup 0 is the root group and is rejected)",
+                "minimum": 1
               },
               "seccompProfile": {
                 "type": "object",
