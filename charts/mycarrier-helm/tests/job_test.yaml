@@ -713,3 +713,133 @@ tests:
           content:
             name: tmp-dir
             mountPath: /tmp
+
+  - it: should render a large fsGroup value as a plain integer, not scientific notation (int64 cast regression guard)
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 1000000
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000000
+
+  - it: should set container-level readOnlyRootFilesystem when specified on job securityContext
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            readOnlyRootFilesystem: true
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should default container-level readOnlyRootFilesystem to false without job securityContext
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: false
+
+  - it: should set pod-level seccompProfile when specified on job securityContext
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should render pod securityContext with only the default fields when no job securityContext is specified (opt-in regression guard)
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true
+
+  - it: should reject fsGroup 0 via the values schema (fsGroup 0 is the root group and is disallowed)
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 0
+    asserts:
+      # Asserted loosely on purpose: the local unittest plugin (v1.0.0) emits
+      # "jobs.0.securityContext.fsGroup: Must be greater than or equal to 1", but CI pins
+      # v1.1.0 whose exact wording is unconfirmed. Two independent, version-robust patterns:
+      # one anchors on the field name, the other on the numeric bound/phrase, so this survives
+      # a wording change (e.g. jsonschema's "minimum: got 0, want 1" style) without being so loose
+      # it would also pass for an unrelated failure.
+      - failedTemplate:
+          errorPattern: "fsGroup"
+      - failedTemplate:
+          errorPattern: "(?i)(greater than or equal to 1|minimum|want 1|>= *1)"
+
+  - it: should render pod-template annotations and pod securityContext byte-identical to snapshot (regression guard)
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - matchSnapshot:
+          path: spec.template.metadata.annotations
+      - matchSnapshot:
+          path: spec.template.spec.securityContext

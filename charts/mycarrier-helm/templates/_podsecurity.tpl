@@ -1,8 +1,8 @@
 {{/*
 Resolve the workload-item securityContext dict (opt-in hardening block) regardless of
 whether the caller context is an application (.application.securityContext), a cronjob
-item (.cronjob.securityContext), or neither (defaults to an empty dict so all lookups
-below are no-ops and rendered output is unchanged).
+item (.cronjob.securityContext), a job item (.job.securityContext), or neither (defaults
+to an empty dict so all lookups below are no-ops and rendered output is unchanged).
 */}}
 {{- define "helm.workloadSecurityContext" -}}
 {{- $sc := dict -}}
@@ -11,6 +11,9 @@ below are no-ops and rendered output is unchanged).
 {{- end -}}
 {{- if and .cronjob .cronjob.securityContext -}}
 {{- $sc = .cronjob.securityContext -}}
+{{- end -}}
+{{- if and .job .job.securityContext -}}
+{{- $sc = .job.securityContext -}}
 {{- end -}}
 {{- $sc | toJson -}}
 {{- end -}}

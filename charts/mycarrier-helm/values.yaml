@@ -588,8 +588,20 @@ applications: {}
 ##
 ## Each job supports: name, timing (pre-deploy/post-deploy), order, ttlSecondsAfterFinished,
 ## activeDeadlineSeconds, backoffLimit, labels, annotations, image (registry/repository/tag),
-## imagePullPolicy, command, args, env, resources (requests/limits for cpu/memory)
-## 
+## imagePullPolicy, command, args, env, resources (requests/limits for cpu/memory), volumes,
+## securityContext (opt-in hardened security context, see below)
+##
+## **Security Context (opt-in)**: securityContext.readOnlyRootFilesystem (default false; sets the
+## container's readOnlyRootFilesystem), securityContext.fsGroup (unset by default; sets the pod-level
+## fsGroup; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema),
+## securityContext.seccompProfile (unset by default; sets the pod-level seccompProfile, e.g.
+## {type: RuntimeDefault}). All three are opt-in per job item — omitting securityContext entirely
+## preserves the chart's existing default rendering.
+##
+## IMPORTANT: the cluster's kyverno `restrict-seccomp` policy is Enforce and only allows
+## seccompProfile.type `RuntimeDefault` (or `runtime/default`) — `Localhost` renders fine from this
+## chart but is hard-rejected at admission. Stick to `RuntimeDefault`.
+##
 ## See the example configuration below for complete job specification details.
 
 ## @param jobs [array] List of Kubernetes Jobs to run
@@ -631,6 +643,13 @@ jobs: []
 #     limits:
 #       cpu: "500m"
 #       memory: "256Mi"
+#
+#   # Optional: Hardened security context (opt-in; omit entirely to keep default rendering)
+#   # securityContext:
+#   #   readOnlyRootFilesystem: true
+#   #   fsGroup: 3000
+#   #   seccompProfile:
+#   #     type: RuntimeDefault
 
 ## @section Kubernetes CronJobs
 ## Configuration for Kubernetes CronJobs to run on a schedule
