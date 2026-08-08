@@ -169,6 +169,18 @@
               }
             ]
           },
+          "istioDisabled": {
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Opt this application's pod template out of Istio sidecar injection and drop the mycarrier.io/gateway annotation (read by _helpers.tpl helm.annotations.istio / helm.annotations.gateway). Not to be confused with service.istioDisabled, which is a separate per-service knob.",
+                "default": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "staticHostname": {
             "oneOf": [
               {
@@ -598,21 +610,7 @@
             }
           },
           "securityContext": {
-            "type": "object",
-            "properties": {
-              "readOnlyRootFilesystem": {
-                "type": "boolean",
-                "default": false
-              },
-              "fsGroup": {
-                "type": "integer",
-                "description": "Pod-level fsGroup (opt-in; unset by default)"
-              },
-              "seccompProfile": {
-                "type": "object",
-                "description": "Pod-level seccompProfile (opt-in; unset by default)"
-              }
-            }
+            "$ref": "#/definitions/workloadSecurityContext"
           },
           "replicas": {
             "type": "integer",
@@ -1725,6 +1723,9 @@
                 }
               }
             }
+          },
+          "securityContext": {
+            "$ref": "#/definitions/workloadSecurityContext"
           }
         }
       }
@@ -1978,23 +1979,7 @@
             }
           },
           "securityContext": {
-            "type": "object",
-            "description": "Opt-in hardened security context for this cronjob",
-            "properties": {
-              "readOnlyRootFilesystem": {
-                "type": "boolean",
-                "description": "Container-level readOnlyRootFilesystem (opt-in; unset defaults to false)",
-                "default": false
-              },
-              "fsGroup": {
-                "type": "integer",
-                "description": "Pod-level fsGroup (opt-in; unset by default)"
-              },
-              "seccompProfile": {
-                "type": "object",
-                "description": "Pod-level seccompProfile (opt-in; unset by default)"
-              }
-            }
+            "$ref": "#/definitions/workloadSecurityContext"
           }
         }
       }
@@ -2406,6 +2391,48 @@
                 }
               }
             }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "workloadSecurityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "description": "Container-level readOnlyRootFilesystem (opt-in; unset defaults to false)",
+          "default": false
+        },
+        "fsGroup": {
+          "type": "integer",
+          "description": "Pod-level fsGroup (opt-in; unset by default). Must be empty or greater than zero per MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule `check-fsGroup` — fsGroup 0 is the root group.",
+          "minimum": 1
+        },
+        "seccompProfile": {
+          "type": "object",
+          "description": "Pod-level seccompProfile (opt-in; unset by default)",
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "SeccompProfile type, per the Kubernetes SeccompProfile.type API field",
+              "enum": ["RuntimeDefault", "Localhost", "Unconfined"]
+            },
+            "localhostProfile": {
+              "type": "string",
+              "description": "Path to a pre-configured profile on the node, relative to the kubelet's configured seccomp profile location. Only used when type is Localhost."
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        "addCapabilities": {
+          "type": "array",
+          "description": "Linux capabilities to add back on top of the drop-all default. All capabilities are dropped by default; list ones here to add them back. Only honoured on the application (Deployment) path by _podsecurity.tpl — jobs and cronjobs do not read this field.",
+          "items": {
+            "type": "string"
           }
         }
       }

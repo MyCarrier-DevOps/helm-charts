@@ -31,8 +31,16 @@ template:
       {{ include "helm.annotations.istio" . | indent 6 | trim }}
       {{ include "helm.annotations.gateway" . | indent 6 | trim }}
       {{ include "helm.otel.annotations" $ | indent 6 | trim }}
-      {{- with .application.annotations }}
-      {{ toYaml . |  indent 6 | trim }}
+      {{- /* Istio/gateway annotations are reserved: application.istioDisabled, networking.istio.enabled,
+           and service.istioDisabled are the supported per-workload knobs for opting out of Istio sidecar
+           injection / the gateway annotation (see helm.annotations.istio / helm.annotations.gateway).
+           Allowing application.annotations to override sidecar.istio.io/inject, proxy.istio.io/config,
+           or mycarrier.io/gateway is therefore redundant and was closing over a duplicate-key defect
+           (last-key-wins on the rendered YAML, silently skipped by scanners). */}}
+      {{- $reserved := merge (dict) (include "helm.annotations.vault" $ | fromYaml) (include "helm.annotations.istio" . | fromYaml) (include "helm.annotations.gateway" . | fromYaml) (include "helm.otel.annotations" $ | fromYaml) }}
+      {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .application.annotations) }}
+      {{- if $extra }}
+      {{ $extra | indent 6 | trim }}
       {{- end }}
   spec:
     {{ include "helm.podDefaultAffinity" . | indent 4 | trim }}

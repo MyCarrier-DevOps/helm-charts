@@ -1,0 +1,19 @@
+should render pod-template annotations and pod securityContext byte-identical to snapshot (regression guard):
+  1: |
+    mycarrier.io/gateway: istio-system/default
+    proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
+    sidecar.istio.io/inject: "true"
+    vault.security.banzaicloud.io/mutate-probes: "true"
+    vault.security.banzaicloud.io/run-as-group: "1000"
+    vault.security.banzaicloud.io/run-as-non-root: "true"
+    vault.security.banzaicloud.io/run-as-user: "100"
+    vault.security.banzaicloud.io/vault-addr: https://vault.mycarrier.tech
+    vault.security.banzaicloud.io/vault-agent-env-variables: '[{"Name":"SKIP_CHOWN","Value":"true"},{"Name":"SKIP_SETCAP","Value":"true"}]'
+    vault.security.banzaicloud.io/vault-auth-method: azure
+    vault.security.banzaicloud.io/vault-env-daemon: "true"
+    vault.security.banzaicloud.io/vault-path: clusterauth
+    vault.security.banzaicloud.io/vault-role: appcluster
+  2: |
+    runAsGroup: 3000
+    runAsNonRoot: true
+    runAsUser: 1000
