@@ -923,3 +923,42 @@ tests:
           path: spec.jobTemplate.spec.template.metadata.annotations
       - matchSnapshot:
           path: spec.jobTemplate.spec.template.spec.securityContext
+
+  - it: should render the smallest legal fsGroup (1) as a presence guard boundary, not a falsey-guard boundary
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 1
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.fsGroup
+          value: 1
+
+  - it: should render pod securityContext with only the default fields when no cronjob securityContext is specified (opt-in regression guard)
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true

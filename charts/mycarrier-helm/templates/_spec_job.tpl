@@ -32,6 +32,15 @@ template:
       {{- end }}
       {{ include "helm.annotations.vault" . | indent 6 | trim }}
       {{ include "helm.otel.annotations" . | indent 6 | trim }}
+      {{- /* The four argocd.argoproj.io/* keys are reserved unconditionally, even though sync-wave/hook
+           only render when .job.timing is set. This keeps the reserved set independent of .job.timing,
+           so enabling a hook later cannot silently change which user keys survive. */}}
+      {{- $argocdReserved := dict "argocd.argoproj.io/sync-options" "" "argocd.argoproj.io/hook-delete-policy" "" "argocd.argoproj.io/sync-wave" "" "argocd.argoproj.io/hook" "" }}
+      {{- $reserved := merge (dict) $argocdReserved (include "helm.annotations.vault" . | fromYaml) (include "helm.otel.annotations" . | fromYaml) }}
+      {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .job.annotations) }}
+      {{- if $extra }}
+      {{ $extra | indent 6 | trim }}
+      {{- end }}
   spec:
     {{ include "helm.podSecurityContext" . | indent 4 | trim }}
     serviceAccountName: default

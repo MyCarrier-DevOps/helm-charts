@@ -48,7 +48,7 @@ jobTemplate:
         annotations:
           {{ include "helm.annotations.vault" . | indent 10 | trim }}
           {{ include "helm.otel.annotations" . | indent 10 | trim }}
-          {{- $reserved := merge (dict) (include "helm.annotations.vault" $ | fromYaml | default dict) (include "helm.otel.annotations" $ | fromYaml | default dict) }}
+          {{- $reserved := merge (dict) (include "helm.annotations.vault" $ | fromYaml) (include "helm.otel.annotations" $ | fromYaml) }}
           {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" $.cronjob.annotations) }}
           {{- if $extra }}
           {{ $extra | indent 10 | trim }}

@@ -96,3 +96,62 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should let chart-managed pod-template annotations win over colliding user annotations on every reserved surface while passing a benign one through
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.env: {}
+      applications.test-app-api.annotations:
+        vault.security.banzaicloud.io/run-as-non-root: "false"
+        sidecar.istio.io/inject: "false"
+        mycarrier.io/gateway: "x/y"
+        team: "platform"
+    asserts:
+      - isKind:
+          of: Deployment
+      # Full-map equal (not contains) so drift in the reserved-key set or a surviving user
+      # override on any one of the four chart-managed keys (vault, istio inject, istio proxy
+      # config, gateway) fails this test - a contains assertion would not catch that.
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            vault.security.banzaicloud.io/vault-addr: "https://vault.mycarrier.tech"
+            vault.security.banzaicloud.io/mutate-probes: "true"
+            vault.security.banzaicloud.io/vault-auth-method: "azure"
+            vault.security.banzaicloud.io/vault-path: "clusterauth"
+            vault.security.banzaicloud.io/vault-role: "appcluster"
+            vault.security.banzaicloud.io/run-as-non-root: "true"
+            vault.security.banzaicloud.io/run-as-user: "100"
+            vault.security.banzaicloud.io/run-as-group: "1000"
+            vault.security.banzaicloud.io/vault-agent-env-variables: '[{"Name":"SKIP_CHOWN","Value":"true"},{"Name":"SKIP_SETCAP","Value":"true"}]'
+            vault.security.banzaicloud.io/vault-env-daemon: "true"
+            proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
+            sidecar.istio.io/inject: "true"
+            mycarrier.io/gateway: "istio-system/default"
+            team: "platform"
+
+  - it: should still render sidecar.istio.io/inject false via istioDisabled after closing the annotation override (capability preserved)
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.env: {}
+      applications.test-app-api.istioDisabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+      - notExists:
+          path: spec.template.metadata.annotations["proxy.istio.io/config"]

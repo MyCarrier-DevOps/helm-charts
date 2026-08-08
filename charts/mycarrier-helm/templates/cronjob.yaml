@@ -21,7 +21,7 @@ metadata:
     {{- end }}
   annotations:
     {{ include "helm.annotations.cronjobMetadata" . | indent 4 | trim }}
-  {{- $reserved := include "helm.annotations.cronjobMetadata" . | fromYaml | default dict }}
+  {{- $reserved := include "helm.annotations.cronjobMetadata" . | fromYaml }}
   {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .annotations) }}
   {{- if $extra }}
     {{ $extra | indent 4 | trim }}

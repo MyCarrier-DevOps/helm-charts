@@ -3,16 +3,17 @@ Resolve the workload-item securityContext dict (opt-in hardening block) regardle
 whether the caller context is an application (.application.securityContext), a cronjob
 item (.cronjob.securityContext), a job item (.job.securityContext), or neither (defaults
 to an empty dict so all lookups below are no-ops and rendered output is unchanged).
+The three sources are mutually exclusive (application -> cronjob -> job precedence,
+matching the exclusive if/else-if chain used in _labels.tpl) since a single caller
+context only ever carries one of .application/.cronjob/.job.
 */}}
 {{- define "helm.workloadSecurityContext" -}}
 {{- $sc := dict -}}
 {{- if and .application .application.securityContext -}}
 {{- $sc = .application.securityContext -}}
-{{- end -}}
-{{- if and .cronjob .cronjob.securityContext -}}
+{{- else if and .cronjob .cronjob.securityContext -}}
 {{- $sc = .cronjob.securityContext -}}
-{{- end -}}
-{{- if and .job .job.securityContext -}}
+{{- else if and .job .job.securityContext -}}
 {{- $sc = .job.securityContext -}}
 {{- end -}}
 {{- $sc | toJson -}}
@@ -25,12 +26,12 @@ securityContext:
   runAsUser: 1000
   runAsGroup: 3000
   runAsNonRoot: true
-{{- with $sc.fsGroup }}
-  fsGroup: {{ int64 . }}
+{{- if hasKey $sc "fsGroup" }}
+  fsGroup: {{ int64 $sc.fsGroup }}
 {{- end }}
-{{- with $sc.seccompProfile }}
+{{- if hasKey $sc "seccompProfile" }}
   seccompProfile:
-{{ toYaml . | indent 4 }}
+{{ toYaml $sc.seccompProfile | indent 4 }}
 {{- end }}
 {{- end }}
 {{- end -}}

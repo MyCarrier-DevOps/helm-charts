@@ -20,9 +20,11 @@ metadata:
     {{ toYaml .labels | indent 4 | trim }}
     {{- end }}
   annotations:
-    argocd.argoproj.io/sync-options: Force=true,Replace=true
-  {{- with .annotations }}
-    {{ toYaml . | indent 4 | trim }}
+    {{ include "helm.annotations.jobMetadata" . | indent 4 | trim }}
+  {{- $reserved := include "helm.annotations.jobMetadata" . | fromYaml }}
+  {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .annotations) }}
+  {{- if $extra }}
+    {{ $extra | indent 4 | trim }}
   {{- end }}
 spec:
   {{ include "helm.specs.job" $rootContext | indent 2 | trim }}

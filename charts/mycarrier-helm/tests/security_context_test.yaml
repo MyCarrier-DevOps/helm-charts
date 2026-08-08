@@ -193,3 +193,63 @@ tests:
           path: spec.template.metadata.annotations
       - matchSnapshot:
           path: spec.template.spec.securityContext
+
+  - it: should reject fsGroup 0 via the values schema on the application securityContext (fsGroup 0 is the root group and is disallowed)
+    set:
+      environment.name: "dev"
+      applications.fsgroup-zero-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "fsgroup-zero-app"
+          tag: "1.0.0"
+        securityContext:
+          fsGroup: 0
+    asserts:
+      # Loosely asserted for CI-version robustness (see the equivalent job/cronjob tests):
+      # local unittest v1.0.0 emits "Must be greater than or equal to 1"; CI pins v1.1.0 whose
+      # exact wording is unconfirmed - jsonschema's "minimum: got 0, want 1" is one known form.
+      - failedTemplate:
+          errorPattern: "fsGroup"
+      - failedTemplate:
+          errorPattern: "(?i)(greater than or equal to 1|minimum|want 1|>= *1)"
+
+  - it: should render the smallest legal fsGroup (1) on an application as a presence guard boundary, not a falsey-guard boundary
+    set:
+      environment.name: "dev"
+      applications.fsgroup-one-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "fsgroup-one-app"
+          tag: "1.0.0"
+        securityContext:
+          fsGroup: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1
+
+  - it: should render pod securityContext with only the default fields when no application securityContext is specified (opt-in regression guard)
+    set:
+      environment.name: "dev"
+      applications.no-sc-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "no-sc-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true

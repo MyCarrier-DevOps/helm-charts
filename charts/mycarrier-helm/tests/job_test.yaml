@@ -843,3 +843,161 @@ tests:
           path: spec.template.metadata.annotations
       - matchSnapshot:
           path: spec.template.spec.securityContext
+
+  - it: should let the chart-managed argocd sync-options annotation win over a colliding user annotation on Job metadata (exactly once, no stray duplicate)
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          annotations:
+            argocd.argoproj.io/sync-options: "Prune=false"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "Force=true,Replace=true"
+
+  - it: should render jobs[].annotations onto the pod template too, with chart-managed keys winning over collisions (new capability)
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          annotations:
+            sidecar.istio.io/inject: "false"
+            argocd.argoproj.io/sync-options: "Prune=false"
+            vault.security.banzaicloud.io/run-as-non-root: "false"
+    asserts:
+      - isKind:
+          of: Job
+      # New capability: jobs[].annotations previously could not reach the pod template at all.
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+      # Job pod-template sync-options differs from the Job-metadata value by design
+      # (Prune=true,Replace=true vs Force=true,Replace=true) - the collision must resolve to
+      # THIS surface's chart-managed value, not the metadata one.
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "Prune=true,Replace=true"
+      - equal:
+          path: spec.template.metadata.annotations["vault.security.banzaicloud.io/run-as-non-root"]
+          value: "true"
+
+  - it: should reserve the argocd hook annotations on the job pod template unconditionally, even when timing is not set
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: regular-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/regular"
+            tag: "1.0.0"
+          annotations:
+            argocd.argoproj.io/hook: "PreSync"
+            argocd.argoproj.io/sync-wave: "5"
+    asserts:
+      - isKind:
+          of: Job
+      # No .job.timing set, so the chart itself would not render these keys - but they are
+      # reserved unconditionally (see _spec_job.tpl $argocdReserved), so the user-supplied
+      # values must still be dropped rather than leaking through.
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+
+  - it: should reject readOnlyRootFileSystem (capital S typo) via the values schema
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            readOnlyRootFileSystem: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)(readOnlyRootFileSystem|additional propert)"
+
+  - it: should reject an empty seccompProfile (missing required type) via the values schema
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            seccompProfile: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)(seccompProfile|missing propert|required)"
+
+  - it: should reject a seccompProfile.type outside the enum via the values schema
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            seccompProfile:
+              type: Bogus
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)(RuntimeDefault|Localhost|Unconfined|enum|one of)"
+
+  - it: should set pod-level seccompProfile Localhost with a localhostProfile path
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/x.json
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: Localhost
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.localhostProfile
+          value: profiles/x.json
+
+  - it: should render the smallest legal fsGroup (1) as a presence guard boundary, not a falsey-guard boundary
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 1
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1
