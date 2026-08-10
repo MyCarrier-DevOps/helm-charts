@@ -20,9 +20,11 @@ metadata:
     {{ toYaml .labels | indent 4 | trim }}
     {{- end }}
   annotations:
-    argocd.argoproj.io/sync-options: Prune=true
-  {{- with .annotations }}
-    {{ toYaml . | indent 4 | trim }}
+    {{ include "helm.annotations.cronjobMetadata" . | indent 4 | trim }}
+  {{- $reserved := include "helm.annotations.cronjobMetadata" . | fromYaml }}
+  {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .annotations) }}
+  {{- if $extra }}
+    {{ $extra | indent 4 | trim }}
   {{- end }}
 spec:
   {{ include "helm.specs.cronjob" $rootContext | indent 2 | trim }}

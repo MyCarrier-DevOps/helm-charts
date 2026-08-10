@@ -136,3 +136,29 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should honor application-level securityContext fsGroup and seccompProfile on the pod spec
+    set:
+      environment.name: "dev"
+      applications.app-level-sc-rollout:
+        enabled: true
+        deploymentType: rollout
+        image:
+          registry: "myregistry.example.com"
+          repository: "mycarrier/app-level-sc-rollout"
+          tag: "1.0.0"
+        updateStrategy:
+          type: "RollingUpdate"
+        securityContext:
+          fsGroup: 1000000
+          seccompProfile:
+            type: RuntimeDefault
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000000
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault

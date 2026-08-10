@@ -126,3 +126,64 @@ tests:
           path: spec.template.spec.volumes
       - exists:
           path: spec.template.spec.containers[0].volumeMounts
+
+  - it: should honor application-level securityContext fsGroup and seccompProfile on the pod spec
+    set:
+      environment.name: "dev"
+      applications.app-level-sc-statefulset:
+        enabled: true
+        deploymentType: statefulset
+        image:
+          registry: "myregistry.example.com"
+          repository: "mycarrier/app-level-sc-statefulset"
+          tag: "1.0.0"
+        securityContext:
+          fsGroup: 1000000
+          seccompProfile:
+            type: RuntimeDefault
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000000
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should let chart-managed pod-template annotations win over colliding user annotations on every reserved surface while passing a benign one through
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.annotations:
+        vault.security.banzaicloud.io/run-as-non-root: "false"
+        sidecar.istio.io/inject: "false"
+        mycarrier.io/gateway: "x/y"
+        team: "platform"
+    asserts:
+      - isKind:
+          of: StatefulSet
+      # Full-map equal (not contains) so a surviving user override on any one of the four
+      # chart-managed keys would fail this test - a contains assertion would not catch that.
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            vault.security.banzaicloud.io/vault-addr: "https://vault.mycarrier.tech"
+            vault.security.banzaicloud.io/mutate-probes: "true"
+            vault.security.banzaicloud.io/vault-auth-method: "azure"
+            vault.security.banzaicloud.io/vault-path: "clusterauth"
+            vault.security.banzaicloud.io/vault-role: "appcluster"
+            vault.security.banzaicloud.io/run-as-non-root: "true"
+            vault.security.banzaicloud.io/run-as-user: "100"
+            vault.security.banzaicloud.io/run-as-group: "1000"
+            vault.security.banzaicloud.io/vault-agent-env-variables: '[{"Name":"SKIP_CHOWN","Value":"true"},{"Name":"SKIP_SETCAP","Value":"true"}]'
+            vault.security.banzaicloud.io/vault-env-daemon: "true"
+            proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
+            sidecar.istio.io/inject: "true"
+            mycarrier.io/gateway: "istio-system/default"
+            team: "platform"

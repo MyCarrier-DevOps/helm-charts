@@ -743,3 +743,222 @@ tests:
           content:
             secretRef:
               name: "backup-secrets"
+
+  - it: should render a large fsGroup value as a plain integer, not scientific notation (int64 cast regression guard)
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 1000000
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.fsGroup
+          value: 1000000
+
+  - it: should set container-level readOnlyRootFilesystem when specified on cronjob securityContext
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          securityContext:
+            readOnlyRootFilesystem: true
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should default container-level readOnlyRootFilesystem to false without cronjob securityContext
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: false
+
+  - it: should set pod-level seccompProfile when specified on cronjob securityContext
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should let the chart-managed vault annotation win over a colliding user annotation while passing through a benign one
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          annotations:
+            sidecar.istio.io/inject: "false"
+            vault.security.banzaicloud.io/run-as-non-root: "false"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations["vault.security.banzaicloud.io/run-as-non-root"]
+          value: "true"
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+      # Prove there is no duplicate/stray key left behind by the collision-drop logic: the plugin
+      # (v1.0.0) has no raw-text/duplicate-key assertion for parsed YAML manifests (matchRegexRaw
+      # only populates for text-file templates and render-error content, not standard K8s
+      # manifests - verified empirically: the "raw" field is nil for cronjob.yaml). The strongest
+      # available proxy is asserting the annotations map equals EXACTLY the expected key set -
+      # any duplicate key would either fail YAML decoding or be silently collapsed by the decoder,
+      # and any stray/incorrectly-retained key would break this exact-equality check.
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations
+          value:
+            sidecar.istio.io/inject: "false"
+            vault.security.banzaicloud.io/mutate-probes: "true"
+            vault.security.banzaicloud.io/run-as-group: "1000"
+            vault.security.banzaicloud.io/run-as-non-root: "true"
+            vault.security.banzaicloud.io/run-as-user: "100"
+            vault.security.banzaicloud.io/vault-addr: "https://vault.mycarrier.tech"
+            vault.security.banzaicloud.io/vault-agent-env-variables: '[{"Name":"SKIP_CHOWN","Value":"true"},{"Name":"SKIP_SETCAP","Value":"true"}]'
+            vault.security.banzaicloud.io/vault-auth-method: "azure"
+            vault.security.banzaicloud.io/vault-env-daemon: "true"
+            vault.security.banzaicloud.io/vault-path: "clusterauth"
+            vault.security.banzaicloud.io/vault-role: "appcluster"
+
+  - it: should let the chart-managed argocd sync-options annotation win over a colliding user annotation on CronJob metadata
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          annotations:
+            argocd.argoproj.io/sync-options: "Prune=false"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "Prune=true"
+
+  - it: should reject fsGroup 0 via the values schema (fsGroup 0 is the root group and is disallowed)
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 0
+    asserts:
+      # Asserted loosely on purpose: the local unittest plugin (v1.0.0) emits
+      # "cronjobs.0.securityContext.fsGroup: Must be greater than or equal to 1", but CI pins
+      # v1.1.0 whose exact wording is unconfirmed. Two independent, version-robust patterns:
+      # one anchors on the field name, the other on the numeric bound/phrase, so this survives
+      # a wording change (e.g. jsonschema's "minimum: got 0, want 1" style) without being so loose
+      # it would also pass for an unrelated failure.
+      - failedTemplate:
+          errorPattern: "fsGroup"
+      - failedTemplate:
+          errorPattern: "(?i)(greater than or equal to 1|minimum|want 1|>= *1)"
+
+  - it: should render pod-template annotations and pod securityContext byte-identical to snapshot (regression guard)
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - matchSnapshot:
+          path: spec.jobTemplate.spec.template.metadata.annotations
+      - matchSnapshot:
+          path: spec.jobTemplate.spec.template.spec.securityContext
+
+  - it: should render the smallest legal fsGroup (1) as a presence guard boundary, not a falsey-guard boundary
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+          securityContext:
+            fsGroup: 1
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.fsGroup
+          value: 1
+
+  - it: should render pod securityContext with only the default fields when no cronjob securityContext is specified (opt-in regression guard)
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: backup-job
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/backup"
+            tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true

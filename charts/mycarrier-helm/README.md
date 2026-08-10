@@ -1054,6 +1054,9 @@ cronjobs:
 | `configMapName` | ConfigMap to load as environment variables | None |
 | `secretName` | Secret to load as environment variables | None |
 | `resources` | CPU and memory resource limits | Defaults set |
+| `labels` | Custom labels added to the CronJob resource | `{}` |
+| `annotations` | Custom annotations, rendered onto BOTH the CronJob resource metadata and the CronJob pod template (filtered against chart-managed keys — see [Security Context and Reserved Annotations](#security-context-and-reserved-annotations)) | `{}` |
+| `securityContext` | Opt-in hardened security context (`readOnlyRootFilesystem`, `fsGroup`, `seccompProfile`) — see [Security Context and Reserved Annotations](#security-context-and-reserved-annotations) | unset |
 | `volumes` | Volume mounts configuration | `[]` |
 
 #### Cron Schedule Examples
@@ -1242,6 +1245,85 @@ disableOtelAutoinstrumentation: false  # opt in; default true leaves it off
 Adds the operator's injection annotations for `nodejs`/`java`/`python` and the nodejs
 `NODE_OPTIONS --require @opentelemetry/auto-instrumentations-node/register` hook. Note the operator
 may also set `NODE_OPTIONS` itself when it injects.
+
+## Security Context and Reserved Annotations
+
+### securityContext (applications / jobs / cronjobs)
+
+All three workload surfaces (`applications[].securityContext`, `jobs[].securityContext`,
+`cronjobs[].securityContext`) support the same opt-in keys. Omitting `securityContext` entirely
+preserves the chart's existing default rendering — nothing changes until you set one of these:
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `readOnlyRootFilesystem` | `false` | Sets the container's `readOnlyRootFilesystem`. |
+| `addCapabilities` | `[]` | Applications only. All capabilities are dropped by default (`drop: [ALL]`); list specific capabilities here to add them back. |
+| `fsGroup` | unset | Sets the pod-level `fsGroup`. Must be `>= 1` — `0` is the root group and is rejected by the values schema. **This lower bound is ORG POLICY**, enforced by `MyCarrier-DevOps/kyverno-policies` `require-non-root-groups` (rule `check-fsGroup`: "must be empty or greater than zero") — it is **not** an upstream Pod Security Standards control. The [PSS spec](https://kubernetes.io/docs/concepts/security/pod-security-standards/) contains zero occurrences of `fsGroup`/`runAsGroup`/`supplementalGroups`; those were PodSecurityPolicy fields, and PSP is retired. |
+| `seccompProfile` | unset | Sets the pod-level `seccompProfile`, e.g. `{type: RuntimeDefault}`. |
+
+**seccompProfile and the `restrict-seccomp` kyverno policy**: the ClusterPolicy differs per cluster,
+because each app cluster syncs its own branch of `MyCarrier-DevOps/kyverno-policies` (verified as of
+2026-08-08):
+
+| Cluster | `validationFailureAction` | Accepted pattern | Effect on `RuntimeDefault` |
+| --- | --- | --- | --- |
+| development | `Enforce` | `runtime/default \| RuntimeDefault` | Passes, IS enforced at admission. |
+| data, production-csp | `Audit` (report-only) | `runtime/default` (literal only) | Records a PolicyReport entry; nothing is blocked. |
+
+Use `RuntimeDefault`: it is the correct value for the Kubernetes `SeccompProfile.type` field
+(`runtime/default` is the pre-1.25 annotation form and is not a legal field value), and the Pod
+Security Standards `restricted` profile permits both `RuntimeDefault` and `Localhost`, forbidding
+only `Unconfined`.
+
+### Annotation precedence and reserved keys
+
+`annotations` on any workload surface is filtered before rendering: chart-managed annotations
+**always win**. A user-supplied key that collides with a chart-managed key is **dropped** from
+`annotations` — it does not override the chart's value and does not render twice. The reserved set
+is an **exact-key match** (Helm's `hasKey`), not a `vault.security.banzaicloud.io/*` prefix match —
+any key outside the table below (including other `vault.security.banzaicloud.io/*` annotations the
+chart doesn't set) is applied to the pod/resource as-is.
+
+| Surface | Reserved keys |
+| --- | --- |
+| Application pod template (Deployment / StatefulSet / Rollout) | vault keys + otel keys (see below) + `sidecar.istio.io/inject`, `proxy.istio.io/config` + `mycarrier.io/gateway` |
+| CronJob resource metadata | `argocd.argoproj.io/sync-options` |
+| CronJob pod template | vault keys + otel keys only (no argocd/istio/gateway keys) |
+| Job resource metadata | `argocd.argoproj.io/sync-options` |
+| Job pod template | vault keys + otel keys + `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/hook-delete-policy`, `argocd.argoproj.io/sync-wave`, `argocd.argoproj.io/hook` (the four argocd keys are reserved unconditionally, even though `sync-wave`/`hook` only render when `.timing` is set) |
+
+**vault keys**: `vault-addr`, `vault-auth-method`, `vault-path`, `vault-role`,
+`vault-agent-env-variables`, `mutate-probes`, `run-as-non-root`, `run-as-user`, `run-as-group`, plus
+`vault-env-daemon` (only when `secrets` is set) and `vault-env-from-path` (only when
+`secrets.bulk.path` is set).
+
+**otel keys**: `sidecar.opentelemetry.io/inject`, `instrumentation.opentelemetry.io/container-names`,
+and `instrumentation.opentelemetry.io/inject-<language>` for the one resolved language only —
+rendered only when `manualOtelConfig` is not `true` AND `disableOtelAutoinstrumentation: false` AND
+the language is `nodejs`/`java`/`python`.
+
+**Unmanaged keys pass through as-is** — including security-relevant ones. Verified: `vault-skip-verify`
+(disables TLS verification to Vault), `mutate: skip` (disables secret injection entirely),
+`vault-namespace`, `vault-serviceaccount`. `psp-allow-privilege-escalation` also renders through but
+is not documented in the current bank-vaults reference.
+
+**Istio override is closed on application surfaces**: `sidecar.istio.io/inject`,
+`proxy.istio.io/config`, and `mycarrier.io/gateway` set in `applications[].annotations` are dropped —
+the chart's own computed values always win. Use `applications[].istioDisabled`,
+`applications[].networking.istio.enabled`, or `applications[].service.istioDisabled` instead.
+
+This does **not** apply to `cronjobs[]`/`jobs[]` — their pod templates emit no istio annotations of
+their own, so `sidecar.istio.io/inject: "false"` set via `cronjobs[].annotations` /
+`jobs[].annotations` still passes through and remains the documented way to stop a never-exiting
+sidecar from hanging a CronJob/Job. This matters more for Jobs than CronJobs: chart Jobs are ArgoCD
+PreSync/PostSync hooks, so a never-exiting sidecar on a Job pod blocks the entire application sync,
+not just one Job run. `jobs[].annotations` now render onto both the Job resource metadata and the
+Job pod template (filtered), mirroring `cronjobs[].annotations`.
+
+The reserved set is also context-dependent: a key that is free today can become chart-managed when a
+related feature is enabled (e.g. turning on otel autoinstrumentation), at which point the user's
+value stops taking effect. This is deliberate — the alternative (failing the template render) would
+turn an unrelated future "enable otel" change into a hard non-local build break.
 
 ## Troubleshooting
 

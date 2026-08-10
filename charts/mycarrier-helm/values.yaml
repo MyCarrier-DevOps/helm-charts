@@ -109,12 +109,44 @@ deployment: deployment
 ## **Container**: image.registry, image.repository, image.tag, pullPolicy, pullSecret
 ## **Resources**: resources.requests.cpu/memory, resources.limits.cpu/memory
 ## **Health Probes**: probes.enableLiveness, probes.enableReadiness, probes.enableStartup (all default true; set to false to disable), custom probe configurations
-## **Security Context**: securityContext.readOnlyRootFilesystem (default false), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back), securityContext.fsGroup (opt-in pod-level fsGroup; previously ignored/silently dropped, now honored), securityContext.seccompProfile (opt-in pod-level seccompProfile; previously ignored/silently dropped, now honored)
+## **Security Context**: securityContext.readOnlyRootFilesystem (default false), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back), securityContext.fsGroup (opt-in pod-level fsGroup; previously ignored/silently dropped, now honored; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1 bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (opt-in pod-level seccompProfile; previously ignored/silently dropped, now honored)
 ## **Service**: service.type, service.ports, service.annotations, service.timeout, service.retryOn
 ## **Networking**: networking.ingress.type, networking.istio.enabled/hosts/routes/corsPolicy/allowedEndpoints
 ## **Autoscaling**: HPA (autoscaling.minReplicas/maxReplicas/targetCPU/targetMemory), VPA (vpa.enabled/updateMode/resources)
 ## **Monitoring**: serviceMonitor.enabled/path/interval/scheme
 ## **Testing**: testtrigger configuration for automated test jobs
+##
+## **Annotations — reserved keys (application pod template)**: `applications[].annotations` render
+## onto the pod template for Deployment / StatefulSet / Rollout applications. Chart-managed
+## annotations always win: a user-supplied key that collides with a chart-managed key is DROPPED
+## from `annotations` before rendering — it does not override the chart's value and does not render
+## twice. The reserved set is an EXACT-KEY match (`hasKey`), not a `vault.security.banzaicloud.io/*`
+## prefix match:
+##   - vault keys: `vault-addr`, `vault-auth-method`, `vault-path`, `vault-role`,
+##     `vault-agent-env-variables`, `mutate-probes`, `run-as-non-root`, `run-as-user`,
+##     `run-as-group`, plus `vault-env-daemon` (only when `secrets` is set) and
+##     `vault-env-from-path` (only when `secrets.bulk.path` is set)
+##   - otel keys: `sidecar.opentelemetry.io/inject`, `instrumentation.opentelemetry.io/container-names`,
+##     and `instrumentation.opentelemetry.io/inject-<language>` for the ONE resolved language only.
+##     Rendered only when `manualOtelConfig` is not true AND `disableOtelAutoinstrumentation: false`
+##     AND the language is nodejs/java/python (verified call chain: `helm.otel.annotations` ->
+##     `helm.otel.autoinstrumentation.enabled` -> `helm.otel.chartManaged` -> `manualOtelConfig`)
+##   - istio keys: `sidecar.istio.io/inject`, `proxy.istio.io/config`
+##   - gateway key: `mycarrier.io/gateway`
+##
+## Any key NOT in this reserved set is applied to the pod as-is — including other
+## `vault.security.banzaicloud.io/*` keys the chart does not set. Security-relevant keys verified to
+## pass through unmanaged: `vault-skip-verify` (disables TLS verification to Vault), `mutate: skip`
+## (disables secret injection entirely), `vault-namespace`, `vault-serviceaccount`.
+## `psp-allow-privilege-escalation` also renders through but is not documented in the current
+## bank-vaults reference.
+##
+## **Istio override is CLOSED on application surfaces**: `sidecar.istio.io/inject`,
+## `proxy.istio.io/config` and `mycarrier.io/gateway` set in `applications[].annotations` are DROPPED
+## — the chart's own computed values always win. The supported per-workload knobs are
+## `applications[].istioDisabled`, `applications[].networking.istio.enabled`, and
+## `applications[].service.istioDisabled`. This closure does NOT apply to `cronjobs[]`/`jobs[]` — see
+## the Kubernetes Jobs / CronJobs sections below.
 
 ## @param applications [object] Map of application definitions where the key is the application name
 
@@ -588,8 +620,55 @@ applications: {}
 ##
 ## Each job supports: name, timing (pre-deploy/post-deploy), order, ttlSecondsAfterFinished,
 ## activeDeadlineSeconds, backoffLimit, labels, annotations, image (registry/repository/tag),
-## imagePullPolicy, command, args, env, resources (requests/limits for cpu/memory)
-## 
+## imagePullPolicy, command, args, env, resources (requests/limits for cpu/memory), volumes,
+## securityContext (opt-in hardened security context, see below)
+##
+## **Security Context (opt-in)**: securityContext.readOnlyRootFilesystem (default false; sets the
+## container's readOnlyRootFilesystem), securityContext.fsGroup (unset by default; sets the pod-level
+## fsGroup; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1
+## bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule
+## `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards
+## control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those
+## were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (unset by
+## default; sets the pod-level seccompProfile, e.g. {type: RuntimeDefault}). All three are opt-in per
+## job item — omitting securityContext entirely preserves the chart's existing default rendering.
+##
+## the `restrict-seccomp` ClusterPolicy differs per cluster, because each app cluster syncs its own
+## branch of MyCarrier-DevOps/kyverno-policies:
+##   - development cluster: validationFailureAction Enforce; pattern accepts
+##     `runtime/default | RuntimeDefault`, so `RuntimeDefault` passes and IS enforced at admission.
+##   - data and production-csp clusters: validationFailureAction Audit (report-only — violations
+##     appear in PolicyReport objects, nothing is blocked); pattern accepts only the literal
+##     `runtime/default`, so `RuntimeDefault` records a PolicyReport entry but is not rejected.
+## Use `RuntimeDefault`: it is the correct value for the Kubernetes SeccompProfile.type field
+## (`runtime/default` is the pre-1.25 annotation form and is not a legal field value), and Pod
+## Security Standards `restricted` permits `RuntimeDefault` and `Localhost`, forbidding only
+## `Unconfined`.
+##
+## **Annotations**: `jobs[].annotations` render onto BOTH the Job resource metadata and the Job pod
+## template (filtered), mirroring `cronjobs[].annotations`. This matters because chart Jobs are
+## ArgoCD PreSync/PostSync hooks — a never-exiting Istio sidecar on a Job pod blocks the entire
+## application sync, not just one Job run — so `sidecar.istio.io/inject: "false"` set via
+## `jobs[].annotations` is the documented way to stop that. The Job pod template emits no istio
+## annotations of its own, so this key is not chart-managed there and passes through unaffected
+## (unlike the application pod template, where it is chart-managed and closed to overrides).
+##
+## Chart-managed annotations always win; a colliding user-supplied key is DROPPED from `annotations`
+## before rendering. The reserved set is an EXACT-KEY match (`hasKey`), not a
+## `vault.security.banzaicloud.io/*` prefix match:
+##   - Job resource metadata: `argocd.argoproj.io/sync-options`
+##   - Job pod template: vault keys (`vault-addr`, `vault-auth-method`, `vault-path`, `vault-role`,
+##     `vault-agent-env-variables`, `mutate-probes`, `run-as-non-root`, `run-as-user`, `run-as-group`,
+##     plus `vault-env-daemon` when `secrets` is set and `vault-env-from-path` when
+##     `secrets.bulk.path` is set) and otel keys (`sidecar.opentelemetry.io/inject`,
+##     `instrumentation.opentelemetry.io/container-names`,
+##     `instrumentation.opentelemetry.io/inject-<language>` — see the Applications section above for
+##     the full otel gating conditions), plus `argocd.argoproj.io/sync-options`,
+##     `argocd.argoproj.io/hook-delete-policy`, `argocd.argoproj.io/sync-wave`, and
+##     `argocd.argoproj.io/hook`. The four argocd keys are reserved UNCONDITIONALLY, even though
+##     sync-wave/hook only render when `.timing` is set — this keeps the reserved set independent of
+##     `.timing`, so enabling a hook later cannot silently change which user keys survive.
+##
 ## See the example configuration below for complete job specification details.
 
 ## @param jobs [array] List of Kubernetes Jobs to run
@@ -631,6 +710,13 @@ jobs: []
 #     limits:
 #       cpu: "500m"
 #       memory: "256Mi"
+#
+#   # Optional: Hardened security context (opt-in; omit entirely to keep default rendering)
+#   # securityContext:
+#   #   readOnlyRootFilesystem: true
+#   #   fsGroup: 3000
+#   #   seccompProfile:
+#   #     type: RuntimeDefault
 
 ## @section Kubernetes CronJobs
 ## Configuration for Kubernetes CronJobs to run on a schedule
@@ -643,18 +729,56 @@ jobs: []
 ##
 ## **Security Context (opt-in)**: securityContext.readOnlyRootFilesystem (default false; sets the
 ## container's readOnlyRootFilesystem), securityContext.fsGroup (unset by default; sets the pod-level
-## fsGroup), securityContext.seccompProfile (unset by default; sets the pod-level seccompProfile, e.g.
-## {type: RuntimeDefault}). All three are opt-in per cronjob item — omitting securityContext entirely
-## preserves the chart's existing default rendering.
+## fsGroup; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1
+## bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule
+## `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards
+## control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those
+## were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (unset by
+## default; sets the pod-level seccompProfile, e.g. {type: RuntimeDefault}). All three are opt-in per
+## cronjob item — omitting securityContext entirely preserves the chart's existing default rendering.
 ##
-## IMPORTANT: the cluster's kyverno `restrict-seccomp` policy is Enforce and only allows
-## seccompProfile.type `RuntimeDefault` (or `runtime/default`) — `Localhost` renders fine from this
-## chart but is hard-rejected at admission. Stick to `RuntimeDefault`.
+## the `restrict-seccomp` ClusterPolicy differs per cluster, because each app cluster syncs its own
+## branch of MyCarrier-DevOps/kyverno-policies:
+##   - development cluster: validationFailureAction Enforce; pattern accepts
+##     `runtime/default | RuntimeDefault`, so `RuntimeDefault` passes and IS enforced at admission.
+##   - data and production-csp clusters: validationFailureAction Audit (report-only — violations
+##     appear in PolicyReport objects, nothing is blocked); pattern accepts only the literal
+##     `runtime/default`, so `RuntimeDefault` records a PolicyReport entry but is not rejected.
+## Use `RuntimeDefault`: it is the correct value for the Kubernetes SeccompProfile.type field
+## (`runtime/default` is the pre-1.25 annotation form and is not a legal field value), and Pod
+## Security Standards `restricted` permits `RuntimeDefault` and `Localhost`, forbidding only
+## `Unconfined`.
 ##
-## `annotations` now also render onto the CronJob pod template (in addition to the CronJob resource
-## itself), so it can be used to set per-cronjob pod annotations — e.g. `sidecar.istio.io/inject: "false"`
-## to opt a CronJob's pods out of Istio sidecar injection in istio-injection=enabled namespaces (a
-## never-exiting sidecar container otherwise hangs the Job).
+## `annotations` render onto BOTH the CronJob resource metadata and the CronJob pod template, so it
+## can be used to set per-cronjob pod annotations — e.g. `sidecar.istio.io/inject: "false"` to opt a
+## CronJob's pods out of Istio sidecar injection in istio-injection=enabled namespaces (a never-exiting
+## sidecar container otherwise hangs the Job). The CronJob pod template emits no istio annotations of
+## its own, so `sidecar.istio.io/inject` is not chart-managed here and passes through unaffected —
+## unlike the application pod template, where this key IS chart-managed and closed to overrides.
+##
+## Chart-managed annotations always win. A user-supplied key that collides with a chart-managed
+## annotation is DROPPED from `annotations` before rendering — it will not override the chart's value,
+## and it will not render twice. The reserved set is an EXACT-KEY match (`hasKey`), not a
+## `vault.security.banzaicloud.io/*` prefix match:
+##   - CronJob resource metadata: `argocd.argoproj.io/sync-options`
+##   - CronJob pod template: vault keys (`vault-addr`, `vault-auth-method`, `vault-path`, `vault-role`,
+##     `vault-agent-env-variables`, `mutate-probes`, `run-as-non-root`, `run-as-user`, `run-as-group`,
+##     plus `vault-env-daemon` when `secrets` is set and `vault-env-from-path` when
+##     `secrets.bulk.path` is set) and otel keys (`sidecar.opentelemetry.io/inject`,
+##     `instrumentation.opentelemetry.io/container-names`,
+##     `instrumentation.opentelemetry.io/inject-<language>` — see the Applications section above for
+##     the full otel gating conditions). No argocd/istio/gateway keys are reserved on the CronJob pod
+##     template.
+##
+## Any key NOT in the reserved set above is applied to the pod/resource as-is — including other
+## `vault.security.banzaicloud.io/*` keys the chart does not set (see the Applications section above
+## for the security-relevant passthrough keys verified: `vault-skip-verify`, `mutate: skip`,
+## `vault-namespace`, `vault-serviceaccount`, `psp-allow-privilege-escalation`).
+##
+## The reserved set is context-dependent: a key that is free today can become chart-managed when a
+## related feature is enabled (e.g. turning on otel autoinstrumentation), at which point the user's
+## value stops taking effect. This is deliberate — the alternative (failing the template render) would
+## turn an unrelated future "enable otel" change into a hard non-local build break.
 ##
 ## See the example configuration below for complete cronjob specification details.
 
