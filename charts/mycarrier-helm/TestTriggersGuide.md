@@ -110,6 +110,7 @@ Each test definition under `testdefinitions` supports the following parameters:
 | `nodeAffinity` | Node affinity rules for test pods scheduled by the test engine | No | `[]` (empty array) | See example below |
 | `useDefaultNodeAffinity` | Whether to use default node affinity for test pods. Accepts boolean or string. | No | `false` | `true` |
 | `spreadAcrossNodes` | Whether to spread test pods across nodes. Accepts boolean or string. | No | `true` | `false` |
+| `hardenedSecurityContext` | Run test pods with a hardened security context (non-root, read-only rootfs). Accepts boolean or string; set `false` to opt out. | No | `true` | `false` |
 | `podResources` | Resource requests and limits for test pods scheduled by the test engine | No | See below** | See example below |
 
 *Default tolerations:

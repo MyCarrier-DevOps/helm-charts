@@ -582,7 +582,7 @@ applications: {}
 #         secretId: "vault:Secrets/data/app_authentication#SecretId"
 #         additionalEnvVars: "key1=value1;key2=value2"
 #         legacyMode: false                      # Optional (default: false)
-#         hardenedSecurityContext: false          # Optional (default: false)
+#         hardenedSecurityContext: true           # Optional (default: true; set false to opt out of hardened test pods)
 #         useDefaultNodeAffinity: false          # Optional (default: false)
 #         spreadAcrossNodes: true                # Optional (default: true)
 #         # Optional: Pod resources for test pods (defaults shown below)

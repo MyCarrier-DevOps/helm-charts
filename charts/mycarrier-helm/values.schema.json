@@ -396,6 +396,11 @@
                           }
                         }
                       }
+                    },
+                    "hardenedSecurityContext": {
+                      "type": ["string", "boolean"],
+                      "description": "Run test pods with a hardened security context (runAsNonRoot + readOnlyRootFilesystem via TestEngine). Accepts boolean or string; only false/\"false\" opts out.",
+                      "default": true
                     }
                   }
                 }

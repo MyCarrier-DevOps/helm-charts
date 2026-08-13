@@ -89,9 +89,9 @@ template:
           {{- if hasKey . "spreadAcrossNodes" }}
             {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
           {{- end }}
-          {{- $hardenedSecurityContext := false }}
-          {{- if hasKey . "hardenedSecurityContext" }}
-            {{- $hardenedSecurityContext = .hardenedSecurityContext }}
+          {{- $hardenedSecurityContext := true }}
+          {{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
+            {{- $hardenedSecurityContext = false }}
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
@@ -124,9 +124,9 @@ template:
           {{- if hasKey . "spreadAcrossNodes" }}
             {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
           {{- end }}
-          {{- $hardenedSecurityContext := false }}
-          {{- if hasKey . "hardenedSecurityContext" }}
-            {{- $hardenedSecurityContext = .hardenedSecurityContext }}
+          {{- $hardenedSecurityContext := true }}
+          {{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
+            {{- $hardenedSecurityContext = false }}
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
