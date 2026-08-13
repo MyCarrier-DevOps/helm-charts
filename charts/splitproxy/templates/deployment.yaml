@@ -100,23 +100,29 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: splitproxy
-                key: SplitDashboardPassword 
+                key: SplitDashboardPassword
+          {{- end }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.secretProvider.enabled }}
             - name:  secret-store
               mountPath:  "/mnt/secrets-store"
               readOnly: true
-          {{- end }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.secretProvider.enabled }}
       volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.secretProvider.enabled }}
         - name: secret-store
           csi:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
               secretProviderClass: {{ $.Values.secretProvider.name }}
-      {{- end }}  
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
