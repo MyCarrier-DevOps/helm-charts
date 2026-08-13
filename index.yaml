@@ -4129,6 +4129,16 @@ entries:
     version: 1.0.1
   splitproxy:
   - apiVersion: v2
+    created: "2026-08-13T13:41:05.753769888Z"
+    description: A Helm chart for splitproxy server and admin-dashboard
+    digest: 2b371270e04afd985f5da5f7091b9ede302b9df8fe1884d727313ee5741cae00
+    icon: https://www.split.io/wp-content/uploads/2017/11/split-logo-light-background-transparent.png
+    name: splitproxy
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/splitproxy-0.3.14/splitproxy-0.3.14.tgz
+    version: 0.3.14
+  - apiVersion: v2
     created: "2026-07-31T15:14:14.866287119Z"
     description: A Helm chart for splitproxy server and admin-dashboard
     digest: b4038bb0f068e647108284440b4e35edd681ed93791e7e7783e81d3e3a75aaa8
@@ -4413,4 +4423,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-08-13T13:26:41.477875373Z"
+generated: "2026-08-13T13:41:05.754274992Z"
