@@ -89,7 +89,7 @@ template:
           {{- if hasKey . "spreadAcrossNodes" }}
             {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
           {{- end }}
-          {{- $hardenedSecurityContext := false }}
+          {{- $hardenedSecurityContext := true }}
           {{- if hasKey . "hardenedSecurityContext" }}
             {{- $hardenedSecurityContext = .hardenedSecurityContext }}
           {{- end }}
@@ -124,7 +124,7 @@ template:
           {{- if hasKey . "spreadAcrossNodes" }}
             {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
           {{- end }}
-          {{- $hardenedSecurityContext := false }}
+          {{- $hardenedSecurityContext := true }}
           {{- if hasKey . "hardenedSecurityContext" }}
             {{- $hardenedSecurityContext = .hardenedSecurityContext }}
           {{- end }}
