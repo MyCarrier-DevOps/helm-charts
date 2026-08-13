@@ -253,3 +253,67 @@ tests:
             runAsUser: 1000
             runAsGroup: 3000
             runAsNonRoot: true
+
+  - it: should still harden pod and container securityContext when enableVaultCA is true (enableVaultCA no longer gates hardening; its only other consumer is dead code)
+    set:
+      environment.name: "dev"
+      enableVaultCA: true
+      applications.vault-ca-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "vault-ca-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+
+  - it: should omit securityContext when disableSecurity is true, even if enableVaultCA is also true (break-glass opt-out is unchanged)
+    set:
+      environment.name: "dev"
+      enableVaultCA: true
+      disableSecurity: true
+      applications.disable-security-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "disable-security-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.securityContext
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+
+  - it: should render pod and container securityContext unchanged when enableVaultCA and disableSecurity are both unset (default)
+    set:
+      environment.name: "dev"
+      applications.default-security-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "default-security-app"
+          tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true

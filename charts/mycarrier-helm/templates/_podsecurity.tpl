@@ -19,8 +19,15 @@ context only ever carries one of .application/.cronjob/.job.
 {{- $sc | toJson -}}
 {{- end -}}
 
+{{/*
+enableVaultCA no longer gates hardening here: its only other consumer,
+helm.defaultLifecyclePostStart's root-requiring vault.crt postStart hook, is
+dead code (helm.lifecycle, its sole caller, is fully commented out in
+_lifecycle.tpl). Kyverno require-run-as-non-root is Enforce on dev, so
+disableSecurity remains the sole explicit break-glass opt-out.
+*/}}
 {{- define "helm.podSecurityContext" -}}
-{{- if and (not .Values.enableVaultCA) (not .Values.disableSecurity) }}
+{{- if not .Values.disableSecurity }}
 {{- $sc := include "helm.workloadSecurityContext" . | fromJson }}
 securityContext:
   runAsUser: 1000
@@ -36,8 +43,15 @@ securityContext:
 {{- end }}
 {{- end -}}
 
+{{/*
+enableVaultCA no longer gates hardening here: its only other consumer,
+helm.defaultLifecyclePostStart's root-requiring vault.crt postStart hook, is
+dead code (helm.lifecycle, its sole caller, is fully commented out in
+_lifecycle.tpl). Kyverno require-run-as-non-root is Enforce on dev, so
+disableSecurity remains the sole explicit break-glass opt-out.
+*/}}
 {{- define "helm.containerSecurityContext" -}}
-{{- if and (not .Values.enableVaultCA) (not .Values.disableSecurity) }}
+{{- if not .Values.disableSecurity }}
 {{- $sc := include "helm.workloadSecurityContext" . | fromJson }}
 securityContext:
   runAsUser: 1000

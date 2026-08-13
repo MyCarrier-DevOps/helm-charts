@@ -1398,7 +1398,7 @@ When contributing to this chart, please follow the coding standards defined in t
 
 | Name                             | Description                                                                            | Value        |
 | -------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
-| `enableVaultCA`                  | Enable Vault CA certificate download during pod startup                                | `false`      |
+| `enableVaultCA`                  | Enable Vault CA certificate download during pod startup (no longer affects securityContext hardening; that postStart hook is currently dead code) | `false`      |
 | `manualOtelConfig`               | Take over OpenTelemetry configuration from the chart (default false = chart-managed)   | `false`      |
 | `disableOtelAutoinstrumentation` | Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)      | `true`       |
 | `tolerations`                    | Default tolerations for all applications                                               | `[]`         |
