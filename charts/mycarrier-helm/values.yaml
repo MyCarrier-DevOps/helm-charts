@@ -68,11 +68,17 @@ environment:
 ## Platform-wide settings
 
 ## @param enableVaultCA Enable Vault CA certificate download during pod startup (no longer affects securityContext hardening; that postStart hook is currently dead code)
+## @param disableSecurity BREAK-GLASS ONLY (discouraged): when true, pods render without runAsNonRoot/securityContext hardening
 ## @param manualOtelConfig Take over OpenTelemetry configuration from the chart (default false = chart-managed)
 ## @param disableOtelAutoinstrumentation Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)
 ## @param tolerations [array] Default tolerations for all applications
 ## @param deployment Deployment folder name (should match the subfolder containing the specific deployment)
 enableVaultCA: false
+
+## BREAK-GLASS ONLY — leave false. When true, pods ship WITHOUT runAsNonRoot/securityContext
+## hardening (both pod- and container-level). This is the sole remaining un-harden path since
+## the enableVaultCA guard removal; setting it is discouraged and should be temporary.
+disableSecurity: false
 
 ## The two OTel keys below have DELIBERATELY OPPOSITE defaults. They are not interchangeable and do
 ## not track each other:

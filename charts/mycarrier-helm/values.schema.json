@@ -92,6 +92,12 @@
         { "type": "null" }
       ]
     },
+    "disableSecurity": {
+      "oneOf": [
+        { "type": "boolean", "description": "BREAK-GLASS ONLY (discouraged): when true, pods render WITHOUT runAsNonRoot/securityContext hardening. Sole remaining un-harden path after the enableVaultCA guard removal. Leave false/unset in normal operation.", "default": false },
+        { "type": "null" }
+      ]
+    },
     "manualOtelConfig": {
       "oneOf": [
         { "type": "boolean", "description": "Take over OpenTelemetry configuration from the chart. When true the chart injects no OTEL_* env vars, no auto-instrumentation annotations and no otel-log volume, and overrides disableOtelAutoinstrumentation", "default": false },
