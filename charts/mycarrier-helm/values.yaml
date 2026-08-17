@@ -68,11 +68,24 @@ environment:
 ## Platform-wide settings
 
 ## @param enableVaultCA Enable Vault CA certificate download during pod startup (no longer affects securityContext hardening; that postStart hook is currently dead code)
+## @param disableSecurity BREAK-GLASS ONLY (discouraged): when true, every pod in the release renders without runAsNonRoot/securityContext hardening
 ## @param manualOtelConfig Take over OpenTelemetry configuration from the chart (default false = chart-managed)
 ## @param disableOtelAutoinstrumentation Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)
 ## @param tolerations [array] Default tolerations for all applications
 ## @param deployment Deployment folder name (should match the subfolder containing the specific deployment)
 enableVaultCA: false
+
+## BREAK-GLASS ONLY — leave false. When true, EVERY pod in the release (all workloads) ships
+## WITHOUT runAsNonRoot/securityContext hardening; this cannot be scoped per-application.
+## Admission backstop: Kyverno require-run-as-non-root is Enforce ONLY on development —
+## production-csp/data run Audit, so setting this there removes the chart's non-root guarantee
+## with report-only admission and no backstop (containers run as whatever the image USER
+## specifies). This is the only flag that removes the hardening block (though not the only
+## route to an un-hardened container — see applications.<name>.enableDebugMode's privileged
+## sidecar); setting it is discouraged and must be temporary.
+## Not settable through mc-environment `environments[]` (its schema rejects the key and
+## appset.yaml does not forward it) — only directly-managed mycarrier-helm value files. Intentional.
+disableSecurity: false
 
 ## The two OTel keys below have DELIBERATELY OPPOSITE defaults. They are not interchangeable and do
 ## not track each other:

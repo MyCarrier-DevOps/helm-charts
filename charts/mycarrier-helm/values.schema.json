@@ -92,6 +92,12 @@
         { "type": "null" }
       ]
     },
+    "disableSecurity": {
+      "oneOf": [
+        { "type": "boolean", "description": "BREAK-GLASS ONLY (discouraged): when true, EVERY pod in the release renders WITHOUT runAsNonRoot/securityContext hardening — release-wide, cannot be scoped per-application. The only flag that removes the securityContext hardening block (applications.<name>.enableDebugMode's privileged sidecar is a separate un-hardened-container route). Kyverno require-run-as-non-root backstop is Enforce only on development; production-csp/data run Audit. Not settable via mc-environment environments[]. Leave false/unset; any use must be temporary.", "default": false },
+        { "type": "null" }
+      ]
+    },
     "manualOtelConfig": {
       "oneOf": [
         { "type": "boolean", "description": "Take over OpenTelemetry configuration from the chart. When true the chart injects no OTEL_* env vars, no auto-instrumentation annotations and no otel-log volume, and overrides disableOtelAutoinstrumentation", "default": false },
