@@ -254,7 +254,7 @@ tests:
             runAsGroup: 3000
             runAsNonRoot: true
 
-  - it: should still harden pod and container securityContext when enableVaultCA is true (enableVaultCA no longer gates hardening; its only other consumer is dead code)
+  - it: should still harden pod and container securityContext when enableVaultCA is true (enableVaultCA has no consumer; it does not gate hardening)
     set:
       environment.name: "dev"
       enableVaultCA: true

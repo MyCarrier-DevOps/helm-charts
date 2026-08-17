@@ -20,11 +20,11 @@ context only ever carries one of .application/.cronjob/.job.
 {{- end -}}
 
 {{/*
-enableVaultCA no longer gates hardening here: its only other consumer,
-helm.defaultLifecyclePostStart's root-requiring vault.crt postStart hook, is
-dead code (helm.lifecycle, its sole caller, is fully commented out in
-_lifecycle.tpl). Kyverno require-run-as-non-root is Enforce on dev, so
-disableSecurity remains the sole explicit break-glass opt-out.
+enableVaultCA does not gate hardening here: it has no template consumer at
+all — its last one, helm.defaultLifecyclePostStart's root-requiring
+vault.crt postStart hook, was removed as dead code (DEVOPS-176). Kyverno
+require-run-as-non-root is Enforce on dev, so disableSecurity remains the
+sole explicit break-glass opt-out.
 */}}
 {{- define "helm.podSecurityContext" -}}
 {{- if not .Values.disableSecurity }}
@@ -44,11 +44,11 @@ securityContext:
 {{- end -}}
 
 {{/*
-enableVaultCA no longer gates hardening here: its only other consumer,
-helm.defaultLifecyclePostStart's root-requiring vault.crt postStart hook, is
-dead code (helm.lifecycle, its sole caller, is fully commented out in
-_lifecycle.tpl). Kyverno require-run-as-non-root is Enforce on dev, so
-disableSecurity remains the sole explicit break-glass opt-out.
+enableVaultCA does not gate hardening here: it has no template consumer at
+all — its last one, helm.defaultLifecyclePostStart's root-requiring
+vault.crt postStart hook, was removed as dead code (DEVOPS-176). Kyverno
+require-run-as-non-root is Enforce on dev, so disableSecurity remains the
+sole explicit break-glass opt-out.
 */}}
 {{- define "helm.containerSecurityContext" -}}
 {{- if not .Values.disableSecurity }}

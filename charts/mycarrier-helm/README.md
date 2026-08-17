@@ -1398,7 +1398,7 @@ When contributing to this chart, please follow the coding standards defined in t
 
 | Name                             | Description                                                                            | Value        |
 | -------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
-| `enableVaultCA`                  | Enable Vault CA certificate download during pod startup (no longer affects securityContext hardening; that postStart hook is currently dead code) | `false`      |
+| `enableVaultCA`                  | Enable Vault CA certificate download during pod startup (no-op: its postStart hook was removed in DEVOPS-176; flag retained for values compatibility) | `false`      |
 | `disableSecurity`                | BREAK-GLASS ONLY (discouraged). When true, every pod in the release renders without runAsNonRoot/securityContext hardening — release-wide, cannot be scoped per-application. Only flag that removes the hardening block (`enableDebugMode`'s privileged sidecar is a separate route). Kyverno `require-run-as-non-root` is Enforce only on development (Audit on production-csp/data). Not settable through mc-environment `environments[]` — direct mycarrier-helm values only. | `false`      |
 | `manualOtelConfig`               | Take over OpenTelemetry configuration from the chart (default false = chart-managed)   | `false`      |
 | `disableOtelAutoinstrumentation` | Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)      | `true`       |
