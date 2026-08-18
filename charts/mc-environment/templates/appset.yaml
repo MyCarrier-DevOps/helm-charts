@@ -25,6 +25,7 @@ spec:
                   {{- $envBlock := deepCopy ($env.environment | default dict) }}
                   {{- $_ := set $envBlock "name" $env.name }}
                   {{- $envBlock | toYaml | nindent 18 }}
+                {{- /* disableSecurity is intentionally NOT forwarded here — it stays direct-mycarrier-helm-values-only (break-glass, blast-radius limited by design). Do not add a disableSecurity line to this list. */}}
                 enableVaultCA: {{ $env.enableVaultCA | default false }}
                 manualOtelConfig: {{ $env.manualOtelConfig | default false }}
                 disableOtelAutoinstrumentation: {{ $env.disableOtelAutoinstrumentation | default false }}

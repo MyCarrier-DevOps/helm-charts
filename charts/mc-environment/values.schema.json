@@ -2,6 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
+  "$comment": "Forwarded platform-setting flags (enableVaultCA, manualOtelConfig, disableOtelAutoinstrumentation, tolerations) mirror mycarrier-helm's schema, both at the top level and under environments[].items below. mycarrier-helm's disableSecurity is DELIBERATELY NOT one of them and is not forwarded by appset.yaml — it stays direct-mycarrier-helm-values-only (break-glass, blast-radius limited by design; see mycarrier-helm values.yaml/README). Do not add a disableSecurity property here or forward it through appset.yaml.",
   "definitions": {
     "mycarrierGlobal": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/global"
@@ -464,6 +465,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
+        "$comment": "Per-environment overrides below intentionally omit disableSecurity — it is not forwardable per-environment either; it remains direct-mycarrier-helm-values-only (break-glass). Do not add it here.",
         "properties": {
           "name": {
             "type": "string",
