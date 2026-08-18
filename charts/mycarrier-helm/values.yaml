@@ -85,6 +85,10 @@ enableVaultCA: false
 ## sidecar); setting it is discouraged and must be temporary.
 ## Not settable through mc-environment `environments[]` (its schema rejects the key and
 ## appset.yaml does not forward it) — only directly-managed mycarrier-helm value files. Intentional.
+## This is a direct-chart-values-only break-glass flag by design: it is deliberately NOT plumbed
+## through mc-environment / the ApplicationSet path, to keep its blast radius limited to whoever
+## edits mycarrier-helm values directly. Future editors should not add it to mc-environment's
+## values.schema.json or forward it via appset.yaml — see the matching comments there.
 disableSecurity: false
 
 ## The two OTel keys below have DELIBERATELY OPPOSITE defaults. They are not interchangeable and do
