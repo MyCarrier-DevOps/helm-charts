@@ -64,7 +64,14 @@ securityContext:
     drop:
       - ALL
 {{- if .application }}
-{{- with (dig "securityContext" "addCapabilities" (list) .application) }}
+{{- $addCaps := dig "securityContext" "addCapabilities" (list) .application }}
+{{- with $addCaps }}
+{{- $allowedCaps := dig "securityContext" "allowedCapabilities" (list) $.application }}
+{{- range . }}
+{{- if not (has . $allowedCaps) }}
+{{- fail (printf "Capability %q is not permitted by the chart security policy. To permit it, add it to application.securityContext.allowedCapabilities (with security sign-off). Currently allowed: %v." . $allowedCaps) }}
+{{- end }}
+{{- end }}
     add:
 {{ toYaml . | indent 6 }}
 {{- end }}

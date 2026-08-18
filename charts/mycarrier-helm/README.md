@@ -1257,7 +1257,8 @@ preserves the chart's existing default rendering — nothing changes until you s
 | Key | Default | Notes |
 | --- | --- | --- |
 | `readOnlyRootFilesystem` | `false` | Sets the container's `readOnlyRootFilesystem`. |
-| `addCapabilities` | `[]` | Applications only. All capabilities are dropped by default (`drop: [ALL]`); list specific capabilities here to add them back. |
+| `addCapabilities` | `[]` | Applications only. All capabilities are dropped by default (`drop: [ALL]`); list specific capabilities here to add them back. Each entry MUST also appear in `allowedCapabilities` (see below) or the render `fail`s. |
+| `allowedCapabilities` | `[]` | Applications only. Chart-security allow-list gating `addCapabilities`. **Empty by default** — no capability is permitted until explicitly allow-listed here (with security sign-off). A capability in `addCapabilities` not present in `allowedCapabilities` fails the render with a clear error message naming the capability and the currently-allowed set. |
 | `fsGroup` | unset | Sets the pod-level `fsGroup`. Must be `>= 1` — `0` is the root group and is rejected by the values schema. **This lower bound is ORG POLICY**, enforced by `MyCarrier-DevOps/kyverno-policies` `require-non-root-groups` (rule `check-fsGroup`: "must be empty or greater than zero") — it is **not** an upstream Pod Security Standards control. The [PSS spec](https://kubernetes.io/docs/concepts/security/pod-security-standards/) contains zero occurrences of `fsGroup`/`runAsGroup`/`supplementalGroups`; those were PodSecurityPolicy fields, and PSP is retired. |
 | `seccompProfile` | unset | Sets the pod-level `seccompProfile`, e.g. `{type: RuntimeDefault}`. |
 

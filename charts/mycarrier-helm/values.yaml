@@ -245,8 +245,13 @@ applications: {}
 #   securityContext:
 #     readOnlyRootFilesystem: false
 #     # All capabilities are dropped by default (drop: [ALL]). List specific
-#     # capabilities here to add them back for this application only:
+#     # capabilities here to add them back for this application only. Each
+#     # capability listed here MUST also be listed in allowedCapabilities
+#     # below, or the render fails with a clear error (empty allow-list by
+#     # default - no capability is permitted until explicitly allow-listed):
 #     # addCapabilities:
+#     #   - NET_BIND_SERVICE
+#     # allowedCapabilities:
 #     #   - NET_BIND_SERVICE
 #
 #   # ----------------------------------------------------------------------------

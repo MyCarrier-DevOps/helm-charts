@@ -2441,10 +2441,18 @@
         },
         "addCapabilities": {
           "type": "array",
-          "description": "Linux capabilities to add back on top of the drop-all default. All capabilities are dropped by default; list ones here to add them back. Only honoured on the application (Deployment) path by _podsecurity.tpl — jobs and cronjobs do not read this field.",
+          "description": "Linux capabilities to add back on top of the drop-all default. All capabilities are dropped by default; list ones here to add them back. Only honoured on the application (Deployment) path by _podsecurity.tpl — jobs and cronjobs do not read this field. Each entry MUST also appear in allowedCapabilities or the render fails (fail-closed, empty allow-list by default).",
           "items": {
             "type": "string"
           }
+        },
+        "allowedCapabilities": {
+          "type": "array",
+          "description": "Chart-security allow-list gating addCapabilities. Empty by default — a capability in addCapabilities that is not also listed here fails the render with a clear error. Only add a capability here with security sign-off. Only honoured on the application (Deployment) path by _podsecurity.tpl.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       }
     }
