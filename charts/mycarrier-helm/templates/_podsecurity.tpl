@@ -58,7 +58,7 @@ securityContext:
   runAsGroup: 3000
   privileged: false
   runAsNonRoot: true
-  readOnlyRootFilesystem: {{ if $sc.readOnlyRootFilesystem }}true{{ else }}false{{ end }}
+  readOnlyRootFilesystem: {{ if hasKey $sc "readOnlyRootFilesystem" }}{{ if $sc.readOnlyRootFilesystem }}true{{ else }}false{{ end }}{{ else }}true{{ end }}
   allowPrivilegeEscalation: false
   capabilities:
     drop:

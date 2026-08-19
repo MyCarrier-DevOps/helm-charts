@@ -2414,8 +2414,8 @@
       "properties": {
         "readOnlyRootFilesystem": {
           "type": "boolean",
-          "description": "Container-level readOnlyRootFilesystem (opt-in; unset defaults to false)",
-          "default": false
+          "description": "Container-level readOnlyRootFilesystem (chart-hardened; unset defaults to true). Set explicitly to false per-workload as a break-glass opt-out. An unconditional /tmp emptyDir is mounted on every workload for temp writes.",
+          "default": true
         },
         "fsGroup": {
           "type": "integer",

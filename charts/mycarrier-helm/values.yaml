@@ -126,7 +126,7 @@ deployment: deployment
 ## **Container**: image.registry, image.repository, image.tag, pullPolicy, pullSecret
 ## **Resources**: resources.requests.cpu/memory, resources.limits.cpu/memory
 ## **Health Probes**: probes.enableLiveness, probes.enableReadiness, probes.enableStartup (all default true; set to false to disable), custom probe configurations
-## **Security Context**: securityContext.readOnlyRootFilesystem (default false), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back), securityContext.fsGroup (opt-in pod-level fsGroup; previously ignored/silently dropped, now honored; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1 bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (opt-in pod-level seccompProfile; previously ignored/silently dropped, now honored)
+## **Security Context**: securityContext.readOnlyRootFilesystem (default true, chart-hardened — applies even when securityContext is omitted; set to false per-application as a break-glass opt-out — an unconditional /tmp emptyDir is mounted on every workload for temp writes), securityContext.addCapabilities (default []; all capabilities are dropped by default, list specific capabilities here to add them back), securityContext.fsGroup (opt-in pod-level fsGroup; previously ignored/silently dropped, now honored; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1 bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (opt-in pod-level seccompProfile; previously ignored/silently dropped, now honored)
 ## **Service**: service.type, service.ports, service.annotations, service.timeout, service.retryOn
 ## **Networking**: networking.ingress.type, networking.istio.enabled/hosts/routes/corsPolicy/allowedEndpoints
 ## **Autoscaling**: HPA (autoscaling.minReplicas/maxReplicas/targetCPU/targetMemory), VPA (vpa.enabled/updateMode/resources)
@@ -243,6 +243,9 @@ applications: {}
 #       memory: "512Mi"
 #   
 #   securityContext:
+#     # Default is true (chart-hardened) even if this block is omitted entirely.
+#     # Set to false here only as a break-glass opt-out for this application;
+#     # /tmp is a writable emptyDir on every workload for temp writes.
 #     readOnlyRootFilesystem: false
 #     # All capabilities are dropped by default (drop: [ALL]). List specific
 #     # capabilities here to add them back for this application only:
@@ -638,17 +641,20 @@ applications: {}
 ## Each job supports: name, timing (pre-deploy/post-deploy), order, ttlSecondsAfterFinished,
 ## activeDeadlineSeconds, backoffLimit, labels, annotations, image (registry/repository/tag),
 ## imagePullPolicy, command, args, env, resources (requests/limits for cpu/memory), volumes,
-## securityContext (opt-in hardened security context, see below)
+## securityContext (hardened by default — readOnlyRootFilesystem true; fsGroup/seccompProfile
+## opt-in; see below)
 ##
-## **Security Context (opt-in)**: securityContext.readOnlyRootFilesystem (default false; sets the
-## container's readOnlyRootFilesystem), securityContext.fsGroup (unset by default; sets the pod-level
-## fsGroup; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1
-## bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule
-## `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards
-## control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those
-## were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (unset by
-## default; sets the pod-level seccompProfile, e.g. {type: RuntimeDefault}). All three are opt-in per
-## job item — omitting securityContext entirely preserves the chart's existing default rendering.
+## **Security Context**: securityContext.readOnlyRootFilesystem (default true, chart-hardened —
+## applies even when securityContext is omitted entirely; set to false per-job as a break-glass
+## opt-out; /tmp is a writable emptyDir on every workload for temp writes), securityContext.fsGroup
+## (opt-in, unset by default; sets the pod-level fsGroup; must be >= 1 — fsGroup 0 is the root group
+## and is rejected by the values schema; the >= 1 bound is ORG POLICY enforced by
+## MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule `check-fsGroup` ("must be empty
+## or greater than zero"), not an upstream Pod Security Standards control — the PSS spec contains
+## zero occurrences of fsGroup/runAsGroup/supplementalGroups; those were PodSecurityPolicy fields,
+## and PSP is retired), securityContext.seccompProfile (opt-in, unset by default; sets the pod-level
+## seccompProfile, e.g. {type: RuntimeDefault}). fsGroup and seccompProfile remain opt-in per job
+## item; omitting securityContext entirely still renders readOnlyRootFilesystem: true.
 ##
 ## the `restrict-seccomp` ClusterPolicy differs per cluster, because each app cluster syncs its own
 ## branch of MyCarrier-DevOps/kyverno-policies:
@@ -728,7 +734,8 @@ jobs: []
 #       cpu: "500m"
 #       memory: "256Mi"
 #
-#   # Optional: Hardened security context (opt-in; omit entirely to keep default rendering)
+#   # Optional: securityContext block (readOnlyRootFilesystem defaults to true even if
+#   # this whole block is omitted; fsGroup/seccompProfile remain opt-in)
 #   # securityContext:
 #   #   readOnlyRootFilesystem: true
 #   #   fsGroup: 3000
@@ -742,17 +749,20 @@ jobs: []
 ## successfulJobsHistoryLimit, failedJobsHistoryLimit, startingDeadlineSeconds, activeDeadlineSeconds,
 ## backoffLimit, restartPolicy, labels, annotations, image (registry/repository/tag), imagePullPolicy,
 ## imagePullSecret, command, args, env, configMapName, secretName, resources (requests/limits), volumes,
-## securityContext (opt-in hardened security context, see below)
+## securityContext (hardened by default — readOnlyRootFilesystem true; fsGroup/seccompProfile
+## opt-in; see below)
 ##
-## **Security Context (opt-in)**: securityContext.readOnlyRootFilesystem (default false; sets the
-## container's readOnlyRootFilesystem), securityContext.fsGroup (unset by default; sets the pod-level
-## fsGroup; must be >= 1 — fsGroup 0 is the root group and is rejected by the values schema; the >= 1
-## bound is ORG POLICY enforced by MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule
-## `check-fsGroup` ("must be empty or greater than zero"), not an upstream Pod Security Standards
-## control — the PSS spec contains zero occurrences of fsGroup/runAsGroup/supplementalGroups; those
-## were PodSecurityPolicy fields, and PSP is retired), securityContext.seccompProfile (unset by
-## default; sets the pod-level seccompProfile, e.g. {type: RuntimeDefault}). All three are opt-in per
-## cronjob item — omitting securityContext entirely preserves the chart's existing default rendering.
+## **Security Context**: securityContext.readOnlyRootFilesystem (default true, chart-hardened —
+## applies even when securityContext is omitted entirely; set to false per-cronjob as a break-glass
+## opt-out; /tmp is a writable emptyDir on every workload for temp writes), securityContext.fsGroup
+## (opt-in, unset by default; sets the pod-level fsGroup; must be >= 1 — fsGroup 0 is the root group
+## and is rejected by the values schema; the >= 1 bound is ORG POLICY enforced by
+## MyCarrier-DevOps/kyverno-policies `require-non-root-groups` rule `check-fsGroup` ("must be empty
+## or greater than zero"), not an upstream Pod Security Standards control — the PSS spec contains
+## zero occurrences of fsGroup/runAsGroup/supplementalGroups; those were PodSecurityPolicy fields,
+## and PSP is retired), securityContext.seccompProfile (opt-in, unset by default; sets the pod-level
+## seccompProfile, e.g. {type: RuntimeDefault}). fsGroup and seccompProfile remain opt-in per
+## cronjob item; omitting securityContext entirely still renders readOnlyRootFilesystem: true.
 ##
 ## the `restrict-seccomp` ClusterPolicy differs per cluster, because each app cluster syncs its own
 ## branch of MyCarrier-DevOps/kyverno-policies:
@@ -849,7 +859,8 @@ cronjobs: []
 #       cpu: "500m"
 #       memory: "512Mi"
 #
-#   # Optional: Hardened security context (opt-in; omit entirely to keep default rendering)
+#   # Optional: securityContext block (readOnlyRootFilesystem defaults to true even if
+#   # this whole block is omitted; fsGroup/seccompProfile remain opt-in)
 #   # securityContext:
 #   #   readOnlyRootFilesystem: true
 #   #   fsGroup: 3000

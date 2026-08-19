@@ -187,3 +187,20 @@ tests:
             sidecar.istio.io/inject: "true"
             mycarrier.io/gateway: "istio-system/default"
             team: "platform"
+
+  - it: should default container-level readOnlyRootFilesystem to true on a statefulset without securityContext
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: statefulset
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.replicas: 1
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true

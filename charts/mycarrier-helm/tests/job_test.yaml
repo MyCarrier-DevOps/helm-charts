@@ -750,7 +750,7 @@ tests:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
 
-  - it: should default container-level readOnlyRootFilesystem to false without job securityContext
+  - it: should default container-level readOnlyRootFilesystem to true without job securityContext
     set:
       environment.name: "dev"
       jobs:
@@ -759,6 +759,24 @@ tests:
             registry: "myregistry.example.com"
             repository: "mycarrier/migration"
             tag: "1.0.0"
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should set container-level readOnlyRootFilesystem to false as break-glass opt-out on job securityContext
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migration-job
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migration"
+            tag: "1.0.0"
+          securityContext:
+            readOnlyRootFilesystem: false
     asserts:
       - isKind:
           of: Job
