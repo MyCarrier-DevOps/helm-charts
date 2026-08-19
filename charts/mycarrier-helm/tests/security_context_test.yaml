@@ -370,6 +370,11 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
           value: true
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: tmp-dir
+            mountPath: /tmp
 
   - it: should set initContainer-level readOnlyRootFilesystem to false as break-glass opt-out
     set:
@@ -394,3 +399,8 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
           value: false
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: tmp-dir
+            mountPath: /tmp

@@ -58,7 +58,12 @@ securityContext:
   runAsGroup: 3000
   privileged: false
   runAsNonRoot: true
-  readOnlyRootFilesystem: {{ if hasKey $sc "readOnlyRootFilesystem" }}{{ if $sc.readOnlyRootFilesystem }}true{{ else }}false{{ end }}{{ else }}true{{ end }}
+  {{- /* An explicit null here is impossible: values.schema.json enforces type boolean for
+       readOnlyRootFilesystem on every workload securityContext, so $sc.readOnlyRootFilesystem
+       is always either absent (dig's own default applies) or a real bool. If a future caller
+       ever bypasses the schema, dig on a null value renders an empty (invalid) field — keep
+       the schema enforcement in force rather than re-adding a null guard here. */}}
+  readOnlyRootFilesystem: {{ dig "readOnlyRootFilesystem" true $sc }}
   allowPrivilegeEscalation: false
   capabilities:
     drop:

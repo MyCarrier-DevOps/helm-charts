@@ -180,3 +180,32 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
+
+  - it: should default initContainer-level readOnlyRootFilesystem to true and mount tmp-dir on a rollout without securityContext
+    set:
+      environment.name: "dev"
+      applications.init-container-rofs-rollout:
+        enabled: true
+        deploymentType: rollout
+        image:
+          registry: "myregistry.example.com"
+          repository: "mycarrier/init-container-rofs-rollout"
+          tag: "1.0.0"
+        updateStrategy:
+          type: "RollingUpdate"
+        initContainers:
+          - name: migrate
+            image: r.example.com/migrate
+            command: ["/bin/sh"]
+            args: ["-c", "echo hello"]
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: tmp-dir
+            mountPath: /tmp
