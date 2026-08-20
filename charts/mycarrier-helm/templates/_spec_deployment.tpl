@@ -107,6 +107,9 @@ template:
             value: "{{ $value }}"
         {{- end }}
         {{ include "helm.containerSecurityContext" $ | indent 8 | trim }}
+        volumeMounts:
+          - name: tmp-dir
+            mountPath: /tmp
     {{- end }}
     {{- end }}
     containers:

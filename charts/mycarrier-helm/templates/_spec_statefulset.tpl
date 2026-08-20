@@ -80,6 +80,9 @@ template:
           {{- end }}
         {{- end }}
         {{ include "helm.containerSecurityContext" $ | indent 8 | trim }}
+        volumeMounts:
+          - name: tmp-dir
+            mountPath: /tmp
     {{- end }}
     {{- end }}
     {{ if $.application.enableDebugMode }}shareProcessNamespace: true {{ end }}

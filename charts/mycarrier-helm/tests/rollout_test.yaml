@@ -162,3 +162,50 @@ tests:
       - equal:
           path: spec.template.spec.securityContext.seccompProfile.type
           value: RuntimeDefault
+
+  - it: should default container-level readOnlyRootFilesystem to true on a rollout without securityContext
+    set:
+      environment.name: "dev"
+      applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.replicas: 1
+      applications.test-app-api.updateStrategy.type: "RollingUpdate"
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should default initContainer-level readOnlyRootFilesystem to true and mount tmp-dir on a rollout without securityContext
+    set:
+      environment.name: "dev"
+      applications.init-container-rofs-rollout:
+        enabled: true
+        deploymentType: rollout
+        image:
+          registry: "myregistry.example.com"
+          repository: "mycarrier/init-container-rofs-rollout"
+          tag: "1.0.0"
+        updateStrategy:
+          type: "RollingUpdate"
+        initContainers:
+          - name: migrate
+            image: r.example.com/migrate
+            command: ["/bin/sh"]
+            args: ["-c", "echo hello"]
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: tmp-dir
+            mountPath: /tmp

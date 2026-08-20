@@ -1251,15 +1251,27 @@ may also set `NODE_OPTIONS` itself when it injects.
 ### securityContext (applications / jobs / cronjobs)
 
 All three workload surfaces (`applications[].securityContext`, `jobs[].securityContext`,
-`cronjobs[].securityContext`) support the same opt-in keys. Omitting `securityContext` entirely
-preserves the chart's existing default rendering — nothing changes until you set one of these:
+`cronjobs[].securityContext`) support the same keys. `fsGroup`, `seccompProfile`, and
+`addCapabilities` remain opt-in — omitting `securityContext` entirely leaves them unset.
+`readOnlyRootFilesystem` is the exception: it defaults to `true` even when `securityContext` is
+omitted entirely.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `readOnlyRootFilesystem` | `false` | Sets the container's `readOnlyRootFilesystem`. |
+| `readOnlyRootFilesystem` | `true` | Chart-hardened default, applies to every workload kind (Deployment/StatefulSet/Job/CronJob/Rollout/TriggerTestEngine, incl. initContainers) even when `securityContext` is omitted. Set explicitly to `false` per-workload as a break-glass opt-out. An unconditional `/tmp` `emptyDir` volume is mounted on every Deployment/StatefulSet/Job/CronJob/Rollout container and initContainer for temp writes, so most images do not need the opt-out — the TriggerTestEngine job is the one exception: it has no `/tmp` mount, so its single `alpine/curl` container must not need to write to disk. |
 | `addCapabilities` | `[]` | Applications only. All capabilities are dropped by default (`drop: [ALL]`); list specific capabilities here to add them back. |
 | `fsGroup` | unset | Sets the pod-level `fsGroup`. Must be `>= 1` — `0` is the root group and is rejected by the values schema. **This lower bound is ORG POLICY**, enforced by `MyCarrier-DevOps/kyverno-policies` `require-non-root-groups` (rule `check-fsGroup`: "must be empty or greater than zero") — it is **not** an upstream Pod Security Standards control. The [PSS spec](https://kubernetes.io/docs/concepts/security/pod-security-standards/) contains zero occurrences of `fsGroup`/`runAsGroup`/`supplementalGroups`; those were PodSecurityPolicy fields, and PSP is retired. |
 | `seccompProfile` | unset | Sets the pod-level `seccompProfile`, e.g. `{type: RuntimeDefault}`. |
+
+> **Migration note (v4.0.0):** `readOnlyRootFilesystem` now defaults to `true` for all workload
+> kinds (Deployment/StatefulSet/Job/CronJob/Rollout/TriggerTestEngine, including initContainers).
+> Opt out per-workload with `securityContext: { readOnlyRootFilesystem: false }` if an image writes
+> outside `/tmp` at runtime. `/tmp` is a writable `emptyDir` on every Deployment/StatefulSet/Job/
+> CronJob/Rollout container and initContainer regardless of this setting — TriggerTestEngine has no
+> `/tmp` mount at all, so its container needs the break-glass opt-out (or must avoid writing to disk)
+> if it ever needs a writable root filesystem. Consumers who already set `readOnlyRootFilesystem`
+> explicitly (`true` or `false`) are unaffected — this only changes the behavior when the key is
+> omitted.
 
 **seccompProfile and the `restrict-seccomp` kyverno policy**: the ClusterPolicy differs per cluster,
 because each app cluster syncs its own branch of `MyCarrier-DevOps/kyverno-policies` (verified as of
