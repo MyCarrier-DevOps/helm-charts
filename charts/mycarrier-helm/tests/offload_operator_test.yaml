@@ -194,6 +194,38 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: should NOT render OffloadBase for preprod (metaEnvironment gate, not dev)
+    template: offloadBase.yaml
+    set:
+      environment.name: "preprod"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should NOT render OffloadBase for prod (metaEnvironment gate, not dev)
+    template: offloadBase.yaml
+    set:
+      environment.name: "prod"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.offloadOperatorEnabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
   #
   # OffloadRoute (feature only)
   #

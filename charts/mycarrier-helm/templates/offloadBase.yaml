@@ -49,6 +49,9 @@ spec:
   - {{ tpl . $ }}
   {{- end }}
   {{- end }}
+  {{- range (dig "networking" "istio" "legacyHostAliases" list $appValues) }}
+  - {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
+  {{- end }}
   {{ include "helm.virtualservice.gateways" $appValues | indent 2 | trim }}
   {{- if dig "networking" "istio" "offloadVirtualServiceAnnotations" nil $appValues }}
   virtualServiceAnnotations:

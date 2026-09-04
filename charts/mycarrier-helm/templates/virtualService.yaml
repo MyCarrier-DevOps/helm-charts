@@ -64,6 +64,9 @@ spec:
   - {{ tpl . $ }}
   {{- end -}}
   {{- end }}
+  {{- range (dig "networking" "istio" "legacyHostAliases" list $appValues) }}
+  - {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
+  {{- end }}
   {{ include "helm.virtualservice.gateways" $appValues | indent 2 | trim }}
   http:
   {{- /* Custom routes (networking.istio.routes) - most specific first, before the catch-all */ -}}

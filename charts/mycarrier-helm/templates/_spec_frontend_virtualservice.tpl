@@ -43,6 +43,9 @@ hosts:
 - {{ tpl . $ }}
 {{- end -}}
 {{- end -}}
+{{- range (dig "networking" "istio" "legacyHostAliases" list $primaryAppValues) }}
+- {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
+{{- end }}
 {{- end }}
 
 {{- $gatewaysAppValues := index $frontendApps $primaryApp }}
@@ -316,6 +319,9 @@ hosts:
 {{- range $istioConfig.hosts }}
 - {{ tpl . $ }}
 {{- end -}}
+{{- end }}
+{{- range (dig "networking" "istio" "legacyHostAliases" list $primaryAppValues) }}
+- {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
 {{- end }}
 {{ include "helm.virtualservice.gateways" $primaryAppValues | trim }}
 http:

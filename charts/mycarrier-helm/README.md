@@ -447,6 +447,37 @@ networking:
 > Note: `{{ $domain }}` does **not** resolve inside a host value (it is a template-internal
 > variable). Use `{{ include "helm.domain" $ }}` or the `helm.whitelabelHost` helper instead.
 
+#### Legacy host aliases
+
+`networking.istio.legacyHostAliases` is a list of **plain alias strings** — no template syntax.
+The chart composes each alias into a full FQDN at render time via the `helm.legacyHostFqdn`
+helper, reusing the same domain resolution as `helm.domain.prefix`/`helm.domain`:
+
+```yaml
+networking:
+  istio:
+    legacyHostAliases:
+      - integrations-orderapi
+```
+
+| environment | rendered host |
+|---|---|
+| `prod` | `integrations-orderapi.api.mycarriertms.com` |
+| `dev` | `integrations-orderapi.dev.mycarrier.dev` |
+| `preprod` | `integrations-orderapi.preprod.mycarrier.dev` |
+| `feature21` | `integrations-orderapi-feature21.dev.mycarrier.dev` |
+
+> **Warning:** unlike `legacyHostAliases`, `networking.istio.hosts` entries ARE `tpl`-evaluated
+> template strings, which is fine for the standard (non-offload) render path. But when an
+> appStack uses v2 offloads, its `networking.istio.hosts` values are also copied verbatim into
+> the `offloads.yaml` ArgoCD `ApplicationSet` (`goTemplate: true`, matrix generator), which
+> parses **every** string leaf of the generator spec through Go's `text/template` with a
+> sprig-only `FuncMap` before the chart ever renders it. A `{{ include ... }}` expression in a
+> `networking.istio.hosts` entry is therefore a parse-time hard error at the generator stage
+> that bricks the offload generator for the whole appStack — never put template syntax in
+> `networking.istio.hosts` for an appStack on the offload path. Use `legacyHostAliases` (plain
+> data) instead.
+
 ### Secrets Management
 
 The chart integrates with Vault for secrets management:

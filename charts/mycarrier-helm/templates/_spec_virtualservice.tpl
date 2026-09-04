@@ -41,6 +41,9 @@ hosts:
 - {{ tpl . $ }}
 {{- end }}
 {{- end }}
+{{- range (dig "networking" "istio" "legacyHostAliases" list .application) }}
+- {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
+{{- end }}
 {{ include "helm.virtualservice.gateways" .application | trim }}
 http:
 {{/* First route: explicit header match - routes traffic with environment header */}}
