@@ -56,6 +56,16 @@
 {{- hasPrefix "prod" $envName | ternary "api" $metaenv -}}
 {{- end -}}
 
+{{/* Env-aware host prefix for legacy VirtualService host aliases. Unlike
+     helm.domain.prefix, does NOT collapse feature envs to metaenv: returns
+     "api" for prod* environments, else .Values.environment.name verbatim
+     (dev, preprod, feature21). Safe to inline in a hostname.
+     Usage: {{ include "helm.hostEnvPrefix" $ }} */}}
+{{- define "helm.hostEnvPrefix" -}}
+{{- $envName := .Values.environment.name -}}
+{{- hasPrefix "prod" $envName | ternary "api" $envName -}}
+{{- end -}}
+
 {{- define "helm.namespace" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
 {{- $ctx := .ctx -}}
