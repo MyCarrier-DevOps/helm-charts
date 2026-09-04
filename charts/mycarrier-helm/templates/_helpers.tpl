@@ -56,6 +56,42 @@
 {{- hasPrefix "prod" $envName | ternary "api" $metaenv -}}
 {{- end -}}
 
+{{/* Compose a legacy VirtualService host alias FQDN from a plain alias string and the root
+     context. Reuses helm.domain.prefix + helm.domain only — no new prod idiom.
+     Call: {{ include "helm.legacyHostFqdn" (dict "alias" "integrations-orderapi" "ctx" $) }}
+     ctx must be the root context ($).
+
+     WHY plain data + chart-side composition (not a values-side template expression): legacy
+     host aliases are consumed by ArgoCD ApplicationSet matrix generators (goTemplate: true),
+     which run EVERY string leaf of the generator params — including this chart's own
+     offloads.yaml `list.elements` entries — through Go's text/template.Parse with a
+     sprig-only FuncMap before the real Helm render ever happens. A values string containing
+     `{{ include ... }}` is therefore a parse-time hard error at the generator stage, not a
+     Helm error, and it bricks the offload generator for the whole appStack. Composing the
+     FQDN here, inside a chart template where `include` is native, keeps
+     networking.istio.legacyHostAliases as plain data (safe to pass through the generator
+     verbatim) while still reusing the existing domain-resolution helpers.
+
+     Shapes (env resolved the same way helm.whitelabelHost resolves it: $ctx.Values.environment.name):
+       dev:      <alias>.dev.mycarrier.dev
+       preprod:  <alias>.preprod.mycarrier.dev
+       prod:     <alias>.api.mycarriertms.com
+       feature*: <alias>-<envName>.dev.mycarrier.dev  (hasPrefix "feature" $envName; unique per
+                 feature env, single label under .dev., wildcard-cert covered, no shared-gateway
+                 collision with the dev VirtualService) */}}
+{{- define "helm.legacyHostFqdn" -}}
+{{- $alias := required "helm.legacyHostFqdn requires an alias" .alias -}}
+{{- $ctx := required "helm.legacyHostFqdn requires ctx (pass \"ctx\" $)" .ctx -}}
+{{- $envName := $ctx.Values.environment.name -}}
+{{- $domainPrefix := include "helm.domain.prefix" $ctx -}}
+{{- $domain := include "helm.domain" $ctx -}}
+{{- if hasPrefix "feature" $envName -}}
+{{- printf "%s-%s.%s.%s" $alias $envName $domainPrefix $domain -}}
+{{- else -}}
+{{- printf "%s.%s.%s" $alias $domainPrefix $domain -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "helm.namespace" -}}
 {{/* Get standardized context with defaults - use cached version if available */}}
 {{- $ctx := .ctx -}}

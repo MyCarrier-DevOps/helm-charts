@@ -1,0 +1,52 @@
+suite: legacyHostAliases generator-safety guard
+# Guards the ApplicationSet (templates/offloads.yaml) passthrough contract for
+# networking.istio.legacyHostAliases (AC2v2, spec v2 - see templates/_helpers.tpl
+# helm.legacyHostFqdn doc comment for the full rationale).
+#
+# The danger this guards against: ArgoCD ApplicationSet (goTemplate: true) matrix generators
+# run EVERY string leaf of the generator spec - including this chart's own offloads.yaml
+# `list.elements` entries - through Go's text/template.Parse with a sprig-only FuncMap, before
+# the real Helm render ever happens. An unevaluated `{{ }}` reaching that stage (e.g. if the
+# chart ever started `tpl`-evaluating networking.istio.legacyHostAliases before handing it to
+# the generator) is a parse-time hard error that bricks the offload generator for the whole
+# appStack. Plain alias strings, with no `{{` anywhere, are the fix: they parse trivially and
+# are only composed into a full FQDN later, inside the chart template, via
+# helm.legacyHostFqdn. This test proves the alias survives into the ApplicationSet element as
+# plain data.
+templates:
+  - offloads.yaml
+tests:
+  - it: ApplicationSet generator element carries the legacy host alias as a plain, unevaluated string
+    template: offloads.yaml
+    set:
+      environment.name: "dev"
+      isEnvironmentDeploy: false
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.testapp.deploymentType: deployment
+      applications.testapp.isFrontend: false
+      applications.testapp.image.registry: "myregistry.example.com"
+      applications.testapp.image.repository: "mycarrier/testapp"
+      applications.testapp.image.tag: "1.0.0"
+      applications.testapp.ports.http: 8080
+      applications.testapp.networking.ingress.type: "istio"
+      applications.testapp.networking.istio.enabled: true
+      applications.testapp.networking.istio.legacyHostAliases:
+        - integrations-testapp
+      applications.testapp.networking.istio.offloadOperatorEnabled: false
+    asserts:
+      - isKind:
+          of: ApplicationSet
+      - equal:
+          path: spec.generators[0].matrix.generators[1].list.elements[0].Values.applications.testapp.networking.istio.legacyHostAliases[0]
+          value: integrations-testapp
+      # Generator-safety proof: no unevaluated (or evaluated) template action reaches the
+      # ApplicationSet element - the alias is data, not markup.
+      - notMatchRegex:
+          path: spec.generators[0].matrix.generators[1].list.elements[0].Values.applications.testapp.networking.istio.legacyHostAliases[0]
+          pattern: '\{\{'
+
+  # OffloadBase's `eq $metaenv "dev"` render gate (preprod/prod never render an OffloadBase
+  # document) is guarded in tests/offload_operator_test.yaml, alongside the rest of that
+  # gate's coverage - it is a pre-existing render-gate behavior, not part of the
+  # legacyHostAliases/helm.legacyHostFqdn contract.
