@@ -695,14 +695,11 @@ applications:
 
 #### Internal mesh hostnames
 
-When Istio ingress is enabled, the chart also advertises mesh-internal DNS entries for every application using the pattern `{{ appStack }}-{{ application }}.{{ environment }}.internal`. These names allow workloads in any namespace to target a stable service address for each environment:
+When Istio ingress is enabled, the chart also advertises mesh-internal DNS entries for every application using the pattern `{{ appStack }}-{{ application }}.{{ environment }}.internal`. These names allow workloads in any namespace to target a stable service address for each environment.
 
-- `*.dev.internal` accepts an optional `environment` request header. If a feature namespace exists with a matching header value (for example `feature-my-branch`), traffic is routed to that namespace. When the feature workload is absent, the request automatically falls back to the `dev` deployment.
-- `*.preprod.internal` and `*.prod.internal` always resolve to the pre-production and production services respectively, providing consistent URLs for cross-environment smoke tests.
+Only the shared, non-feature environments (`dev`, `qa`, `uat`, `preprod`, `prod`, etc.) get a `ServiceEntry` for their `.internal` host — the `dev` release is the sole owner of `*.dev.internal`. Feature environments (`environment.name` equal to or prefixed with `feature`, e.g. `feature-my-branch`) never render a `ServiceEntry` of their own, regardless of that environment's `networking.istio.internalEnabled` setting; setting `internalEnabled: false` on a shared environment also skips rendering for it.
 
-Every Istio-enabled application receives a matching `ServiceEntry` so that these internal hostnames are resolvable within the mesh. Feature namespaces are included, which means preview workloads can expose `*.dev.internal` endpoints for collaborative testing without additional DNS changes.
-
-Set the `environment` header to the desired feature namespace when calling the `dev` endpoint to exercise preview deployments without touching DNS records.
+Routing to a feature namespace instead happens **dynamically at the mesh layer**: the dev-only `EnvoyDevFallback` WASM plugin inspects the `environment` request header on calls to `*.dev.internal` and dispatches to the matching feature namespace when it exists, falling back to the `dev` deployment when it doesn't. There is no per-feature DNS entry or ServiceEntry involved — see `DevOps/EnvoyDevFallback/FEATURE_ROUTING_RCA.md` for the full routing rationale.
 
 ### Minimal Secret Configuration
 
