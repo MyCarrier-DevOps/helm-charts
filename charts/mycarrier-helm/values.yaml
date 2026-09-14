@@ -582,6 +582,30 @@ applications: {}
 #   #   minReplicaCount: 1
 #   #   maxReplicaCount: 20
 #
+#   # --- Multiple triggers ---
+#   # Mutually exclusive with the flat type/topicName/subscriptionName/queueName/messageCount/
+#   # activationMessageCount fields above -- use one shape or the other, not both.
+#   # minReplicaCount/maxReplicaCount/pollingInterval/cooldownPeriod/idleReplicaCount/advanced
+#   # stay at the keda level and apply to the whole ScaledObject, shared by every trigger.
+#   # keda:
+#   #   enabled: true
+#   #   minReplicaCount: 6
+#   #   maxReplicaCount: 50
+#   #   triggers:
+#   #     - type: topic
+#   #       topicName: topic-name
+#   #       subscriptionName: subscription
+#   #       messageCount: 200
+#   #     - type: topic
+#   #       topicName: topic-name2
+#   #       subscriptionName: subscription2
+#   #       messageCount: 200
+#   #       activationMessageCount: 1            # Optional, per trigger
+#   #       clusterAuthRef: other-cluster-auth   # Optional, per-trigger override of keda.clusterAuthRef
+#   #     - type: queue
+#   #       queueName: dead-letter-replay
+#   #       messageCount: 50
+#
 #   # ----------------------------------------------------------------------------
 #   # Automated Testing Configuration
 #   # ----------------------------------------------------------------------------
