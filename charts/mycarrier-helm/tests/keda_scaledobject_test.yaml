@@ -531,3 +531,381 @@ tests:
       - equal:
           path: spec.triggers[0].authenticationRef.name
           value: custom-cluster-auth
+
+  - it: should render two topic triggers from keda.triggers
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.minReplicaCount: 6
+      applications.test-app-api.keda.maxReplicaCount: 50
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - type: "topic"
+          topicName: "topic-name2"
+          subscriptionName: "subscription2"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.minReplicaCount
+          value: 6
+      - equal:
+          path: spec.maxReplicaCount
+          value: 50
+      - equal:
+          path: spec.triggers[0].type
+          value: azure-servicebus
+      - equal:
+          path: spec.triggers[0].metadata.topicName
+          value: "topic-name"
+      - equal:
+          path: spec.triggers[0].metadata.subscriptionName
+          value: "subscription"
+      - equal:
+          path: spec.triggers[0].metadata.messageCount
+          value: "500"
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[0].authenticationRef.kind
+          value: ClusterTriggerAuthentication
+      - equal:
+          path: spec.triggers[1].type
+          value: azure-servicebus
+      - equal:
+          path: spec.triggers[1].metadata.topicName
+          value: "topic-name2"
+      - equal:
+          path: spec.triggers[1].metadata.subscriptionName
+          value: "subscription2"
+      - equal:
+          path: spec.triggers[1].metadata.messageCount
+          value: "500"
+      - equal:
+          path: spec.triggers[1].authenticationRef.name
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[1].authenticationRef.kind
+          value: ClusterTriggerAuthentication
+
+  - it: should render mixed queue and topic triggers
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.minReplicaCount: 6
+      applications.test-app-api.keda.maxReplicaCount: 50
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - type: "queue"
+          queueName: "dead-letter-replay"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.topicName
+          value: "topic-name"
+      - equal:
+          path: spec.triggers[0].metadata.subscriptionName
+          value: "subscription"
+      - notExists:
+          path: spec.triggers[0].metadata.queueName
+      - equal:
+          path: spec.triggers[1].metadata.queueName
+          value: "dead-letter-replay"
+      - notExists:
+          path: spec.triggers[1].metadata.topicName
+      - notExists:
+          path: spec.triggers[1].metadata.subscriptionName
+
+  - it: should default per-trigger messageCount and allow override
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - type: "topic"
+          topicName: "topic-name2"
+          subscriptionName: "subscription2"
+          messageCount: 10
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.messageCount
+          value: "500"
+      - equal:
+          path: spec.triggers[1].metadata.messageCount
+          value: "10"
+
+  - it: should render activationMessageCount only on the trigger that sets it
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - type: "topic"
+          topicName: "topic-name2"
+          subscriptionName: "subscription2"
+          activationMessageCount: 1
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.triggers[0].metadata.activationMessageCount
+      - equal:
+          path: spec.triggers[1].metadata.activationMessageCount
+          value: "1"
+
+  - it: should override clusterAuthRef per trigger and fall back to keda.clusterAuthRef otherwise
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - type: "topic"
+          topicName: "topic-name2"
+          subscriptionName: "subscription2"
+          clusterAuthRef: "other-cluster-auth"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[1].authenticationRef.name
+          value: other-cluster-auth
+
+  - it: should fall back to the environment default clusterAuthRef when neither trigger nor keda level set one
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - type: "topic"
+          topicName: "topic-name2"
+          subscriptionName: "subscription2"
+          clusterAuthRef: "other-cluster-auth"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: servicebus-connectionstring-prod
+      - equal:
+          path: spec.triggers[1].authenticationRef.name
+          value: other-cluster-auth
+
+  - it: should fail when a trigger's type is missing
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+          subscriptionName: "subscription"
+        - topicName: "topic-name2"
+          subscriptionName: "subscription2"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.triggers[1].type must be 'queue' or 'topic', got '<not set>'"
+
+  - it: should fail when a trigger's topicName is missing for topic type
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          subscriptionName: "subscription"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.triggers[0].topicName is required when keda.triggers[0].type is 'topic'"
+
+  - it: should fail when a trigger's subscriptionName is missing for topic type
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "topic"
+          topicName: "topic-name"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.triggers[0].subscriptionName is required when keda.triggers[0].type is 'topic'"
+
+  - it: should fail when a trigger's queueName is missing for queue type
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "queue"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.triggers[0].queueName is required when keda.triggers[0].type is 'queue'"
+
+  - it: should fail when both flat keda.type and keda.triggers are set
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-subscription"
+      applications.test-app-api.keda.triggers:
+        - type: "queue"
+          queueName: "my-queue"
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.type and keda.triggers are mutually exclusive; move the flat trigger into keda.triggers"
+
+  - it: should fail when a trigger sets minReplicaCount
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "queue"
+          queueName: "my-queue"
+          minReplicaCount: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.triggers[0].minReplicaCount is not supported; set keda.minReplicaCount at the keda level (KEDA applies replica bounds to the whole ScaledObject)"
+
+  - it: should fail when a trigger sets maxReplicaCount
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: "queue"
+          queueName: "my-queue"
+          maxReplicaCount: 20
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'test-app-api': keda.triggers[0].maxReplicaCount is not supported; set keda.maxReplicaCount at the keda level (KEDA applies replica bounds to the whole ScaledObject)"
+
+  - it: should render legacy flat config as a single trigger
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.type: "topic"
+      applications.test-app-api.keda.topicName: "my-topic"
+      applications.test-app-api.keda.subscriptionName: "my-subscription"
+      applications.test-app-api.keda.clusterAuthRef: "servicebus-connectionstring-prod"
+    documentIndex: 0
+    asserts:
+      - lengthEqual:
+          path: spec.triggers
+          count: 1
+
+  - it: should render large messageCount values as plain integers
+    set:
+      environment.name: "prod"
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.isFrontend: false
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      applications.test-app-api.ports.http: 8080
+      applications.test-app-api.keda.enabled: true
+      applications.test-app-api.keda.triggers:
+        - type: queue
+          queueName: my-queue
+          messageCount: 1000000
+          activationMessageCount: 2000000
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.messageCount
+          value: "1000000"
+      - equal:
+          path: spec.triggers[0].metadata.activationMessageCount
+          value: "2000000"

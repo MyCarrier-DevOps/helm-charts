@@ -1530,6 +1530,45 @@
               "advanced": {
                 "type": "object",
                 "description": "Advanced KEDA scaling configuration (e.g., scaling policies)"
+              },
+              "triggers": {
+                "type": "array",
+                "description": "Multiple KEDA triggers for this ScaledObject. Mutually exclusive with the flat type/topicName/subscriptionName/queueName/messageCount/activationMessageCount fields above. minReplicaCount/maxReplicaCount/pollingInterval/cooldownPeriod/idleReplicaCount/advanced remain ScaledObject-level and are not set per-trigger.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "Azure Service Bus trigger type",
+                      "enum": ["topic", "queue"]
+                    },
+                    "topicName": {
+                      "type": "string",
+                      "description": "Azure Service Bus topic name (required when type is 'topic')"
+                    },
+                    "subscriptionName": {
+                      "type": "string",
+                      "description": "Azure Service Bus subscription name (required when type is 'topic')"
+                    },
+                    "queueName": {
+                      "type": "string",
+                      "description": "Azure Service Bus queue name (required when type is 'queue')"
+                    },
+                    "clusterAuthRef": {
+                      "type": "string",
+                      "description": "Per-trigger override of an existing ClusterTriggerAuthentication resource. Falls back to keda.clusterAuthRef, then to servicebus-connectionstring-<env>."
+                    },
+                    "messageCount": {
+                      "type": "integer",
+                      "description": "Target message count per replica to trigger scaling for this trigger",
+                      "default": 500
+                    },
+                    "activationMessageCount": {
+                      "type": "integer",
+                      "description": "Message count threshold to activate this trigger's scaler (scale from 0)"
+                    }
+                  }
+                }
               }
             }
           }

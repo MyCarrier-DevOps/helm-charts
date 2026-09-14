@@ -116,24 +116,61 @@ applications:
       # clusterAuthRef defaults to servicebus-connectionstring-<env>
 ```
 
+### Multiple Triggers
+
+A single ScaledObject can scale off more than one trigger — for example, a worker that drains a primary topic subscription and also needs to react to a dead-letter queue. Use `keda.triggers` (a list) instead of the flat `type`/`topicName`/`subscriptionName`/`queueName`/`messageCount`/`activationMessageCount` fields:
+
+```yaml
+applications:
+  order-worker:
+    deploymentType: deployment
+    image:
+      registry: "myregistry.example.com"
+      repository: "mycarrier/order-worker"
+      tag: "1.0.0"
+    keda:
+      enabled: true
+      minReplicaCount: 6
+      maxReplicaCount: 50
+      triggers:
+        - type: topic
+          topicName: topic-name
+          subscriptionName: subscription
+          messageCount: 200
+        - type: topic
+          topicName: topic-name2
+          subscriptionName: subscription2
+          messageCount: 200
+          activationMessageCount: 1          # Optional, per trigger
+          clusterAuthRef: other-cluster-auth # Optional, per-trigger override of keda.clusterAuthRef
+        - type: queue
+          queueName: dead-letter-replay
+          messageCount: 50
+```
+
+KEDA computes a desired replica count independently for each trigger, then scales the workload to the **maximum** of those results, clamped by the shared `minReplicaCount`/`maxReplicaCount`. `minReplicaCount`, `maxReplicaCount`, `pollingInterval`, `cooldownPeriod`, `idleReplicaCount`, and `advanced` are always ScaledObject-level — they apply once, to the whole ScaledObject, and cannot be set on an individual trigger. Each trigger's `clusterAuthRef` falls back to `keda.clusterAuthRef`, which falls back to `servicebus-connectionstring-<env>`, same as the flat shape.
+
+The flat fields and `keda.triggers` are **mutually exclusive** — configure one shape or the other, never both, for the same application.
+
 ### Configuration Reference
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `enabled` | Yes | `false` | Enable KEDA autoscaling |
-| `type` | Yes | - | `"queue"` or `"topic"` |
-| `queueName` | When type=queue | - | Azure Service Bus queue name |
-| `topicName` | When type=topic | - | Azure Service Bus topic name |
-| `subscriptionName` | When type=topic | - | Azure Service Bus subscription name |
-| `clusterAuthRef` | No | `servicebus-connectionstring-<env>` | Name of an existing ClusterTriggerAuthentication (auto-resolved from environment) |
-| `messageCount` | No | `500` | Target messages per replica to trigger scaling |
-| `activationMessageCount` | No | - | Message threshold to activate the scaler (scale from idle) |
-| `pollingInterval` | No | `30` | How often KEDA checks the trigger source (seconds) |
-| `cooldownPeriod` | No | `300` | Wait time after last trigger before scaling down (seconds) |
-| `minReplicaCount` | No | `2` | Minimum number of replicas |
-| `maxReplicaCount` | No | `50` | Maximum number of replicas |
-| `idleReplicaCount` | No | - | Replicas when idle (set to `0` for scale-to-zero) |
-| `advanced` | No | - | Advanced KEDA scaling policies |
+| `type` | Yes (flat shape only) | - | `"queue"` or `"topic"`. Per-trigger when using `triggers` |
+| `queueName` | When type=queue | - | Azure Service Bus queue name. Per-trigger when using `triggers` |
+| `topicName` | When type=topic | - | Azure Service Bus topic name. Per-trigger when using `triggers` |
+| `subscriptionName` | When type=topic | - | Azure Service Bus subscription name. Per-trigger when using `triggers` |
+| `clusterAuthRef` | No | `servicebus-connectionstring-<env>` | Name of an existing ClusterTriggerAuthentication (auto-resolved from environment). Per-trigger override available when using `triggers` |
+| `messageCount` | No | `500` | Target messages per replica to trigger scaling. Per-trigger when using `triggers` |
+| `activationMessageCount` | No | - | Message threshold to activate the scaler (scale from idle). Per-trigger when using `triggers` |
+| `pollingInterval` | No | `30` | How often KEDA checks the trigger source (seconds). Always ScaledObject-level |
+| `cooldownPeriod` | No | `300` | Wait time after last trigger before scaling down (seconds). Always ScaledObject-level |
+| `minReplicaCount` | No | `2` | Minimum number of replicas. Always ScaledObject-level |
+| `maxReplicaCount` | No | `50` | Maximum number of replicas. Always ScaledObject-level |
+| `idleReplicaCount` | No | - | Replicas when idle (set to `0` for scale-to-zero). Always ScaledObject-level |
+| `advanced` | No | - | Advanced KEDA scaling policies. Always ScaledObject-level |
+| `triggers` | No | - | List of triggers for multi-trigger scaling. Mutually exclusive with the flat `type`/`topicName`/`subscriptionName`/`queueName`/`messageCount`/`activationMessageCount` fields |
 
 ## Examples
 
