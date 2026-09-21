@@ -64,32 +64,28 @@ Centralized endpoint name generation for all kinds
 {{- end -}}
 
 {{/*
-Centralized match rendering for all endpoint kinds
+Centralized match rendering for all endpoint kinds.
+
+Allowlist rules match on URI only, in every environment. They deliberately do not carry
+withoutHeaders: within a single match entry Istio ANDs the conditions, so a rule combining a
+uri with withoutHeaders.environment matches only when the caller sends no "environment" header.
+Any request that does send one - which is how callers target a specific feature environment -
+would miss every allowlist rule and fall through to the terminal 403.
+
+withoutHeaders belongs on the default route, where it is one arm of a match LIST (an OR)
+alongside the env-header arm, so header-less and header-carrying requests both land. See
+helm.specs.virtualservice.
 */}}
 {{- define "helm.renderEndpointMatch" -}}
-{{- $metaenv := default "" .metaenv -}}
-{{- $isDevEnv := eq $metaenv "dev" -}}
 {{- if eq .kind "regex" -}}
 - uri:
     regex: {{ .match | quote }}
-  {{- if $isDevEnv }}
-  withoutHeaders:
-    environment: {}
-  {{- end }}
 {{- else if eq .kind "prefix" -}}
 - uri:
     prefix: {{ include "helm.processPrefixPath" .match | quote }}
-  {{- if $isDevEnv }}
-  withoutHeaders:
-    environment: {}
-  {{- end }}
 {{- else -}}
 - uri:
     exact: {{ .match | quote }}
-  {{- if $isDevEnv }}
-  withoutHeaders:
-    environment: {}
-  {{- end }}
 {{- end -}}
 {{- end -}}
 
