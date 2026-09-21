@@ -119,7 +119,17 @@ http:
 {{- $istioEnabled = $istioConfig.enabled }}
 {{- end }}
 {{- $hasUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
-{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (ne $metaenv "dev") }}
+{{- /* Feature environments get the allowlist; Swagger stays reachable there via the dev-gated
+       entry in helm.lang.endpoint.list. The plain dev environment is deliberately excluded:
+       its default route carries the -feature-routing rule and the withoutHeaders fallback in
+       the else branch below, which the allowlist branch does not emit and the EnvoyDevFallback
+       WASM plugin depends on.
+
+       networking.istio.allowAllEndpoints is the escape hatch for developers who need a path
+       outside the allowlist on a feature environment. It is honoured only in the dev metaenv,
+       so it can never open up preprod or prod. */ -}}
+{{- $allowAllEndpoints := and (dig "networking" "istio" "allowAllEndpoints" false .application) (eq $metaenv "dev") }}
+{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (or (ne $metaenv "dev") $isFeatureEnv) (not $allowAllEndpoints) }}
 
 {{- if $hasAllowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}

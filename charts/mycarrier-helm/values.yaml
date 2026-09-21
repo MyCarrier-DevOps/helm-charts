@@ -341,12 +341,21 @@ applications: {}
 #       responseHeaders: {}
 #       corsPolicy: {}
 #       
-#       # Allowed endpoints (C# apps auto-add /liveness, /health, /api if name contains 'api')
+#       # Allowed endpoints (C# apps auto-add /liveness, /health, /api if name contains 'api').
+#       # Anything not on the list gets a 403 from the gateway and never reaches the pod.
+#       # Enforced in every environment. On dev/feature, /swagger is added automatically so
+#       # Swagger UI keeps working there; it is never added on preprod or prod.
 #       allowedEndpoints: []
 #       # allowedEndpoints:
 #       #   - "/custom-endpoint"
 #       #   - "/api/v1/*"
 #       # disableDefaultEndpoints: false  # Set true to disable auto C# endpoints
+#       #
+#       # Escape hatch for dev and feature environments: route every path to the app and skip
+#       # the allowlist entirely, as things behaved before the allowlist existed. Ignored in
+#       # preprod and prod, so it cannot be used to open those up. Prefer adding the specific
+#       # path to allowedEndpoints over switching this on.
+#       # allowAllEndpoints: false
 #
 #     # ------------------------------------------------------------------------
 #     # KrakenD AutoConfig
