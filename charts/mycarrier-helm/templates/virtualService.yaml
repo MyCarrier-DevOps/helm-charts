@@ -8,6 +8,13 @@
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $metaenv := (include "helm.metaEnvironment" $ ) }}
 {{- $istioConfig := dig "networking" "istio" dict $appValues }}
+{{- /* allowAllEndpoints only has an effect on dev and feature environments. Setting it anywhere
+       else is a configuration mistake - usually the value landing in a shared values file rather
+       than the dev one - so fail the render instead of silently ignoring it. This sits ahead of
+       every render condition below, so it fires even when no VirtualService is produced. */ -}}
+{{- if and (dig "networking" "istio" "allowAllEndpoints" false $appValues) (ne $metaenv "dev") }}
+{{- fail (printf "application %q: networking.istio.allowAllEndpoints is only supported on dev and feature environments, but this render targets %q. It has no effect here and the endpoint allowlist stays enforced. Move it to your dev values file." $appName $.Values.environment.name) }}
+{{- end }}
 {{- $istioEnabled := true }}
 {{- if and $istioConfig (hasKey $istioConfig "enabled") }}
 {{- $istioEnabled = $istioConfig.enabled }}
@@ -89,9 +96,11 @@ spec:
   {{- $offloadLangEndpoints := include "helm.lang.endpoint.list" (dict "Values" $.Values "application" $appValues "fullName" $fullName) | trim }}
   {{- $offloadUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
   {{- /* networking.istio.allowAllEndpoints restores the unrestricted catch-all for developers
-         who need a path outside the allowlist. Offload VirtualServices only ever render on
-         feature environments, so this is already confined to the dev metaenv. */ -}}
-  {{- $offloadAllowAll := dig "networking" "istio" "allowAllEndpoints" false $appValues }}
+         who need a path outside the allowlist. Offload VirtualServices only render on feature
+         environments, which always map to the dev metaenv, so the guard below is redundant
+         today - it is here so the confinement survives any future change to that render
+         condition rather than depending on it. */ -}}
+  {{- $offloadAllowAll := and (dig "networking" "istio" "allowAllEndpoints" false $appValues) (eq $metaenv "dev") }}
   {{- if and (or (ne $offloadLangEndpoints "") $offloadUserEndpoints) (not $offloadAllowAll) }}
   {{ include "helm.virtualservice.allowedEndpoints" $appContext | indent 2 | trim }}
   {{- else }}

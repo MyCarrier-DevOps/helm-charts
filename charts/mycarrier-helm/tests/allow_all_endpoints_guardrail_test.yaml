@@ -1,0 +1,160 @@
+suite: allowAllEndpoints is confined to dev and feature environments
+templates:
+  - templates/virtualService.yaml
+# networking.istio.allowAllEndpoints turns off the endpoint allowlist. It is only honoured on
+# the dev metaenv (the literal name "dev" and any "feature*" name). Setting it anywhere else is
+# a configuration mistake - most often the value landing in a shared values file rather than the
+# dev one - so the render fails instead of silently ignoring it.
+#
+# Two guards enforce this. values.schema.json carries the rule as a root-level if/then and
+# rejects it at schema validation; virtualService.yaml fails the render with a fuller, actionable
+# message for anyone who bypasses that with --skip-schema-validation. Schema validation runs
+# first, including under helm-unittest, so the assertions below match on the offending value path
+# rather than on either guard's exact wording.
+tests:
+  - it: should reject allowAllEndpoints in preprod
+    set: &app
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              allowAllEndpoints: true
+    asserts:
+      - failedTemplate:
+          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+
+  - it: should reject allowAllEndpoints in prod
+    set:
+      <<: *app
+      environment:
+        name: prod
+      namespace: prod
+    asserts:
+      - failedTemplate:
+          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+
+  - it: should reject allowAllEndpoints in uat
+    set:
+      <<: *app
+      environment:
+        name: uat
+      namespace: uat
+    asserts:
+      - failedTemplate:
+          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+
+  - it: should reject allowAllEndpoints in qa
+    set:
+      <<: *app
+      environment:
+        name: qa
+      namespace: qa
+    asserts:
+      - failedTemplate:
+          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+
+  # Environment names outside the standard set are allowed and treated as generic, which means
+  # they are not the dev metaenv either. The guard is an allowlist of dev/feature, not a denylist
+  # of known environments, so these are covered without being enumerated.
+  - it: should reject allowAllEndpoints in a generic environment
+    set:
+      <<: *app
+      environment:
+        name: demo
+      namespace: demo
+    asserts:
+      - failedTemplate:
+          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+
+  - it: should allow allowAllEndpoints on a feature environment
+    set:
+      <<: *app
+      environment:
+        name: feature20
+      namespace: feature20
+    asserts:
+      - notFailedTemplate: {}
+      # Escape hatch engaged: back to a single unrestricted catch-all, no 403 rule.
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-feature20
+      - notExists:
+          path: spec.http[1]
+
+  - it: should allow allowAllEndpoints on the dev environment
+    set:
+      <<: *app
+      environment:
+        name: dev
+      namespace: dev
+    asserts:
+      - notFailedTemplate: {}
+
+  # The guard keys off the value, not the presence of the key, so an explicit false is fine
+  # anywhere. It matches the default and is a legitimate way to document intent.
+  - it: should accept an explicit false in prod
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              allowAllEndpoints: false
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.http[4].fault.abort.httpStatus
+          value: 403
+
+  # The guard sits ahead of every render condition, so it fires even for applications that
+  # produce no VirtualService at all. Without that, a mistake in a prod values file on an
+  # Istio-disabled service would pass unnoticed.
+  - it: should reject allowAllEndpoints even when no VirtualService renders
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      namespace: prod
+      applications:
+        api:
+          deploymentType: deployment
+          istioDisabled: true
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              allowAllEndpoints: true
+    asserts:
+      - failedTemplate:
+          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints

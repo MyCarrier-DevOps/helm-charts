@@ -352,9 +352,13 @@ applications: {}
 #       # disableDefaultEndpoints: false  # Set true to disable auto C# endpoints
 #       #
 #       # Escape hatch for dev and feature environments: route every path to the app and skip
-#       # the allowlist entirely, as things behaved before the allowlist existed. Ignored in
-#       # preprod and prod, so it cannot be used to open those up. Prefer adding the specific
-#       # path to allowedEndpoints over switching this on.
+#       # the allowlist entirely, as things behaved before the allowlist existed. Prefer adding
+#       # the specific path to allowedEndpoints over switching this on.
+#       #
+#       # Setting it to true anywhere other than dev or a feature environment is rejected - by
+#       # values.schema.json at validation, and by the templates if schema validation is skipped.
+#       # It is a no-op outside dev/feature, so failing loudly beats it sitting in a preprod or
+#       # prod values file looking effective. An explicit false is accepted everywhere.
 #       # allowAllEndpoints: false
 #
 #     # ------------------------------------------------------------------------
