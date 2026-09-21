@@ -93,7 +93,7 @@ template:
           {{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
             {{- $hardenedSecurityContext = false }}
           {{- end }}
-          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
+          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
           {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
           {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
@@ -128,7 +128,7 @@ template:
           {{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
             {{- $hardenedSecurityContext = false }}
           {{- end }}
-          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "0.5Gi") }}
+          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
             curl -X POST \
             -H "Content-Type: application/json" \

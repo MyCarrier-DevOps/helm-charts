@@ -130,7 +130,7 @@ podResources:
     memory: "4Gi"
   requests:
     cpu: "250m"
-    memory: "0.5Gi"
+    memory: "1Gi"
 ```
 
 ## Example Configurations
@@ -236,7 +236,7 @@ testtrigger:
           memory: "4Gi"
         requests:
           cpu: "250m"
-          memory: "0.5Gi"
+          memory: "1Gi"
 ```
 
 ### Multiple Applications with Multiple Tests
