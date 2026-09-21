@@ -239,7 +239,7 @@ tests:
       # the render is rejected so the mistake surfaces instead of looking effective.
       # allow_all_endpoints_guardrail_test.yaml covers this across every environment.
       - failedTemplate:
-          errorPattern: applications\.test-app\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
 
   - it: should render allowed endpoints in preprod namespace
     set:

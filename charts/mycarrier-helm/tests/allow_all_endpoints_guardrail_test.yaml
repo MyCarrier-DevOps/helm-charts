@@ -9,8 +9,14 @@ templates:
 # Two guards enforce this. values.schema.json carries the rule as a root-level if/then and
 # rejects it at schema validation; virtualService.yaml fails the render with a fuller, actionable
 # message for anyone who bypasses that with --skip-schema-validation. Schema validation runs
-# first, including under helm-unittest, so the assertions below match on the offending value path
-# rather than on either guard's exact wording.
+# first, including under helm-unittest, so the schema is what these cases actually trip.
+#
+# The assertions deliberately match on the property name alone. Helm's bundled JSON Schema
+# validator has changed error format between versions - one renders the path dot-separated
+# ("applications.api.networking.istio.allowAllEndpoints"), another as a JSON pointer
+# ("at '/applications/api/networking/istio/allowAllEndpoints'") - and the two guards word their
+# messages differently. Matching the property name keeps these tests pinned to the behaviour
+# (this value is rejected here) rather than to a message format that is not ours to control.
 tests:
   - it: should reject allowAllEndpoints in preprod
     set: &app
@@ -34,7 +40,7 @@ tests:
               allowAllEndpoints: true
     asserts:
       - failedTemplate:
-          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
 
   - it: should reject allowAllEndpoints in prod
     set:
@@ -44,7 +50,7 @@ tests:
       namespace: prod
     asserts:
       - failedTemplate:
-          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
 
   - it: should reject allowAllEndpoints in uat
     set:
@@ -54,7 +60,7 @@ tests:
       namespace: uat
     asserts:
       - failedTemplate:
-          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
 
   - it: should reject allowAllEndpoints in qa
     set:
@@ -64,7 +70,7 @@ tests:
       namespace: qa
     asserts:
       - failedTemplate:
-          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
 
   # Environment names outside the standard set are allowed and treated as generic, which means
   # they are not the dev metaenv either. The guard is an allowlist of dev/feature, not a denylist
@@ -77,7 +83,7 @@ tests:
       namespace: demo
     asserts:
       - failedTemplate:
-          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
 
   - it: should allow allowAllEndpoints on a feature environment
     set:
@@ -157,4 +163,4 @@ tests:
               allowAllEndpoints: true
     asserts:
       - failedTemplate:
-          errorPattern: applications\.api\.networking\.istio\.allowAllEndpoints
+          errorPattern: allowAllEndpoints
