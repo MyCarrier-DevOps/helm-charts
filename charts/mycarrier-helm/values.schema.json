@@ -842,6 +842,11 @@
                           "corsPolicy": {
                             "type": "object"
                           },
+                          "allowAllEndpoints": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Dev and feature environments only: skip the endpoint allowlist and route every path to the application, restoring the pre-allowlist behaviour. Ignored in preprod and prod, which always enforce the allowlist. Use when a feature environment needs to serve a path outside /liveness, /health, /api and /swagger."
+                          },
                           "allowedEndpoints": {
                             "type": "array",
                             "description": "List of allowed HTTP endpoints for the VirtualService. Can be strings with wildcards or objects with kind and match fields.",

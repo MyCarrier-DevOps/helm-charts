@@ -82,11 +82,25 @@ spec:
             number: {{ default (default 8080 (dig "ports" "http" nil $appValues)) $value.port }}
   {{- end }}
   {{- end }}
+  {{- /* Endpoint allowlist. Mirrors the main VirtualService so feature environments are not
+         left proxying every probed path straight to the pod. Emits the allowed routes plus a
+         terminal 403 rule, so the unconditional catch-all below is only used when no
+         allowlist applies (e.g. non-csharp apps with no allowedEndpoints configured). */ -}}
+  {{- $offloadLangEndpoints := include "helm.lang.endpoint.list" (dict "Values" $.Values "application" $appValues "fullName" $fullName) | trim }}
+  {{- $offloadUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
+  {{- /* networking.istio.allowAllEndpoints restores the unrestricted catch-all for developers
+         who need a path outside the allowlist. Offload VirtualServices only ever render on
+         feature environments, so this is already confined to the dev metaenv. */ -}}
+  {{- $offloadAllowAll := dig "networking" "istio" "allowAllEndpoints" false $appValues }}
+  {{- if and (or (ne $offloadLangEndpoints "") $offloadUserEndpoints) (not $offloadAllowAll) }}
+  {{ include "helm.virtualservice.allowedEndpoints" $appContext | indent 2 | trim }}
+  {{- else }}
   - name: {{ $fullName }}
     route:
       - destination:
           host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
           port:
             number: {{ default 8080 (dig "ports" "http" nil $appValues) }}
+  {{- end }}
 {{- end }}
 {{- end }}

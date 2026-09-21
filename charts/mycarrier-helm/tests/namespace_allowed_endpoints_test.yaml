@@ -1,4 +1,4 @@
-suite: test allowed endpoints are disabled for dev namespace
+suite: allowed endpoints by namespace - enforced everywhere except the plain dev namespace, with Swagger on dev/feature only and an allowAllEndpoints escape hatch
 templates:
   - templates/virtualService.yaml
 tests:
@@ -52,7 +52,7 @@ tests:
       - notExists:
           path: spec.http[3]
 
-  - it: should not render allowed endpoints in feature20 namespace
+  - it: should render allowed endpoints in feature20 namespace
     set:
       global:
         appStack: test-stack
@@ -86,15 +86,166 @@ tests:
       - equal:
           path: metadata.namespace
           value: feature20
-      # Feature namespaces expose an exact header match for their branch and a single default fallback route
+      # Feature namespaces still lead with the exact header match for their branch
+      - equal:
+          path: spec.http[0].match[0].headers.environment.exact
+          value: feature20
+      # Feature environments now enforce the allowlist, so unlisted paths are refused at the
+      # gateway instead of being proxied to the pod.
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-feature20-allowed-liveness
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-test-app-feature20-allowed-api-health
+      - equal:
+          path: spec.http[6].name
+          value: test-stack-test-app-feature20-forbidden
+      - equal:
+          path: spec.http[6].fault.abort.httpStatus
+          value: 403
+
+  - it: should allow Swagger on a feature namespace but never on preprod
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-feature20-allowed-swagger
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: /swagger
+
+  - it: should not allow Swagger in preprod
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    documentIndex: 0
+    asserts:
+      # Swagger must never be reachable outside dev/feature, so no allowed-swagger rule exists.
+      - notMatchRegex:
+          path: spec.http[1].name
+          pattern: swagger
+      - notMatchRegex:
+          path: spec.http[2].name
+          pattern: swagger
+      - notMatchRegex:
+          path: spec.http[3].name
+          pattern: swagger
+
+  - it: allowAllEndpoints should restore the unrestricted catch-all on a feature namespace
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+              allowAllEndpoints: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    documentIndex: 0
+    asserts:
+      # Back to the pre-allowlist shape: header match, then a single default fallback route.
       - equal:
           path: spec.http[0].match[0].headers.environment.exact
           value: feature20
       - exists:
           path: spec.http[1].match[0].withoutHeaders.environment
-      # No additional allowed-endpoint rules should be rendered beyond the fallback route
       - notExists:
           path: spec.http[2]
+
+  - it: allowAllEndpoints must be ignored in preprod
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      namespace: preprod
+      applications:
+        test-app:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/app
+            tag: latest
+          networking:
+            istio:
+              enabled: true
+              allowAllEndpoints: true
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    documentIndex: 0
+    asserts:
+      # The escape hatch is dev/feature only - preprod still terminates in the 403 rule.
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-test-app-allowed-liveness
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-test-app-forbidden
+      - equal:
+          path: spec.http[3].fault.abort.httpStatus
+          value: 403
 
   - it: should render allowed endpoints in preprod namespace
     set:

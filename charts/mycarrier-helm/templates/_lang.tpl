@@ -225,6 +225,12 @@ Expects context with: .Values, .fullName, .application
 {{- if contains "api" (.fullName | lower) }}
 - kind: "prefix"
   match: "/api"
+{{- end }}
+{{- /* Swagger is intentionally reachable on dev/feature environments only. It must stay
+       unreachable on preprod and prod, which is why this is gated on the dev metaenv. */ -}}
+{{- if eq (include "helm.metaEnvironment" .) "dev" }}
+- kind: "prefix"
+  match: "/swagger"
 {{- end -}}
 {{- end -}}
 {{- end -}}

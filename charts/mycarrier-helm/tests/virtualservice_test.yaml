@@ -875,10 +875,19 @@ tests:
           path: spec.http[0].route[0].destination.host
           value: app-tpl-app-feature-tpl.feature-tpl.svc.cluster.local
         documentIndex: 1
-      # Catch-all default route follows the custom route
+      # The endpoint allowlist follows the custom route, and the offload VS terminates in the
+      # 403 rule rather than an unconditional catch-all.
       - equal:
           path: spec.http[1].name
-          value: app-tpl-app-feature-tpl
+          value: app-tpl-app-feature-tpl-allowed-liveness
+        documentIndex: 1
+      - equal:
+          path: spec.http[4].name
+          value: app-tpl-app-feature-tpl-forbidden
+        documentIndex: 1
+      - equal:
+          path: spec.http[4].fault.abort.httpStatus
+          value: 403
         documentIndex: 1
 
   # A route destination template that builds an FQDN from the environment name:

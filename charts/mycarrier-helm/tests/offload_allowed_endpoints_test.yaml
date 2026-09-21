@@ -1,0 +1,208 @@
+suite: offload VirtualService endpoint allowlist
+templates:
+  - templates/virtualService.yaml
+tests:
+  # The offload VirtualService is the only one rendered on a feature environment, and it is
+  # bound to the public istio-system/default gateway. Without an allowlist it proxied every
+  # probed path (/config.js, /.env, /xmlrpc.php, ...) straight to the pod.
+  - it: should enforce the allowlist on the offload VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.name
+          value: test-stack-api-feature20-offload
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-feature20-allowed-liveness
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-api-feature20-allowed-health
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-api-feature20-allowed-api
+      # Swagger stays reachable on feature environments.
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-api-feature20-allowed-swagger
+      - equal:
+          path: spec.http[3].match[0].uri.prefix
+          value: /swagger
+      # Everything else is refused at the gateway and never reaches the pod.
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-api-feature20-forbidden
+      - equal:
+          path: spec.http[4].fault.abort.httpStatus
+          value: 403
+      - notExists:
+          path: spec.http[5]
+
+  - it: should place custom routes ahead of the allowlist on the offload VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              routes:
+                proxy:
+                  match:
+                    - uri:
+                        prefix: /proxy
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: proxy
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-api-feature20-allowed-liveness
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-api-feature20-forbidden
+
+  - it: should honour user-supplied allowedEndpoints on the offload VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              allowedEndpoints:
+                - "/graphql"
+    asserts:
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-api-feature20-allowed-graphql
+      - equal:
+          path: spec.http[4].match[0].uri.exact
+          value: /graphql
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-api-feature20-forbidden
+
+  # The escape hatch for developers who need a path outside the allowlist.
+  - it: allowAllEndpoints should restore the unrestricted catch-all on the offload VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              allowAllEndpoints: true
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-feature20
+      - equal:
+          path: spec.http[0].route[0].destination.host
+          value: test-stack-api-feature20.feature20.svc.cluster.local
+      - notExists:
+          path: spec.http[1]
+
+  # Non-csharp apps have no language default endpoints, so they keep the previous behaviour
+  # until they opt in with allowedEndpoints. This bounds the blast radius of the change.
+  - it: should leave non-csharp offload VirtualServices on the catch-all
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-feature20
+      - notExists:
+          path: spec.http[1]
+
+  - it: disableDefaultEndpoints should drop the language defaults on the offload VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              disableDefaultEndpoints: true
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-feature20
+      - notExists:
+          path: spec.http[1]
