@@ -227,6 +227,80 @@ tests:
           path: spec.http[2].match[0].withoutHeaders
 
   # ==========================================
+  # FEATURE ENVIRONMENT - allowlist rules must stay URI-only
+  # ==========================================
+  # Regression cover. Istio ANDs the conditions inside a single match entry, so an allowlist rule
+  # carrying both a uri and withoutHeaders.environment matches only when the caller sends no
+  # "environment" header. Callers targeting a feature environment do send one:
+  #
+  #   curl https://mycarrier-api-feature20.dev.mycarrier.dev/liveness -H 'Environment: feature20'
+  #
+  # With withoutHeaders present that request misses every allowlist rule and falls through to the
+  # terminal 403, while the same request without the header succeeds. Both VirtualServices a
+  # feature environment can produce are checked, since the allowlist reaches both.
+  - it: should NOT include withoutHeaders in feature environment allowed endpoints
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature20
+      namespace: feature20
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: mycarrieracr.azurecr.io
+            repository: test/api
+            tag: latest
+          ports:
+            http: 8080
+          networking:
+            istio:
+              enabled: true
+              offloadOperatorEnabled: false
+              allowedEndpoints:
+                - "/api/status"
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+    asserts:
+      # Main VirtualService
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-api-feature20-allowed-liveness
+        documentIndex: 0
+      - equal:
+          path: spec.http[1].match[0].uri.exact
+          value: /liveness
+        documentIndex: 0
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+        documentIndex: 0
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+        documentIndex: 0
+      - notExists:
+          path: spec.http[3].match[0].withoutHeaders
+        documentIndex: 0
+      # Offload VirtualService - the only one a feature environment normally renders
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api-feature20-allowed-liveness
+        documentIndex: 1
+      - notExists:
+          path: spec.http[0].match[0].withoutHeaders
+        documentIndex: 1
+      - notExists:
+          path: spec.http[1].match[0].withoutHeaders
+        documentIndex: 1
+      - notExists:
+          path: spec.http[2].match[0].withoutHeaders
+        documentIndex: 1
+
+  # ==========================================
   # PROD ENVIRONMENT - simple env: default route is unconditional catch-all
   # ==========================================
   - it: should NOT include withoutHeaders in prod environment default route
