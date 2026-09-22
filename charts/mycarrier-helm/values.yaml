@@ -360,19 +360,30 @@ applications: {}
 #       # dev/feature, so failing loudly beats it sitting in a preprod or prod values file looking
 #       # effective. An explicit false is accepted everywhere.
 #       #
-#       # Both the environment name and the RESOLVED namespace must be dev/feature, so
-#       # environment.namespaceOverride cannot be used to slip it into another namespace.
+#       # The environment must be dev metaenv AND the RESOLVED namespace must not be a protected
+#       # one (prod, preprod, uat, qa, demo), so environment.namespaceOverride cannot be used to
+#       # slip it into a protected namespace. Custom dev namespaces - platform-dev and the like -
+#       # are accepted.
 #       #
 #       # BLAST RADIUS: the rejection aborts the whole release render, not just the VirtualService,
-#       # so a stray value stops every manifest in the release. That surfaces as a failed render
-#       # step in the deploy pipeline (render-deploy-core runs `helm template` per environment and
-#       # hard-fails, naming the app, environment and values files), so the broken manifests never
-#       # reach ArgoCD and no sync is left half-applied. It does mean a value that only appears in
-#       # a preprod or prod values file is caught when that environment deploys rather than when
-#       # the change merges - keep it out of shared values files.
+#       # so a stray value stops every manifest in the release. Where that surfaces depends on the
+#       # path:
+#       #   - direct values: the deploy pipeline catches it first (render-deploy-core runs
+#       #     `helm template` per environment and hard-fails, naming the app, environment and
+#       #     values files), so the broken manifests never reach ArgoCD.
+#       #   - mc-environment: there is no such pre-flight. That pipeline renders only the
+#       #     ApplicationSet generator, which hands the values to ArgoCD, and ArgoCD's repo-server
+#       #     renders mycarrier-helm itself - so the failure surfaces as a ComparisonError on that
+#       #     environment's Application and stalls every manifest in it until the value is removed.
+#       # Either way, a value that only appears in a preprod or prod values file is caught when
+#       # that environment deploys rather than when the change merges - keep it out of shared
+#       # values files.
 #       #
 #       # On the plain dev environment the flag is inert: dev renders no allowlist at all. It is
-#       # accepted there so that a values.dev.yaml shared with feature environments still renders.
+#       # accepted there for the mc-environment path, where a missing values.$env.yaml falls back
+#       # to values.$metaEnv.yaml, so one values.dev.yaml serves both dev and its feature
+#       # environments. (On the direct-values path a feature deploy requires its own
+#       # values.feature<N>.yaml, so the flag has a feature-only home there.)
 #       # allowAllEndpoints: false
 #
 #     # ------------------------------------------------------------------------

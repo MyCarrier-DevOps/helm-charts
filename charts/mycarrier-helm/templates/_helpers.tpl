@@ -27,28 +27,52 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Is this resolved namespace one of the shared protected environments?
+
+     Used to keep networking.istio.allowAllEndpoints out of environments it must never weaken,
+     while leaving custom dev namespaces alone. It deliberately names the protected set rather
+     than allowlisting "dev" and "feature*": environment.namespaceOverride is a supported way to
+     land a dev-metaenv release in a custom namespace (mc-environment's own fixture uses
+     platform-dev), and rejecting those would fail renders for a setting that is a no-op there.
+
+     Exact matches only. A prefix rule would start false-rejecting names like production-sandbox,
+     which is the failure mode this helper exists to avoid.
+
+     Usage: {{ include "helm.isProtectedNamespace" $namespace }} -> "true" | "false" */}}
+{{- define "helm.isProtectedNamespace" -}}
+{{- if has . (list "prod" "preprod" "uat" "qa" "demo") -}}
+{{- printf "true" -}}
+{{- else -}}
+{{- printf "false" -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Validate networking.istio.allowAllEndpoints, which switches off the endpoint allowlist.
      It only takes effect on the dev metaenv, so setting it anywhere else is a mistake - usually
      the value landing in a shared values file rather than the dev one - and is rejected rather
      than silently ignored.
 
-     Both the environment name and the RESOLVED namespace must be dev-metaenv. helm.namespace
-     returns environment.namespaceOverride when set, so `name: dev` with `namespaceOverride: prod`
-     targets the prod namespace while reporting a dev metaenv; checking the name alone would let
-     an unrestricted VirtualService into prod.
+     The environment must be dev metaenv and the RESOLVED namespace must not be protected.
+     helm.namespace returns environment.namespaceOverride when set, so `name: dev` with
+     `namespaceOverride: prod` targets the prod namespace while reporting a dev metaenv; checking
+     the name alone would let an unrestricted VirtualService into prod. See
+     helm.isProtectedNamespace for why this rejects the protected set rather than allowlisting
+     dev/feature.
 
-     NOTE ON BLAST RADIUS: fail aborts the whole release render, not just the VirtualService. A
-     stray value stops every manifest in the release, and under ArgoCD that surfaces at the next
-     sync - which may be an unrelated urgent deploy rather than the merge that introduced it. That
-     is the intended trade (a silently-ignored security control is worse), but it is why the
-     message names the file to move the value to.
+     NOTE ON BLAST RADIUS: fail aborts the whole release render, not just the VirtualService, so a
+     stray value stops every manifest in the release. On the direct-values path the deploy
+     pipeline's render step catches it before the GitOps commit, so nothing reaches ArgoCD. On the
+     mc-environment path there is no pre-flight - ArgoCD renders this chart itself - so it surfaces
+     as a ComparisonError that stalls that environment's Application. That is the intended trade (a
+     silently-ignored security control is worse), and it is why the message names the file to move
+     the value to.
 
      Usage: {{ include "helm.assertDevOnlyEndpointEscape" (dict "appName" $name "application" $values "metaenv" $metaenv "namespace" $namespace "envName" $envName) }} */}}
 {{- define "helm.assertDevOnlyEndpointEscape" -}}
 {{- $istioConfig := default dict (dig "networking" "istio" dict .application) -}}
 {{- if dig "allowAllEndpoints" false $istioConfig -}}
-{{- $nsIsDev := or (eq .namespace "dev") (hasPrefix "feature" .namespace) -}}
-{{- if not (and (eq .metaenv "dev") $nsIsDev) -}}
+{{- $nsProtected := eq (include "helm.isProtectedNamespace" .namespace) "true" -}}
+{{- if or (ne .metaenv "dev") $nsProtected -}}
 {{- fail (printf "application %q: networking.istio.allowAllEndpoints is only supported on dev and feature environments, but this render targets environment %q in namespace %q. It has no effect here and the endpoint allowlist stays enforced. Move it to your dev values file." .appName .envName .namespace) -}}
 {{- end -}}
 {{- end -}}

@@ -97,7 +97,11 @@ spec:
          environments, which always map to the dev metaenv, so the guard below is redundant
          today - it is here so the confinement survives any future change to that render
          condition rather than depending on it. */ -}}
-  {{- $offloadAllowAll := and (dig "allowAllEndpoints" false (default dict $istioConfig)) (eq $metaenv "dev") (or (eq $namespace "dev") (hasPrefix "feature" $namespace)) }}
+  {{- /* The namespace clause is redundant by construction: helm.assertDevOnlyEndpointEscape
+         rejects every protected-namespace case before this gate is reached, so dropping it here
+         changes no render and no test. It is kept as defence in depth against a future relaxation
+         of the helper, and stated as unreachable so nobody assumes the drift cover protects it. */ -}}
+  {{- $offloadAllowAll := and (dig "allowAllEndpoints" false (default dict $istioConfig)) (eq $metaenv "dev") (ne (include "helm.isProtectedNamespace" $namespace) "true") }}
   {{- if and (or (ne $offloadLangEndpoints "") $offloadUserEndpoints) (not $offloadAllowAll) }}
   {{ include "helm.virtualservice.allowedEndpoints" $appContext | indent 2 | trim }}
   {{- else }}
