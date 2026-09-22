@@ -355,10 +355,10 @@ applications: {}
 #       # the allowlist entirely, as things behaved before the allowlist existed. Prefer adding
 #       # the specific path to allowedEndpoints over switching this on.
 #       #
-#       # Setting it to true anywhere other than dev or a feature environment is REJECTED - by
-#       # values.schema.json at validation, and by helm.assertDevOnlyEndpointEscape in the
-#       # templates. It is a no-op outside dev/feature, so failing loudly beats it sitting in a
-#       # preprod or prod values file looking effective. An explicit false is accepted everywhere.
+#       # Setting it to true anywhere other than dev or a feature environment is REJECTED by
+#       # helm.assertDevOnlyEndpointEscape, which fails the render. It is a no-op outside
+#       # dev/feature, so failing loudly beats it sitting in a preprod or prod values file looking
+#       # effective. An explicit false is accepted everywhere.
 #       #
 #       # Both the environment name and the RESOLVED namespace must be dev/feature, so
 #       # environment.namespaceOverride cannot be used to slip it into another namespace.

@@ -7,17 +7,15 @@ templates:
 # landing in a shared values file rather than the dev one - so the render fails instead of
 # silently ignoring it.
 #
-# Two guards enforce it:
-#   - values.schema.json, a root-level if/then keyed on environment.name. Runs first, including
-#     under helm-unittest, so it is what most of the cases below actually trip.
-#   - helm.assertDevOnlyEndpointEscape, which additionally checks the RESOLVED namespace and so
-#     is the only guard that catches environment.namespaceOverride.
+# helm.assertDevOnlyEndpointEscape is the single guard. A values.schema.json if/then enforcing the
+# same rule was dropped deliberately: schema validation runs before templates, so it pre-empted the
+# helper and reduced the developer-visible error to "value must be false". Both fire at the same
+# point in practice - render-deploy-core.yaml runs `helm template` per environment and hard-fails
+# the deploy pipeline - so the schema bought no earlier detection, only a worse message. It also
+# never caught environment.namespaceOverride. The property description remains in the schema, so
+# editor hover is unaffected.
 #
-# Rejection assertions match on the property name alone. Helm's bundled JSON Schema validator has
-# changed error format between versions - one renders the path dot-separated, another as a JSON
-# pointer - so matching the name keeps these pinned to the behaviour rather than to a message
-# format that is not ours to control. The namespaceOverride cases are the exception: they are
-# unreachable by the schema, so they assert the template's own wording.
+# Assertions can therefore pin the helper's own wording, which is stable and ours.
 tests:
   # --------------------------------------------------------------------------
   # Rejected outside the dev metaenv
@@ -36,7 +34,7 @@ tests:
               allowAllEndpoints: true
     asserts:
       - failedTemplate:
-          errorPattern: allowAllEndpoints
+          errorPattern: allowAllEndpoints is only supported on dev and feature environments
 
   - it: should reject allowAllEndpoints in prod
     set:
@@ -45,7 +43,7 @@ tests:
       applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
-          errorPattern: allowAllEndpoints
+          errorPattern: allowAllEndpoints is only supported on dev and feature environments
 
   - it: should reject allowAllEndpoints in uat
     set:
@@ -54,7 +52,7 @@ tests:
       applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
-          errorPattern: allowAllEndpoints
+          errorPattern: allowAllEndpoints is only supported on dev and feature environments
 
   - it: should reject allowAllEndpoints in qa
     set:
@@ -63,7 +61,7 @@ tests:
       applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
-          errorPattern: allowAllEndpoints
+          errorPattern: allowAllEndpoints is only supported on dev and feature environments
 
   # Environment names outside the standard set are allowed and treated as generic, which means
   # they are not the dev metaenv either. The rule is an allowlist of dev/feature, not a denylist
@@ -75,16 +73,16 @@ tests:
       applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
-          errorPattern: allowAllEndpoints
+          errorPattern: allowAllEndpoints is only supported on dev and feature environments
 
   # --------------------------------------------------------------------------
-  # namespaceOverride - reachable ONLY by the template guard
+  # namespaceOverride - environment name and target namespace disagree
   # --------------------------------------------------------------------------
   # helm.namespace returns environment.namespaceOverride when set, so environment.name and the
-  # namespace actually targeted can disagree. The schema keys on environment.name and therefore
-  # accepts `name: dev` regardless of the override; only helm.assertDevOnlyEndpointEscape sees the
-  # resolved namespace. These two cases are consequently the only ones in this suite that can pass
-  # via the template guard, which is what keeps that guard covered - delete it and they fail.
+  # namespace actually targeted can differ. A rule keyed on the name alone would accept `name: dev`
+  # regardless of the override and let an unrestricted VirtualService into prod; the guard checks
+  # the resolved namespace as well. These cases pin that, and are the ones a name-only
+  # reimplementation would silently fail.
   - it: should reject allowAllEndpoints when namespaceOverride targets prod
     set:
       global: { appStack: test-stack, language: csharp }
@@ -186,12 +184,12 @@ tests:
   # --------------------------------------------------------------------------
   # Drift cover for the dev-metaenv rule
   # --------------------------------------------------------------------------
-  # The dev/feature rule is expressed in several places - helm.metaEnvironment, the schema regex,
-  # helm.assertDevOnlyEndpointEscape and the two allowlist gates - and the schema cannot call the
-  # helper. If helm.metaEnvironment ever maps another name onto the dev metaenv, the schema regex
-  # will not follow and will start rejecting values files the templates would honour. These cases
-  # pin every name that currently resolves to the dev metaenv through both guards, so that drift
-  # fails here rather than in a consumer's pipeline.
+  # The dev/feature rule is expressed in three places - helm.metaEnvironment,
+  # helm.assertDevOnlyEndpointEscape and the two allowlist gates, which share the same predicate.
+  # If helm.metaEnvironment ever maps another name onto the dev metaenv, the guard and the gates
+  # must agree or the flag becomes rejected-but-honoured, or honoured-but-rejected. These cases pin
+  # every name that currently resolves to the dev metaenv, so that drift fails here rather than in
+  # a consumer's pipeline.
   - it: should accept allowAllEndpoints on every name that resolves to the dev metaenv
     set:
       global: { appStack: test-stack, language: csharp }

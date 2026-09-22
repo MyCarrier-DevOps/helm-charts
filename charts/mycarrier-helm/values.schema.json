@@ -2492,40 +2492,5 @@
         }
       }
     }
-  },
-  "if": {
-    "$comment": "Mirrors helm.metaEnvironment: the dev metaenv is the literal name 'dev' or any name starting with 'feature'. Everything else - preprod, prod, uat, qa and any generic environment - falls into the 'then' branch below.",
-    "required": ["environment"],
-    "properties": {
-      "environment": {
-        "required": ["name"],
-        "properties": {
-          "name": { "not": { "pattern": "^(dev$|feature)" } }
-        }
-      }
-    }
-  },
-  "then": {
-    "$comment": "networking.istio.allowAllEndpoints only takes effect on dev and feature environments; elsewhere the templates ignore it and the endpoint allowlist stays enforced. Reject it here so it cannot sit in a preprod or prod values file looking effective. helm.assertDevOnlyEndpointEscape fails the render with a fuller, actionable message, and is the only guard that also catches environment.namespaceOverride. additionalProperties is used rather than repeating the base application-name pattern: a copy of that pattern would fail OPEN if the base one were ever widened.",
-    "properties": {
-      "applications": {
-        "additionalProperties": {
-          "properties": {
-            "networking": {
-              "properties": {
-                "istio": {
-                  "properties": {
-                    "allowAllEndpoints": {
-                      "const": false,
-                      "description": "Only supported on dev and feature environments. Move it to your dev values file."
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
   }
 }
