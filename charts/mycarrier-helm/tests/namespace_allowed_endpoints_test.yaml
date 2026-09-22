@@ -112,7 +112,6 @@ tests:
         language: csharp
       environment:
         name: feature20
-      namespace: feature20
       applications:
         test-app:
           deploymentType: deployment
@@ -145,7 +144,6 @@ tests:
         language: csharp
       environment:
         name: preprod
-      namespace: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -181,7 +179,6 @@ tests:
         language: csharp
       environment:
         name: feature20
-      namespace: feature20
       applications:
         test-app:
           deploymentType: deployment
@@ -210,14 +207,13 @@ tests:
       - notExists:
           path: spec.http[2]
 
-  - it: allowAllEndpoints must be ignored in preprod
+  - it: allowAllEndpoints must be rejected outright in preprod
     set:
       global:
         appStack: test-stack
         language: csharp
       environment:
         name: preprod
-      namespace: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -234,18 +230,12 @@ tests:
               - name: http
                 port: 8080
                 targetPort: 8080
-    documentIndex: 0
     asserts:
-      # The escape hatch is dev/feature only - preprod still terminates in the 403 rule.
-      - equal:
-          path: spec.http[1].name
-          value: test-stack-test-app-allowed-liveness
-      - equal:
-          path: spec.http[3].name
-          value: test-stack-test-app-forbidden
-      - equal:
-          path: spec.http[3].fault.abort.httpStatus
-          value: 403
+      # The escape hatch is dev/feature only. Rather than silently ignoring it outside those,
+      # the render is rejected so the mistake surfaces instead of looking effective.
+      # allow_all_endpoints_guardrail_test.yaml covers this across every environment.
+      - failedTemplate:
+          errorPattern: allowAllEndpoints
 
   - it: should render allowed endpoints in preprod namespace
     set:

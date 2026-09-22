@@ -128,7 +128,14 @@ http:
        networking.istio.allowAllEndpoints is the escape hatch for developers who need a path
        outside the allowlist on a feature environment. It is honoured only in the dev metaenv,
        so it can never open up preprod or prod. */ -}}
-{{- $allowAllEndpoints := and (dig "networking" "istio" "allowAllEndpoints" false .application) (eq $metaenv "dev") }}
+{{- /* The resolved namespace is checked alongside the metaenv: helm.namespace honours
+       environment.namespaceOverride, so name/namespace can disagree and the name alone is not
+       enough to keep this off prod. */ -}}
+{{- /* The namespace clause is redundant by construction: helm.assertDevOnlyEndpointEscape
+       rejects every protected-namespace case before this gate is reached, so dropping it here
+       changes no render and no test. It is kept as defence in depth against a future relaxation
+       of the helper, and stated as unreachable so nobody assumes the drift cover protects it. */ -}}
+{{- $allowAllEndpoints := and (dig "allowAllEndpoints" false (default dict $istioConfig)) (eq $metaenv "dev") (ne (include "helm.isProtectedNamespace" $namespace) "true") }}
 {{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (or (ne $metaenv "dev") $isFeatureEnv) (not $allowAllEndpoints) }}
 
 {{- if $hasAllowedEndpoints }}

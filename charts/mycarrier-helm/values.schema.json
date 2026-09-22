@@ -845,7 +845,7 @@
                           "allowAllEndpoints": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Dev and feature environments only: skip the endpoint allowlist and route every path to the application, restoring the pre-allowlist behaviour. Ignored in preprod and prod, which always enforce the allowlist. Use when a feature environment needs to serve a path outside /liveness, /health, /api and /swagger."
+                            "description": "Dev and feature environments only: skip the endpoint allowlist and route every path to the application, restoring the pre-allowlist behaviour. Setting it to true anywhere else is REJECTED - the render fails rather than ignoring it - because it is a no-op there and the allowlist stays enforced. An explicit false is accepted everywhere. Use when a feature environment needs to serve a path outside /liveness, /health, /api and /swagger; prefer adding that path to allowedEndpoints instead."
                           },
                           "allowedEndpoints": {
                             "type": "array",
