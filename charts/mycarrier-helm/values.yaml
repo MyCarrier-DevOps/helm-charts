@@ -364,9 +364,12 @@ applications: {}
 #       # environment.namespaceOverride cannot be used to slip it into another namespace.
 #       #
 #       # BLAST RADIUS: the rejection aborts the whole release render, not just the VirtualService,
-#       # so a stray value stops every manifest in the release. Under ArgoCD that surfaces at the
-#       # next sync of that application - possibly an unrelated urgent deploy rather than the merge
-#       # that introduced the value. Keep it out of shared values files.
+#       # so a stray value stops every manifest in the release. That surfaces as a failed render
+#       # step in the deploy pipeline (render-deploy-core runs `helm template` per environment and
+#       # hard-fails, naming the app, environment and values files), so the broken manifests never
+#       # reach ArgoCD and no sync is left half-applied. It does mean a value that only appears in
+#       # a preprod or prod values file is caught when that environment deploys rather than when
+#       # the change merges - keep it out of shared values files.
 #       #
 #       # On the plain dev environment the flag is inert: dev renders no allowlist at all. It is
 #       # accepted there so that a values.dev.yaml shared with feature environments still renders.
