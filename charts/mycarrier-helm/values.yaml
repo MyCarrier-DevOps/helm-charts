@@ -355,10 +355,21 @@ applications: {}
 #       # the allowlist entirely, as things behaved before the allowlist existed. Prefer adding
 #       # the specific path to allowedEndpoints over switching this on.
 #       #
-#       # Setting it to true anywhere other than dev or a feature environment is rejected - by
-#       # values.schema.json at validation, and by the templates if schema validation is skipped.
-#       # It is a no-op outside dev/feature, so failing loudly beats it sitting in a preprod or
-#       # prod values file looking effective. An explicit false is accepted everywhere.
+#       # Setting it to true anywhere other than dev or a feature environment is REJECTED - by
+#       # values.schema.json at validation, and by helm.assertDevOnlyEndpointEscape in the
+#       # templates. It is a no-op outside dev/feature, so failing loudly beats it sitting in a
+#       # preprod or prod values file looking effective. An explicit false is accepted everywhere.
+#       #
+#       # Both the environment name and the RESOLVED namespace must be dev/feature, so
+#       # environment.namespaceOverride cannot be used to slip it into another namespace.
+#       #
+#       # BLAST RADIUS: the rejection aborts the whole release render, not just the VirtualService,
+#       # so a stray value stops every manifest in the release. Under ArgoCD that surfaces at the
+#       # next sync of that application - possibly an unrelated urgent deploy rather than the merge
+#       # that introduced the value. Keep it out of shared values files.
+#       #
+#       # On the plain dev environment the flag is inert: dev renders no allowlist at all. It is
+#       # accepted there so that a values.dev.yaml shared with feature environments still renders.
 #       # allowAllEndpoints: false
 #
 #     # ------------------------------------------------------------------------

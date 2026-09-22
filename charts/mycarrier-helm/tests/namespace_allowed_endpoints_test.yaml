@@ -112,7 +112,6 @@ tests:
         language: csharp
       environment:
         name: feature20
-      namespace: feature20
       applications:
         test-app:
           deploymentType: deployment
@@ -145,7 +144,6 @@ tests:
         language: csharp
       environment:
         name: preprod
-      namespace: preprod
       applications:
         test-app:
           deploymentType: deployment
@@ -181,7 +179,6 @@ tests:
         language: csharp
       environment:
         name: feature20
-      namespace: feature20
       applications:
         test-app:
           deploymentType: deployment
@@ -217,7 +214,6 @@ tests:
         language: csharp
       environment:
         name: preprod
-      namespace: preprod
       applications:
         test-app:
           deploymentType: deployment

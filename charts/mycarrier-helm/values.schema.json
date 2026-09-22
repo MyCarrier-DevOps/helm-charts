@@ -845,7 +845,7 @@
                           "allowAllEndpoints": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Dev and feature environments only: skip the endpoint allowlist and route every path to the application, restoring the pre-allowlist behaviour. Ignored in preprod and prod, which always enforce the allowlist. Use when a feature environment needs to serve a path outside /liveness, /health, /api and /swagger."
+                            "description": "Dev and feature environments only: skip the endpoint allowlist and route every path to the application, restoring the pre-allowlist behaviour. Setting it to true anywhere else is REJECTED - the render fails rather than ignoring it - because it is a no-op there and the allowlist stays enforced. An explicit false is accepted everywhere. Use when a feature environment needs to serve a path outside /liveness, /health, /api and /swagger; prefer adding that path to allowedEndpoints instead."
                           },
                           "allowedEndpoints": {
                             "type": "array",
@@ -2506,20 +2506,18 @@
     }
   },
   "then": {
-    "$comment": "networking.istio.allowAllEndpoints only takes effect on dev and feature environments; elsewhere the templates ignore it and the endpoint allowlist stays enforced. Reject it here so it cannot sit in a preprod or prod values file looking effective. virtualService.yaml fails the render with a fuller, actionable message.",
+    "$comment": "networking.istio.allowAllEndpoints only takes effect on dev and feature environments; elsewhere the templates ignore it and the endpoint allowlist stays enforced. Reject it here so it cannot sit in a preprod or prod values file looking effective. helm.assertDevOnlyEndpointEscape fails the render with a fuller, actionable message, and is the only guard that also catches environment.namespaceOverride. additionalProperties is used rather than repeating the base application-name pattern: a copy of that pattern would fail OPEN if the base one were ever widened.",
     "properties": {
       "applications": {
-        "patternProperties": {
-          "^[a-z0-9_-]+$": {
-            "properties": {
-              "networking": {
-                "properties": {
-                  "istio": {
-                    "properties": {
-                      "allowAllEndpoints": {
-                        "const": false,
-                        "description": "Only supported on dev and feature environments. Move it to your dev values file."
-                      }
+        "additionalProperties": {
+          "properties": {
+            "networking": {
+              "properties": {
+                "istio": {
+                  "properties": {
+                    "allowAllEndpoints": {
+                      "const": false,
+                      "description": "Only supported on dev and feature environments. Move it to your dev values file."
                     }
                   }
                 }

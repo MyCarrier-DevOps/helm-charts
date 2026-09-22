@@ -27,6 +27,33 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Validate networking.istio.allowAllEndpoints, which switches off the endpoint allowlist.
+     It only takes effect on the dev metaenv, so setting it anywhere else is a mistake - usually
+     the value landing in a shared values file rather than the dev one - and is rejected rather
+     than silently ignored.
+
+     Both the environment name and the RESOLVED namespace must be dev-metaenv. helm.namespace
+     returns environment.namespaceOverride when set, so `name: dev` with `namespaceOverride: prod`
+     targets the prod namespace while reporting a dev metaenv; checking the name alone would let
+     an unrestricted VirtualService into prod.
+
+     NOTE ON BLAST RADIUS: fail aborts the whole release render, not just the VirtualService. A
+     stray value stops every manifest in the release, and under ArgoCD that surfaces at the next
+     sync - which may be an unrelated urgent deploy rather than the merge that introduced it. That
+     is the intended trade (a silently-ignored security control is worse), but it is why the
+     message names the file to move the value to.
+
+     Usage: {{ include "helm.assertDevOnlyEndpointEscape" (dict "appName" $name "application" $values "metaenv" $metaenv "namespace" $namespace "envName" $envName) }} */}}
+{{- define "helm.assertDevOnlyEndpointEscape" -}}
+{{- $istioConfig := default dict (dig "networking" "istio" dict .application) -}}
+{{- if dig "allowAllEndpoints" false $istioConfig -}}
+{{- $nsIsDev := or (eq .namespace "dev") (hasPrefix "feature" .namespace) -}}
+{{- if not (and (eq .metaenv "dev") $nsIsDev) -}}
+{{- fail (printf "application %q: networking.istio.allowAllEndpoints is only supported on dev and feature environments, but this render targets environment %q in namespace %q. It has no effect here and the endpoint allowlist stays enforced. Move it to your dev values file." .appName .envName .namespace) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Build a whitelabel VirtualService host from a label and the environment-resolved domain.
      Renders <label>.<domain> in prod/preprod/dev and <label>.<env>.<domain> elsewhere.
      Call from a (tpl-evaluated) networking.istio.hosts entry:

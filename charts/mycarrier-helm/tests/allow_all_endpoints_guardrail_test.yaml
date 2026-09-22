@@ -1,40 +1,36 @@
 suite: allowAllEndpoints is confined to dev and feature environments
 templates:
   - templates/virtualService.yaml
-# networking.istio.allowAllEndpoints turns off the endpoint allowlist. It is only honoured on
-# the dev metaenv (the literal name "dev" and any "feature*" name). Setting it anywhere else is
-# a configuration mistake - most often the value landing in a shared values file rather than the
-# dev one - so the render fails instead of silently ignoring it.
+# networking.istio.allowAllEndpoints turns off the endpoint allowlist. It is honoured only when
+# BOTH the environment name resolves to the dev metaenv AND the resolved namespace is a dev or
+# feature namespace. Setting it anywhere else is a configuration mistake - most often the value
+# landing in a shared values file rather than the dev one - so the render fails instead of
+# silently ignoring it.
 #
-# Two guards enforce this. values.schema.json carries the rule as a root-level if/then and
-# rejects it at schema validation; virtualService.yaml fails the render with a fuller, actionable
-# message for anyone who bypasses that with --skip-schema-validation. Schema validation runs
-# first, including under helm-unittest, so the schema is what these cases actually trip.
+# Two guards enforce it:
+#   - values.schema.json, a root-level if/then keyed on environment.name. Runs first, including
+#     under helm-unittest, so it is what most of the cases below actually trip.
+#   - helm.assertDevOnlyEndpointEscape, which additionally checks the RESOLVED namespace and so
+#     is the only guard that catches environment.namespaceOverride.
 #
-# The assertions deliberately match on the property name alone. Helm's bundled JSON Schema
-# validator has changed error format between versions - one renders the path dot-separated
-# ("applications.api.networking.istio.allowAllEndpoints"), another as a JSON pointer
-# ("at '/applications/api/networking/istio/allowAllEndpoints'") - and the two guards word their
-# messages differently. Matching the property name keeps these tests pinned to the behaviour
-# (this value is rejected here) rather than to a message format that is not ours to control.
+# Rejection assertions match on the property name alone. Helm's bundled JSON Schema validator has
+# changed error format between versions - one renders the path dot-separated, another as a JSON
+# pointer - so matching the name keeps these pinned to the behaviour rather than to a message
+# format that is not ours to control. The namespaceOverride cases are the exception: they are
+# unreachable by the schema, so they assert the template's own wording.
 tests:
+  # --------------------------------------------------------------------------
+  # Rejected outside the dev metaenv
+  # --------------------------------------------------------------------------
   - it: should reject allowAllEndpoints in preprod
-    set: &app
-      global:
-        appStack: test-stack
-        language: csharp
-      environment:
-        name: preprod
-      namespace: preprod
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: preprod }
       applications:
-        api:
+        api: &rejectApp
           deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/api
-            tag: latest
-          ports:
-            http: 8080
+          image: { registry: mycarrieracr.azurecr.io, repository: test/api, tag: latest }
+          ports: { http: 8080 }
           networking:
             istio:
               allowAllEndpoints: true
@@ -44,53 +40,77 @@ tests:
 
   - it: should reject allowAllEndpoints in prod
     set:
-      <<: *app
-      environment:
-        name: prod
-      namespace: prod
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: prod }
+      applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
           errorPattern: allowAllEndpoints
 
   - it: should reject allowAllEndpoints in uat
     set:
-      <<: *app
-      environment:
-        name: uat
-      namespace: uat
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: uat }
+      applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
           errorPattern: allowAllEndpoints
 
   - it: should reject allowAllEndpoints in qa
     set:
-      <<: *app
-      environment:
-        name: qa
-      namespace: qa
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: qa }
+      applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
           errorPattern: allowAllEndpoints
 
   # Environment names outside the standard set are allowed and treated as generic, which means
-  # they are not the dev metaenv either. The guard is an allowlist of dev/feature, not a denylist
+  # they are not the dev metaenv either. The rule is an allowlist of dev/feature, not a denylist
   # of known environments, so these are covered without being enumerated.
   - it: should reject allowAllEndpoints in a generic environment
     set:
-      <<: *app
-      environment:
-        name: demo
-      namespace: demo
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: demo }
+      applications: { api: *rejectApp }
     asserts:
       - failedTemplate:
           errorPattern: allowAllEndpoints
 
+  # --------------------------------------------------------------------------
+  # namespaceOverride - reachable ONLY by the template guard
+  # --------------------------------------------------------------------------
+  # helm.namespace returns environment.namespaceOverride when set, so environment.name and the
+  # namespace actually targeted can disagree. The schema keys on environment.name and therefore
+  # accepts `name: dev` regardless of the override; only helm.assertDevOnlyEndpointEscape sees the
+  # resolved namespace. These two cases are consequently the only ones in this suite that can pass
+  # via the template guard, which is what keeps that guard covered - delete it and they fail.
+  - it: should reject allowAllEndpoints when namespaceOverride targets prod
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: dev, namespaceOverride: prod }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'is only supported on dev and feature environments, but this render targets environment "dev" in namespace "prod"'
+
+  - it: should reject allowAllEndpoints when namespaceOverride targets preprod from a feature env
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: preprod }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'Move it to your dev values file'
+
+  # --------------------------------------------------------------------------
+  # Accepted on dev and feature
+  # --------------------------------------------------------------------------
   - it: should allow allowAllEndpoints on a feature environment
     set:
-      <<: *app
-      environment:
-        name: feature20
-      namespace: feature20
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20 }
+      applications: { api: *rejectApp }
     asserts:
       - notFailedTemplate: {}
       # Escape hatch engaged: back to a single unrestricted catch-all, no 403 rule.
@@ -100,34 +120,60 @@ tests:
       - notExists:
           path: spec.http[1]
 
-  - it: should allow allowAllEndpoints on the dev environment
+  # The plain dev environment never renders an allowlist in the first place (the main VirtualService
+  # is gated on (or (ne $metaenv "dev") $isFeatureEnv), and the offload VirtualService only renders
+  # under hasPrefix "feature"), so the flag is inert here rather than meaningful.
+  #
+  # It is still accepted, deliberately: on the direct-values path a service has one values.dev.yaml
+  # and no values.feature*.yaml, so the file carrying the flag for a feature environment is the same
+  # file a plain dev render consumes. Rejecting it here would fail that dev render for a setting
+  # aimed at feature. The assertions pin the dev route shape so this stays a statement about what
+  # dev renders, not a blessing of the flag.
+  - it: should leave the dev environment render untouched by allowAllEndpoints
     set:
-      <<: *app
-      environment:
-        name: dev
-      namespace: dev
-    asserts:
-      - notFailedTemplate: {}
-
-  # The guard keys off the value, not the presence of the key, so an explicit false is fine
-  # anywhere. It matches the default and is a legitimate way to document intent.
-  - it: should accept an explicit false in prod
-    set:
-      global:
-        appStack: test-stack
-        language: csharp
-      environment:
-        name: prod
-      namespace: prod
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: dev }
       applications:
         api:
           deploymentType: deployment
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/api
-            tag: latest
-          ports:
-            http: 8080
+          image: { registry: mycarrieracr.azurecr.io, repository: test/api, tag: latest }
+          ports: { http: 8080 }
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              allowAllEndpoints: true
+    asserts:
+      - notFailedTemplate: {}
+      # Dev's own route shape, unchanged by the flag: header match, feature-routing, default.
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-api-feature-routing
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-api-default
+      - exists:
+          path: spec.http[2].match[0].withoutHeaders.environment
+      # No allowlist and no 403 rule exist on dev with or without the flag.
+      - notExists:
+          path: spec.http[3]
+
+  # --------------------------------------------------------------------------
+  # An explicit false is valid everywhere
+  # --------------------------------------------------------------------------
+  # The guard keys off the value, not the presence of the key, so false matches the default and is
+  # a legitimate way to document intent in any values file.
+  - it: should accept an explicit false in prod
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: prod }
+      applications:
+        api:
+          deploymentType: deployment
+          image: { registry: mycarrieracr.azurecr.io, repository: test/api, tag: latest }
+          ports: { http: 8080 }
           networking:
             istio:
               allowAllEndpoints: false
@@ -137,30 +183,27 @@ tests:
           path: spec.http[4].fault.abort.httpStatus
           value: 403
 
-  # The guard sits ahead of every render condition, so it fires even for applications that
-  # produce no VirtualService at all. Without that, a mistake in a prod values file on an
-  # Istio-disabled service would pass unnoticed.
-  - it: should reject allowAllEndpoints even when no VirtualService renders
+  # --------------------------------------------------------------------------
+  # Drift cover for the dev-metaenv rule
+  # --------------------------------------------------------------------------
+  # The dev/feature rule is expressed in several places - helm.metaEnvironment, the schema regex,
+  # helm.assertDevOnlyEndpointEscape and the two allowlist gates - and the schema cannot call the
+  # helper. If helm.metaEnvironment ever maps another name onto the dev metaenv, the schema regex
+  # will not follow and will start rejecting values files the templates would honour. These cases
+  # pin every name that currently resolves to the dev metaenv through both guards, so that drift
+  # fails here rather than in a consumer's pipeline.
+  - it: should accept allowAllEndpoints on every name that resolves to the dev metaenv
     set:
-      global:
-        appStack: test-stack
-        language: csharp
-      environment:
-        name: prod
-      namespace: prod
-      applications:
-        api:
-          deploymentType: deployment
-          istioDisabled: true
-          image:
-            registry: mycarrieracr.azurecr.io
-            repository: test/api
-            tag: latest
-          ports:
-            http: 8080
-          networking:
-            istio:
-              allowAllEndpoints: true
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature-tpl }
+      applications: { api: *rejectApp }
     asserts:
-      - failedTemplate:
-          errorPattern: allowAllEndpoints
+      - notFailedTemplate: {}
+
+  - it: should accept allowAllEndpoints on a numbered feature environment
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature1 }
+      applications: { api: *rejectApp }
+    asserts:
+      - notFailedTemplate: {}
