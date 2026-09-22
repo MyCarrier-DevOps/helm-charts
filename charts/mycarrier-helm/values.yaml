@@ -361,9 +361,10 @@ applications: {}
 #       # effective. An explicit false is accepted everywhere.
 #       #
 #       # The environment must be dev metaenv AND the RESOLVED namespace must not be a protected
-#       # one (prod, preprod, uat, qa, demo), so environment.namespaceOverride cannot be used to
-#       # slip it into a protected namespace. Custom dev namespaces - platform-dev and the like -
-#       # are accepted.
+#       # one, so environment.namespaceOverride cannot be used to slip it into a protected
+#       # namespace. Protected is matched by PREFIX over prod, preprod, uat, qa and demo, so
+#       # production, prod-eu and preprod2 are covered too. Custom dev namespaces - platform-dev,
+#       # sandbox and the like - are accepted.
 #       #
 #       # BLAST RADIUS: the rejection aborts the whole release render, not just the VirtualService,
 #       # so a stray value stops every manifest in the release. Where that surfaces depends on the

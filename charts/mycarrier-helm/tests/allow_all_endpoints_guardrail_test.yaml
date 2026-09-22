@@ -3,14 +3,15 @@ templates:
   - templates/virtualService.yaml
 # networking.istio.allowAllEndpoints turns off the endpoint allowlist. It is honoured only when the
 # environment name resolves to the dev metaenv AND the resolved namespace is not a protected one
-# (prod, preprod, uat, qa, demo - see helm.isProtectedNamespace). Setting it anywhere else is a
-# configuration mistake - most often the value landing in a shared values file rather than the dev
-# one - so the render fails instead of silently ignoring it.
+# (prefixed prod, preprod, uat, qa or demo - see helm.isProtectedNamespace). Setting it anywhere
+# else is a configuration mistake - most often the value landing in a shared values file rather
+# than the dev one - so the render fails instead of silently ignoring it.
 #
 # The two halves are deliberately asymmetric. The name half is an allowlist (dev metaenv only),
 # because the set of names that resolve to dev metaenv is fixed and known. The namespace half is a
 # denylist, because environment.namespaceOverride is a supported way to land a dev-metaenv release
-# in a custom namespace and an allowlist there would reject legitimate ones.
+# in a custom namespace and an allowlist there would reject legitimate ones. That denylist matches
+# by prefix so it fails closed for production, prod-eu and the like.
 #
 # helm.assertDevOnlyEndpointEscape is the single guard. A values.schema.json if/then enforcing the
 # same rule was dropped deliberately: schema validation runs before templates, so it pre-empted the
@@ -155,6 +156,67 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'in namespace "uat"'
+
+  # helm.isProtectedNamespace matches by PREFIX over the chart's protected environment vocabulary,
+  # so it fails closed for the dangerous direction. An exact-match list accepted every one of these
+  # - `production` in particular, which is a far likelier name than any it was protecting.
+  - it: should reject a production-suffixed namespace
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: production }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'in namespace "production"'
+
+  - it: should reject a regional production namespace
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: prod-eu }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'in namespace "prod-eu"'
+
+  - it: should reject a numbered preprod namespace
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: preprod2 }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'in namespace "preprod2"'
+
+  - it: should reject a numbered uat namespace
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: uat2 }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'in namespace "uat2"'
+
+  # The knowing cost of prefix matching, pinned so it is a decision rather than a surprise: a
+  # dev-ish namespace whose name starts with a protected root is rejected and must be renamed or
+  # leave the flag unset.
+  - it: should reject a dev-ish namespace that starts with a protected root
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: production-sandbox }
+      applications: { api: *rejectApp }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'in namespace "production-sandbox"'
+
+  # Namespaces that merely look production-ish but sit outside the chart's environment vocabulary
+  # are NOT matched. Documented on the helper; pinned here so a future reader sees it was a choice.
+  - it: should accept namespaces outside the chart's protected vocabulary
+    set:
+      global: { appStack: test-stack, language: csharp }
+      environment: { name: feature20, namespaceOverride: staging }
+      applications: { api: *rejectApp }
+    asserts:
+      - notFailedTemplate: {}
 
   # The predicate names the protected set rather than allowlisting dev/feature, so a dev-metaenv
   # release landing in a custom namespace is accepted. mc-environment's own fixture uses

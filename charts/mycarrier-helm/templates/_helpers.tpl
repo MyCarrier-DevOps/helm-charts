@@ -27,20 +27,40 @@
 {{- end -}}
 {{- end -}}
 
-{{/* Is this resolved namespace one of the shared protected environments?
+{{/* Does this resolved namespace belong to a protected shared environment?
+
+     This is the chart's single definition of that question. Anything needing a different or
+     broader notion of "protected" should extend this helper rather than introduce a second list,
+     so the two cannot drift apart.
 
      Used to keep networking.istio.allowAllEndpoints out of environments it must never weaken,
-     while leaving custom dev namespaces alone. It deliberately names the protected set rather
-     than allowlisting "dev" and "feature*": environment.namespaceOverride is a supported way to
-     land a dev-metaenv release in a custom namespace (mc-environment's own fixture uses
-     platform-dev), and rejecting those would fail renders for a setting that is a no-op there.
+     while leaving custom dev namespaces alone. It names the protected set rather than allowlisting
+     "dev" and "feature*": environment.namespaceOverride is a supported way to land a dev-metaenv
+     release in a custom namespace (mc-environment's own fixture uses platform-dev), and rejecting
+     those would fail renders for a setting that is a no-op there.
 
-     Exact matches only. A prefix rule would start false-rejecting names like production-sandbox,
-     which is the failure mode this helper exists to avoid.
+     Matching is by PREFIX over the chart's protected environment vocabulary, so it fails closed
+     for the dangerous direction: production, prod-eu, prod2, preprod2 and uat2 are all protected,
+     not just the bare names. An exact-match list accepted every one of those.
+
+     The knowing trade is the other direction: a dev-ish namespace whose name starts with one of
+     these roots - production-sandbox, say - is rejected and has to be renamed or leave the flag
+     unset. That is the safer way round, and the render says exactly what to do.
+
+     The roots are the environment names this chart knows (see helm.metaEnvironment). A namespace
+     outside that vocabulary - prd, live - is NOT matched; add the root here if such a name is ever
+     adopted.
 
      Usage: {{ include "helm.isProtectedNamespace" $namespace }} -> "true" | "false" */}}
 {{- define "helm.isProtectedNamespace" -}}
-{{- if has . (list "prod" "preprod" "uat" "qa" "demo") -}}
+{{- $ns := . -}}
+{{- $protected := false -}}
+{{- range (list "prod" "preprod" "uat" "qa" "demo") -}}
+{{- if hasPrefix . $ns -}}
+{{- $protected = true -}}
+{{- end -}}
+{{- end -}}
+{{- if $protected -}}
 {{- printf "true" -}}
 {{- else -}}
 {{- printf "false" -}}
