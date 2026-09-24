@@ -1,5 +1,5 @@
 {{- define "helm.podDefaultAffinity" -}}
-{{- if hasPrefix "prod" .Values.environment.name }}
+{{- if or (hasPrefix "prod" .Values.environment.name) (dig "affinity" "enablePodAntiAffinity" false .application) }}
 affinity:
   podAntiAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:

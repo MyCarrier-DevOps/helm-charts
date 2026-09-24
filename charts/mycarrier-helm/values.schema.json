@@ -1415,6 +1415,14 @@
               "preStop": {
                 "type": "string",
                 "description": "Command to run on container pre-stop"
+              },
+              "preStopSleepSeconds": {
+                "description": "Seconds the container sleeps in a preStop hook before receiving SIGTERM, to allow in-flight requests/sidecars to drain. Defaults to 5 (hook renders by default; see README for grace-period interaction with the chart's default terminationGracePeriodSeconds of 10). Set to 0 to disable the preStop hook entirely.",
+                "default": 5,
+                "oneOf": [
+                  { "type": "integer", "minimum": 0 },
+                  { "type": "string", "pattern": "^[0-9]+$" }
+                ]
               }
             }
           },

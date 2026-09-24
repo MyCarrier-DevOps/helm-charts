@@ -241,7 +241,11 @@ applications:
     volumeMounts: []
     lifecycle:
       postStart: "echo postStartTest"
-      preStop: "pkill dotnet"  # Varies based on language
+      preStop: "pkill dotnet"  # Varies based on language -- NOTE: documented but not implemented by any template (pre-existing)
+      preStopSleepSeconds: 5  # Default 5 when omitted; renders a preStop `sleep {N}` hook. 0 disables the hook.
+                               # terminationGracePeriodSeconds also defaults to 10s, so the default preStop sleep
+                               # leaves headroom in the default grace budget -- raise terminationGracePeriodSeconds
+                               # for apps that need more time to drain in-flight requests after SIGTERM.
     networking:
       ingress:
         type: "istio"

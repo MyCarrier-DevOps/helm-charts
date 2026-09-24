@@ -118,6 +118,13 @@ template:
         {{ if .application.command }}command: {{ .application.command }}{{- end }}
         {{ if .application.args }}args: {{ .application.args | default "" }}{{- end }}
         imagePullPolicy: {{ .application.pullPolicy | default "IfNotPresent" }}
+        {{- $preStopSleep := dig "lifecycle" "preStopSleepSeconds" 5 .application }}
+        {{- if $preStopSleep }}
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep {{ $preStopSleep }}"]
+        {{- end }}
         {{- if .application.ports }}
         ports:
           {{- range $key, $value := .application.ports }}

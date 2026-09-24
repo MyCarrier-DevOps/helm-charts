@@ -540,8 +540,12 @@ applications: {}
 #   # ----------------------------------------------------------------------------
 #   # lifecycle:
 #   #   postStart: "echo 'Container started'"
-#   #   preStop: "sleep 10 && pkill node"
-#   
+#   #   preStop: "sleep 10 && pkill node"     # NOTE: documented here but not implemented by any template (pre-existing, unrelated to preStopSleepSeconds below)
+#   #   preStopSleepSeconds: 5                # Default is 5 when omitted; the preStop hook (sleep {N}) renders automatically.
+#   #                                          # Set to 0 to disable the hook. terminationGracePeriodSeconds defaults to 10s,
+#   #                                          # so the default preStopSleepSeconds of 5 leaves headroom for the app and sidecar
+#   #                                          # to drain after SIGTERM. Raise terminationGracePeriodSeconds if your app needs more time.
+#
 #   # ----------------------------------------------------------------------------
 #   # Vertical Pod Autoscaler (VPA)
 #   # ----------------------------------------------------------------------------
