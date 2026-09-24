@@ -11,6 +11,8 @@
   value: "vault:secrets/data/dev/shared/auth_mycarrierapi_baseurl#value"
 - name: Auth_UserService_BaseUrl
   value: "vault:secrets/data/dev/shared/auth_userservice_baseurl#value"
+- name: MyCarrierSqlConnections
+  value: "vault:secrets/data/dev/shared/MyCarrierSqlConnections#value"
 - name: AuthEnvironment
   value: "Development"
 - name: Auth_Environment
@@ -29,6 +31,8 @@
   value: "vault:secrets/data/preprod/shared/auth_mycarrierapi_baseurl#value"
 - name: Auth_UserService_BaseUrl
   value: "vault:secrets/data/preprod/shared/auth_userservice_baseurl#value"
+- name: MyCarrierSqlConnections
+  value: "vault:secrets/data/preprod/shared/MyCarrierSqlConnections#value"
 - name: AuthEnvironment
   value: "PreProd"
 - name: Auth_Environment
@@ -47,6 +51,8 @@
   value: "vault:secrets/data/prod/shared/auth_mycarrierapi_baseurl#value"
 - name: Auth_UserService_BaseUrl
   value: "vault:secrets/data/prod/shared/auth_userservice_baseurl#value"
+- name: MyCarrierSqlConnections
+  value: "vault:secrets/data/prod/shared/MyCarrierSqlConnections#value"
 - name: AuthEnvironment
   value: "Production"
 - name: Auth_Environment

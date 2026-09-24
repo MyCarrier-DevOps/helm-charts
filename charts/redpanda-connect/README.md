@@ -1,1 +1,0 @@
-# Repanda-Connect Helm Chart
