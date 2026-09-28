@@ -202,7 +202,7 @@ tests:
           pattern: '"TestName":\s*"performancetests"'
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)curl -X POST.*curl -X POST'
+          pattern: '(?s)curl -sS --fail-with-body.*curl -sS --fail-with-body'
       - equal:
           path: spec.template.spec.containers[0].env[1].value
           value: "vault:DevOps/data/testengine/api/v1#url"
@@ -252,7 +252,7 @@ tests:
           pattern: '"TestName": "uitests"'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)curl -X POST.*curl -X POST'
+          pattern: '(?s)curl -sS --fail-with-body.*curl -sS --fail-with-body'
       - equal:
           path: spec.template.spec.containers[0].env[1].value
           value: "vault:DevOps/data/testengine/api#url"
@@ -295,7 +295,7 @@ tests:
           pattern: '"Tests":\['
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)curl -X POST.*curl -X POST'
+          pattern: '(?s)curl -sS --fail-with-body.*curl -sS --fail-with-body'
       - equal:
           path: spec.template.spec.containers[0].env[1].value
           value: "vault:DevOps/data/testengine/api#url"
@@ -1762,6 +1762,170 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
+
+  - it: should fail the job script on HTTP error and retry only transient failures (legacy mode)
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.backoffLimit
+          value: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*set -u\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'curl -sS --fail-with-body -w '
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '--retry 3 --retry-delay 5 --retry-connrefused --max-time 60'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*failed=0\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"\$TESTENGINEHOOK_URL" \|\| \{'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*exit "\$failed"\s*$'
+
+  - it: should fail the job script on HTTP error and retry only transient failures (enableV1 mode)
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=whatever"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.backoffLimit
+          value: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*set -u\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'curl -sS --fail-with-body -w '
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '--retry 3 --retry-delay 5 --retry-connrefused --max-time 60'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*failed=0\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"\$TESTENGINEHOOK_URL" \|\| \{'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*exit "\$failed"\s*$'
+
+  - it: should run every curl in legacy mode with multiple test definitions even if an earlier one fails, then exit non-zero
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: false
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=api"
+              - name: "uitests"
+                containerImage: "cypress/included"
+                containerTag: "12.8.1"
+                secretId: "vault:Secret/data/ui#SecretId"
+                filters:
+                  - "TestCategory=ui"
+              - name: "performancetests"
+                containerImage: "k6/operator"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/performance#SecretId"
+                filters:
+                  - "TestCategory=performance"
+    asserts:
+      - isKind:
+          of: Job
+      - hasDocuments:
+          count: 1
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*set -e'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*set -u\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*failed=0\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'TestEngine trigger failed for apitests'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'TestEngine trigger failed for uitests'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'TestEngine trigger failed for performancetests'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*exit "\$failed"\s*$'
 
   - it: back-compat — legacy global.testengineWebhookUrl still wins when set (3.1.9 transitional)
     set:
