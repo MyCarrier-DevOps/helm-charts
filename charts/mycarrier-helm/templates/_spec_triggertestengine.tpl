@@ -107,8 +107,9 @@ template:
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
             -d '{{ dict "Tests" $tests | toPrettyJson | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
-              echo "TestEngine trigger failed" >&2
-              failed=1
+              rc=$?
+              echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
+              failed=$((failed+1))
             }
           {{- else }}
           {{- range dig "testtrigger" "testdefinitions" list .application }}
@@ -167,12 +168,16 @@ template:
                   "LegacyMode": "{{ $legacyMode }}"
                 }
               }' "$TESTENGINEHOOK_URL" || {
-              echo "TestEngine trigger failed for {{ .name }}" >&2
-              failed=1
+              rc=$?
+              echo "ERROR: TestEngine trigger failed for {{ .name }} (curl exit $rc)" >&2
+              failed=$((failed+1))
             }
           {{- end }}
           {{- end }}
-            exit "$failed"
+            if [ "$failed" -gt 0 ]; then
+              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+            fi
+            exit 0
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
 {{- end }}

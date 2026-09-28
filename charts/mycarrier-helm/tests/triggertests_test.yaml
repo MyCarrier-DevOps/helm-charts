@@ -1763,7 +1763,7 @@ tests:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
 
-  - it: should fail the job script on HTTP error (legacy mode)
+  - it: should log a clear error but exit 0 on HTTP error (legacy mode)
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1813,9 +1813,18 @@ tests:
           pattern: '"\$TESTENGINEHOOK_URL" \|\| \{'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
+          pattern: 'ERROR: TestEngine trigger failed for apitests \(curl exit \$rc\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*exit "\$failed"\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*exit 0\s*$'
 
-  - it: should fail the job script on HTTP error (enableV1 mode)
+  - it: should log a clear error but exit 0 on HTTP error (enableV1 mode)
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1866,9 +1875,18 @@ tests:
           pattern: '"\$TESTENGINEHOOK_URL" \|\| \{'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
+          pattern: 'ERROR: TestEngine trigger failed \(curl exit \$rc\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*exit "\$failed"\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*exit 0\s*$'
 
-  - it: should run every curl in legacy mode with multiple test definitions even if an earlier one fails, then exit non-zero
+  - it: should run every curl in legacy mode with multiple test definitions even if an earlier one fails, then log and exit 0
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1922,16 +1940,22 @@ tests:
           pattern: '(?s)"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'TestEngine trigger failed for apitests'
+          pattern: 'ERROR: TestEngine trigger failed for apitests \(curl exit \$rc\)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'TestEngine trigger failed for uitests'
+          pattern: 'ERROR: TestEngine trigger failed for uitests \(curl exit \$rc\)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'TestEngine trigger failed for performancetests'
+          pattern: 'ERROR: TestEngine trigger failed for performancetests \(curl exit \$rc\)'
       - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
+      - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*exit "\$failed"\s*$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?m)^\s*exit 0\s*$'
 
   - it: back-compat — legacy global.testengineWebhookUrl still wins when set (3.1.9 transitional)
     set:
