@@ -1763,7 +1763,7 @@ tests:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
 
-  - it: should fail the job script on HTTP error and retry only transient failures (legacy mode)
+  - it: should fail the job script on HTTP error (legacy mode)
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1801,7 +1801,10 @@ tests:
           pattern: 'curl -sS --fail-with-body -w '
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '--retry 3 --retry-delay 5 --retry-connrefused --max-time 60'
+          pattern: '--max-time 60'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '--retry'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*failed=0\s*$'
@@ -1812,7 +1815,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*exit "\$failed"\s*$'
 
-  - it: should fail the job script on HTTP error and retry only transient failures (enableV1 mode)
+  - it: should fail the job script on HTTP error (enableV1 mode)
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1851,7 +1854,10 @@ tests:
           pattern: 'curl -sS --fail-with-body -w '
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '--retry 3 --retry-delay 5 --retry-connrefused --max-time 60'
+          pattern: '--max-time 60'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '--retry'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*failed=0\s*$'

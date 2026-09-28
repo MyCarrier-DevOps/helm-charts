@@ -102,7 +102,7 @@ template:
           {{- $tests = append $tests $test }}
           {{- end }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
-            --retry 3 --retry-delay 5 --retry-connrefused --max-time 60 \
+            --max-time 60 \
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
@@ -138,7 +138,7 @@ template:
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
-            --retry 3 --retry-delay 5 --retry-connrefused --max-time 60 \
+            --max-time 60 \
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
