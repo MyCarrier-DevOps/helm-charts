@@ -861,6 +861,17 @@ entries:
   mycarrier-helm:
   - apiVersion: v2
     appVersion: 3.0.29
+    created: "2026-09-29T13:31:03.94505795Z"
+    description: A Helm chart for MyCarrier GitOps
+    digest: 1b56f38149b9e7d9de287278d2829ca97db9ce34e32d0704f5f996cf40a1824e
+    icon: https://go.mycarrier.io/hs-fs/hubfs/Logos/PNG-MC-COLOR-Logo.png?width=366&height=85&name=PNG-MC-COLOR-Logo.png
+    name: mycarrier-helm
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mycarrier-helm-4.3.1/mycarrier-helm-4.3.1.tgz
+    version: 4.3.1
+  - apiVersion: v2
+    appVersion: 3.0.29
     created: "2026-09-24T07:49:38.550234952Z"
     description: A Helm chart for MyCarrier GitOps
     digest: b6fad8a934c5dc1f9af96d0c87ea035e491c77ea12e4aa7bc3204d035fd8141f
@@ -4576,4 +4587,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-09-24T07:49:38.550691071Z"
+generated: "2026-09-29T13:31:03.945601974Z"
