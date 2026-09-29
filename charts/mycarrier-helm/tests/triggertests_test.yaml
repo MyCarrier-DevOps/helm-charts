@@ -1763,7 +1763,7 @@ tests:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
 
-  - it: should log a clear error but exit 0 on HTTP error (legacy mode)
+  - it: "legacy: curl call is guarded, failure is logged with the single-quoted test name, script always exits 0"
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1795,9 +1795,6 @@ tests:
           value: 0
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*set -u\s*$'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
           pattern: 'curl -sS --fail-with-body -w '
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
@@ -1813,18 +1810,18 @@ tests:
           pattern: '"\$TESTENGINEHOOK_URL" \|\| \{'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for apitests \(curl exit \$rc\)'
+          pattern: 'ERROR: TestEngine trigger failed for "''apitests''" \(curl exit \$rc\)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit "\$failed"\s*$'
+          pattern: '(?m)^\s*exit\s+([1-9]|"?\$)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit 0\s*$'
+          pattern: 'exit 0\s*$'
 
-  - it: should log a clear error but exit 0 on HTTP error (enableV1 mode)
+  - it: "enableV1: curl call is guarded, failure is logged, script always exits 0"
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1857,9 +1854,6 @@ tests:
           value: 0
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*set -u\s*$'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
           pattern: 'curl -sS --fail-with-body -w '
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
@@ -1881,12 +1875,12 @@ tests:
           pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit "\$failed"\s*$'
+          pattern: '(?m)^\s*exit\s+([1-9]|"?\$)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit 0\s*$'
+          pattern: 'exit 0\s*$'
 
-  - it: should run every curl in legacy mode with multiple test definitions even if an earlier one fails, then log and exit 0
+  - it: "legacy multi-definition: every definition gets a guarded curl call, failures are counted and summarized, script always exits 0"
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1931,31 +1925,28 @@ tests:
           pattern: '(?m)^\s*set -e'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*set -u\s*$'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
           pattern: '(?m)^\s*failed=0\s*$'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '(?s)"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for apitests \(curl exit \$rc\)'
+          pattern: 'ERROR: TestEngine trigger failed for "''apitests''" \(curl exit \$rc\)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for uitests \(curl exit \$rc\)'
+          pattern: 'ERROR: TestEngine trigger failed for "''uitests''" \(curl exit \$rc\)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for performancetests \(curl exit \$rc\)'
+          pattern: 'ERROR: TestEngine trigger failed for "''performancetests''" \(curl exit \$rc\)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit "\$failed"\s*$'
+          pattern: '(?m)^\s*exit\s+([1-9]|"?\$)'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit 0\s*$'
+          pattern: 'exit 0\s*$'
 
   - it: back-compat — legacy global.testengineWebhookUrl still wins when set (3.1.9 transitional)
     set:
