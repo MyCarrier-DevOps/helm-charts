@@ -169,7 +169,7 @@ template:
                 }
               }' "$TESTENGINEHOOK_URL" || {
               rc=$?
-              echo "ERROR: TestEngine trigger failed for {{ .name }} (curl exit $rc)" >&2
+              echo "ERROR: TestEngine trigger failed for "{{ .name | squote }}" (curl exit $rc)" >&2
               failed=$((failed+1))
             }
           {{- end }}
