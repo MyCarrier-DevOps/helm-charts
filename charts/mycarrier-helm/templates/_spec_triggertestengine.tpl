@@ -67,6 +67,8 @@ template:
           - /bin/sh
           - -c
           - |
+            set -u
+            failed=0
           {{- if $enableV1 }}
           {{- $tests := list }}
           {{- range dig "testtrigger" "testdefinitions" list .application }}
@@ -99,10 +101,16 @@ template:
           {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
           {{- $tests = append $tests $test }}
           {{- end }}
-            curl -X POST \
+            curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
+            --max-time 60 \
+            -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
-            -d '{{ dict "Tests" $tests | toPrettyJson | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL"
+            -d '{{ dict "Tests" $tests | toPrettyJson | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
+              rc=$?
+              echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
+              failed=$((failed+1))
+            }
           {{- else }}
           {{- range dig "testtrigger" "testdefinitions" list .application }}
           {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
@@ -130,7 +138,9 @@ template:
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
-            curl -X POST \
+            curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
+            --max-time 60 \
+            -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
             -d '{
@@ -157,9 +167,17 @@ template:
                   "CorrelationId": "{{ $correlationId }}",
                   "LegacyMode": "{{ $legacyMode }}"
                 }
-              }' "$TESTENGINEHOOK_URL";
+              }' "$TESTENGINEHOOK_URL" || {
+              rc=$?
+              echo "ERROR: TestEngine trigger failed for "{{ .name | squote }}" (curl exit $rc)" >&2
+              failed=$((failed+1))
+            }
           {{- end }}
           {{- end }}
+            if [ "$failed" -gt 0 ]; then
+              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+            fi
+            exit 0
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
 {{- end }}
