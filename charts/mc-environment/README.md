@@ -49,3 +49,20 @@ environments:
 ```
 
 Apply the chart with your preferred Helm workflow and Argo CD will manage one `mycarrier-helm` release per configured environment.
+
+## Argo CD sync behaviour
+
+Since 0.3.0 generated Applications use `ServerSideApply=true` **without** `Replace=true`, so fields owned by other controllers (Argo Rollouts) are not overwritten on sync. `RespectIgnoreDifferences=true` applies the `ignoreDifferences` rules during sync as well as diff. Versus 0.2.x the rendered ApplicationSet differs only by `ignoreDifferences` and that syncOption swap.
+
+`ignoreDifferences` entries:
+
+- `Service` fields managed by `rollouts-controller` (selector injection during canary/blue-green).
+- `VirtualService` (`networking.istio.io`): `canary` route weights (`route[0]`, `route[1]`) and the `canary-header` route, mutated by Argo Rollouts during progressive delivery. With `RespectIgnoreDifferences`, Argo CD merges live values into the desired manifest, so git edits to `spec.http` on a VirtualService with a `canary` route may be dropped; verify such changes by hand.
+
+No Rollout `/spec/replicas` ignore is emitted on purpose: `mycarrier-helm` omits `spec.replicas` on a Rollout whenever an HPA or KEDA ScaledObject is rendered (`templates/_spec_rollout.tpl`), and Argo CD's legacy (client-side) diff never treats an absent field as drift.
+
+Stale-field caveat: after moving off `Replace=true`, fields written by the legacy `argocd-application-controller` (Update) manager may linger in `managedFields`; a one-time `kubectl patch --type=json` removing that entry cleans them up. The chart does not run it.
+
+Per-resource escape hatch: annotate a resource with `argocd.argoproj.io/sync-options: Replace=true` when it needs replace semantics.
+
+Known gap: the backend `allowed-*` route-name list does not cover the route names above (tracked in DEVOPS-321).

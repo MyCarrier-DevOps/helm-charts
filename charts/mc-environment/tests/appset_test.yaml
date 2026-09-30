@@ -122,15 +122,44 @@ tests:
       - equal:
           path: spec.template.spec.source.targetRevision
           value: "2.5.100"
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: ApplyOutOfSyncOnly=true
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: CreateNamespace=true
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: ServerSideApply=true
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: RespectIgnoreDifferences=true
+      - notContains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: Replace=true
       - equal:
-          path: spec.template.spec.syncPolicy.syncOptions[0]
-          value: ApplyOutOfSyncOnly=true
+          path: spec.template.spec.syncPolicy.automated
+          value: { prune: true, selfHeal: true }
+  - it: ignores Rollout-controller-managed Service and VirtualService fields
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
       - equal:
-          path: spec.template.spec.syncPolicy.syncOptions[2]
-          value: CreateNamespace=true
-      - equal:
-          path: spec.template.spec.syncPolicy.syncOptions[6]
-          value: Replace=true
+          path: spec.template.spec.ignoreDifferences
+          value:
+            - group: ""
+              kind: Service
+              managedFieldsManagers:
+                - rollouts-controller
+            - group: networking.istio.io
+              kind: VirtualService
+              jqPathExpressions:
+                - '.spec.http[] | select(.name == "canary") | .route[0].weight'
+                - '.spec.http[] | select(.name == "canary") | .route[1].weight'
+                - '.spec.http[] | select(.name == "canary-header")'
   - it: forwards the environment block (dependencyenv, namespaceOverride, domainOverride)
     values:
       - fixtures/environment-overrides.yaml
@@ -254,3 +283,19 @@ tests:
     asserts:
       - notExists:
           path: spec.generators[0].list.elements[0].Values.cronjobs
+  - it: emits no Rollout replicas ignore even for HPA/KEDA-scaled rollouts (mycarrier-helm omits spec.replicas)
+    values:
+      - fixtures/rollout-hpa.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.ignoreDifferences
+          count: 2
+  - it: renders valid ignoreDifferences when an environment has no applications
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.ignoreDifferences
+          count: 2

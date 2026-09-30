@@ -66,6 +66,17 @@ spec:
         helm:
           values: |2+
             {{`{{`}} .Values | toYaml {{`}}`}}
+      ignoreDifferences:
+        - group: ""
+          kind: Service
+          managedFieldsManagers:
+            - rollouts-controller
+        - group: networking.istio.io
+          kind: VirtualService
+          jqPathExpressions:
+            - '.spec.http[] | select(.name == "canary") | .route[0].weight'
+            - '.spec.http[] | select(.name == "canary") | .route[1].weight'
+            - '.spec.http[] | select(.name == "canary-header")'
       syncPolicy:
         automated:
           prune: true
@@ -77,7 +88,7 @@ spec:
           - PrunePropagationPolicy=foreground
           - PruneLast=false
           - ServerSideApply=true
-          - Replace=true
+          - RespectIgnoreDifferences=true
           - SkipDryRunOnMissingResource=true
 
         retry:

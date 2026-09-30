@@ -1,0 +1,85 @@
+global:
+  appStack: Carriers
+  gitbranch: main
+  language: nodejs
+environments:
+  - name: dev
+    applications:
+      orders-api:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+        autoscaling:
+          enabled: true
+      plain-rollout:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+      hpa-deployment:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: deployment
+        autoscaling:
+          enabled: true
+      keda-rollout:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+        autoscaling:
+          enabled: true
+        keda:
+          enabled: true
+  - name: prod
+    applications:
+      implicit-rollout:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+      opted-out-rollout:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+        autoscaling:
+          forceAutoscaling: false
+      db-migration:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+      implicit-deployment:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: deployment
+  - name: feature12
+    applications:
+      orders-api:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: rollout
+        autoscaling:
+          enabled: true
+  - name: preprod
+    applications:
+      only-deployment:
+        image:
+          registry: ghcr.io
+          repository: mycarrier/x
+          tag: '1.0.0'
+        deploymentType: deployment
