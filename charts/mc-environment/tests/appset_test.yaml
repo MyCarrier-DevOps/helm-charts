@@ -131,7 +131,7 @@ tests:
       - contains:
           path: spec.template.spec.syncPolicy.syncOptions
           content: ServerSideApply=true
-      - contains:
+      - notContains:
           path: spec.template.spec.syncPolicy.syncOptions
           content: RespectIgnoreDifferences=true
       - notContains:

@@ -52,12 +52,12 @@ Apply the chart with your preferred Helm workflow and Argo CD will manage one `m
 
 ## Argo CD sync behaviour
 
-Since 0.3.0 generated Applications use `ServerSideApply=true` **without** `Replace=true`, so fields owned by other controllers (Argo Rollouts) are not overwritten on sync. `RespectIgnoreDifferences=true` applies the `ignoreDifferences` rules during sync as well as diff. Versus 0.2.x the rendered ApplicationSet differs only by `ignoreDifferences` and that syncOption swap.
+Since 0.3.0 generated Applications use `ServerSideApply=true` **without** `Replace=true`, so fields owned by other controllers (Argo Rollouts) are not overwritten on sync. `RespectIgnoreDifferences=true` is deliberately **not** set: in Argo CD 3.1 (`controller/sync.go`, `normalizeTargetResources`) it deletes every ignored path from the target and restores only values present in the live object. On a Deployment-to-Rollout migration the live VirtualService has no `canary` route yet, so the canary route weights are stripped and Istio rejects the VirtualService ("total destination weight = 0"). Without it, `ignoreDifferences` still keeps controller-managed fields out of the diff (no OutOfSync flapping, no selfHeal), `ServerSideApply` keeps rollouts-controller-owned Service selector keys, and `ApplyOutOfSyncOnly` re-applies the VirtualService only on a real git change. Trade-off: after such a git change the canary weights reset to 100/0 until the Rollouts controller's next reconcile. Versus 0.2.x the rendered ApplicationSet differs only by `ignoreDifferences` and the removal of `Replace=true`.
 
 `ignoreDifferences` entries:
 
 - `Service` fields managed by `rollouts-controller` (selector injection during canary/blue-green).
-- `VirtualService` (`networking.istio.io`): `canary` route weights (`route[0]`, `route[1]`) and the `canary-header` route, mutated by Argo Rollouts during progressive delivery. With `RespectIgnoreDifferences`, Argo CD merges live values into the desired manifest, so git edits to `spec.http` on a VirtualService with a `canary` route may be dropped; verify such changes by hand.
+- `VirtualService` (`networking.istio.io`): `canary` route weights (`route[0]`, `route[1]`) and the `canary-header` route, mutated by Argo Rollouts during progressive delivery. A git change to the VirtualService resets these weights to their git values (100/0) until the Rollouts controller reconciles.
 
 No Rollout `/spec/replicas` ignore is emitted on purpose: `mycarrier-helm` omits `spec.replicas` on a Rollout whenever an HPA or KEDA ScaledObject is rendered (`templates/_spec_rollout.tpl`), and Argo CD's legacy (client-side) diff never treats an absent field as drift.
 
