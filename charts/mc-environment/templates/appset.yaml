@@ -54,6 +54,12 @@ spec:
       name: "{{ $.Values.global.appStack | lower }}-{{`{{`}} .Values.environment.name {{`}}`}}"
       annotations:
         notifications.argoproj.io/subscribe.on-deployed.deploy-reporter: ""
+        {{- if not (or $env.jobs $env.extraObjects) }}
+        {{- /* CSA->SSA managedFields migration of the legacy Replace-era manager. Skipped when the env
+             renders Jobs or extraObjects (which can carry Jobs): mycarrier-helm Jobs keep Force=true,Replace=true, get the legacy manager back on
+             every replace, and the migration's client-side apply of an immutable Job template fails the sync. */}}
+        argocd.argoproj.io/client-side-apply-migration-manager: argocd-application-controller
+        {{- end }}
     spec:
       project: default
       destination:
@@ -71,6 +77,13 @@ spec:
           kind: Service
           managedFieldsManagers:
             - rollouts-controller
+          # Per-deploy labels (mycarrier-helm _labels.tpl). Ignoring them keeps Services Synced on a deploy, so
+          # ApplyOutOfSyncOnly skips them and SSA (force-conflicts) never takes the atomic spec.selector
+          # away from rollouts-controller (which would drop rollouts-pod-template-hash).
+          jsonPointers:
+            - /metadata/labels/mycarrier.tech~1correlationId
+            - /metadata/labels/mycarrier.tech~1commitDeployed
+            - /metadata/labels/mycarrier.tech~1reference
         - group: networking.istio.io
           kind: VirtualService
           jqPathExpressions:

@@ -154,6 +154,10 @@ tests:
               kind: Service
               managedFieldsManagers:
                 - rollouts-controller
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
             - group: networking.istio.io
               kind: VirtualService
               jqPathExpressions:
@@ -299,3 +303,74 @@ tests:
       - lengthEqual:
           path: spec.template.spec.ignoreDifferences
           count: 2
+  - it: renders the CSA migration annotation for an environment without jobs
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+          value: argocd-application-controller
+  - it: omits the CSA migration annotation for an environment with jobs
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+      - equal:
+          path: spec.template.metadata.annotations["notifications.argoproj.io/subscribe.on-deployed.deploy-reporter"]
+          value: ""
+  - it: renders the CSA migration annotation when jobs is an empty list
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+          jobs: []
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+          value: argocd-application-controller
+  - it: omits the CSA migration annotation when extraObjects is set
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+          extraObjects:
+            - apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: x
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+  - it: renders the Service label jsonPointers with RFC 6901 escaping
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.spec.ignoreDifferences[0].jsonPointers[0]
+          value: /metadata/labels/mycarrier.tech~1correlationId
+      - equal:
+          path: spec.template.spec.ignoreDifferences[0].jsonPointers[1]
+          value: /metadata/labels/mycarrier.tech~1commitDeployed
+      - equal:
+          path: spec.template.spec.ignoreDifferences[0].jsonPointers[2]
+          value: /metadata/labels/mycarrier.tech~1reference
