@@ -161,8 +161,9 @@ tests:
             - group: networking.istio.io
               kind: VirtualService
               jqPathExpressions:
-                - '.spec.http[] | select(.name == "canary") | .route[0].weight'
-                - '.spec.http[] | select(.name == "canary") | .route[1].weight'
+                # Weights on every multi-destination route with a -preview destination (Rollout-managed: canary and allowed-* routes).
+                # Host forms: FQDN <app>-preview.<ns>.svc.cluster.local and multi-frontend short <app>-preview (hence the end-of-string alternative).
+                - '.spec.http[] | select(((.route // []) | length) > 1 and any(.route[]; (.destination.host // "") | test("-preview(\\.|$)"))) | .route[].weight'
                 - '.spec.http[] | select(.name == "canary-header")'
   - it: forwards the environment block (dependencyenv, namespaceOverride, domainOverride)
     values:
