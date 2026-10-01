@@ -630,6 +630,16 @@ entries:
   mc-environment:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-10-01T09:57:17.908133063Z"
+    description: Aggregate multiple mycarrier-helm environments into Argo CD Applications.
+    digest: 175736ef93a5ccee67639dfb0484005badd42119a46b5532babcd1f1c8fceda5
+    name: mc-environment
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mc-environment-0.3.0/mc-environment-0.3.0.tgz
+    version: 0.3.0
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2026-08-18T10:20:47.287758196Z"
     description: Aggregate multiple mycarrier-helm environments into Argo CD Applications.
     digest: e5ee1ea210dc1eafd20d1ad942dcca2d1602bd1b1ced3626f923fd458acbd348
@@ -4587,4 +4597,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-09-29T13:31:03.945601974Z"
+generated: "2026-10-01T09:57:17.908705016Z"
