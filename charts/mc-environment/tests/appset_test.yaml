@@ -122,15 +122,65 @@ tests:
       - equal:
           path: spec.template.spec.source.targetRevision
           value: "2.5.100"
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: ApplyOutOfSyncOnly=true
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: CreateNamespace=true
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: ServerSideApply=true
+      - notContains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: RespectIgnoreDifferences=true
+      - notContains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: Replace=true
       - equal:
-          path: spec.template.spec.syncPolicy.syncOptions[0]
-          value: ApplyOutOfSyncOnly=true
+          path: spec.template.spec.syncPolicy.automated
+          value: { prune: true, selfHeal: true }
+  - it: ignores Rollout-controller-managed Service and VirtualService fields and per-deploy labels of later-wave autoscalers
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
       - equal:
-          path: spec.template.spec.syncPolicy.syncOptions[2]
-          value: CreateNamespace=true
-      - equal:
-          path: spec.template.spec.syncPolicy.syncOptions[6]
-          value: Replace=true
+          path: spec.template.spec.ignoreDifferences
+          value:
+            - group: ""
+              kind: Service
+              managedFieldsManagers:
+                - rollouts-controller
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
+            - group: networking.istio.io
+              kind: VirtualService
+              jqPathExpressions:
+                # Weights on every multi-destination route with a -preview destination (Rollout-managed: canary and allowed-* routes).
+                # Host forms: FQDN <app>-preview.<ns>.svc.cluster.local and multi-frontend short <app>-preview (hence the end-of-string alternative).
+                - '.spec.http[] | select(((.route // []) | length) > 1 and any(.route[]; (.destination.host // "") | test("-preview(\\.|$)"))) | .route[].weight'
+                - '.spec.http[] | select(.name == "canary-header")'
+            - group: autoscaling
+              kind: HorizontalPodAutoscaler
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
+                - /metadata/labels/version
+                - /metadata/labels/mycarrier~1service-version
+            - group: keda.sh
+              kind: ScaledObject
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
+                - /metadata/labels/version
+                - /metadata/labels/mycarrier~1service-version
   - it: forwards the environment block (dependencyenv, namespaceOverride, domainOverride)
     values:
       - fixtures/environment-overrides.yaml
@@ -254,3 +304,90 @@ tests:
     asserts:
       - notExists:
           path: spec.generators[0].list.elements[0].Values.cronjobs
+  - it: emits no Rollout replicas ignore even for HPA/KEDA-scaled rollouts (mycarrier-helm omits spec.replicas)
+    values:
+      - fixtures/rollout-hpa.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.ignoreDifferences
+          count: 4
+  - it: renders valid ignoreDifferences when an environment has no applications
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.ignoreDifferences
+          count: 4
+  - it: renders the CSA migration annotation for an environment without jobs
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+          value: argocd-application-controller
+  - it: omits the CSA migration annotation for an environment with jobs
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+      - equal:
+          path: spec.template.metadata.annotations["notifications.argoproj.io/subscribe.on-deployed.deploy-reporter"]
+          value: ""
+  - it: renders the CSA migration annotation when jobs is an empty list
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+          jobs: []
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+          value: argocd-application-controller
+  - it: omits the CSA migration annotation when extraObjects is set
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+          extraObjects:
+            - apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: x
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+  - it: renders the Service label jsonPointers with RFC 6901 escaping
+    set:
+      global.appStack: carriers
+      environments:
+        - name: dev
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.spec.ignoreDifferences[0].jsonPointers[0]
+          value: /metadata/labels/mycarrier.tech~1correlationId
+      - equal:
+          path: spec.template.spec.ignoreDifferences[0].jsonPointers[1]
+          value: /metadata/labels/mycarrier.tech~1commitDeployed
+      - equal:
+          path: spec.template.spec.ignoreDifferences[0].jsonPointers[2]
+          value: /metadata/labels/mycarrier.tech~1reference
