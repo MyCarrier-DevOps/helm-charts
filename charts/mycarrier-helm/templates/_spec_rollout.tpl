@@ -18,54 +18,27 @@ analysis:
   successfulRunHistoryLimit: {{ dig "updateStrategy" "successfulRunHistoryLimit" 10 .application }}
   unsuccessfulRunHistoryLimit: {{ dig "updateStrategy" "unsuccessfulRunHistoryLimit" 10 .application }}
 minReadySeconds: {{ .application.minReadySeconds | default 0 }}
+{{- /* Deployment-to-Rollout migration, release 1 of 2: the Rollout borrows the Deployment's pod template and the
+       chart keeps rendering the Deployment (deployment.yaml), so its pods keep serving. scaleDown: never because
+       onsuccess/progressively scale the Deployment to 0 as soon as the Rollout is Healthy, which happens at 1 pod
+       before the HPA/KEDA autoscaler (sync wave 11) takes the Rollout over. Release 2 removes migratingToRollouts:
+       the Rollout gets its own template and Argo CD prunes the Deployment. */}}
 {{- if .application.migratingToRollouts }}
 workloadRef:
   apiVersion: {{ .application.apiVersion | default "apps/v1" }}
   kind: Deployment
   name: {{ $fullName }}
-  scaleDown: onsuccess
+  scaleDown: never
 {{- end }}
 strategy:
-{{- if dig "updateStrategy" "bluegreen" false .application }}
-  blueGreen:
-    activeService: {{ $fullName }}
-    previewService: {{ $fullName }}-preview
-    previewReplicaCount: 1
-    autoPromotionEnabled: {{ dig "updateStrategy" "bluegreen" "autoPromotionEnabled" true .application }}
-    autoPromotionSeconds: {{ dig "updateStrategy" "bluegreen" "autoPromotionSeconds" 30 .application }}
-    scaleDownDelaySeconds: {{ dig "updateStrategy" "bluegreen" "scaleDownDelaySeconds" 60 .application }}
-    scaleDownDelayRevisionLimit: {{ dig "updateStrategy" "bluegreen" "scaleDownDelayRevisionLimit" 5 .application }}
-    abortScaleDownDelaySeconds: {{ dig "updateStrategy" "bluegreen" "abortScaleDownDelaySeconds" 60 .application }}
-    activeMetadata:
-      labels:
-        {{- include "helm.labels.dependencies" . | indent 8 | trim }}
-        {{ include "helm.labels.standard" . | indent 8 | trim }}
-        {{ include "helm.labels.version" . | indent 8 | trim }}
-        role: active
-        strategy: bluegreen
-    previewMetadata:
-      labels:
-        {{- include "helm.labels.dependencies" . | indent 8 | trim }}
-        {{ include "helm.labels.standard" . | indent 8 | trim }}
-        {{ include "helm.labels.version" . | indent 8 | trim }}
-        role: preview
-        strategy: bluegreen
-    {{- if dig "updateStrategy" "bluegreen" "prePromotionAnalysis" false .application }}
-    prePromotionAnalysis:
-      templates:
-      {{ toYaml (dig "updateStrategy" "bluegreen" "prePromotionAnalysis" "templates" list .application) | indent 6 | trim }}
-      {{- if dig "updateStrategy" "bluegreen" "prePromotionAnalysis" "args" false .application }}
-      args:
-      {{ toYaml (dig "updateStrategy" "bluegreen" "prePromotionAnalysis" "args" list .application) | indent 6 | trim }}
-      {{- end }}
-    {{- end }}
-{{- end }}
 {{- if dig "updateStrategy" "canary" false .application }}
   canary:
     {{- with (dig "updateStrategy" "canary" dict .application) }}
     {{ toYaml . | indent 4 | trim }}
     {{- end }}
 {{- end }}
+{{- /* With workloadRef the pod template comes from the Deployment; Argo Rollouts rejects a Rollout that sets both. */}}
+{{- if not .application.migratingToRollouts }}
 template:
   metadata:
     labels:
@@ -210,4 +183,5 @@ template:
     {{- end }}
     imagePullSecrets:
       - name: {{ .application.pullSecret | default $imagePullSecret }}
+{{- end }}
 {{- end -}}

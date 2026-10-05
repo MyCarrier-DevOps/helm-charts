@@ -140,6 +140,9 @@ tests:
       applications:
         rollout-app:
           deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
           image:
             registry: registry.example.com
             repository: rollout-app

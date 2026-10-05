@@ -5,6 +5,16 @@
 {{- if (eq $appValues.deploymentType "rollout")  }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
+{{- $metaenv := include "helm.metaEnvironment" $ }}
+{{- /* The offload operator owns the VirtualService in dev (same rule as virtualService.yaml) and rewrites it on
+       every reconcile, which would wipe canary weights and header routes. A schema rule cannot see this
+       environment-dependent default, so the check is here. */ -}}
+{{- if and (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
+{{- fail (printf "application '%s': deploymentType rollout cannot run while the offload operator owns the VirtualService (networking.istio.offloadOperatorEnabled, on by default in dev); the operator would wipe canary weights. Set networking.istio.offloadOperatorEnabled: false for this application, or keep deploymentType: deployment in this environment." $appName) }}
+{{- end }}
+{{- if dig "updateStrategy" "bluegreen" false $appValues }}
+{{- fail (printf "application '%s': updateStrategy.bluegreen is no longer supported; use updateStrategy.canary." $appName) }}
+{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
@@ -12,7 +22,7 @@ metadata:
   name: {{ $fullName }}{{- if contains "feature" $.Values.environment.name }}{{ end }}
   namespace: {{ $namespace }}
   labels:
-    {{- include "helm.labels.dependencies" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.dependencies" $appContext | indent 4 | trim }}
     {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
     {{ include "helm.labels.version" $appContext | indent 4 | trim }}
   annotations:

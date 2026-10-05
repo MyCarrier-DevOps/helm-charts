@@ -6,6 +6,7 @@ tests:
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
       applications.test-app-api.image.registry: "myregistry.example.com"
       applications.test-app-api.image.repository: "mycarrier/test-app-api"
@@ -27,10 +28,11 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].image
 
-  - it: should create bluegreen rollout with analysis templates
+  - it: should reject updateStrategy.bluegreen (removed; use canary)
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
       applications.test-app-api.image.registry: "myregistry.example.com"
       applications.test-app-api.image.repository: "mycarrier/test-app-api"
@@ -48,15 +50,14 @@ tests:
         previewService: test-app-api-preview
         autoPromotionEnabled: true
     asserts:
-      - isKind:
-          of: Rollout
-      - exists:
-          path: spec.strategy.blueGreen
+      - failedTemplate:
+          errorPattern: "updateStrategy.bluegreen is no longer supported"
 
   - it: should annotate rollout with the default gateway
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
       applications.test-app-api.image.registry: "myregistry.example.com"
       applications.test-app-api.image.repository: "mycarrier/test-app-api"
@@ -80,6 +81,7 @@ tests:
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
       applications.test-app-api.image.registry: "myregistry.example.com"
       applications.test-app-api.image.repository: "mycarrier/test-app-api"
@@ -104,6 +106,7 @@ tests:
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
       applications.test-app-api.image.registry: "myregistry.example.com"
       applications.test-app-api.image.repository: "mycarrier/test-app-api"
@@ -143,6 +146,9 @@ tests:
       applications.app-level-sc-rollout:
         enabled: true
         deploymentType: rollout
+        networking:
+          istio:
+            offloadOperatorEnabled: false
         image:
           registry: "myregistry.example.com"
           repository: "mycarrier/app-level-sc-rollout"
@@ -167,6 +173,7 @@ tests:
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
+      applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
       applications.test-app-api.image.registry: "myregistry.example.com"
       applications.test-app-api.image.repository: "mycarrier/test-app-api"
@@ -187,6 +194,9 @@ tests:
       applications.init-container-rofs-rollout:
         enabled: true
         deploymentType: rollout
+        networking:
+          istio:
+            offloadOperatorEnabled: false
         image:
           registry: "myregistry.example.com"
           repository: "mycarrier/init-container-rofs-rollout"

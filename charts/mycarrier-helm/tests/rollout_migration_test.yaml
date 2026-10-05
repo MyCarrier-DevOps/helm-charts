@@ -1,0 +1,222 @@
+suite: Deployment to Rollout migration (migratingToRollouts)
+templates:
+  - rollout.yaml
+  - deployment.yaml
+  - autoscaler.yaml
+tests:
+  # Release 1 of the two-release migration: deploymentType rollout + migratingToRollouts true.
+  - it: keeps rendering the Deployment while migratingToRollouts is set, so Argo CD does not prune it
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: test-stack-api
+      - exists:
+          path: spec.template.spec.containers[0].image
+
+  - it: references the Deployment with workloadRef and scaleDown never, and renders no pod template, while migrating
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.workloadRef
+          value:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: test-stack-api
+            scaleDown: never
+      - notExists:
+          path: spec.template
+      - exists:
+          path: spec.selector.matchLabels
+
+  # Release 2: the flag is removed.
+  - it: stops rendering the Deployment for a Rollout app once migratingToRollouts is removed
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders its own pod template and no workloadRef once migratingToRollouts is removed
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - notExists:
+          path: spec.workloadRef
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/api:1.0.0
+
+  # Autoscaled apps: the old Deployment has no replica count for anyone to fight over, and the HPA moves to the Rollout.
+  - it: leaves the Deployment's replica count to the autoscaler while migrating with HPA
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          replicas: 8
+          autoscaling:
+            enabled: true
+            minReplicas: 6
+            maxReplicas: 12
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - notExists:
+          path: spec.replicas
+
+  - it: points the HPA at the Rollout while migrating
+    template: autoscaler.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          replicas: 8
+          autoscaling:
+            enabled: true
+            minReplicas: 6
+            maxReplicas: 12
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef
+          value:
+            apiVersion: argoproj.io/v1alpha1
+            kind: Rollout
+            name: test-stack-api
+
+  # Fixed-replica apps: both workloads keep their count; nothing scales the Deployment down until release 2 prunes it.
+  - it: keeps the fixed replica count on the Deployment while migrating without an autoscaler
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          replicas: 2
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: gives the Rollout the same fixed replica count while migrating without an autoscaler
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          replicas: 2
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2

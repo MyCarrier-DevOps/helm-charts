@@ -1,0 +1,118 @@
+suite: Rollout render checks (dependency labels, offload operator)
+templates:
+  - rollout.yaml
+tests:
+  # rollout.yaml used {{- include "helm.labels.dependencies" ... }}, which joined the dependency labels onto the
+  # labels: line and broke the YAML whenever a global.dependencies flag was true.
+  - it: renders the dependency labels when a global.dependencies flag is true
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        dependencies:
+          mongodb: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: metadata.labels["dependency.mongo"]
+          value: "true"
+      - equal:
+          path: metadata.labels.app
+          value: test-stack-api
+
+  # The offload operator owns the VirtualService in dev and feature environments and rewrites it on every reconcile,
+  # which would wipe canary weights, so a Rollout there must turn it off explicitly.
+  - it: refuses a Rollout in dev while the offload operator is on by default
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "deploymentType rollout cannot run while the offload operator owns the VirtualService"
+
+  - it: refuses a Rollout in a feature environment while the offload operator is on by default
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature20-saia
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "deploymentType rollout cannot run while the offload operator owns the VirtualService"
+
+  - it: renders a Rollout in dev when the offload operator is turned off for the application
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+
+  - it: renders a Rollout in preprod, where the offload operator never applies
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout

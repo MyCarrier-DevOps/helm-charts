@@ -13,7 +13,10 @@ metadata:
   namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "5"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+    {{- /* Rollout Services use client-side apply: it merges spec.selector, so the rollouts-pod-template-hash key the
+           Rollouts controller adds survives a deploy that also changes the Service. Server-side apply replaces the
+           whole selector map and briefly sends traffic to old and new pods together. */}}
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true{{ if eq $appValues.deploymentType "rollout" }},ServerSideApply=false{{ end }}
     {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
     {{ toYaml $appValues.service.annotations | indent 4 | trim }}
     {{- end }}
@@ -31,7 +34,7 @@ metadata:
   namespace: {{ $namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "5"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,ServerSideApply=false
     {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
     {{ toYaml $appValues.service.annotations | indent 4 | trim }}
     {{- end }}

@@ -423,7 +423,7 @@
             "oneOf": [
               {
                 "type": "boolean",
-                "description": "Whether the application is migrating to Argo Rollouts",
+                "description": "Release 1 of a two-release Deployment-to-Rollout migration. With deploymentType rollout, the chart keeps the Deployment and the Rollout references it through workloadRef (scaleDown: never). Remove it in the next release; Argo CD then prunes the Deployment.",
                 "default": false
               },
               {
@@ -1216,45 +1216,6 @@
                     "default": 30
                   },
                   "backgroundanalysis": {
-                    "type": "object",
-                    "properties": {
-                      "templates": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      },
-                      "args": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              "bluegreen": {
-                "type": "object",
-                "properties": {
-                  "prePromotionAnalysis": {
-                    "type": "object",
-                    "properties": {
-                      "templates": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      },
-                      "args": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      }
-                    }
-                  },
-                  "postPromotionAnalysis": {
                     "type": "object",
                     "properties": {
                       "templates": {
