@@ -423,7 +423,7 @@
             "oneOf": [
               {
                 "type": "boolean",
-                "description": "Release 1 of a two-release Deployment-to-Rollout migration. With deploymentType rollout, the chart keeps the Deployment and the Rollout references it through workloadRef (scaleDown: never). Remove it in the next release; Argo CD then prunes the Deployment.",
+                "description": "Release 1 of a two-release Deployment-to-Rollout migration. With deploymentType rollout, the chart keeps the Deployment, and the Rollout references it through workloadRef (scaleDown: never) with a bare canary strategy, so it takes over no Service until release 2. Remove it in the next release: the Rollout gets the configured strategy and Argo CD prunes the Deployment.",
                 "default": false
               },
               {

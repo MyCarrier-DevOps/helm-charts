@@ -45,7 +45,9 @@ replicas: 2
 revisionHistoryLimit: 2
 minReadySeconds: {{ .application.minReadySeconds | default 0 }}
 strategy:
-{{- if .application.updateStrategy }}
+{{- /* A Rollout app's updateStrategy holds the Rollout's canary block, which is not a Deployment strategy; while it
+       migrates (release 1), its Deployment keeps the default rolling update. */}}
+{{- if and .application.updateStrategy (ne .application.deploymentType "rollout") }}
   {{ toYaml .application.updateStrategy | indent 2 | trim }}
 {{- else }}
   type: RollingUpdate

@@ -31,7 +31,14 @@ workloadRef:
   scaleDown: never
 {{- end }}
 strategy:
-{{- if dig "updateStrategy" "canary" false .application }}
+{{- /* Release 1: a bare canary, so the Rollout takes over no Service and no VirtualService. With stableService set,
+       the controller points the stable Service at the Rollout's ReplicaSet as soon as it is fully available, which
+       is at 1 pod before the autoscaler (wave 11) scales it, and the Deployment's pods stop getting traffic. Without
+       it, the Rollout's pods join the existing Services next to the Deployment's. A Rollout's first rollout runs no
+       steps, so nothing else is lost; release 2 renders the configured strategy. */}}
+{{- if .application.migratingToRollouts }}
+  canary: {}
+{{- else if dig "updateStrategy" "canary" false .application }}
   canary:
     {{- with (dig "updateStrategy" "canary" dict .application) }}
     {{ toYaml . | indent 4 | trim }}

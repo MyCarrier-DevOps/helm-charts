@@ -220,3 +220,131 @@ tests:
       - equal:
           path: spec.replicas
           value: 2
+
+  # Release 1 must not hand the Services to the Rollout: with stableService set, the controller switches the stable
+  # Service to the Rollout's ReplicaSet at 1 pod, before the autoscaler scales it, and the Deployment's pods drop out.
+  - it: renders a bare canary strategy while migrating, so the Rollout takes over no Service
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          updateStrategy:
+            canary:
+              stableService: test-stack-api
+              canaryService: test-stack-api-preview
+              steps:
+                - setWeight: 10
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            canary: {}
+
+  - it: renders the configured canary strategy once migratingToRollouts is removed
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          updateStrategy:
+            canary:
+              stableService: test-stack-api
+              canaryService: test-stack-api-preview
+              steps:
+                - setWeight: 10
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.stableService
+          value: test-stack-api
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+
+  # A Rollout app's updateStrategy is a canary block; copied into the Deployment it would fail the sync.
+  - it: gives the Deployment the default rolling update while its Rollout app migrates with a canary block
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          updateStrategy:
+            canary:
+              stableService: test-stack-api
+              steps:
+                - setWeight: 10
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 0
+              maxSurge: 2
+
+  - it: keeps a Deployment app's own updateStrategy
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          updateStrategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 1
+              maxSurge: 1
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 1
+              maxSurge: 1
