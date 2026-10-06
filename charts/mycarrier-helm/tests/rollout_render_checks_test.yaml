@@ -116,3 +116,87 @@ tests:
     asserts:
       - isKind:
           of: Rollout
+
+  # In a feature environment <fullName>-offload claims the same hosts as the Rollout's VirtualService, and Istio does
+  # not merge VirtualServices for sidecars, so a Rollout with Istio trafficRouting there needs offloadVSEnabled: false.
+  - it: refuses a Rollout with Istio trafficRouting in a feature environment while the -offload VirtualService renders
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature20-saia
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          updateStrategy:
+            canary:
+              trafficRouting:
+                istio:
+                  virtualService:
+                    name: test-stack-api-feature20-saia
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "also needs networking.istio.offloadVSEnabled: false"
+
+  - it: renders a Rollout with Istio trafficRouting in a feature environment once the -offload VirtualService is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature20-saia
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+          updateStrategy:
+            canary:
+              trafficRouting:
+                istio:
+                  virtualService:
+                    name: test-stack-api-feature20-saia
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+
+  # While migrating both workloads run the Deployment's pod template, so the privileged debug sidecar would run twice.
+  - it: refuses enableDebugMode while migratingToRollouts is set
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          enableDebugMode: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "enableDebugMode cannot be on while migratingToRollouts is set"

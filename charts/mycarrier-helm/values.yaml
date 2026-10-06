@@ -192,6 +192,9 @@ applications: {}
 #   #                              Argo CD prunes the Deployment
 #   #   back:           release 1: deploymentType: deployment + migratingToRollouts: true
 #   #                   release 2: remove migratingToRollouts -> Argo CD prunes the Rollout
+#   # Ship release 2 only once the incoming workload has at least as many ready pods as the outgoing one: release 2
+#   # prunes every outgoing pod at once. With HPA/KEDA, set the autoscaler minimum in release 1 to the outgoing
+#   # workload's current pod count so the incoming one gets there, and restore it in release 2.
 #   migratingToRollouts: false
 #   version: "1.0.0"
 #   replicas: 1

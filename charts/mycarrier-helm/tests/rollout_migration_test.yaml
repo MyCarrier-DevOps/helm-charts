@@ -172,7 +172,8 @@ tests:
             kind: Rollout
             name: test-stack-api
 
-  # Fixed-replica apps: both workloads keep their count; nothing scales the Deployment down until release 2 prunes it.
+  # Fixed-replica apps: both workloads render the same count (helm.specs.replicas); nothing scales the Deployment down
+  # until release 2 prunes it. 4 rather than 2, because 2 was the Rollout's old fallback and would hide a mismatch.
   - it: keeps the fixed replica count on the Deployment while migrating without an autoscaler
     template: deployment.yaml
     set:
@@ -185,7 +186,7 @@ tests:
         api:
           deploymentType: rollout
           migratingToRollouts: true
-          replicas: 2
+          replicas: 4
           image:
             registry: registry.example.com
             repository: api
@@ -195,7 +196,7 @@ tests:
     asserts:
       - equal:
           path: spec.replicas
-          value: 2
+          value: 4
 
   - it: gives the Rollout the same fixed replica count while migrating without an autoscaler
     template: rollout.yaml
@@ -209,7 +210,7 @@ tests:
         api:
           deploymentType: rollout
           migratingToRollouts: true
-          replicas: 2
+          replicas: 4
           image:
             registry: registry.example.com
             repository: api
@@ -219,7 +220,7 @@ tests:
     asserts:
       - equal:
           path: spec.replicas
-          value: 2
+          value: 4
 
   # Release 1 must not hand the Services to the Rollout: with stableService set, the controller switches the stable
   # Service to the Rollout's ReplicaSet at 1 pod, before the autoscaler scales it, and the Deployment's pods drop out.
@@ -481,7 +482,7 @@ tests:
         api:
           deploymentType: deployment
           migratingToRollouts: true
-          replicas: 2
+          replicas: 4
           image:
             registry: registry.example.com
             repository: api
@@ -491,7 +492,7 @@ tests:
     asserts:
       - equal:
           path: spec.replicas
-          value: 2
+          value: 4
 
   - it: renders no Rollout for a Deployment app once migratingToRollouts is removed
     template: rollout.yaml
@@ -536,3 +537,85 @@ tests:
     asserts:
       - isKind:
           of: Rollout
+
+  # Dev and feature environments default to 1 pod when replicas is unset; the Rollout used to fall back to 2.
+  - it: gives the Rollout the Deployment's default of 1 pod in dev when replicas is unset
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  # The Rollout's own template is the Deployment's (helm.specs.podTemplate), so release 2 changes no pod setting.
+  - it: gives a Rollout's own template the Deployment's preStop hook and ComputedEnvironmentName
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: ["sh", "-c", "sleep 5"]
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ComputedEnvironmentName
+            value: uat
+
+  - it: honours lifecycle.preStopSleepSeconds and enableDebugMode in a Rollout's own template
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          enableDebugMode: true
+          lifecycle:
+            preStopSleepSeconds: 7
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: ["sh", "-c", "sleep 7"]
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: dotnet-debug-tools

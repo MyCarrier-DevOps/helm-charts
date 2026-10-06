@@ -14,6 +14,19 @@
 {{- if and (eq $appValues.deploymentType "rollout") (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
 {{- fail (printf "application '%s': deploymentType rollout cannot run while the offload operator owns the VirtualService (networking.istio.offloadOperatorEnabled, on by default in dev); the operator would wipe canary weights. Set networking.istio.offloadOperatorEnabled: false for this application, or keep deploymentType: deployment in this environment." $appName) }}
 {{- end }}
+{{- /* In a feature environment the chart also renders <fullName>-offload (same gate as virtualService.yaml), which
+       claims the same hosts as the Rollout's VirtualService. Istio does not merge VirtualServices for sidecars, and
+       the order across resources at a gateway is undefined, so the canary weights might never apply. */ -}}
+{{- $offloadVSRendered := and (dig "networking" "istio" "enabled" true $appValues) (not (dig "istioDisabled" false $appValues)) (not (dig "service" "istioDisabled" false $appValues)) (hasPrefix "feature" $.Values.environment.name) (dig "networking" "istio" "offloadVSEnabled" true $appValues) (not (dig "networking" "krakend" "enabled" false $appValues)) }}
+{{- $trafficRouting := get (dig "updateStrategy" "canary" dict $appValues | default dict) "trafficRouting" | default dict }}
+{{- if and (eq $appValues.deploymentType "rollout") (get $trafficRouting "istio") $offloadVSRendered }}
+{{- fail (printf "application '%s': a Rollout with Istio trafficRouting in a feature environment also needs networking.istio.offloadVSEnabled: false; otherwise %s-offload claims the same hosts as the Rollout's VirtualService, and Istio does not merge VirtualServices for sidecars." $appName $fullName) }}
+{{- end }}
+{{- /* While migrating, the Rollout runs the Deployment's pod template next to the Deployment, so the privileged debug
+       sidecar would run in both pod sets. */ -}}
+{{- if and $appValues.migratingToRollouts $appValues.enableDebugMode }}
+{{- fail (printf "application '%s': enableDebugMode cannot be on while migratingToRollouts is set; both the Deployment and the Rollout would run the privileged debug sidecar. Turn enableDebugMode off for the two migration releases." $appName) }}
+{{- end }}
 {{- if dig "updateStrategy" "bluegreen" false $appValues }}
 {{- fail (printf "application '%s': updateStrategy.bluegreen is no longer supported; use updateStrategy.canary." $appName) }}
 {{- end }}

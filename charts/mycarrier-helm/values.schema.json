@@ -423,7 +423,7 @@
             "oneOf": [
               {
                 "type": "boolean",
-                "description": "First release of a two-release switch between Deployment and Rollout, in either direction. The chart renders both workloads: the Rollout references the Deployment through workloadRef (scaleDown: never) with a bare canary strategy, so it takes over no Service, and the HPA/KEDA autoscaler targets the workload deploymentType names. To move to a Rollout, set deploymentType rollout with this flag; to move back, set deploymentType deployment with this flag. Remove it in the next release: Argo CD prunes the other workload.",
+                "description": "First release of a two-release switch between Deployment and Rollout, in either direction. The chart renders both workloads: the Rollout references the Deployment through workloadRef (scaleDown: never) with a bare canary strategy, so it takes over no Service, and the HPA/KEDA autoscaler targets the workload deploymentType names. To move to a Rollout, set deploymentType rollout with this flag; to move back, set deploymentType deployment with this flag. Remove it in the next release, once the incoming workload has at least as many ready pods as the outgoing one (with HPA/KEDA, set the autoscaler minimum in release 1 to the outgoing pod count): Argo CD prunes the other workload, all its pods at once.",
                 "default": false
               },
               {
