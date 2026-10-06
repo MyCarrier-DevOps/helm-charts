@@ -223,7 +223,7 @@ tests:
 
   # Release 1 must not hand the Services to the Rollout: with stableService set, the controller switches the stable
   # Service to the Rollout's ReplicaSet at 1 pod, before the autoscaler scales it, and the Deployment's pods drop out.
-  - it: renders a bare canary strategy while migrating, so the Rollout takes over no Service
+  - it: renders a bare canary strategy while migrating, so the Rollout takes over no Service and keeps all pods while replaced
     template: rollout.yaml
     set:
       global:
@@ -251,7 +251,8 @@ tests:
       - equal:
           path: spec.strategy
           value:
-            canary: {}
+            canary:
+              maxUnavailable: 0
 
   - it: renders the configured canary strategy once migratingToRollouts is removed
     template: rollout.yaml
@@ -348,3 +349,190 @@ tests:
             rollingUpdate:
               maxUnavailable: 1
               maxSurge: 1
+
+  # The way back: deploymentType deployment + migratingToRollouts keeps the Rollout for one release next to the
+  # Deployment, with the autoscaler on the Deployment; the next release removes the flag and Argo CD prunes the Rollout.
+  - it: keeps the Rollout on the way back while migratingToRollouts is set, borrowing the Deployment's template
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          migratingToRollouts: true
+          autoscaling:
+            enabled: true
+            minReplicas: 6
+            maxReplicas: 12
+          updateStrategy:
+            canary:
+              stableService: test-stack-api
+              steps:
+                - setWeight: 10
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.workloadRef
+          value:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: test-stack-api
+            scaleDown: never
+      - notExists:
+          path: spec.template
+      - notExists:
+          path: spec.replicas
+      - equal:
+          path: spec.strategy
+          value:
+            canary:
+              maxUnavailable: 0
+
+  - it: renders the Deployment with the default rolling update on the way back, ignoring the leftover canary block
+    template: deployment.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          migratingToRollouts: true
+          autoscaling:
+            enabled: true
+            minReplicas: 6
+            maxReplicas: 12
+          updateStrategy:
+            canary:
+              stableService: test-stack-api
+              steps:
+                - setWeight: 10
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notExists:
+          path: spec.replicas
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 0
+              maxSurge: 2
+
+  - it: points the HPA at the Deployment on the way back
+    template: autoscaler.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          migratingToRollouts: true
+          autoscaling:
+            enabled: true
+            minReplicas: 6
+            maxReplicas: 12
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef
+          value:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: test-stack-api
+
+  - it: keeps the fixed replica count on the kept Rollout on the way back without an autoscaler
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          migratingToRollouts: true
+          replicas: 2
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: renders no Rollout for a Deployment app once migratingToRollouts is removed
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # The kept Rollout has no traffic routing, so the offload operator is no reason to block the way back in dev.
+  - it: renders the kept Rollout on the way back in dev while the offload operator is on
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout

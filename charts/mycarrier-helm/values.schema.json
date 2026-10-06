@@ -423,7 +423,7 @@
             "oneOf": [
               {
                 "type": "boolean",
-                "description": "Release 1 of a two-release Deployment-to-Rollout migration. With deploymentType rollout, the chart keeps the Deployment, and the Rollout references it through workloadRef (scaleDown: never) with a bare canary strategy, so it takes over no Service until release 2. Remove it in the next release: the Rollout gets the configured strategy and Argo CD prunes the Deployment.",
+                "description": "First release of a two-release switch between Deployment and Rollout, in either direction. The chart renders both workloads: the Rollout references the Deployment through workloadRef (scaleDown: never) with a bare canary strategy, so it takes over no Service, and the HPA/KEDA autoscaler targets the workload deploymentType names. To move to a Rollout, set deploymentType rollout with this flag; to move back, set deploymentType deployment with this flag. Remove it in the next release: Argo CD prunes the other workload.",
                 "default": false
               },
               {

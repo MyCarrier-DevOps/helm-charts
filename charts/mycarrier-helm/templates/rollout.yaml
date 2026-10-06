@@ -2,14 +2,16 @@
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
-{{- if (eq $appValues.deploymentType "rollout")  }}
+{{- /* Also rendered for a Deployment app while migratingToRollouts is set: on the way back from a Rollout, the Rollout
+       stays for one release next to the Deployment, as the Deployment does on the way in. */}}
+{{- if or (eq $appValues.deploymentType "rollout") (and (eq $appValues.deploymentType "deployment") $appValues.migratingToRollouts) }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $metaenv := include "helm.metaEnvironment" $ }}
 {{- /* The offload operator owns the VirtualService in dev (same rule as virtualService.yaml) and rewrites it on
        every reconcile, which would wipe canary weights and header routes. A schema rule cannot see this
-       environment-dependent default, so the check is here. */ -}}
-{{- if and (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
+       environment-dependent default, so the check is here. A Rollout kept on the way back has no traffic routing. */ -}}
+{{- if and (eq $appValues.deploymentType "rollout") (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
 {{- fail (printf "application '%s': deploymentType rollout cannot run while the offload operator owns the VirtualService (networking.istio.offloadOperatorEnabled, on by default in dev); the operator would wipe canary weights. Set networking.istio.offloadOperatorEnabled: false for this application, or keep deploymentType: deployment in this environment." $appName) }}
 {{- end }}
 {{- if dig "updateStrategy" "bluegreen" false $appValues }}

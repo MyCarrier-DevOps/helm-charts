@@ -18,11 +18,12 @@ analysis:
   successfulRunHistoryLimit: {{ dig "updateStrategy" "successfulRunHistoryLimit" 10 .application }}
   unsuccessfulRunHistoryLimit: {{ dig "updateStrategy" "unsuccessfulRunHistoryLimit" 10 .application }}
 minReadySeconds: {{ .application.minReadySeconds | default 0 }}
-{{- /* Deployment-to-Rollout migration, release 1 of 2: the Rollout borrows the Deployment's pod template and the
-       chart keeps rendering the Deployment (deployment.yaml), so its pods keep serving. scaleDown: never because
-       onsuccess/progressively scale the Deployment to 0 as soon as the Rollout is Healthy, which happens at 1 pod
-       before the HPA/KEDA autoscaler (sync wave 11) takes the Rollout over. Release 2 removes migratingToRollouts:
-       the Rollout gets its own template and Argo CD prunes the Deployment. */}}
+{{- /* migratingToRollouts renders both workloads for one release; deploymentType picks the one the HPA/KEDA autoscaler
+       targets. On the way in (deploymentType rollout) the chart keeps the Deployment so its pods keep serving; on the
+       way back (deploymentType deployment) it keeps the Rollout. Either way the Rollout borrows the Deployment's pod
+       template. scaleDown: never because onsuccess/progressively scale the Deployment to 0 as soon as the Rollout is
+       Healthy, which happens at 1 pod before the autoscaler (sync wave 11) takes the Rollout over. The next release
+       removes migratingToRollouts and Argo CD prunes the workload deploymentType does not name. */}}
 {{- if .application.migratingToRollouts }}
 workloadRef:
   apiVersion: {{ .application.apiVersion | default "apps/v1" }}
@@ -31,13 +32,15 @@ workloadRef:
   scaleDown: never
 {{- end }}
 strategy:
-{{- /* Release 1: a bare canary, so the Rollout takes over no Service and no VirtualService. With stableService set,
-       the controller points the stable Service at the Rollout's ReplicaSet as soon as it is fully available, which
-       is at 1 pod before the autoscaler (wave 11) scales it, and the Deployment's pods stop getting traffic. Without
-       it, the Rollout's pods join the existing Services next to the Deployment's. A Rollout's first rollout runs no
-       steps, so nothing else is lost; release 2 renders the configured strategy. */}}
+{{- /* While migrating (either way): a bare canary, so the Rollout takes over no Service and no VirtualService. With
+       stableService set, the controller points the stable Service at the Rollout's ReplicaSet as soon as it is fully
+       available, which is at 1 pod before the autoscaler (wave 11) scales it, and the Deployment's pods stop getting
+       traffic. Without it, both sets of pods serve behind the existing Services. A Rollout's first rollout runs no
+       steps, so nothing is lost on the way in; release 2 renders the configured strategy. maxUnavailable: 0 keeps
+       every Rollout pod serving while it is replaced (on the way back its template becomes the Deployment's). */}}
 {{- if .application.migratingToRollouts }}
-  canary: {}
+  canary:
+    maxUnavailable: 0
 {{- else if dig "updateStrategy" "canary" false .application }}
   canary:
     {{- with (dig "updateStrategy" "canary" dict .application) }}

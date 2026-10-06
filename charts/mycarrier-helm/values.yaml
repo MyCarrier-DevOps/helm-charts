@@ -184,10 +184,14 @@ applications: {}
 #   isFrontend: false
 #   forceOffload: false
 #   deploymentType: "deployment"  # Options: deployment, statefulset, rollout
-#   # Deployment-to-Rollout migration (two releases, zero downtime):
-#   #   release 1: deploymentType: rollout + migratingToRollouts: true -> Deployment kept, Rollout uses workloadRef (scaleDown: never)
-#   #              and a bare canary strategy, so both sets of pods serve behind the existing Services
-#   #   release 2: remove migratingToRollouts -> Rollout gets its own template and updateStrategy.canary, Argo CD prunes the Deployment
+#   # Switching between Deployment and Rollout (two releases each way, zero downtime). With migratingToRollouts the chart
+#   # renders both workloads: the Rollout uses workloadRef (scaleDown: never) and a bare canary strategy, both sets of pods
+#   # serve behind the existing Services, and the autoscaler targets the workload deploymentType names.
+#   #   to a Rollout:   release 1: deploymentType: rollout + migratingToRollouts: true
+#   #                   release 2: remove migratingToRollouts -> Rollout gets its own template and updateStrategy.canary,
+#   #                              Argo CD prunes the Deployment
+#   #   back:           release 1: deploymentType: deployment + migratingToRollouts: true
+#   #                   release 2: remove migratingToRollouts -> Argo CD prunes the Rollout
 #   migratingToRollouts: false
 #   version: "1.0.0"
 #   replicas: 1
