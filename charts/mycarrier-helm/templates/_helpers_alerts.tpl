@@ -38,12 +38,72 @@ severities. Only alertrulegroup.yaml calls it; the three alert templates always 
 {{- if not (regexMatch "^[A-Za-z0-9]+$" (toString $alerts.displayName)) -}}
 {{- fail "alerts.displayName is required when alerts are enabled and must match [A-Za-z0-9]+" -}}
 {{- end -}}
+{{- $severities := list "sev1" "sev2" "sev3" -}}
+{{- range $key, $rule := ($alerts.additional | default dict) -}}
+{{- if hasKey $rule "rule" -}}
+{{- range $field := list "uid" "title" "condition" "data" -}}
+{{- if not (hasKey $rule.rule $field) -}}
+{{- fail (printf "alerts.additional.%s.rule.%s is required" $key $field) -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- range $field := list "title" "severity" "sql" -}}
+{{- if not (index $rule $field) -}}
+{{- fail (printf "alerts.additional.%s.%s is required" $key $field) -}}
+{{- end -}}
+{{- end -}}
+{{- if not (has (toString $rule.severity) $severities) -}}
+{{- fail (printf "alerts.additional.%s.severity must be one of sev1, sev2, sev3" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
-{{/* helm.alerts.rules: every enabled rule as a JSON list; fails when there is none (the CRD requires one). */}}
+{{/*
+helm.alerts.rules: every enabled rule as a JSON list, standard rules first, then additional rules by key; fails
+when there is none (the CRD requires one).
+*/}}
 {{- define "helm.alerts.rules" -}}
 {{- $alerts := .Values.alerts -}}
+{{- $name := include "helm.alerts.name" . -}}
 {{- $rules := include "helm.alerts.standardRules" . | fromJsonArray -}}
+{{- range $key, $rule := ($alerts.additional | default dict) -}}
+{{- if dig "enabled" true $rule -}}
+{{- if hasKey $rule "rule" -}}
+{{- $raw := deepCopy $rule.rule -}}
+{{- $labels := $raw.labels | default dict -}}
+{{- $_ := set $labels "alertSource" "mycarrier-helm" -}}
+{{- if not (hasKey $labels "service") -}}
+{{- $_ := set $labels "service" (lower $alerts.serviceName) -}}
+{{- end -}}
+{{- $_ := set $raw "labels" $labels -}}
+{{- $rules = append $rules $raw -}}
+{{- else -}}
+{{- $condition := $rule.condition | default dict -}}
+{{- $labels := dict
+      "alertType" ($rule.alertType | default (snakecase $key))
+      "severity" $rule.severity
+      "service" (lower $alerts.serviceName)
+      "alertSource" "mycarrier-helm"
+      "confluence" (include "helm.alerts.confluence" (dict "anchor" "")) -}}
+{{- $compact := dict
+      "uid" ($rule.uid | default (printf "%s_%s" $name (snakecase $key)))
+      "title" $rule.title
+      "sql" $rule.sql
+      "threshold" (dig "threshold" 0 $condition)
+      "evaluator" ($condition.type | default "gt")
+      "reducer" ($condition.reducer | default "last")
+      "timeRange" ($rule.timeRange | default 300)
+      "for" ($rule.for | default "5m")
+      "noDataState" ($rule.noDataState | default "OK")
+      "execErrState" ($rule.execErrState | default "KeepLast")
+      "paused" (ternary $rule.paused $alerts.paused (hasKey $rule "paused"))
+      "labels" (mergeOverwrite $labels ($rule.labels | default dict))
+      "annotations" ($rule.annotations | default dict) -}}
+{{- $rules = append $rules (include "helm.alerts.rule" $compact | fromJson) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- if not $rules -}}
 {{- fail "alerts are enabled but no alert rule is enabled; a rule group needs at least one (enable a standard alert or add one under alerts.additional)" -}}
 {{- end -}}

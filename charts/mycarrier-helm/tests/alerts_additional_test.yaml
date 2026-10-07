@@ -1,0 +1,201 @@
+suite: alerts - additional rules
+templates:
+  - templates/alerts/alertrulegroup.yaml
+set:
+  global:
+    appStack: invoice
+  environment:
+    name: prod
+  alerts:
+    enabled: true
+    serviceName: MC.Invoice
+    displayName: Invoice
+tests:
+  - it: expands a compact rule with defaults after the standard rules
+    set:
+      alerts:
+        additional:
+          smc3ParseErrors:
+            title: "[Sev3] MC.Invoice.InboundIntegration.Worker SMC3 Parse Errors"
+            severity: sev3
+            sql: SELECT COUNT(1) FROM hyperdx.prod_otel_logs
+            condition:
+              threshold: 1
+              reducer: min
+            labels:
+              hyperdx: https://hyperdx.mycarrier.tech/search
+            annotations:
+              description: More than 1 smc3 document parse error.
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 8
+      - equal:
+          path: spec.rules[7].uid
+          value: invoice_smc3_parse_errors
+      - equal:
+          path: spec.rules[7].labels
+          value:
+            alertType: smc3_parse_errors
+            severity: sev3
+            service: mc.invoice
+            alertSource: mycarrier-helm
+            confluence: https://integratedtransportationmanagement.atlassian.net/wiki/spaces/~7120202a257556b56643019e4eca311640971f/pages/4527325285/I+ve+got+an+alert+from+grafana+what+do+I+do
+            hyperdx: https://hyperdx.mycarrier.tech/search
+      - equal:
+          path: spec.rules[7].data[1].model.conditions[0].evaluator
+          value:
+            params:
+              - 1
+            type: gt
+      - equal:
+          path: spec.rules[7].data[1].model.conditions[0].reducer.type
+          value: min
+      - equal:
+          path: spec.rules[7].for
+          value: 5m
+      - equal:
+          path: spec.rules[7].noDataState
+          value: OK
+      - equal:
+          path: spec.rules[7].annotations.description
+          value: More than 1 smc3 document parse error.
+
+  - it: renders additional rules for a language without standard alerts
+    set:
+      global:
+        language: python
+      alerts:
+        additional:
+          queueDepth:
+            title: "[Sev2] Invoice queue depth"
+            severity: sev2
+            sql: SELECT 1
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 1
+      - equal:
+          path: spec.rules[0].uid
+          value: invoice_queue_depth
+
+  - it: keeps an explicit uid (AlertManagement's existing one)
+    set:
+      alerts:
+        additional:
+          smc3ParseErrors:
+            uid: invoice_sev2_smc3_parse_errors
+            title: SMC3
+            severity: sev3
+            sql: SELECT 1
+    asserts:
+      - equal:
+          path: spec.rules[7].uid
+          value: invoice_sev2_smc3_parse_errors
+
+  - it: passes a raw rule through without templating its Grafana expressions
+    set:
+      alerts:
+        additional:
+          sustainedRetries:
+            rule:
+              uid: integration_sustained_retries
+              title: "[Sev2] Integration Sustained Retries"
+              condition: C
+              data:
+                - refId: A
+              annotations:
+                summary: "{{ $labels.Connector }} partner {{ $labels.PartnerId }} is retrying"
+              labels:
+                severity: sev2
+    asserts:
+      - equal:
+          path: spec.rules[7].annotations.summary
+          value: "{{ $labels.Connector }} partner {{ $labels.PartnerId }} is retrying"
+      - equal:
+          path: spec.rules[7].labels
+          value:
+            severity: sev2
+            alertSource: mycarrier-helm
+            service: mc.invoice
+
+  - it: keeps a raw rule's own service label
+    set:
+      alerts:
+        additional:
+          sustainedRetries:
+            rule:
+              uid: integration_sustained_retries
+              title: retries
+              condition: C
+              data:
+                - refId: A
+              labels:
+                service: mc.integration
+    asserts:
+      - equal:
+          path: spec.rules[7].labels.service
+          value: mc.integration
+
+  - it: skips a disabled additional rule
+    set:
+      alerts:
+        additional:
+          smc3ParseErrors:
+            enabled: false
+            title: SMC3
+            severity: sev3
+            sql: SELECT 1
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 7
+
+  - it: rejects a uid longer than 40 characters
+    set:
+      alerts:
+        additional:
+          aVeryLongAdditionalRuleNameThatOverflows:
+            title: long
+            severity: sev3
+            sql: SELECT 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "must be at most 40 characters"
+
+  - it: rejects a duplicate uid
+    set:
+      alerts:
+        additional:
+          clash:
+            uid: invoice_http_errors
+            title: clash
+            severity: sev3
+            sql: SELECT 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "alert rule uid \"invoice_http_errors\" is used more than once"
+
+  - it: requires sql on a compact rule
+    set:
+      alerts:
+        additional:
+          smc3ParseErrors:
+            title: SMC3
+            severity: sev3
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.additional.smc3ParseErrors.sql is required"
+
+  - it: requires data on a raw rule
+    set:
+      alerts:
+        additional:
+          sustainedRetries:
+            rule:
+              uid: integration_sustained_retries
+              title: retries
+              condition: C
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.additional.sustainedRetries.rule.data is required"
