@@ -113,12 +113,17 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: registry.example.com/api:1.0.0
-      # No canary block: a bare canary, not an empty strategy the Rollout CRD would reject while the Deployment is pruned.
+      # Release 2 renders the canary contract (default preset standard).
       - equal:
-          path: spec.strategy
+          path: spec.strategy.canary.stableService
+          value: test-stack-api
+      - equal:
+          path: spec.strategy.canary.canaryService
+          value: test-stack-api-preview
+      - equal:
+          path: spec.strategy.canary.steps[0]
           value:
-            canary:
-              maxUnavailable: 0
+            setWeight: 10
 
   # Autoscaled apps: the old Deployment has no replica count for anyone to fight over, and the HPA moves to the Rollout.
   - it: leaves the Deployment's replica count to the autoscaler while migrating with HPA
@@ -237,18 +242,15 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        strategy:
+          canary:
+            preset: fast
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
           migratingToRollouts: true
-          updateStrategy:
-            canary:
-              stableService: test-stack-api
-              canaryService: test-stack-api-preview
-              steps:
-                - setWeight: 10
           image:
             registry: registry.example.com
             repository: api
@@ -268,17 +270,15 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        strategy:
+          canary:
+            steps:
+              - setWeight: 10
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
-          updateStrategy:
-            canary:
-              stableService: test-stack-api
-              canaryService: test-stack-api-preview
-              steps:
-                - setWeight: 10
           image:
             registry: registry.example.com
             repository: api
@@ -289,13 +289,14 @@ tests:
       - equal:
           path: spec.strategy.canary.stableService
           value: test-stack-api
+      # An explicit steps list replaces the preset verbatim.
       - equal:
           path: spec.strategy.canary.steps
           value:
             - setWeight: 10
 
-  # A Rollout app's updateStrategy is a canary block; copied into the Deployment it would fail the sync.
-  - it: gives the Deployment the default rolling update while its Rollout app migrates with a canary block
+  # A canary block is not a Deployment strategy; copied into the Deployment it would fail the sync.
+  - it: gives a Deployment app with a leftover canary block the default rolling update
     template: deployment.yaml
     set:
       global:
@@ -305,8 +306,7 @@ tests:
         name: preprod
       applications:
         api:
-          deploymentType: rollout
-          migratingToRollouts: true
+          deploymentType: deployment
           updateStrategy:
             canary:
               stableService: test-stack-api
@@ -376,11 +376,6 @@ tests:
             enabled: true
             minReplicas: 6
             maxReplicas: 12
-          updateStrategy:
-            canary:
-              stableService: test-stack-api
-              steps:
-                - setWeight: 10
           image:
             registry: registry.example.com
             repository: api
@@ -423,11 +418,6 @@ tests:
             enabled: true
             minReplicas: 6
             maxReplicas: 12
-          updateStrategy:
-            canary:
-              stableService: test-stack-api
-              steps:
-                - setWeight: 10
           image:
             registry: registry.example.com
             repository: api

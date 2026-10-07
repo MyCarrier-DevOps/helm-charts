@@ -35,6 +35,18 @@ global:
   correlationId: "" # Optional: Correlation ID for tracking deployments across systems
   argoEventsInstance: "argo-events" # Argo Events namespace the render pipeline runs in (argo-events|argo-events-test). Selects which TestEngine deployment receives test trigger payloads. Set by render-deploy-core.yaml from K8S_NAMESPACE.
   env: {}
+  # Canary settings for every application with deploymentType rollout (release-wide, so every Rollout of a release
+  # runs the same steps). The chart injects the stable and -preview Services, Istio weights on every VirtualService
+  # route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and rollbackWindow (2 revisions).
+  # strategy:
+  #   canary:
+  #     preset: standard          # standard: 10, 25, 50 with a 5m pause after each, then 100
+  #                               # fast: 25, then 100; manual: 10, then a pause until resumed, then 100
+  #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
+  #     analysis:
+  #       enabled: false          # an analysis step after each weight; off until DEVOPS-312's AnalysisTemplates exist
+  #       templates: [health, compare, alerts]   # run as <environment>-<fullName>-<template>
+  #     progressDeadlineSeconds: 600
   dependencies:
     mongodb: false
     elasticsearch: false
@@ -188,8 +200,8 @@ applications: {}
 #   # renders both workloads: the Rollout uses workloadRef (scaleDown: never) and a bare canary strategy, both sets of pods
 #   # serve behind the existing Services, and the autoscaler targets the workload deploymentType names.
 #   #   to a Rollout:   release 1: deploymentType: rollout + migratingToRollouts: true
-#   #                   release 2: remove migratingToRollouts -> Rollout gets its own template and updateStrategy.canary
-#   #                              (a bare canary without one), Argo CD prunes the Deployment
+#   #                   release 2: remove migratingToRollouts -> Rollout gets its own template and the canary
+#   #                              settings from global.strategy.canary, Argo CD prunes the Deployment
 #   #   back:           release 1: deploymentType: deployment + migratingToRollouts: true
 #   #                   release 2: remove migratingToRollouts -> Argo CD prunes the Rollout
 #   # Never switch deploymentType in one release: the old workload is pruned before any new pod is Ready (an outage).
@@ -526,21 +538,8 @@ applications: {}
 #       maxUnavailable: 0
 #       maxSurge: 2
 #     
-#     # For Argo Rollouts:
-#     # canary:
-#     #   steps:
-#     #     - setWeight: 25
-#     #     - analysis:
-#     #         templates:
-#     #           - templateName: load-test
-#     #     - setWeight: 50
-#     #     - analysis:
-#     #         templates:
-#     #           - templateName: load-test
-#     #     - setWeight: 100
-#     #   scaleDownDelaySeconds: 30
-#     #   scaleDownDelayRevisionLimit: 5
-#     #   abortScaleDownDelaySeconds: 30
+#     # For Argo Rollouts the canary settings are release-wide: see global.strategy.canary. A canary block here is
+#     # refused.
 #   
 #   # ----------------------------------------------------------------------------
 #   # Monitoring and Observability

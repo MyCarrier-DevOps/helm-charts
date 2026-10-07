@@ -1,0 +1,834 @@
+suite: Rollout canary contract (global.strategy.canary, Istio routing on every route)
+templates:
+  - rollout.yaml
+  - virtualService.yaml
+  - frontendVirtualService.yaml
+  - service.yaml
+tests:
+  # R1: with no canary values the Rollout gets the Services, Istio routing and the standard ladder.
+  - it: renders the stable and canary Services, Istio routing and the standard ladder by default
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.stableService
+          value: test-stack-api
+      - equal:
+          path: spec.strategy.canary.canaryService
+          value: test-stack-api-preview
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-api
+              routes:
+                - test-stack-api
+                - canary
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+            - pause:
+                duration: 5m
+            - setWeight: 25
+            - pause:
+                duration: 5m
+            - setWeight: 50
+            - pause:
+                duration: 5m
+            - setWeight: 100
+
+  - it: renders the progress deadline, abort and rollback window defaults
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+      - equal:
+          path: spec.progressDeadlineAbort
+          value: true
+      - equal:
+          path: spec.rollbackWindow
+          value:
+            revisions: 2
+
+  - it: honours global.strategy.canary.progressDeadlineSeconds
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            progressDeadlineSeconds: 1200
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 1200
+
+  - it: renders the fast preset
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            preset: fast
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 25
+            - setWeight: 100
+
+  - it: renders the manual preset with a pause until resumed
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            preset: manual
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+            - pause: {}
+            - setWeight: 100
+
+  - it: adds an analysis step after each weight when analysis is enabled
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-test-stack-api-health
+                - templateName: preprod-test-stack-api-compare
+                - templateName: preprod-test-stack-api-alerts
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            pause:
+              duration: 5m
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 10
+
+  - it: runs only the configured analysis templates
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              enabled: true
+              templates: [health]
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 25
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
+            - setWeight: 100
+
+  # R2: an explicit steps list replaces the preset verbatim.
+  - it: replaces the preset with global.strategy.canary.steps verbatim
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            preset: manual
+            steps:
+              - setWeight: 5
+              - pause:
+                  duration: 2m
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 5
+            - pause:
+                duration: 2m
+
+  - it: rejects an unknown preset
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            preset: slow
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "preset"
+
+  # R4: the Rollout carries the release's correlation ID.
+  - it: labels the Rollout with global.correlationId
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: abc-123
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+          value: abc-123
+
+  - it: annotates each canary Rollout with the number of canary Rollouts in the release
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        web:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "2"
+
+  # A migrating Rollout runs no canary steps: it is not counted, and gets none of the canary defaults.
+  - it: leaves migrating Rollouts out of the group and out of the canary defaults
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "1"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+      - notExists:
+          path: spec.progressDeadlineAbort
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+      - notExists:
+          path: spec.rollbackWindow
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  - it: refuses a per-application updateStrategy.canary block
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          updateStrategy:
+            canary:
+              steps:
+                - setWeight: 50
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "updateStrategy.canary is no longer supported; canary settings are release-wide in global.strategy.canary"
+
+  - it: refuses service.aliases on a Rollout app
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          service:
+            aliases: [legacy-api]
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "service.aliases is not supported with deploymentType rollout"
+
+  # R3: every route that reaches the app carries the stable and -preview destinations at 100/0.
+  - it: gives the environment-header route the stable and -preview destinations
+    template: virtualService.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-api
+      - equal:
+          path: spec.http[0].route
+          value:
+            - destination:
+                host: test-stack-api.preprod.svc.cluster.local
+                port:
+                  number: 8080
+              weight: 100
+            - destination:
+                host: test-stack-api-preview.preprod.svc.cluster.local
+                port:
+                  number: 8080
+              weight: 0
+
+  - it: lists the allowed-endpoint and forbidden routes of a csharp app in prod
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-api
+              routes:
+                - test-stack-api
+                - test-stack-api-allowed-liveness
+                - test-stack-api-allowed-health
+                - test-stack-api-allowed-api
+                - test-stack-api-forbidden
+
+  - it: gives the forbidden route of a Rollout app the -preview destination too
+    template: virtualService.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - contains:
+          path: spec.http
+          content:
+            name: test-stack-api-forbidden
+            route:
+              - destination:
+                  host: test-stack-api.prod.svc.cluster.local
+                  port:
+                    number: 8080
+                weight: 100
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+                weight: 0
+            fault:
+              delay:
+                fixedDelay: 29s
+                percentage:
+                  value: 100
+              abort:
+                httpStatus: 403
+                percentage:
+                  value: 100
+
+  # In dev the -feature-routing route goes to the <app>.dev.internal ServiceEntry, not the app's Service.
+  - it: leaves the dev feature-routing route out of the managed routes
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[0].routes
+          value:
+            - test-stack-api
+            - canary
+
+  - it: gives a custom route to the app's own Service the -preview destination and lists it
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              routes:
+                reports:
+                  match:
+                    - uri:
+                        prefix: /reports
+                elsewhere:
+                  match:
+                    - uri:
+                        prefix: /elsewhere
+                  destination: other-svc.preprod.svc.cluster.local
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[0].routes
+          value:
+            - test-stack-api
+            - reports
+            - canary
+
+  - it: leaves a custom route to another Service with its single destination
+    template: virtualService.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              routes:
+                elsewhere:
+                  match:
+                    - uri:
+                        prefix: /elsewhere
+                  destination: other-svc.preprod.svc.cluster.local
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.http[1].name
+          value: elsewhere
+      - equal:
+          path: spec.http[1].route
+          value:
+            - destination:
+                host: other-svc.preprod.svc.cluster.local
+                port:
+                  number: 8080
+
+  - it: refuses a custom route that sends traffic to the app's own Service without -preview
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              routes:
+                pinned:
+                  match:
+                    - uri:
+                        prefix: /pinned
+                  destination: test-stack-api.preprod.svc.cluster.local
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "VirtualService route 'pinned' sends traffic to test-stack-api without its -preview destination"
+
+  # A frontend Rollout in a multi-frontend release is reached through its own VirtualService and the shared one.
+  - it: lists both VirtualServices for a frontend Rollout in a multi-frontend release
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: rollout
+          # The multi-frontend template needs the primary's networking.istio block (true on 4.4.0 as well).
+          networking:
+            istio: {}
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-shell
+              routes:
+                - test-stack-shell
+                - canary
+            - name: test-stack-shell-multifrontend
+              routes:
+                - test-stack-shell-env-match
+                - test-stack-shell-catchall
+                - canary
+
+  - it: leaves the routes of a Deployment frontend in the multi-frontend VirtualService unchanged
+    template: frontendVirtualService.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: rollout
+          # The multi-frontend template needs the primary's networking.istio block (true on 4.4.0 as well).
+          networking:
+            istio: {}
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - contains:
+          path: spec.http
+          content:
+            name: test-stack-admin-env-match
+            route:
+              - destination:
+                  host: test-stack-admin.preprod.svc.cluster.local
+                  port:
+                    number: 4200
+            match:
+              - headers:
+                  environment:
+                    exact: preprod
+                uri:
+                  prefix: /admin
+      - contains:
+          path: spec.http
+          content:
+            name: test-stack-shell-env-match
+            route:
+              - destination:
+                  host: test-stack-shell.preprod.svc.cluster.local
+                  port:
+                    number: 4200
+                weight: 100
+              - destination:
+                  host: test-stack-shell-preview.preprod.svc.cluster.local
+                  port:
+                    number: 4200
+                weight: 0
+            match:
+              - headers:
+                  environment:
+                    exact: preprod
+
+  # Only the mesh reaches the canary; a LoadBalancer -preview Service would expose a second external Service.
+  - it: renders the -preview Service as ClusterIP whatever service.type is
+    template: service.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          service:
+            type: LoadBalancer
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api-preview
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP

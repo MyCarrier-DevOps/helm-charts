@@ -11,6 +11,53 @@
           "type": "string",
           "description": "The application stack name, used for naming resources and grouping applications"
         },
+        "strategy": {
+          "type": "object",
+          "description": "Release-wide rollout strategy settings.",
+          "properties": {
+            "canary": {
+              "type": "object",
+              "description": "Canary settings for every application with deploymentType rollout (DEVOPS-311). The chart injects the stable and -preview Services, Istio weights on every VirtualService route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and a rollbackWindow of 2 revisions.",
+              "additionalProperties": false,
+              "properties": {
+                "preset": {
+                  "type": "string",
+                  "enum": ["standard", "fast", "manual"],
+                  "default": "standard",
+                  "description": "Step ladder. standard: 10, 25 and 50 with a 5m pause after each, then 100. fast: 25, then 100. manual: 10, then a pause until resumed, then 100. An analysis step follows each weight when analysis.enabled is true."
+                },
+                "steps": {
+                  "type": "array",
+                  "items": { "type": "object" },
+                  "description": "Argo Rollouts canary steps that replace the preset verbatim."
+                },
+                "analysis": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Render an analysis step after each weight. Off until the platform AnalysisTemplates (DEVOPS-312) exist: a step that names a missing template aborts the canary."
+                    },
+                    "templates": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "default": ["health", "compare", "alerts"],
+                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-."
+                    }
+                  }
+                },
+                "progressDeadlineSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 600,
+                  "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true)."
+                }
+              }
+            }
+          }
+        },
         "language": {
           "type": "string",
           "description": "Programming language used by the application",
@@ -1196,43 +1243,7 @@
               },
               "canary": {
                 "type": "object",
-                "properties": {
-                  "steps": {
-                    "type": "array",
-                    "items": {
-                      "type": "object"
-                    }
-                  },
-                  "scaleDownDelaySeconds": {
-                    "type": "integer",
-                    "default": 30
-                  },
-                  "scaleDownDelayRevisionLimit": {
-                    "type": "integer",
-                    "default": 5
-                  },
-                  "abortScaleDownDelaySeconds": {
-                    "type": "integer",
-                    "default": 30
-                  },
-                  "backgroundanalysis": {
-                    "type": "object",
-                    "properties": {
-                      "templates": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      },
-                      "args": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      }
-                    }
-                  }
-                }
+                "description": "Not supported since mycarrier-helm 4.5.0: canary settings are release-wide in global.strategy.canary (preset, steps, analysis), so every Rollout of a release runs the same steps. The chart refuses to render a Rollout that sets this."
               }
             }
           },

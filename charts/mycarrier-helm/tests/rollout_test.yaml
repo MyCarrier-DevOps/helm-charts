@@ -18,7 +18,7 @@ tests:
       applications.test-app-api.probes.enableLiveness: true
       applications.test-app-api.probes.enableReadiness: true
       applications.test-app-api.updateStrategy.type: "RollingUpdate"
-      applications.test-app-api.updateStrategy.canary.steps:
+      global.strategy.canary.steps:
         - setWeight: 25
         - setWeight: 50
         - setWeight: 100
@@ -65,7 +65,7 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.env: {}
       applications.test-app-api.updateStrategy.type: "RollingUpdate"
-      applications.test-app-api.updateStrategy.canary.steps:
+      global.strategy.canary.steps:
         - setWeight: 100
     asserts:
       - isKind:
@@ -89,7 +89,7 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.env: {}
       applications.test-app-api.updateStrategy.type: "RollingUpdate"
-      applications.test-app-api.updateStrategy.canary.steps:
+      global.strategy.canary.steps:
         - setWeight: 100
       applications.test-app-api.networking.istio.gateway: istio-system/authenticated
     asserts:
@@ -102,7 +102,8 @@ tests:
           path: spec.template.metadata.annotations["mycarrier.io/gateway"]
           value: istio-system/authenticated
 
-  - it: should not annotate rollout with a gateway when istio is disabled
+  # A Rollout's canary weights live in the chart's VirtualService, so a canary Rollout with Istio off is refused.
+  - it: should refuse a canary rollout when istio is disabled
     set:
       environment.name: "dev"
       applications.test-app-api.deploymentType: rollout
@@ -114,16 +115,12 @@ tests:
       applications.test-app-api.ports.http: 8080
       applications.test-app-api.env: {}
       applications.test-app-api.updateStrategy.type: "RollingUpdate"
-      applications.test-app-api.updateStrategy.canary.steps:
+      global.strategy.canary.steps:
         - setWeight: 100
       applications.test-app-api.service.istioDisabled: true
     asserts:
-      - isKind:
-          of: Rollout
-      - notExists:
-          path: metadata.annotations["mycarrier.io/gateway"]
-      - notExists:
-          path: spec.template.metadata.annotations["mycarrier.io/gateway"]
+      - failedTemplate:
+          errorPattern: "a Rollout needs the chart's Istio VirtualService for its canary weights"
 
   - it: should not create rollout when deploymentType is not rollout
     set:
