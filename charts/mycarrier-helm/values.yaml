@@ -9,6 +9,7 @@
 ## @param global.gitbranch Name of the git branch (used for feature branches)
 ## @param global.branchlabel Label for the branch, used for reference label
 ## @param global.language Default programming language for applications (can be overridden at application level)
+## @param global.disableLanguageSecrets Do not inject the language's default secrets and environment variables (the stack supplies its own)
 ## @param global.v2migration Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
 ## @param global.commitDeployed Label for the deployed commit (used for tracking deployments)
 ## @param global.correlationId Correlation ID for tracking deployments across systems
@@ -30,6 +31,7 @@ global:
   gitbranch: "" # Git branch name (e.g., "main" or "feature/xyz")
   branchlabel: "" # Used for reference label (e.g., "main" or "feature-xyz")
   language: "csharp" # Default language (csharp, java, nodejs, python, go, etc.) - can be overridden at application level
+  disableLanguageSecrets: false # Set to true to stop injecting the language's default secrets and environment variables (the stack supplies its own)
   v2migration: false # Set to true to enable ArgoCD sync options for v2 migration (e.g., skip schema validation, ignore certain fields)
   commitDeployed: "" # Optional: Git commit hash or identifier for the deployed code (used for tracking deployments)
   correlationId: "" # Optional: Correlation ID for tracking deployments across systems
