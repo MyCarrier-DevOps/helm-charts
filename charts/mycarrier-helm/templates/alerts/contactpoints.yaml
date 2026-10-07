@@ -1,0 +1,29 @@
+{{- if eq (include "helm.alerts.enabled" .) "true" }}
+{{- $alerts := .Values.alerts }}
+{{- $secretKey := $alerts.contactPoints.secretKey | default (lower $alerts.serviceName) }}
+{{- range $receiver := list (dict "suffix" "" "name" $alerts.displayName "key" $secretKey) (dict "suffix" "-sev1" "name" (printf "%s Sev1" $alerts.displayName) "key" (printf "%s-sev1" $secretKey)) }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaContactPoint
+metadata:
+  name: {{ include "helm.alerts.name" $ }}{{ $receiver.suffix }}
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: {{ $.Values.global.appStack }}
+spec:
+  name: {{ $receiver.name }}
+  instanceSelector:
+    matchLabels:
+      grafana-instance: grafana
+  receivers:
+    - type: webhook
+      settings:
+        placeholder: unused
+      valuesFrom:
+        - targetPath: url
+          valueFrom:
+            secretKeyRef:
+              name: {{ $alerts.contactPoints.secretName }}
+              key: {{ $receiver.key }}
+{{- end }}
+{{- end }}

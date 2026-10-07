@@ -1,0 +1,26 @@
+{{- if eq (include "helm.alerts.enabled" .) "true" }}
+{{- $alerts := .Values.alerts }}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaNotificationPolicyRoute
+metadata:
+  name: {{ include "helm.alerts.name" . }}
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: {{ .Values.global.appStack }}
+    mycarrier.tech/notification-policy: mycarrier
+spec:
+  receiver: {{ $alerts.displayName }}
+  object_matchers:
+    - - service
+      - "="
+      - {{ lower $alerts.serviceName }}
+  routes:
+    - receiver: {{ $alerts.displayName }} Sev1
+      object_matchers:
+        - - severity
+          - "="
+          - sev1
+    {{- with $alerts.routing.routes }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
