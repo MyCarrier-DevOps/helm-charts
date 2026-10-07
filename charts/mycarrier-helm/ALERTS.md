@@ -41,6 +41,19 @@ The Squadcast webhooks must exist in Vault under the keys `<serviceName lowercas
 `<serviceName lowercased>-sev1` (the `squadcast-webhooks` secret in `monitoring`), or set
 `alerts.contactPoints.secretKey`.
 
+Other settings:
+
+| Value | Default | Purpose |
+| --- | --- | --- |
+| `alerts.environments` | `prod` | Environments (`environment.name`) the alerts render in |
+| `alerts.observabilityName` | `global.appStack` | `observability.availability` service the availability alert reads |
+| `alerts.folderUID` | `1ca77e1c-c38b-400c-a7de-7478f3e2d127` | Grafana folder of the rule group (cannot change once created) |
+| `alerts.interval` | `60s` | Rule group evaluation interval |
+| `alerts.paused` | `false` | `isPaused` for every rule that does not set its own `paused` |
+| `alerts.contactPoints.secretName` | `squadcast-webhooks` | Secret in `monitoring` holding the webhook URLs |
+| `alerts.contactPoints.secretKey` | `serviceName` lowercased | Key of the general webhook; the Sev1 contact point uses `<secretKey>-sev1` |
+| `alerts.additional.<key>.enabled` | `true` | `false` leaves that additional rule out |
+
 ## Standard alerts
 
 `global.language` selects the standard alerts and their defaults:
@@ -53,7 +66,7 @@ The Squadcast webhooks must exist in Vault under the keys `<serviceName lowercas
 | `http503Returned` | `[Sev1] <displayName> HTTP 503 Service Unavailable in 5m` | the service returned a 503 outside `probePaths` | on | off |
 | `http503Received` | `[Sev2] <displayName> Dependency HTTP 503 in 5m` | the service received a 503 from a dependency outside `excludedHosts` | on | off |
 | `availabilityProbe` | `[Sev1] <displayName> Availability Probe Failure` | an availability probe reports state 0 | on | on |
-| `nonHttpErrors` | `[Sev3] <displayName> Non HTTP Errors > 5 in 5m` | more than `threshold` error log lines outside the `apiServiceSuffix` service | on | on, paused |
+| `nonHttpErrors` | `[Sev3] <displayName> Non HTTP Errors > 5 in 5m` | more than `threshold` error log lines outside the `apiServiceSuffix` service (default `Api`) | on | on, paused |
 
 Other languages (`python`, `go`) have no standard alerts; use `alerts.additional`.
 
@@ -75,7 +88,8 @@ Severity sets the `[SevN]` title prefix and the `severity` label, which selects 
 change with severity or title, so Grafana keeps the rule's state, silences and history. The render fails when
 `alerts.standard` is set for a language without standard alerts, and when alerts are enabled with no rule at all.
 
-`alerts.filters.excludedPaths` leaves `url.path` values out of every HTTP rule (both sides of the ratios), for example
+`alerts.filters.excludedPaths` leaves `url.path` values out of the alerts on the service's own HTTP responses
+(`serverErrorRatio` and `clientErrorRatio` on both sides of the ratio, `serverErrorCount`, `http503Returned`), for example
 synthetic monitoring endpoints:
 
 ```yaml
