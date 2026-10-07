@@ -240,3 +240,74 @@ Expects context with: .Values, .fullName, .application
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Standard alerts per language: every standard alert's default settings (see ALERTS.md). helm.lang.alerts returns
+them for global.language; a language without an entry has no standard alerts. alerts.standard overrides them.
+*/}}
+{{- define "helm.lang.alerts.csharp" -}}
+serverErrorRatio:
+  enabled: true
+  severity: sev1
+  threshold: 30
+  for: 5m
+clientErrorRatio:
+  enabled: true
+  severity: sev2
+  threshold: 30
+  for: 5m
+serverErrorCount:
+  enabled: true
+  severity: sev3
+  threshold: 5
+  for: 5m
+http503Returned:
+  enabled: true
+  severity: sev1
+  threshold: 0
+  for: 0m
+  probePaths:
+    - /liveness
+    - /health
+    - /healthz
+    - /readiness
+    - /startup
+    - /smc3-health
+http503Received:
+  enabled: true
+  severity: sev2
+  threshold: 0
+  for: 0m
+  excludedHosts:
+    - localhost
+    - 127.0.0.1
+availabilityProbe:
+  enabled: true
+  severity: sev1
+  for: 1m
+  excludedComponents: []
+nonHttpErrors:
+  enabled: true
+  severity: sev3
+  threshold: 5
+  for: 5m
+  apiServiceSuffix: Api
+{{- end -}}
+
+{{/* nodejs: the csharp alerts without the 503 alerts, with the non-HTTP error alert paused. */}}
+{{- define "helm.lang.alerts.nodejs" -}}
+{{- $alerts := include "helm.lang.alerts.csharp" . | fromYaml -}}
+{{- $_ := set $alerts.http503Returned "enabled" false -}}
+{{- $_ := set $alerts.http503Received "enabled" false -}}
+{{- $_ := set $alerts.nonHttpErrors "paused" true -}}
+{{- toYaml $alerts -}}
+{{- end -}}
+
+{{- define "helm.lang.alerts" -}}
+{{- $language := lower (toString .Values.global.language) -}}
+{{- if eq $language "csharp" -}}
+{{ include "helm.lang.alerts.csharp" . }}
+{{- else if eq $language "nodejs" -}}
+{{ include "helm.lang.alerts.nodejs" . }}
+{{- end -}}
+{{- end -}}

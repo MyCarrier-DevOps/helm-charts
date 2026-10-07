@@ -1223,6 +1223,44 @@ infrastructure:
       #         - name: "email-sender"
       #           maxDeliveryCount: 5                    # Fewer retries for notifications
 
+## @section Alerts
+## Grafana alert rules, contact points and notification route for the stack (see ALERTS.md). They render under
+## templates/alerts/ only: application clusters exclude */alerts/*, the management cluster applies them.
+
+## @param alerts.enabled Render the stack's alerts
+## @param alerts.environments [array] Environment names (environment.name) the alerts render in
+## @param alerts.serviceName HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled
+## @param alerts.displayName Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled
+## @param alerts.observabilityName observability.availability Service name (default: global.appStack)
+## @param alerts.folderUID Grafana folder UID of the rule group (immutable once created)
+## @param alerts.interval Rule group evaluation interval
+## @param alerts.paused Default isPaused for every rule
+## @param alerts.filters.excludedPaths [array] url.path values left out of every HTTP rule
+## @param alerts.standard [object] Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1|sev2|sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists
+## @param alerts.additional [object] Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: <Grafana AlertRule>)
+## @param alerts.contactPoints.secretName Secret holding the Squadcast webhook URLs
+## @param alerts.contactPoints.secretKey Secret key of the general webhook (default: serviceName lowercased); Sev1 uses <secretKey>-sev1
+## @param alerts.routing.routes [array] Extra child routes under the stack's notification route, after the Sev1 route
+alerts:
+  enabled: false
+  environments:
+    - prod
+  serviceName: ""
+  displayName: ""
+  observabilityName: ""
+  folderUID: 1ca77e1c-c38b-400c-a7de-7478f3e2d127
+  interval: 60s
+  paused: false
+  filters:
+    excludedPaths: []
+  standard: {}
+  additional: {}
+  contactPoints:
+    secretName: squadcast-webhooks
+    secretKey: ""
+  routing:
+    routes: []
+
 # ============================================================================
 # DEPLOYMENT SETTINGS
 # ============================================================================

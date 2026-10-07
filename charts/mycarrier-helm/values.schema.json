@@ -2423,6 +2423,360 @@
           }
         }
       }
+    },
+    "alerts": {
+      "type": "object",
+      "description": "Grafana alert rules, contact points and notification route for the stack (see ALERTS.md).",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "serviceName": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "observabilityName": {
+          "type": "string"
+        },
+        "folderUID": {
+          "type": "string"
+        },
+        "interval": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "excludedPaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "standard": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "serverErrorRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            },
+            "clientErrorRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            },
+            "serverErrorCount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            },
+            "http503Returned": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "probePaths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "http503Received": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "excludedHosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "availabilityProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "excludedComponents": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "nonHttpErrors": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string"
+                },
+                "execErrState": {
+                  "type": "string"
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "apiServiceSuffix": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "additional": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          }
+        },
+        "contactPoints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string"
+            },
+            "secretKey": {
+              "type": "string"
+            }
+          }
+        },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {

@@ -1,0 +1,90 @@
+suite: alerts - gating and validation
+templates:
+  - templates/alerts/alertrulegroup.yaml
+tests:
+  - it: renders nothing by default
+    set:
+      environment:
+        name: prod
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing in an environment that is not listed
+    set:
+      environment:
+        name: preprod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the rule group in a listed environment, in the monitoring namespace
+    set:
+      global:
+        appStack: invoice
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+
+  - it: renders for an mc-environment Application (isEnvironmentDeploy does not gate alerts)
+    set:
+      isEnvironmentDeploy: true
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: renders in any environment listed in alerts.environments
+    set:
+      environment:
+        name: preprod
+      alerts:
+        enabled: true
+        environments:
+          - preprod
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: requires serviceName
+    set:
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        displayName: Invoice
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.serviceName is required"
+
+  - it: requires an alphanumeric displayName
+    set:
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: "Invoice Service"
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.displayName is required when alerts are enabled and must match"
