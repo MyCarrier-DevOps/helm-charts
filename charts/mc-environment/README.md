@@ -50,6 +50,13 @@ environments:
 
 Apply the chart with your preferred Helm workflow and Argo CD will manage one `mycarrier-helm` release per configured environment.
 
+## Alerts
+
+`alerts:` is forwarded unchanged into every generated Application's values, so each environment renders
+mycarrier-helm's alerts from the same settings (see mycarrier-helm `ALERTS.md`). The Applications run on the
+application cluster's Argo CD, which excludes the `grafana.integreatly.org` group; the pipeline's render step
+(chart-renderer) writes the same alerts into the environment's GitOps directory for the management cluster.
+
 ## Argo CD sync behaviour
 
 Since 0.3.0 generated Applications use `ServerSideApply=true` **without** `Replace=true`, so fields owned by other controllers (Argo Rollouts) are not overwritten on sync. `RespectIgnoreDifferences=true` is deliberately **not** set: in Argo CD 3.1 (`controller/sync.go`, `normalizeTargetResources`) it deletes every ignored path from the target and restores only values present in the live object. On a Deployment-to-Rollout migration the live VirtualService has no `canary` route yet, so the Rollout-managed route weights are stripped and Istio rejects the VirtualService ("total destination weight = 0"). Without it, `ignoreDifferences` still keeps controller-managed fields out of the diff (no OutOfSync flapping, no selfHeal), `ServerSideApply` keeps rollouts-controller-owned Service selector keys, and `ApplyOutOfSyncOnly` re-applies the VirtualService only on a real git change. Trade-off: after such a git change the canary weights reset to 100/0 until the Rollouts controller's next reconcile. Versus 0.2.x the rendered ApplicationSet differs by the removal of `Replace=true`, the `ignoreDifferences` entries below (Service, VirtualService, HorizontalPodAutoscaler, ScaledObject) and the `argocd.argoproj.io/client-side-apply-migration-manager` annotation (see "Migration annotation"; it is left off environments that have `jobs` or `extraObjects`, which today is only the preprod `uat` backend).

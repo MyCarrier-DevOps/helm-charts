@@ -1,0 +1,28 @@
+suite: alerts forwarding
+templates:
+  - templates/appset.yaml
+tests:
+  - it: forwards alerts into every environment's Application values
+    values:
+      - fixtures/basic-environments.yaml
+    set:
+      alerts:
+        enabled: true
+        serviceName: MC.Carriers
+        displayName: Carriers
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.alerts
+          value:
+            enabled: true
+            serviceName: MC.Carriers
+            displayName: Carriers
+
+  - it: forwards nothing when alerts are not set
+    values:
+      - fixtures/basic-environments.yaml
+    asserts:
+      - notExists:
+          path: spec.generators[0].list.elements[0].Values.alerts
