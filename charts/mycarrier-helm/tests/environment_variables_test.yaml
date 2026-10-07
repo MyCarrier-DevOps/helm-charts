@@ -510,3 +510,64 @@ tests:
           content:
             name: KeyVault_SplitIoProxyApiKey
             value: SplitIoProxyApiKey_dev
+
+  - it: should keep an initContainer's own KeyVault_* when global.disableLanguageSecrets is true
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: csharp
+        disableLanguageSecrets: true
+      applications.csharp-no-lang-secrets-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "csharp-no-lang-secrets-app"
+          tag: "1.0.0"
+        initContainers:
+          - name: migrate
+            image: test-registry/migrate
+            command:
+              - /bin/sh
+            args:
+              - -c
+              - "true"
+            env:
+              KeyVault_SplitIoProxyApiKey: SomeValue
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: KeyVault_SplitIoProxyApiKey
+            value: SomeValue
+
+  - it: should still strip an initContainer's KeyVault_* while language secrets are on
+    set:
+      environment.name: "dev"
+      global:
+        appStack: test-stack
+        language: csharp
+      applications.csharp-keyvault-app:
+        enabled: true
+        deploymentType: deployment
+        image:
+          registry: "test-registry"
+          repository: "csharp-keyvault-app"
+          tag: "1.0.0"
+        initContainers:
+          - name: migrate
+            image: test-registry/migrate
+            command:
+              - /bin/sh
+            args:
+              - -c
+              - "true"
+            env:
+              KeyVault_SplitIoProxyApiKey: SomeValue
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: KeyVault_SplitIoProxyApiKey
+            value: SomeValue
