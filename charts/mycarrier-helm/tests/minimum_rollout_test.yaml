@@ -12,6 +12,9 @@ tests:
       applications:
         minimal-rollout-app:
           deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
           image:
             registry: "registry.example.com"
             repository: "minimal-rollout-app"
@@ -41,7 +44,7 @@ tests:
             app: test-stack-minimal-rollout-app
             app.kubernetes.io/name: test-stack-minimal-rollout-app
 
-  - it: should handle rollout with bluegreen strategy
+  - it: should reject updateStrategy.bluegreen (removed; use canary)
     set:
       global:
         appStack: "test-stack"
@@ -51,6 +54,9 @@ tests:
       applications:
         bluegreen-rollout-app:
           deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
           image:
             registry: "registry.example.com"
             repository: "bluegreen-rollout-app"
@@ -62,14 +68,6 @@ tests:
               previewService: test-stack-bluegreen-rollout-app-preview
               autoPromotionEnabled: true
     asserts:
-      - isKind:
-          of: Rollout
-      - equal:
-          path: metadata.name
-          value: test-stack-bluegreen-rollout-app
-      # Verify bluegreen strategy is configured
-      - exists:
-          path: spec.strategy.blueGreen
-      - equal:
-          path: spec.strategy.blueGreen.activeService
-          value: test-stack-bluegreen-rollout-app
+      - failedTemplate:
+          errorPattern: "updateStrategy.bluegreen is no longer supported"
+

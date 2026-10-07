@@ -108,6 +108,9 @@ tests:
       applications:
         web:
           deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
           image:
             registry: r.example.com
             repository: web

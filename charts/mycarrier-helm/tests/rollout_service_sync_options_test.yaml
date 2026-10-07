@@ -1,0 +1,76 @@
+suite: Rollout Services use client-side apply
+templates:
+  - service.yaml
+tests:
+  # Server-side apply replaces the whole spec.selector map and drops the rollouts-pod-template-hash key the Rollouts
+  # controller adds; client-side apply merges it, so the key survives a deploy that also changes the Service.
+  - it: adds ServerSideApply=false to the stable Service of a Rollout app
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: SkipDryRunOnMissingResource=true,Prune=true,ServerSideApply=false
+
+  - it: adds ServerSideApply=false to the -preview Service of a Rollout app
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api-preview
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: SkipDryRunOnMissingResource=true,ServerSideApply=false
+
+  - it: leaves the Service of a Deployment app unchanged
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: SkipDryRunOnMissingResource=true,Prune=true

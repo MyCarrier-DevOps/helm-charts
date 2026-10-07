@@ -423,7 +423,7 @@
             "oneOf": [
               {
                 "type": "boolean",
-                "description": "Whether the application is migrating to Argo Rollouts",
+                "description": "First release of a two-release switch between Deployment and Rollout, in either direction. The chart renders both workloads: the Rollout references the Deployment through workloadRef (scaleDown: never) with a bare canary strategy, so it takes over no Service, and the HPA/KEDA autoscaler targets the workload deploymentType names. To move to a Rollout, set deploymentType rollout with this flag; to move back, set deploymentType deployment with this flag. Remove it in the next release, once the incoming workload has at least as many ready pods as the outgoing one (with HPA/KEDA, set the autoscaler minimum in release 1 to the outgoing pod count) and, on the way in, the Rollout's availableReplicas equals spec.replicas: Argo CD prunes the other workload, all its pods at once. Never change deploymentType in one release without this flag. See the procedure in values.yaml.",
                 "default": false
               },
               {
@@ -1216,45 +1216,6 @@
                     "default": 30
                   },
                   "backgroundanalysis": {
-                    "type": "object",
-                    "properties": {
-                      "templates": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      },
-                      "args": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              "bluegreen": {
-                "type": "object",
-                "properties": {
-                  "prePromotionAnalysis": {
-                    "type": "object",
-                    "properties": {
-                      "templates": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      },
-                      "args": {
-                        "type": "array",
-                        "items": {
-                          "type": "object"
-                        }
-                      }
-                    }
-                  },
-                  "postPromotionAnalysis": {
                     "type": "object",
                     "properties": {
                       "templates": {

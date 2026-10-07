@@ -3,7 +3,9 @@
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
-{{- if (eq $appValues.deploymentType "deployment")  }}
+{{- /* Also rendered for a Rollout app while migratingToRollouts is set (release 1 of the two-release migration), so
+       Argo CD keeps the Deployment and its pods serve until release 2 removes the flag. */}}
+{{- if or (eq $appValues.deploymentType "deployment") (and (eq $appValues.deploymentType "rollout") $appValues.migratingToRollouts) }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 apiVersion: apps/v1

@@ -184,6 +184,25 @@ applications: {}
 #   isFrontend: false
 #   forceOffload: false
 #   deploymentType: "deployment"  # Options: deployment, statefulset, rollout
+#   # Switching between Deployment and Rollout (two releases each way, zero downtime). With migratingToRollouts the chart
+#   # renders both workloads: the Rollout uses workloadRef (scaleDown: never) and a bare canary strategy, both sets of pods
+#   # serve behind the existing Services, and the autoscaler targets the workload deploymentType names.
+#   #   to a Rollout:   release 1: deploymentType: rollout + migratingToRollouts: true
+#   #                   release 2: remove migratingToRollouts -> Rollout gets its own template and updateStrategy.canary
+#   #                              (a bare canary without one), Argo CD prunes the Deployment
+#   #   back:           release 1: deploymentType: deployment + migratingToRollouts: true
+#   #                   release 2: remove migratingToRollouts -> Argo CD prunes the Rollout
+#   # Never switch deploymentType in one release: the old workload is pruned before any new pod is Ready (an outage).
+#   # Before release 1: the app must sync without app-level Replace=true (mc-environment 0.3.0 or later; not the legacy
+#   # offload generator), and the autoscaler must already be on. Turning HPA/KEDA on removes replicas from the manifest,
+#   # so the workload drops to 1 pod until the autoscaler scales it; do that in an earlier release.
+#   # Ship release 2 only once the incoming workload has at least as many ready pods as the outgoing one: release 2
+#   # prunes every outgoing pod at once. With HPA/KEDA, set the autoscaler minimum in release 1 to the outgoing
+#   # workload's current pod count so the incoming one gets there, and restore it in release 2. On the way in, also
+#   # wait until the Rollout's availableReplicas equals spec.replicas: the controller takes the stable Service over only
+#   # once the stable ReplicaSet is fully available, and until then the Service also selects release 2's canary pods.
+#   # In the dev environment the offload operator owns <fullName>'s VirtualService, so turning offloadOperatorEnabled
+#   # off there deletes that VirtualService until Argo CD self-heals; try Rollouts in feature environments instead.
 #   migratingToRollouts: false
 #   version: "1.0.0"
 #   replicas: 1
