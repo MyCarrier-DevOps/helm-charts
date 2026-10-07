@@ -60,6 +60,16 @@ app that rendered on 4.4.0 can fail on 4.5.0, which blocks the whole release, un
 | A custom route whose `destination` is the app's own Service | Remove `destination` so the route gets the `-preview` destination. |
 | `applications.<app>.analysisTemplates` | The AnalysisTemplates are now named `<environment>-<fullName>-<name>`, matching the analysis steps. |
 
+## Upgrading to 4.6.0 (Rollouts only)
+
+4.6.0 adds `global.strategy.canary.coordinator` (off by default) for release-wide lockstep through the
+`mycarrier/canary-coordinator` step plugin. With it off, renders are unchanged. One Rollout app that rendered on 4.5.0
+fails on 4.6.0:
+
+| 4.5.0 values | 4.6.0 edit |
+|---|---|
+| An application whose name contains `migration` with `deploymentType: rollout` | Render the migrator through `jobs` with `timing: pre-deploy`: it runs to completion and exits, so it cannot be a canary. |
+
 ## Chart Structure
 
 ```
