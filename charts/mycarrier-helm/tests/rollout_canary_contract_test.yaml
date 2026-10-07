@@ -4,6 +4,7 @@ templates:
   - virtualService.yaml
   - frontendVirtualService.yaml
   - service.yaml
+  - analysistemplate.yaml
 tests:
   # R1: with no canary values the Rollout gets the Services, Istio routing and the standard ladder.
   - it: renders the stable and canary Services, Istio routing and the standard ladder by default
@@ -832,3 +833,252 @@ tests:
       - equal:
           path: spec.type
           value: ClusterIP
+
+  # Argo Rollouts weights only the first route with a given name (searchHttpRoute), so duplicates fail the render.
+  - it: refuses a custom route key named canary, which would shadow the catch-all canary route
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              routes:
+                canary:
+                  match:
+                    - uri:
+                        prefix: /reports
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "VirtualService has 2 HTTP routes named 'canary'"
+
+  - it: refuses the same custom route key on two frontends of a multi-frontend release
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: deployment
+          networking:
+            istio:
+              routes:
+                assets:
+                  match:
+                    - uri:
+                        prefix: /assets
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        zadmin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: rollout
+          networking:
+            istio:
+              routes:
+                assets:
+                  match:
+                    - uri:
+                        prefix: /admin/assets
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - failedTemplate:
+          errorPattern: "VirtualService has 2 HTTP routes named 'assets-custom-route'"
+
+  # The analysis steps reference <environment>-<fullName>-<template>; the chart names its AnalysisTemplates the same way.
+  - it: names the chart's AnalysisTemplates the way the analysis steps reference them
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          analysisTemplates:
+            - name: health
+              provider:
+                web:
+                  url: http://test-stack-api-preview.preprod.svc.cluster.local:8080
+                  statusEndpoint: health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: metadata.name
+          value: preprod-test-stack-api-health
+
+  # The shared -multifrontend-offload VirtualService follows the primary frontend's offloadVSEnabled.
+  - it: refuses a non-primary frontend Rollout in a feature environment while the primary keeps the offload VirtualService
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature20-saia
+      applications:
+        web:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: deployment
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - failedTemplate:
+          errorPattern: "also needs networking.istio.offloadVSEnabled: false on the primary frontend"
+
+  - it: renders a non-primary frontend Rollout in a feature environment once the primary's offload VirtualService is off
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: feature20-saia
+      applications:
+        web:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: deployment
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - isKind:
+          of: Rollout
+
+  # A multi-frontend primary without a networking block used to hit a nil pointer at the catch-all corsPolicy.
+  - it: renders a multi-frontend release whose primary has no networking block
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[1].name
+          value: test-stack-shell-multifrontend
+
+  - it: lets one application override the release-wide progress deadline
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          progressDeadlineSeconds: 1800
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 1800

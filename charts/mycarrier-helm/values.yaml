@@ -46,7 +46,14 @@ global:
   #     analysis:
   #       enabled: false          # an analysis step after each weight; off until DEVOPS-312's AnalysisTemplates exist
   #       templates: [health, compare, alerts]   # run as <environment>-<fullName>-<template>
-  #     progressDeadlineSeconds: 600
+  #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
+  #                               # canary aborts; size it above the slowest pod start. applications.<app>.
+  #                               # progressDeadlineSeconds overrides it for one slow-starting app.
+  #   Until the coordinator (DEVOPS-325) is on, each Rollout of a release runs its own steps: one can be at 50% while
+  #   another is at 10%, or abort while another promotes. Don't enable canary for a prod release with more than one
+  #   Rollout until then. mycarrier.tech/rolloutGroupSize on each Rollout is the number the coordinator will wait for.
+  #   The manual preset's pause has no time limit (progressDeadlineSeconds doesn't count paused time, and Argo CD has
+  #   no sync timeout here): someone must promote or abort it. Prod Rollouts send a Teams message when they pause.
   dependencies:
     mongodb: false
     elasticsearch: false

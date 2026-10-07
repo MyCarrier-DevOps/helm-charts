@@ -22,6 +22,15 @@
 {{- if and $canary $offloadVSRendered }}
 {{- fail (printf "application '%s': a Rollout in a feature environment also needs networking.istio.offloadVSEnabled: false; otherwise %s-offload claims the same hosts as the Rollout's VirtualService, and Istio does not merge VirtualServices for sidecars." $appName $fullName) }}
 {{- end }}
+{{- /* The shared <primary>-multifrontend-offload VirtualService of a feature environment follows the primary frontend's
+       offloadVSEnabled, so a non-primary frontend Rollout needs the primary's flag off too. */ -}}
+{{- if and $canary $appValues.isFrontend (hasPrefix "feature" $.Values.environment.name) }}
+{{- $frontendCount := 0 }}{{- $primaryValues := dict }}
+{{- range $name, $values := $.Values.applications }}{{ if $values.isFrontend }}{{ $frontendCount = add1 $frontendCount }}{{ if $values.isPrimary }}{{ $primaryValues = $values }}{{ end }}{{ end }}{{ end }}
+{{- if and (gt $frontendCount 1) $primaryValues (dig "networking" "istio" "offloadVSEnabled" true $primaryValues) }}
+{{- fail (printf "application '%s': a frontend Rollout in a feature environment also needs networking.istio.offloadVSEnabled: false on the primary frontend; otherwise the shared -multifrontend-offload VirtualService claims the same hosts and Istio does not merge VirtualServices for sidecars." $appName) }}
+{{- end }}
+{{- end }}
 {{- /* The canary weights live in the chart's VirtualService, so a Rollout that runs canary steps needs it rendered. */ -}}
 {{- if and $canary (or (not (dig "networking" "istio" "enabled" true $appValues)) (dig "istioDisabled" false $appValues) (dig "service" "istioDisabled" false $appValues)) }}
 {{- fail (printf "application '%s': a Rollout needs the chart's Istio VirtualService for its canary weights; networking.istio.enabled, istioDisabled and service.istioDisabled must leave Istio on." $appName) }}

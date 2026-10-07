@@ -38,13 +38,13 @@
                     "enabled": {
                       "type": "boolean",
                       "default": false,
-                      "description": "Render an analysis step after each weight. Off until the platform AnalysisTemplates (DEVOPS-312) exist: a step that names a missing template aborts the canary."
+                      "description": "Render an analysis step after each weight. Off until the platform AnalysisTemplates (DEVOPS-312) exist: Argo Rollouts resolves every referenced template up front, and a missing one leaves the Rollout InvalidSpec before any step runs (no traffic shift, no abort, no rollback)."
                     },
                     "templates": {
                       "type": "array",
                       "items": { "type": "string" },
                       "default": ["health", "compare", "alerts"],
-                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-."
+                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-; the chart names applications.<app>.analysisTemplates the same way."
                     }
                   }
                 },
@@ -465,6 +465,11 @@
             "description": "Type of deployment",
             "enum": ["deployment", "statefulset", "rollout"],
             "default": "deployment"
+          },
+          "progressDeadlineSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Overrides global.strategy.canary.progressDeadlineSeconds for this application's Rollout, for an app whose pods take longer to become Ready. Not a step setting, so lockstep is unaffected."
           },
           "migratingToRollouts": {
             "oneOf": [

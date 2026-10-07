@@ -222,7 +222,7 @@ http:
     {{- end }}
   headers:
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
-  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  {{- with (dig "networking" "istio" "corsPolicy" nil $primaryAppValues) }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
@@ -432,7 +432,7 @@ http:
   {{- end }}
   headers:
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
-  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  {{- with (dig "networking" "istio" "corsPolicy" nil $primaryAppValues) }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
 {{- end -}}

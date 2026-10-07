@@ -29,8 +29,9 @@ workloadRef:
 {{- if $canary }}
 {{- $canaryConfig := include "helm.canary.config" . | fromJson }}
 {{- /* DEVOPS-307 defaults: a canary that makes no progress for this long aborts (and the Rollout goes back to
-       stable); a GitOps revert to one of the last 2 revisions skips the steps. */}}
-progressDeadlineSeconds: {{ $canaryConfig.progressDeadlineSeconds }}
+       stable); a GitOps revert to one of the last 2 revisions skips the steps. applications.<app>.progressDeadlineSeconds
+       overrides the release-wide value for a slow-starting app; it is not a step setting, so lockstep is unaffected. */}}
+progressDeadlineSeconds: {{ dig "progressDeadlineSeconds" $canaryConfig.progressDeadlineSeconds .application }}
 progressDeadlineAbort: true
 rollbackWindow:
   revisions: 2

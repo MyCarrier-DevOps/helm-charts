@@ -83,7 +83,16 @@
   {{- if and $hit (not $preview) -}}
     {{- fail (printf "VirtualService route '%s' sends traffic to %s without its -preview destination, so it would bypass the canary. A custom route with an explicit destination to the app's own Service gets no -preview destination; leave destination unset." $route.name $.fullName) -}}
   {{- end -}}
-  {{- if $hit }}{{ $names = append $names $route.name }}{{ end -}}
+  {{- if $hit -}}
+    {{- /* Argo Rollouts weights only the first route with a given name, so a second route of the same name would be
+           silently skipped (or resolve to another app's route in a multi-frontend VirtualService). */ -}}
+    {{- $sameName := 0 -}}
+    {{- range $.spec.http }}{{ if eq (toString .name) (toString $route.name) }}{{ $sameName = add1 $sameName }}{{ end }}{{ end -}}
+    {{- if gt $sameName 1 -}}
+      {{- fail (printf "VirtualService has %d HTTP routes named '%s'; Argo Rollouts weights only the first route with a name, so every route that reaches %s needs a unique name (a custom route key must not be 'canary' or the app's full name, and custom route keys must differ across frontend apps)." $sameName $route.name $.fullName) -}}
+    {{- end -}}
+    {{- $names = append $names $route.name -}}
+  {{- end -}}
 {{- end -}}
 {{- toJson $names -}}
 {{- end -}}
