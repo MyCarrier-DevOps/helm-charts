@@ -12,7 +12,7 @@
        every reconcile, which would wipe canary weights and header routes. A schema rule cannot see this
        environment-dependent default, so the check is here. A Rollout kept on the way back has no traffic routing. */ -}}
 {{- if and (eq $appValues.deploymentType "rollout") (dig "networking" "istio" "offloadOperatorEnabled" (eq $metaenv "dev") $appValues) (eq $metaenv "dev") }}
-{{- fail (printf "application '%s': deploymentType rollout cannot run while the offload operator owns the VirtualService (networking.istio.offloadOperatorEnabled, on by default in dev); the operator would wipe canary weights. Set networking.istio.offloadOperatorEnabled: false for this application, or keep deploymentType: deployment in this environment." $appName) }}
+{{- fail (printf "application '%s': deploymentType rollout cannot run while the offload operator owns the VirtualService (networking.istio.offloadOperatorEnabled, on by default in dev); the operator would wipe canary weights. Set networking.istio.offloadOperatorEnabled: false for this application, or keep deploymentType: deployment in this environment. In the dev environment itself the operator owns %s's VirtualService, so turning it off there deletes that VirtualService until Argo CD self-heals; try Rollouts in a feature environment instead." $appName $fullName) }}
 {{- end }}
 {{- /* In a feature environment the chart also renders <fullName>-offload (same gate as virtualService.yaml), which
        claims the same hosts as the Rollout's VirtualService. Istio does not merge VirtualServices for sidecars, and

@@ -3,6 +3,7 @@ templates:
   - rollout.yaml
   - deployment.yaml
   - autoscaler.yaml
+  - keda-scaledobject.yaml
 tests:
   # Release 1 of the two-release migration: deploymentType rollout + migratingToRollouts true.
   - it: keeps rendering the Deployment while migratingToRollouts is set, so Argo CD does not prune it
@@ -112,6 +113,12 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: registry.example.com/api:1.0.0
+      # No canary block: a bare canary, not an empty strategy the Rollout CRD would reject while the Deployment is pruned.
+      - equal:
+          path: spec.strategy
+          value:
+            canary:
+              maxUnavailable: 0
 
   # Autoscaled apps: the old Deployment has no replica count for anyone to fight over, and the HPA moves to the Rollout.
   - it: leaves the Deployment's replica count to the autoscaler while migrating with HPA
@@ -619,3 +626,72 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].name
           value: dotnet-debug-tools
+      # Both containers mount "debug", so the volume must exist even though the app sets no volumes.
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: debug
+            persistentVolumeClaim:
+              claimName: pvc-test-stack-api
+
+  # KEDA follows deploymentType like the HPA does.
+  - it: points the KEDA ScaledObject at the Rollout on the way in
+    template: keda-scaledobject.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          keda:
+            enabled: true
+            type: topic
+            topicName: my-topic
+            subscriptionName: my-subscription
+            clusterAuthRef: servicebus-connectionstring-prod
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Rollout
+      - equal:
+          path: spec.scaleTargetRef.apiVersion
+          value: argoproj.io/v1alpha1
+
+  - it: points the KEDA ScaledObject at the Deployment on the way back
+    template: keda-scaledobject.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: deployment
+          migratingToRollouts: true
+          keda:
+            enabled: true
+            type: topic
+            topicName: my-topic
+            subscriptionName: my-subscription
+            clusterAuthRef: servicebus-connectionstring-prod
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Deployment

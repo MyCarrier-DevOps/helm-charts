@@ -31,11 +31,13 @@ strategy:
        available, which is at 1 pod before the autoscaler (wave 11) scales it, and the Deployment's pods stop getting
        traffic. Without it, both sets of pods serve behind the existing Services. A Rollout's first rollout runs no
        steps, so nothing is lost on the way in; release 2 renders the configured strategy. maxUnavailable: 0 keeps
-       every Rollout pod serving while it is replaced (on the way back its template becomes the Deployment's). */}}
-{{- if .application.migratingToRollouts }}
+       every Rollout pod serving while it is replaced (on the way back its template becomes the Deployment's).
+       Without a canary block the Rollout gets the same bare canary: the Rollout CRD rejects an empty strategy, and
+       Argo CD would still prune the Deployment in that sync, leaving the Rollout frozen on its old spec. */}}
+{{- if or .application.migratingToRollouts (not (dig "updateStrategy" "canary" false .application)) }}
   canary:
     maxUnavailable: 0
-{{- else if dig "updateStrategy" "canary" false .application }}
+{{- else }}
   canary:
     {{- with (dig "updateStrategy" "canary" dict .application) }}
     {{ toYaml . | indent 4 | trim }}

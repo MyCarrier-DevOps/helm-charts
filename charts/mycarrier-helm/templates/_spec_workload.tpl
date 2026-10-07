@@ -193,8 +193,11 @@ template:
       {{- if $.Values.secrets.mounted }}
       {{ include "helm.secretVolumes" $ | indent 6 | trim -}}
       {{- end }}
+    {{- /* The debug volume is not tied to application.volumes: both containers mount it whenever debug mode is on. */}}
+    {{- if .application.enableDebugMode }}
+      {{ include "helm.podDebugVolume" . | indent 6 | trim }}
+    {{- end }}
     {{- if .application.volumes }}
-      {{ if .application.enableDebugMode }}{{ include "helm.podDebugVolume" . | indent 6 | trim }}{{ end }}
       {{- range .application.volumes }}
       - name: {{ .name }}
         {{ if ( or (and ( .kind ) (eq (.kind | lower) "emptydir")) (not .kind)) }}emptyDir: {}{{- end }}
