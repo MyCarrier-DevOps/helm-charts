@@ -212,7 +212,7 @@
 
 {{- define "helm.lang.vars" -}}
 {{- $csharp := (include "helm.lang.vars.csharp" . ) }}
-{{- if eq .Values.global.language "csharp" }}
+{{- if and (eq .Values.global.language "csharp") (not .Values.global.disableLanguageSecrets) }}
 {{ include "helm.lang.vars.csharp" . }}
 {{- end }}
 {{- end -}}

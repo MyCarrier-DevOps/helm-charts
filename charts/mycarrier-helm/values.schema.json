@@ -16,6 +16,11 @@
           "description": "Programming language used by the application",
           "enum": ["csharp", "nodejs", "python", "go"]
         },
+        "disableLanguageSecrets": {
+          "type": "boolean",
+          "description": "Do not inject the language's default secrets and environment variables (the stack supplies its own)",
+          "default": false
+        },
         "gitbranch": {
           "oneOf": [
             { "type": "string", "description": "Name of the git branch (used for feature branches)" },

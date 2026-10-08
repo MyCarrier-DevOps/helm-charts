@@ -93,9 +93,16 @@ template:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
           {{ include "helm.otel.env" (merge (dict "otelUserEnv" .env) $) | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
-        {{- range $key, $value := omit (.env | default dict) "ComputedEnvironmentName" "ActiveOffloads" "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl"}}
+        {{- /* helm.lang.vars re-injects the KeyVault_* keys, so they are stripped unless language secrets are off */}}
+        {{- $initOmit := list "ComputedEnvironmentName" "ActiveOffloads" }}
+        {{- if not $.Values.global.disableLanguageSecrets }}
+        {{- $initOmit = concat $initOmit (list "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection" "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl") }}
+        {{- end }}
+        {{- range $key, $value := (.env | default dict) }}
+        {{- if not (has $key $initOmit) }}
           - name: "{{ $key }}"
             value: "{{ $value }}"
+        {{- end }}
         {{- end }}
         {{ include "helm.containerSecurityContext" $ | indent 8 | trim }}
         volumeMounts:

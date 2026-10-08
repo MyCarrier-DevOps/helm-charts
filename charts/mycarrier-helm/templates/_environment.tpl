@@ -125,7 +125,8 @@ Keys managed by other helpers (otel/computed) are stripped from both sources so
 they cannot be redefined here.
 The KeyVault_* keys are ONLY stripped for csharp apps, because the
 `helm.lang.vars.csharp` helper re-injects them and only emits when
-`.Values.global.language == "csharp"`. For non-csharp apps (e.g. nodejs) nothing
+`.Values.global.language == "csharp"` and `.Values.global.disableLanguageSecrets` is
+not set. For non-csharp apps (e.g. nodejs), or with language secrets disabled, nothing
 re-injects them, so they must pass through from global.env / application.env.
 
 KeyVault_IsActive, KeyVault_SplitIoProxyApiKey and KeyVault_SplitIoProxyUrl are
@@ -141,7 +142,7 @@ where the call-site dot exposes both `.Values.global.env` and `.application.env`
 */}}
 {{- define "helm.application.env" -}}
 {{- $omitKeys := list "ComputedEnvironmentName" "ActiveOffloads" -}}
-{{- if eq (lower (toString $.Values.global.language)) "csharp" -}}
+{{- if and (eq (lower (toString $.Values.global.language)) "csharp") (not $.Values.global.disableLanguageSecrets) -}}
 {{- $omitKeys = concat $omitKeys (list "KeyVault_IsActive" "KeyVault_SplitIoProxyApiKey" "KeyVault_SplitIoProxyUrl") -}}
 {{- if dig "dependencies" "redis" false $.Values.global -}}
 {{- $omitKeys = concat $omitKeys (list "KeyVault_RedisConnection" "Auth_KeyVault_RedisConnection") -}}
