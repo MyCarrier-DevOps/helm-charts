@@ -1,0 +1,159 @@
+suite: alerts - contact points and notification route
+set:
+  global:
+    appStack: integrations
+  environment:
+    name: prod
+  alerts:
+    enabled: true
+    serviceName: MC.Integration
+    displayName: Integration
+tests:
+  - it: renders no contact points or route when alerts are disabled
+    templates:
+      - templates/alerts/contactpoints.yaml
+      - templates/alerts/notificationpolicyroute.yaml
+    set:
+      alerts:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders two contact points and one route in the monitoring namespace
+    templates:
+      - templates/alerts/contactpoints.yaml
+      - templates/alerts/notificationpolicyroute.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: templates/alerts/contactpoints.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/alerts/notificationpolicyroute.yaml
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+
+  - it: renders the general and Sev1 contact points with the Squadcast secret keys
+    template: templates/alerts/contactpoints.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: integration
+        documentIndex: 0
+      - equal:
+          path: spec.name
+          value: Integration
+        documentIndex: 0
+      - equal:
+          path: spec.receivers[0].valuesFrom[0]
+          value:
+            targetPath: url
+            valueFrom:
+              secretKeyRef:
+                name: squadcast-webhooks
+                key: mc.integration
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: integration-sev1
+        documentIndex: 1
+      - equal:
+          path: spec.name
+          value: Integration Sev1
+        documentIndex: 1
+      - equal:
+          path: spec.receivers[0].valuesFrom[0].valueFrom.secretKeyRef.key
+          value: mc.integration-sev1
+        documentIndex: 1
+
+  - it: uses an overridden secret name and key
+    template: templates/alerts/contactpoints.yaml
+    set:
+      alerts:
+        contactPoints:
+          secretName: other-webhooks
+          secretKey: integrations
+    asserts:
+      - equal:
+          path: spec.receivers[0].valuesFrom[0].valueFrom.secretKeyRef
+          value:
+            name: other-webhooks
+            key: integrations-sev1
+        documentIndex: 1
+
+  - it: routes the stack's alerts with a Sev1 child route and the central policy's selection label
+    template: templates/alerts/notificationpolicyroute.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["mycarrier.tech/notification-policy"]
+          value: mycarrier
+      - equal:
+          path: spec
+          value:
+            receiver: Integration
+            object_matchers:
+              - - service
+                - "="
+                - mc.integration
+            routes:
+              - receiver: Integration Sev1
+                object_matchers:
+                  - - severity
+                    - "="
+                    - sev1
+
+  - it: appends extra child routes after the Sev1 route
+    template: templates/alerts/notificationpolicyroute.yaml
+    set:
+      alerts:
+        routing:
+          routes:
+            - receiver: Integration
+              object_matchers:
+                - - alertType
+                  - "="
+                  - sustained_retries
+              group_by:
+                - grafana_folder
+                - alertname
+                - PartnerId
+    asserts:
+      - lengthEqual:
+          path: spec.routes
+          count: 2
+      - equal:
+          path: spec.routes[1].group_by
+          value:
+            - grafana_folder
+            - alertname
+            - PartnerId
+
+  - it: keeps names strings when they look like numbers
+    templates:
+      - templates/alerts/alertrulegroup.yaml
+      - templates/alerts/contactpoints.yaml
+      - templates/alerts/notificationpolicyroute.yaml
+    set:
+      alerts:
+        displayName: "123"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "123"
+        template: templates/alerts/contactpoints.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.name
+          value: "123"
+        template: templates/alerts/contactpoints.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "123"
+        template: templates/alerts/notificationpolicyroute.yaml
+      - equal:
+          path: spec.receiver
+          value: "123"
+        template: templates/alerts/notificationpolicyroute.yaml

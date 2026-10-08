@@ -1,0 +1,89 @@
+suite: alerts - gating and validation
+templates:
+  - templates/alerts/alertrulegroup.yaml
+tests:
+  - it: renders nothing by default
+    set:
+      environment:
+        name: prod
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders in whichever environment enables alerts (per-environment values file)
+    set:
+      environment:
+        name: preprod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: renders the rule group in the monitoring namespace
+    set:
+      global:
+        appStack: invoice
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+
+  - it: renders for an mc-environment Application (isEnvironmentDeploy does not gate alerts)
+    set:
+      isEnvironmentDeploy: true
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: requires serviceName
+    set:
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        displayName: Invoice
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.serviceName is required"
+
+  - it: requires an alphanumeric displayName
+    set:
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: "Invoice Service"
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.displayName is required when alerts are enabled and must match"
+
+  - it: does not take a folder (the rule group always goes to the Service Alerts folder)
+    set:
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+        folderUID: 1ca77e1c-c38b-400c-a7de-7478f3e2d127
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional properties 'folderUID' not allowed"

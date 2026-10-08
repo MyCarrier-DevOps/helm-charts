@@ -1,0 +1,395 @@
+suite: alerts - standard rules
+templates:
+  - templates/alerts/alertrulegroup.yaml
+set:
+  global:
+    appStack: invoice
+  environment:
+    name: prod
+  alerts:
+    enabled: true
+    serviceName: MC.Invoice
+    displayName: Invoice
+tests:
+  - it: names the rule group and keeps AlertManagement's rule uids
+    asserts:
+      - equal:
+          path: metadata.name
+          value: invoice-alerts
+      - equal:
+          path: spec.name
+          value: Invoice Alerts
+      - equal:
+          path: spec.folderUID
+          value: 1ca77e1c-c38b-400c-a7de-7478f3e2d127
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: Force=true,Replace=true
+      - lengthEqual:
+          path: spec.rules
+          count: 6
+      - equal:
+          path: spec.rules[0].uid
+          value: invoice_sev1_http_errors
+      - equal:
+          path: spec.rules[1].uid
+          value: invoice_sev2_http_errors
+      - equal:
+          path: spec.rules[2].uid
+          value: invoice_http_errors
+      - equal:
+          path: spec.rules[3].uid
+          value: invoice_sev1_503_returned
+      - equal:
+          path: spec.rules[4].uid
+          value: invoice_sev2_503_received
+      - equal:
+          path: spec.rules[5].uid
+          value: invoice_non_http_errors
+
+  - it: renders titles, thresholds and labels from the defaults
+    asserts:
+      - equal:
+          path: spec.rules[0].title
+          value: "[Sev1] Invoice Server HTTP Errors > 30% in 5m"
+      - equal:
+          path: spec.rules[0].data[1].model.conditions[0].evaluator.params[0]
+          value: 30
+      - equal:
+          path: spec.rules[0].labels
+          value:
+            alertType: server_http_errors
+            severity: sev1
+            service: mc.invoice
+            alertSource: mycarrier-helm
+            confluence: https://integratedtransportationmanagement.atlassian.net/wiki/spaces/~7120202a257556b56643019e4eca311640971f/pages/4527325285/I+ve+got+an+alert+from+grafana+what+do+I+do
+            hyperdx: https://hyperdx.mycarrier.tech/search?isLive=false&source=68097c857e80cf9d5670b13c&where=ServiceName:MC.Invoice*+SpanAttributes.url.path:*+SpanAttributes.http.response.status_code:%3E=500&select=Timestamp,+ServiceName,+StatusCode,+round(Duration+/+1e6)+as+DurationMs,+SpanAttributes[%27http.response.status_code%27]+as+HttpResponseCode,+SpanName&whereLanguage=lucene&orderBy=Timestamp+DESC&from=1749156178000&to=1749157078000&filters=[]
+      - equal:
+          path: spec.rules[2].title
+          value: "[Sev3] Invoice HTTP Errors > 5 in 5m"
+      - matchRegex:
+          path: spec.rules[5].data[0].model.rawSql
+          pattern: "ServiceName NOT LIKE 'MC.Invoice%Api'"
+
+  - it: changes the title prefix and severity label but not the uid when severity is overridden
+    set:
+      alerts:
+        standard:
+          clientErrorRatio:
+            severity: sev1
+    asserts:
+      - equal:
+          path: spec.rules[1].uid
+          value: invoice_sev2_http_errors
+      - equal:
+          path: spec.rules[1].title
+          value: "[Sev1] Invoice Client HTTP Errors > 30% in 5m"
+      - equal:
+          path: spec.rules[1].labels.severity
+          value: sev1
+
+  - it: replaces the whole title when title is set
+    set:
+      alerts:
+        standard:
+          serverErrorCount:
+            title: "[Sev3] Invoice 5xx burst"
+    asserts:
+      - equal:
+          path: spec.rules[2].title
+          value: "[Sev3] Invoice 5xx burst"
+
+  - it: applies thresholds, for, paused and state overrides
+    set:
+      alerts:
+        paused: true
+        standard:
+          serverErrorRatio:
+            threshold: 10
+            for: 10m
+            paused: false
+            execErrState: Error
+    asserts:
+      - equal:
+          path: spec.rules[0].title
+          value: "[Sev1] Invoice Server HTTP Errors > 10% in 5m"
+      - equal:
+          path: spec.rules[0].data[1].model.conditions[0].evaluator.params[0]
+          value: 10
+      - equal:
+          path: spec.rules[0].for
+          value: 10m
+      - equal:
+          path: spec.rules[0].isPaused
+          value: false
+      - equal:
+          path: spec.rules[0].execErrState
+          value: Error
+      - equal:
+          path: spec.rules[1].isPaused
+          value: true
+
+  - it: applies a zero threshold override
+    set:
+      alerts:
+        standard:
+          serverErrorCount:
+            threshold: 0
+    asserts:
+      - equal:
+          path: spec.rules[2].title
+          value: "[Sev3] Invoice HTTP Errors > 0 in 5m"
+      - equal:
+          path: spec.rules[2].data[1].model.conditions[0].evaluator.params[0]
+          value: 0
+
+  - it: leaves excluded paths out of every HTTP rule (AlertManagement PR #52)
+    set:
+      alerts:
+        filters:
+          excludedPaths:
+            - /api/v1/customer-health
+    asserts:
+      - matchRegex:
+          path: spec.rules[0].data[0].model.rawSql
+          pattern: "(?s)NOT IN \\('/api/v1/customer-health'\\).*http_errors.*NOT IN \\('/api/v1/customer-health'\\).*http_non_errors"
+      - matchRegex:
+          path: spec.rules[1].data[0].model.rawSql
+          pattern: "(?s)NOT IN \\('/api/v1/customer-health'\\).*NOT IN \\('/api/v1/customer-health'\\)"
+      - matchRegex:
+          path: spec.rules[2].data[0].model.rawSql
+          pattern: "NOT IN \\('/api/v1/customer-health'\\)"
+      - matchRegex:
+          path: spec.rules[3].data[0].model.rawSql
+          pattern: "NOT IN \\('/liveness','/health','/healthz','/readiness','/startup','/smc3-health','/api/v1/customer-health'\\)"
+      - notMatchRegex:
+          path: spec.rules[4].data[0].model.rawSql
+          pattern: "customer-health"
+
+  - it: renders the MyCarrier exceptions as values
+    set:
+      global:
+        appStack: mycarrier
+      alerts:
+        serviceName: MyCarrier
+        displayName: MyCarrier
+        standard:
+          nonHttpErrors:
+            apiServiceSuffix: API
+    asserts:
+      - matchRegex:
+          path: spec.rules[5].data[0].model.rawSql
+          pattern: "ServiceName NOT LIKE 'MyCarrier%API'"
+
+  - it: omits the NOT LIKE clause when apiServiceSuffix is empty
+    set:
+      alerts:
+        standard:
+          nonHttpErrors:
+            apiServiceSuffix: ""
+    asserts:
+      - notMatchRegex:
+          path: spec.rules[5].data[0].model.rawSql
+          pattern: "NOT LIKE"
+
+  - it: clears a default list with an empty override
+    set:
+      alerts:
+        standard:
+          http503Received:
+            excludedHosts: []
+    asserts:
+      - notMatchRegex:
+          path: spec.rules[4].data[0].model.rawSql
+          pattern: "server.address"
+
+  - it: drops disabled rules (IntegrationEventPublisher keeps only nonHttpErrors)
+    set:
+      alerts:
+        serviceName: MC.Common.IntegrationEventPublisher
+        displayName: IntegrationEventPublisher
+        standard:
+          serverErrorRatio:
+            enabled: false
+          clientErrorRatio:
+            enabled: false
+          serverErrorCount:
+            enabled: false
+          http503Returned:
+            enabled: false
+          http503Received:
+            enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 1
+      - equal:
+          path: spec.rules[0].uid
+          value: integrationeventpublishe_non_http_errors
+
+  - it: renders the nodejs standard alerts (no 503 alerts, non-HTTP errors paused)
+    set:
+      global:
+        language: nodejs
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 4
+      - equal:
+          path: spec.rules[2].uid
+          value: invoice_http_errors
+      - equal:
+          path: spec.rules[3].uid
+          value: invoice_non_http_errors
+      - equal:
+          path: spec.rules[3].isPaused
+          value: true
+      - equal:
+          path: spec.rules[0].isPaused
+          value: false
+
+  - it: lets a false override win over a language default
+    set:
+      global:
+        language: nodejs
+      alerts:
+        standard:
+          nonHttpErrors:
+            paused: false
+    asserts:
+      - equal:
+          path: spec.rules[3].isPaused
+          value: false
+
+  - it: enables a standard alert the language leaves off
+    set:
+      global:
+        language: nodejs
+      alerts:
+        standard:
+          http503Returned:
+            enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 5
+      - equal:
+          path: spec.rules[3].uid
+          value: invoice_sev1_503_returned
+      - equal:
+          path: spec.rules[3].for
+          value: 0m
+      - matchRegex:
+          path: spec.rules[3].data[0].model.rawSql
+          pattern: "NOT IN \\('/liveness','/health','/healthz','/readiness','/startup','/smc3-health'\\)"
+
+  - it: fails when alerts.standard is set for a language without standard alerts
+    set:
+      global:
+        language: python
+      alerts:
+        standard:
+          serverErrorRatio:
+            threshold: 10
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.standard.serverErrorRatio is set, but language \"python\" has no standard alerts; use alerts.additional"
+
+  - it: fails when no alert rule is enabled
+    set:
+      global:
+        language: python
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts are enabled but no alert rule is"
+
+  - it: has no availability alert (the availability probe query does not work for any service)
+    set:
+      alerts:
+        standard:
+          availabilityProbe:
+            enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional properties 'availabilityProbe' not allowed"
+
+  - it: does not take observabilityName
+    set:
+      alerts:
+        observabilityName: invoices
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional properties 'observabilityName' not allowed"
+
+  - it: uses curant's queries for a nodejs stack
+    set:
+      global:
+        appStack: curant
+        language: nodejs
+      alerts:
+        serviceName: curant
+        displayName: Curant
+    asserts:
+      - equal:
+          path: spec.rules[0].data[0].model.rawSql
+          value: |-
+            SELECT
+              countIf(ServerError = 1) * 100.0
+                / countIf(ServerError = 0 AND ClientError = 0) AS value
+            FROM hyperdx.l5m_traces
+            PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
+            WHERE ServiceName ILIKE 'curant%'
+              AND SpanAttributes['http.route'] != ''
+      - equal:
+          path: spec.rules[1].data[0].model.rawSql
+          value: |-
+            SELECT
+              countIf(ClientError = 1) * 100.0
+                / countIf(ServerError = 0 AND ClientError = 0) AS value
+            FROM hyperdx.l5m_traces
+            PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
+            WHERE ServiceName ILIKE 'curant%'
+              AND SpanAttributes['http.route'] != ''
+      - equal:
+          path: spec.rules[2].data[0].model.rawSql
+          value: |-
+            SELECT count() AS value
+            FROM hyperdx.l5m_traces
+            PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
+            WHERE ServerError = 1
+              AND ServiceName ILIKE 'curant%'
+              AND SpanAttributes['http.route'] != ''
+      - equal:
+          path: spec.rules[3].data[0].model.rawSql
+          value: |-
+            SELECT count() AS value
+            FROM hyperdx.prod_otel_logs
+            PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
+            WHERE SeverityText = 'Error'
+              AND ServiceName ILIKE 'curant%'
+              AND ServiceName NOT ILIKE 'curant%Api'
+      - equal:
+          path: spec.rules[0].labels.hyperdx
+          value: https://hyperdx.mycarrier.tech/search?isLive=false&source=68097c857e80cf9d5670b13c&where=ServiceName:curant*+SpanAttributes.http.route:*+SpanAttributes.http.response.status_code:%3E=500&select=Timestamp,+ServiceName,+StatusCode,+round(Duration+/+1e6)+as+DurationMs,+SpanAttributes[%27http.response.status_code%27]+as+HttpResponseCode,+SpanName&whereLanguage=lucene&orderBy=Timestamp+DESC&from=1749156178000&to=1749157078000&filters=[]
+      - equal:
+          path: spec.rules[1].labels.hyperdx
+          value: https://hyperdx.mycarrier.tech/search?isLive=false&source=68097c857e80cf9d5670b13c&where=ServiceName:curant*+SpanAttributes.http.route:*+SpanAttributes.http.response.status_code:%3E=400+SpanAttributes.http.response.status_code:%3C499&select=Timestamp,+ServiceName,+StatusCode,+round(Duration+/+1e6)+as+DurationMs,+SpanAttributes[%27http.response.status_code%27]+as+HttpResponseCode,+SpanName&whereLanguage=lucene&orderBy=Timestamp+DESC&from=1749156178000&to=1749157078000&filters=[]
+      - equal:
+          path: spec.rules[3].labels.hyperdx
+          value: https://hyperdx.mycarrier.tech/search?isLive=false&source=68097c577e80cf9d5670b11c&where=SeverityText+=+%27Error%27+AND+ServiceName+ILIKE+%27curant%25%27+AND+ServiceName+NOT+ILIKE+%27curant%25Api%27&select=Timestamp,+ServiceName,+SeverityText,+Body&whereLanguage=sql&orderBy=TimestampTime+DESC
+
+  - it: leaves excluded routes out of a nodejs stack's HTTP alerts
+    set:
+      global:
+        language: nodejs
+      alerts:
+        filters:
+          excludedPaths:
+            - /api/v1/customer-health
+    asserts:
+      - matchRegex:
+          path: spec.rules[0].data[0].model.rawSql
+          pattern: "AND SpanAttributes\\['http.route'\\] NOT IN \\('/api/v1/customer-health'\\)"
+      - matchRegex:
+          path: spec.rules[2].data[0].model.rawSql
+          pattern: "AND SpanAttributes\\['http.route'\\] NOT IN \\('/api/v1/customer-health'\\)"

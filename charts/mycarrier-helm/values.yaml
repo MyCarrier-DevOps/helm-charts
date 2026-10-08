@@ -9,6 +9,7 @@
 ## @param global.gitbranch Name of the git branch (used for feature branches)
 ## @param global.branchlabel Label for the branch, used for reference label
 ## @param global.language Default programming language for applications (can be overridden at application level)
+## @param global.disableLanguageSecrets Do not inject the language's default secrets and environment variables (the stack supplies its own)
 ## @param global.v2migration Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
 ## @param global.commitDeployed Label for the deployed commit (used for tracking deployments)
 ## @param global.correlationId Correlation ID for tracking deployments across systems
@@ -30,6 +31,7 @@ global:
   gitbranch: "" # Git branch name (e.g., "main" or "feature/xyz")
   branchlabel: "" # Used for reference label (e.g., "main" or "feature-xyz")
   language: "csharp" # Default language (csharp, java, nodejs, python, go, etc.) - can be overridden at application level
+  disableLanguageSecrets: false # Set to true to stop injecting the language's default secrets and environment variables (the stack supplies its own)
   v2migration: false # Set to true to enable ArgoCD sync options for v2 migration (e.g., skip schema validation, ignore certain fields)
   commitDeployed: "" # Optional: Git commit hash or identifier for the deployed code (used for tracking deployments)
   correlationId: "" # Optional: Correlation ID for tracking deployments across systems
@@ -1220,6 +1222,113 @@ infrastructure:
       #       subscriptions:
       #         - name: "email-sender"
       #           maxDeliveryCount: 5                    # Fewer retries for notifications
+
+## @section Alerts
+## Grafana alert rules, contact points and notification route for the stack (see ALERTS.md). They render under
+## templates/alerts/ only: application clusters exclude */alerts/*, the management cluster applies them.
+
+## @param alerts.enabled Render the stack's alerts
+## @param alerts.serviceName HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled
+## @param alerts.displayName Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled
+## @param alerts.interval Rule group evaluation interval
+## @param alerts.paused Default isPaused for standard and compact rules (raw rules keep their own isPaused)
+## @param alerts.filters.excludedPaths [array] Paths left out of the alerts on the service's own HTTP responses (serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned): url.path values, or http.route values for nodejs
+## @param alerts.standard [object] Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1/sev2/sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists
+## @param alerts.additional [object] Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: a Grafana AlertRule)
+## @param alerts.contactPoints.secretName Secret holding the Squadcast webhook URLs
+## @param alerts.contactPoints.secretKey Secret key of the general webhook (default: serviceName lowercased); the Sev1 contact point uses this key plus -sev1
+## @param alerts.routing.routes [array] Extra child routes under the stack's notification route, after the Sev1 route
+alerts:
+  enabled: false
+    # enabled: true   # in the prod values file only (helm/values.prod.yaml): resource names carry no environment
+  serviceName: ""
+    # serviceName: MC.Invoice
+  displayName: ""
+    # displayName: Invoice
+  interval: 60s
+    # interval: 2m
+  paused: false
+    # paused: true
+  filters:
+    excludedPaths: []
+      # - /api/v1/customer-health
+  standard: {}
+    # serverErrorRatio:
+    #   threshold: 10
+    # clientErrorRatio:
+    #   severity: sev3
+    #   for: 10m
+    # http503Returned:
+    #   enabled: true
+    #   probePaths:
+    #     - /liveness
+    #     - /health
+    # nonHttpErrors:
+    #   apiServiceSuffix: API
+    #   paused: false
+    #   title: "[Sev3] Invoice worker errors"
+  additional: {}
+    # smc3ParseErrors:   # compact form: the chart builds the rule around the query
+    #   title: "[Sev3] MC.Invoice.InboundIntegration.Worker SMC3 Parse Errors"
+    #   severity: sev3
+    #   sql: |
+    #     SELECT COUNT(1)
+    #     FROM hyperdx.prod_otel_logs
+    #     WHERE ServiceName = 'MC.Invoice.InboundIntegration.Worker'
+    #       AND SeverityText = 'Error'
+    #       AND Timestamp > now() - INTERVAL 1 MINUTE
+    #   condition:
+    #     threshold: 1
+    #     reducer: min
+    #   for: 0m
+    #   annotations:
+    #     description: More than 1 SMC3 document parse error in the last minute.
+    # sustainedRetries:   # raw form: a Grafana AlertRule passed through unchanged
+    #   rule:
+    #     uid: invoice_sustained_retries
+    #     title: "[Sev2] Invoice Sustained Retries"
+    #     condition: C
+    #     data:
+    #       - refId: A
+    #         datasourceUid: clickhouse
+    #         relativeTimeRange:
+    #           from: 3600
+    #           to: 0
+    #         model:
+    #           refId: A
+    #           rawSql: SELECT ...
+    #       - refId: C
+    #         datasourceUid: __expr__
+    #         model:
+    #           refId: C
+    #           type: threshold
+    #           expression: A
+    #           conditions:
+    #             - evaluator:
+    #                 type: gt
+    #                 params:
+    #                   - 0
+    #     for: 10m
+    #     noDataState: OK
+    #     execErrState: KeepLast
+    #     labels:
+    #       alertType: sustained_retries
+    #       severity: sev2
+  contactPoints:
+    secretName: squadcast-webhooks
+      # secretName: team-webhooks
+    secretKey: ""
+      # secretKey: mc.invoice   # the Sev1 contact point uses mc.invoice-sev1
+  routing:
+    routes: []
+      # - receiver: Integration
+      #   object_matchers:
+      #     - - alertType
+      #       - "="
+      #       - sustained_retries
+      #   group_by:
+      #     - grafana_folder
+      #     - alertname
 
 # ============================================================================
 # DEPLOYMENT SETTINGS
