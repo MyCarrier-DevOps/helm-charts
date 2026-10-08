@@ -32,8 +32,6 @@ alerts:
 - `serviceName` is the HyperDX `ServiceName` prefix the queries match (`ServiceName LIKE '<serviceName>%'`).
 - `displayName` (letters and digits) names the resources (`invoice-alerts`, `invoice`, `invoice-sev1`), the Grafana
   contact points (`Invoice`, `Invoice Sev1`) and the rule uids.
-- `observabilityName` is the `observability.availability` service the availability rule reads; it defaults to
-  `global.appStack`.
 
 `alerts:` belongs to the stack, next to `secrets:`. Put the shared settings (`serviceName`, `displayName`, overrides,
 additional rules) in `helm/values.yaml` and `enabled: true` in the prod values file (`helm/values.prod.yaml`); an
@@ -47,7 +45,6 @@ Other settings:
 
 | Value | Default | Purpose |
 | --- | --- | --- |
-| `alerts.observabilityName` | `global.appStack` | `observability.availability` service the availability alert reads |
 | `alerts.interval` | `60s` | Rule group evaluation interval |
 | `alerts.paused` | `false` | `isPaused` for every standard and compact rule that does not set its own `paused`; raw rules keep their own `isPaused` |
 | `alerts.contactPoints.secretName` | `squadcast-webhooks` | Secret in `monitoring` holding the webhook URLs |
@@ -65,15 +62,17 @@ Other settings:
 | `serverErrorCount` | `[Sev3] <displayName> HTTP Errors > 5 in 5m` | more than `threshold` 5xx responses | on | on |
 | `http503Returned` | `[Sev1] <displayName> HTTP 503 Service Unavailable in 5m` | the service returned more than `threshold` 503s outside `probePaths` (default threshold 0: any 503) | on | off |
 | `http503Received` | `[Sev2] <displayName> Dependency HTTP 503 in 5m` | the service received more than `threshold` 503s from dependencies outside `excludedHosts` (default threshold 0: any 503) | on | off |
-| `availabilityProbe` | `[Sev1] <displayName> Availability Probe Failure` | an availability probe reports state 0 | on | on |
 | `nonHttpErrors` | `[Sev3] <displayName> Non HTTP Errors > 5 in 5m` | more than `threshold` error log lines outside the `apiServiceSuffix` service (default `Api`) | on | on, paused |
 
 Other languages (`python`, `go`) have no standard alerts; use `alerts.additional`.
 
+A nodejs stack's HTTP and log queries are curant's: they select requests by route (`http.route`) and match
+`ServiceName` case-insensitively (`ILIKE`). There is no availability-probe alert: the probe query does not work for any
+service yet.
+
 `alerts.standard.<key>` overrides the language's defaults for that alert: `enabled`, `severity` (`sev1`, `sev2`,
-`sev3`), `threshold` (all but `availabilityProbe`), `for`, `title`, `paused`, `noDataState`, `execErrState`, and the
-alert's own `probePaths`, `excludedHosts`, `excludedComponents` or `apiServiceSuffix`. An override replaces the
-default, including `false`, `0` and an empty list:
+`sev3`), `threshold`, `for`, `title`, `paused`, `noDataState`, `execErrState`, and the alert's own `probePaths`,
+`excludedHosts` or `apiServiceSuffix`. An override replaces the default, including `false`, `0` and an empty list:
 
 ```yaml
 alerts:
@@ -88,9 +87,9 @@ Severity sets the `[SevN]` title prefix and the `severity` label, which selects 
 change with severity or title, so Grafana keeps the rule's state, silences and history. The render fails when
 `alerts.standard` is set for a language without standard alerts, and when alerts are enabled with no rule at all.
 
-`alerts.filters.excludedPaths` leaves `url.path` values out of the alerts on the service's own HTTP responses
-(`serverErrorRatio` and `clientErrorRatio` on both sides of the ratio, `serverErrorCount`, `http503Returned`), for example
-synthetic monitoring endpoints:
+`alerts.filters.excludedPaths` leaves paths out of the alerts on the service's own HTTP responses (`serverErrorRatio`
+and `clientErrorRatio` on both sides of the ratio, `serverErrorCount`, `http503Returned`): `url.path` values, or
+`http.route` values for a nodejs stack, for example synthetic monitoring endpoints:
 
 ```yaml
 alerts:
@@ -203,14 +202,15 @@ The central `GrafanaNotificationPolicy` picks the route up through its `routeSel
 | --- | --- |
 | `appstack_display_name` | `alerts.displayName` |
 | `appstack_service_name` | `alerts.serviceName` |
-| `appstack_observability_name` | `alerts.observabilityName` (only when it differs from `global.appStack`) |
 | `error_threshold` | `alerts.standard.serverErrorCount.threshold` and `alerts.standard.nonHttpErrors.threshold` |
 | `server_error_percent` | `alerts.standard.serverErrorRatio.threshold` |
 | `client_error_percent` | `alerts.standard.clientErrorRatio.threshold` |
 | `is_paused` | `alerts.paused` |
 | `provisioning/specialAlerts/<stack>/*` | `alerts.additional` (raw form where needed) and `alerts.routing.routes` |
 
-Template special cases become values: MyCarrier (`nonHttpErrors.apiServiceSuffix: API`,
-`availabilityProbe.excludedComponents` listing `quoteapi`), IntegrationEventPublisher (every standard rule
-except `nonHttpErrors` disabled), Integration (`filters.excludedPaths`), Invoice (`additional.smc3ParseErrors` with
-`uid: invoice_sev2_smc3_parse_errors`).
+Template special cases become values: MyCarrier (`nonHttpErrors.apiServiceSuffix: API`), IntegrationEventPublisher
+(every standard rule except `nonHttpErrors` disabled), Integration (`filters.excludedPaths`), Invoice
+(`additional.smc3ParseErrors` with `uid: invoice_sev2_smc3_parse_errors`).
+
+AlertManagement's `<stack>_avail_probe_fail` rules (and curant's anomaly rules) have no chart counterpart; they are
+dropped when the stack moves.

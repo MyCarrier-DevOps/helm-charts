@@ -1230,10 +1230,9 @@ infrastructure:
 ## @param alerts.enabled Render the stack's alerts
 ## @param alerts.serviceName HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled
 ## @param alerts.displayName Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled
-## @param alerts.observabilityName observability.availability Service name (default: global.appStack)
 ## @param alerts.interval Rule group evaluation interval
 ## @param alerts.paused Default isPaused for standard and compact rules (raw rules keep their own isPaused)
-## @param alerts.filters.excludedPaths [array] url.path values left out of the alerts on the service's own HTTP responses: serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned
+## @param alerts.filters.excludedPaths [array] Paths left out of the alerts on the service's own HTTP responses (serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned): url.path values, or http.route values for nodejs
 ## @param alerts.standard [object] Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1/sev2/sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists
 ## @param alerts.additional [object] Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: a Grafana AlertRule)
 ## @param alerts.contactPoints.secretName Secret holding the Squadcast webhook URLs
@@ -1246,8 +1245,6 @@ alerts:
     # serviceName: MC.Invoice
   displayName: ""
     # displayName: Invoice
-  observabilityName: ""
-    # observabilityName: invoices
   interval: 60s
     # interval: 2m
   paused: false
@@ -1266,9 +1263,6 @@ alerts:
     #   probePaths:
     #     - /liveness
     #     - /health
-    # availabilityProbe:
-    #   excludedComponents:
-    #     - quoteapi
     # nonHttpErrors:
     #   apiServiceSuffix: API
     #   paused: false

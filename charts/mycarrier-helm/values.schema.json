@@ -2439,9 +2439,6 @@
         "displayName": {
           "type": "string"
         },
-        "observabilityName": {
-          "type": "string"
-        },
         "interval": {
           "type": "string",
           "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
@@ -2715,58 +2712,6 @@
                   "type": "number"
                 },
                 "excludedHosts": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "availabilityProbe": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "severity": {
-                  "type": "string",
-                  "enum": [
-                    "sev1",
-                    "sev2",
-                    "sev3"
-                  ]
-                },
-                "for": {
-                  "type": "string",
-                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
-                },
-                "title": {
-                  "type": "string",
-                  "maxLength": 190
-                },
-                "paused": {
-                  "type": "boolean"
-                },
-                "noDataState": {
-                  "type": "string",
-                  "enum": [
-                    "Alerting",
-                    "NoData",
-                    "OK",
-                    "KeepLast"
-                  ]
-                },
-                "execErrState": {
-                  "type": "string",
-                  "enum": [
-                    "OK",
-                    "Alerting",
-                    "Error",
-                    "KeepLast"
-                  ]
-                },
-                "excludedComponents": {
                   "type": "array",
                   "items": {
                     "type": "string"

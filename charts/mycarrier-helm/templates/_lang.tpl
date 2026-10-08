@@ -281,11 +281,6 @@ http503Received:
   excludedHosts:
     - localhost
     - 127.0.0.1
-availabilityProbe:
-  enabled: true
-  severity: sev1
-  for: 1m
-  excludedComponents: []
 nonHttpErrors:
   enabled: true
   severity: sev3

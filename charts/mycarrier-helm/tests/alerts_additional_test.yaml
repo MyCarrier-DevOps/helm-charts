@@ -29,12 +29,12 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.rules
-          count: 8
+          count: 7
       - equal:
-          path: spec.rules[7].uid
+          path: spec.rules[6].uid
           value: invoice_smc3_parse_errors
       - equal:
-          path: spec.rules[7].labels
+          path: spec.rules[6].labels
           value:
             alertType: smc3_parse_errors
             severity: sev3
@@ -43,22 +43,22 @@ tests:
             confluence: https://integratedtransportationmanagement.atlassian.net/wiki/spaces/~7120202a257556b56643019e4eca311640971f/pages/4527325285/I+ve+got+an+alert+from+grafana+what+do+I+do
             hyperdx: https://hyperdx.mycarrier.tech/search
       - equal:
-          path: spec.rules[7].data[1].model.conditions[0].evaluator
+          path: spec.rules[6].data[1].model.conditions[0].evaluator
           value:
             params:
               - 1
             type: gt
       - equal:
-          path: spec.rules[7].data[1].model.conditions[0].reducer.type
+          path: spec.rules[6].data[1].model.conditions[0].reducer.type
           value: min
       - equal:
-          path: spec.rules[7].for
+          path: spec.rules[6].for
           value: 5m
       - equal:
-          path: spec.rules[7].noDataState
+          path: spec.rules[6].noDataState
           value: OK
       - equal:
-          path: spec.rules[7].annotations.description
+          path: spec.rules[6].annotations.description
           value: More than 1 smc3 document parse error.
 
   - it: renders additional rules for a language without standard alerts
@@ -90,7 +90,7 @@ tests:
             sql: SELECT 1
     asserts:
       - equal:
-          path: spec.rules[7].uid
+          path: spec.rules[6].uid
           value: invoice_sev2_smc3_parse_errors
 
   - it: passes a raw rule through without templating its Grafana expressions
@@ -113,10 +113,10 @@ tests:
                 severity: sev2
     asserts:
       - equal:
-          path: spec.rules[7].annotations.summary
+          path: spec.rules[6].annotations.summary
           value: "{{ $labels.Connector }} partner {{ $labels.PartnerId }} is retrying"
       - equal:
-          path: spec.rules[7].labels
+          path: spec.rules[6].labels
           value:
             severity: sev2
             alertSource: mycarrier-helm
@@ -140,7 +140,7 @@ tests:
                 service: mc.integration
     asserts:
       - equal:
-          path: spec.rules[7].labels.service
+          path: spec.rules[6].labels.service
           value: mc.integration
 
   - it: skips a disabled additional rule
@@ -155,7 +155,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.rules
-          count: 7
+          count: 6
 
   - it: rejects a uid longer than 40 characters
     set:
