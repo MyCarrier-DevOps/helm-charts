@@ -19,6 +19,14 @@ tests:
             enabled: true
             serviceName: MC.Carriers
             displayName: Carriers
+        documentIndex: 0
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.alerts
+          value:
+            enabled: true
+            serviceName: MC.Carriers
+            displayName: Carriers
+        documentIndex: 1
 
   - it: forwards nothing when alerts are not set
     values:
