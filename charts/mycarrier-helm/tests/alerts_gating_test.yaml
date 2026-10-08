@@ -74,3 +74,16 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "alerts.displayName is required when alerts are enabled and must match"
+
+  - it: does not take a folder (the rule group always goes to the Service Alerts folder)
+    set:
+      environment:
+        name: prod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+        folderUID: 1ca77e1c-c38b-400c-a7de-7478f3e2d127
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional properties 'folderUID' not allowed"

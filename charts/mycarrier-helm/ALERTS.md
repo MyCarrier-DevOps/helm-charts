@@ -48,7 +48,6 @@ Other settings:
 | Value | Default | Purpose |
 | --- | --- | --- |
 | `alerts.observabilityName` | `global.appStack` | `observability.availability` service the availability alert reads |
-| `alerts.folderUID` | `1ca77e1c-c38b-400c-a7de-7478f3e2d127` | Grafana folder of the rule group (cannot change once created) |
 | `alerts.interval` | `60s` | Rule group evaluation interval |
 | `alerts.paused` | `false` | `isPaused` for every standard and compact rule that does not set its own `paused`; raw rules keep their own `isPaused` |
 | `alerts.contactPoints.secretName` | `squadcast-webhooks` | Secret in `monitoring` holding the webhook URLs |

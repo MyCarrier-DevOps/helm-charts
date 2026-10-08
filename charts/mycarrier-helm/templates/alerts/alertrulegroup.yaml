@@ -12,7 +12,8 @@ metadata:
 spec:
   name: {{ printf "%s Alerts" .Values.alerts.displayName | quote }}
   interval: {{ .Values.alerts.interval }}
-  folderUID: {{ .Values.alerts.folderUID | quote }}
+  # The Service Alerts folder every stack's rules live in (AlertManagement's); immutable on the rule group.
+  folderUID: "1ca77e1c-c38b-400c-a7de-7478f3e2d127"
   instanceSelector:
     matchLabels:
       grafana-instance: grafana

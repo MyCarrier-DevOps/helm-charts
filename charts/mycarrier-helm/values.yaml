@@ -1231,7 +1231,6 @@ infrastructure:
 ## @param alerts.serviceName HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled
 ## @param alerts.displayName Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled
 ## @param alerts.observabilityName observability.availability Service name (default: global.appStack)
-## @param alerts.folderUID Grafana folder UID of the rule group (immutable once created)
 ## @param alerts.interval Rule group evaluation interval
 ## @param alerts.paused Default isPaused for standard and compact rules (raw rules keep their own isPaused)
 ## @param alerts.filters.excludedPaths [array] url.path values left out of the alerts on the service's own HTTP responses: serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned
@@ -1245,7 +1244,6 @@ alerts:
   serviceName: ""
   displayName: ""
   observabilityName: ""
-  folderUID: 1ca77e1c-c38b-400c-a7de-7478f3e2d127
   interval: 60s
   paused: false
   filters:
