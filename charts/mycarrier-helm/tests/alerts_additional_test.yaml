@@ -104,6 +104,9 @@ tests:
               condition: C
               data:
                 - refId: A
+              for: 10m
+              noDataState: OK
+              execErrState: KeepLast
               annotations:
                 summary: "{{ $labels.Connector }} partner {{ $labels.PartnerId }} is retrying"
               labels:
@@ -130,6 +133,9 @@ tests:
               condition: C
               data:
                 - refId: A
+              for: 10m
+              noDataState: OK
+              execErrState: KeepLast
               labels:
                 service: mc.integration
     asserts:
@@ -199,3 +205,20 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "alerts.additional.sustainedRetries.rule.data is required"
+
+  - it: requires for on a raw rule
+    set:
+      alerts:
+        additional:
+          sustainedRetries:
+            rule:
+              uid: integration_sustained_retries
+              title: retries
+              condition: C
+              data:
+                - refId: A
+              noDataState: OK
+              execErrState: KeepLast
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.additional.sustainedRetries.rule.for is required"

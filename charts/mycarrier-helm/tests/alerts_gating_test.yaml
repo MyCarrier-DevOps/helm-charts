@@ -22,6 +22,22 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: fails in an environment that is not listed when a compact rule lacks sql
+    set:
+      environment:
+        name: preprod
+      alerts:
+        enabled: true
+        serviceName: MC.Invoice
+        displayName: Invoice
+        additional:
+          smc3ParseErrors:
+            title: SMC3
+            severity: sev3
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.additional.smc3ParseErrors.sql is required"
+
   - it: renders the rule group in a listed environment, in the monitoring namespace
     set:
       global:

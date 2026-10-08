@@ -3,19 +3,19 @@
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaNotificationPolicyRoute
 metadata:
-  name: {{ include "helm.alerts.name" . }}
+  name: {{ include "helm.alerts.name" . | quote }}
   namespace: monitoring
   labels:
-    app.kubernetes.io/part-of: {{ .Values.global.appStack }}
+    app.kubernetes.io/part-of: {{ .Values.global.appStack | quote }}
     mycarrier.tech/notification-policy: mycarrier
 spec:
-  receiver: {{ $alerts.displayName }}
+  receiver: {{ $alerts.displayName | quote }}
   object_matchers:
     - - service
       - "="
-      - {{ lower $alerts.serviceName }}
+      - {{ lower $alerts.serviceName | quote }}
   routes:
-    - receiver: {{ $alerts.displayName }} Sev1
+    - receiver: {{ printf "%s Sev1" $alerts.displayName | quote }}
       object_matchers:
         - - severity
           - "="
