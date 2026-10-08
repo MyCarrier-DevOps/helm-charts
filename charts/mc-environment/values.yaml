@@ -21,6 +21,10 @@ global:
     loadsure: false
     chargify: false
 
+# Alert values forwarded to every environment's mycarrier-helm Application as Values.alerts
+# (see mycarrier-helm ALERTS.md).
+alerts: {}
+
 environments: []
   # - name: dev
   #   applications: {}
