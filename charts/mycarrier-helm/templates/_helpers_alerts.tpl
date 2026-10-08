@@ -1,6 +1,8 @@
 {{/*
 Alert helpers. Alerts render only when alerts.enabled is true and environment.name is listed in
-alerts.environments; every alert resource lives under templates/alerts/ so GitOps consumers can split them by path.
+alerts.environments, but are validated in every environment while alerts.enabled is true, so a values mistake fails
+the first environment's render rather than prod's. Every alert resource lives under templates/alerts/ so GitOps
+consumers can split them by path.
 */}}
 
 {{/* helm.alerts.enabled: "true" when the alert templates render. */}}
@@ -27,8 +29,9 @@ true
 
 {{/*
 helm.alerts.validate fails the render, naming the field, for what values.schema.json cannot express: required
-fields when alerts are enabled and the shape of additional rules. The schema enforces the standard keys and
-severities. Only alertrulegroup.yaml calls it; the three alert templates always render together.
+fields when alerts are enabled, the shape of additional rules and the rule checks of helm.alerts.rules. The schema
+enforces the standard keys and severities. Only alertrulegroup.yaml calls it, in every environment while
+alerts.enabled is true; the three alert templates always render together.
 */}}
 {{- define "helm.alerts.validate" -}}
 {{- $alerts := .Values.alerts -}}
@@ -57,6 +60,7 @@ severities. Only alertrulegroup.yaml calls it; the three alert templates always 
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- $_ := include "helm.alerts.rules" . -}}
 {{- end -}}
 
 {{/*

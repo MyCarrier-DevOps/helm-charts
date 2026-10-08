@@ -1,5 +1,6 @@
-{{- if eq (include "helm.alerts.enabled" .) "true" }}
+{{- if (.Values.alerts | default dict).enabled }}
 {{- include "helm.alerts.validate" . }}
+{{- if eq (include "helm.alerts.enabled" .) "true" }}
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaAlertRuleGroup
 metadata:
@@ -18,4 +19,5 @@ spec:
       grafana-instance: grafana
   rules:
     {{- include "helm.alerts.rules" . | fromJsonArray | toYaml | nindent 4 }}
+{{- end }}
 {{- end }}

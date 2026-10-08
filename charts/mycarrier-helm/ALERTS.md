@@ -17,7 +17,8 @@ Application clusters never apply them: the app-cluster Applications exclude `*/a
 mc-environment's ApplicationSet generates (which render this chart from the Helm repository and so do render the
 alerts) run on an Argo CD that excludes the `grafana.integreatly.org` group. The management cluster applies only
 `*/alerts/*`. Alerts render only in the environments listed in `alerts.environments` (default `prod`): the queries
-read production telemetry, and resource names do not include the environment.
+read production telemetry, and resource names do not include the environment. While `alerts.enabled` is true, the
+values are validated in every environment, so a mistake fails the first environment's render rather than prod's.
 
 ## Enabling alerts for a stack
 
