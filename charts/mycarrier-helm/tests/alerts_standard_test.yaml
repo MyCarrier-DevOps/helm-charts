@@ -146,6 +146,20 @@ tests:
           path: spec.rules[1].isPaused
           value: true
 
+  - it: applies a zero threshold override
+    set:
+      alerts:
+        standard:
+          serverErrorCount:
+            threshold: 0
+    asserts:
+      - equal:
+          path: spec.rules[2].title
+          value: "[Sev3] Invoice HTTP Errors > 0 in 5m"
+      - equal:
+          path: spec.rules[2].data[1].model.conditions[0].evaluator.params[0]
+          value: 0
+
   - it: leaves excluded paths out of every HTTP rule (AlertManagement PR #52)
     set:
       alerts:
