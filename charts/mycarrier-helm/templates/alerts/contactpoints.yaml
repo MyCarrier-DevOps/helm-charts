@@ -6,12 +6,12 @@
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaContactPoint
 metadata:
-  name: {{ include "helm.alerts.name" $ }}{{ $receiver.suffix }}
+  name: {{ printf "%s%s" (include "helm.alerts.name" $) $receiver.suffix | quote }}
   namespace: monitoring
   labels:
-    app.kubernetes.io/part-of: {{ $.Values.global.appStack }}
+    app.kubernetes.io/part-of: {{ $.Values.global.appStack | quote }}
 spec:
-  name: {{ $receiver.name }}
+  name: {{ $receiver.name | quote }}
   instanceSelector:
     matchLabels:
       grafana-instance: grafana
@@ -23,7 +23,7 @@ spec:
         - targetPath: url
           valueFrom:
             secretKeyRef:
-              name: {{ $alerts.contactPoints.secretName }}
-              key: {{ $receiver.key }}
+              name: {{ $alerts.contactPoints.secretName | quote }}
+              key: {{ $receiver.key | quote }}
 {{- end }}
 {{- end }}

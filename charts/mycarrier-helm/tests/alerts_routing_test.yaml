@@ -129,3 +129,36 @@ tests:
             - grafana_folder
             - alertname
             - PartnerId
+
+  - it: keeps names and the folder uid strings when they look like numbers
+    templates:
+      - templates/alerts/alertrulegroup.yaml
+      - templates/alerts/contactpoints.yaml
+      - templates/alerts/notificationpolicyroute.yaml
+    set:
+      alerts:
+        displayName: "123"
+        folderUID: "1234"
+    asserts:
+      - equal:
+          path: spec.folderUID
+          value: "1234"
+        template: templates/alerts/alertrulegroup.yaml
+      - equal:
+          path: metadata.name
+          value: "123"
+        template: templates/alerts/contactpoints.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.name
+          value: "123"
+        template: templates/alerts/contactpoints.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "123"
+        template: templates/alerts/notificationpolicyroute.yaml
+      - equal:
+          path: spec.receiver
+          value: "123"
+        template: templates/alerts/notificationpolicyroute.yaml
