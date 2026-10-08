@@ -67,8 +67,9 @@ Other settings:
 Other languages (`python`, `go`) have no standard alerts; use `alerts.additional`.
 
 A nodejs stack's HTTP and log queries are curant's: they select requests by route (`http.route`) and match
-`ServiceName` case-insensitively (`ILIKE`). There is no availability-probe alert: the probe query does not work for any
-service yet.
+`ServiceName` case-insensitively (`ILIKE`).
+
+The chart has no availability alert for any language: availability alerts come from Hyperping.
 
 `alerts.standard.<key>` overrides the language's defaults for that alert: `enabled`, `severity` (`sev1`, `sev2`,
 `sev3`), `threshold`, `for`, `title`, `paused`, `noDataState`, `execErrState`, and the alert's own `probePaths`,
@@ -213,4 +214,4 @@ Template special cases become values: MyCarrier (`nonHttpErrors.apiServiceSuffix
 (`additional.smc3ParseErrors` with `uid: invoice_sev2_smc3_parse_errors`).
 
 AlertManagement's `<stack>_avail_probe_fail` rules (and curant's anomaly rules) have no chart counterpart; they are
-dropped when the stack moves.
+dropped when the stack moves. Availability alerts come from Hyperping.
