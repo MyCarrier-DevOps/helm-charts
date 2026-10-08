@@ -2453,7 +2453,7 @@
         },
         "interval": {
           "type": "string",
-          "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
         },
         "paused": {
           "type": "boolean"
@@ -2494,16 +2494,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "threshold": {
                   "type": "number"
@@ -2530,16 +2543,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "threshold": {
                   "type": "number"
@@ -2566,16 +2592,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "threshold": {
                   "type": "number"
@@ -2602,16 +2641,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "threshold": {
                   "type": "number"
@@ -2644,16 +2696,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "threshold": {
                   "type": "number"
@@ -2686,16 +2751,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "excludedComponents": {
                   "type": "array",
@@ -2725,16 +2803,29 @@
                   "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
                 },
                 "title": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 190
                 },
                 "paused": {
                   "type": "boolean"
                 },
                 "noDataState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
                 },
                 "execErrState": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
                 },
                 "threshold": {
                   "type": "number"
@@ -2749,7 +2840,40 @@
         "additional": {
           "type": "object",
           "additionalProperties": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 190
+              },
+              "noDataState": {
+                "type": "string",
+                "enum": [
+                  "Alerting",
+                  "NoData",
+                  "OK",
+                  "KeepLast"
+                ]
+              },
+              "execErrState": {
+                "type": "string",
+                "enum": [
+                  "OK",
+                  "Alerting",
+                  "Error",
+                  "KeepLast"
+                ]
+              },
+              "rule": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 190
+                  }
+                }
+              }
+            }
           }
         },
         "contactPoints": {
