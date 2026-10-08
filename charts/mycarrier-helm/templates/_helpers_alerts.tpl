@@ -44,7 +44,7 @@ alerts.enabled is true; the three alert templates always render together.
 {{- $severities := list "sev1" "sev2" "sev3" -}}
 {{- range $key, $rule := ($alerts.additional | default dict) -}}
 {{- if hasKey $rule "rule" -}}
-{{- range $field := list "uid" "title" "condition" "data" -}}
+{{- range $field := list "uid" "title" "condition" "data" "for" "noDataState" "execErrState" -}}
 {{- if not (hasKey $rule.rule $field) -}}
 {{- fail (printf "alerts.additional.%s.rule.%s is required" $key $field) -}}
 {{- end -}}

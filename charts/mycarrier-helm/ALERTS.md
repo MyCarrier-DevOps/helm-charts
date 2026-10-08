@@ -129,9 +129,10 @@ Defaults: `uid` `<displayName lowercased>_<key in snake_case>`, `alertType` `<ke
 (seconds), `condition.type` `gt`, `condition.reducer` `last`, `for` `5m`, `noDataState` `OK`, `execErrState`
 `KeepLast`, `paused` `alerts.paused`. `labels` and `annotations` merge over the defaults.
 
-The raw form passes a Grafana `AlertRule` through unchanged (`uid`, `title`, `condition` and `data` are required);
-the chart adds `alertSource` and, when absent, `service`. Grafana templating such as `{{ $labels.PartnerId }}` is
-never evaluated by Helm:
+The raw form passes a Grafana `AlertRule` through unchanged; `uid`, `title`, `condition`, `data`, `for`,
+`noDataState` and `execErrState` are required, as the `GrafanaAlertRuleGroup` CRD requires them. The chart adds
+`alertSource` and, when absent, `service`. Grafana templating such as `{{ $labels.PartnerId }}` is never evaluated by
+Helm:
 
 ```yaml
 alerts:
@@ -150,6 +151,17 @@ alerts:
             model:
               refId: A
               rawSql: SELECT ...
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
         for: 10m
         noDataState: OK
         execErrState: KeepLast
