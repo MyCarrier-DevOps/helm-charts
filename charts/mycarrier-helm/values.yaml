@@ -1241,20 +1241,100 @@ infrastructure:
 ## @param alerts.routing.routes [array] Extra child routes under the stack's notification route, after the Sev1 route
 alerts:
   enabled: false
+    # enabled: true   # in the prod values file only (helm/values.prod.yaml): resource names carry no environment
   serviceName: ""
+    # serviceName: MC.Invoice
   displayName: ""
+    # displayName: Invoice
   observabilityName: ""
+    # observabilityName: invoices
   interval: 60s
+    # interval: 2m
   paused: false
+    # paused: true
   filters:
     excludedPaths: []
+      # - /api/v1/customer-health
   standard: {}
+    # serverErrorRatio:
+    #   threshold: 10
+    # clientErrorRatio:
+    #   severity: sev3
+    #   for: 10m
+    # http503Returned:
+    #   enabled: true
+    #   probePaths:
+    #     - /liveness
+    #     - /health
+    # availabilityProbe:
+    #   excludedComponents:
+    #     - quoteapi
+    # nonHttpErrors:
+    #   apiServiceSuffix: API
+    #   paused: false
+    #   title: "[Sev3] Invoice worker errors"
   additional: {}
+    # smc3ParseErrors:   # compact form: the chart builds the rule around the query
+    #   title: "[Sev3] MC.Invoice.InboundIntegration.Worker SMC3 Parse Errors"
+    #   severity: sev3
+    #   sql: |
+    #     SELECT COUNT(1)
+    #     FROM hyperdx.prod_otel_logs
+    #     WHERE ServiceName = 'MC.Invoice.InboundIntegration.Worker'
+    #       AND SeverityText = 'Error'
+    #       AND Timestamp > now() - INTERVAL 1 MINUTE
+    #   condition:
+    #     threshold: 1
+    #     reducer: min
+    #   for: 0m
+    #   annotations:
+    #     description: More than 1 SMC3 document parse error in the last minute.
+    # sustainedRetries:   # raw form: a Grafana AlertRule passed through unchanged
+    #   rule:
+    #     uid: invoice_sustained_retries
+    #     title: "[Sev2] Invoice Sustained Retries"
+    #     condition: C
+    #     data:
+    #       - refId: A
+    #         datasourceUid: clickhouse
+    #         relativeTimeRange:
+    #           from: 3600
+    #           to: 0
+    #         model:
+    #           refId: A
+    #           rawSql: SELECT ...
+    #       - refId: C
+    #         datasourceUid: __expr__
+    #         model:
+    #           refId: C
+    #           type: threshold
+    #           expression: A
+    #           conditions:
+    #             - evaluator:
+    #                 type: gt
+    #                 params:
+    #                   - 0
+    #     for: 10m
+    #     noDataState: OK
+    #     execErrState: KeepLast
+    #     labels:
+    #       alertType: sustained_retries
+    #       severity: sev2
   contactPoints:
     secretName: squadcast-webhooks
+      # secretName: team-webhooks
     secretKey: ""
+      # secretKey: mc.invoice   # the Sev1 contact point uses mc.invoice-sev1
   routing:
     routes: []
+      # - receiver: Integration
+      #   object_matchers:
+      #     - - alertType
+      #       - "="
+      #       - sustained_retries
+      #   group_by:
+      #     - grafana_folder
+      #     - alertname
 
 # ============================================================================
 # DEPLOYMENT SETTINGS
