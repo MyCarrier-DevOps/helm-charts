@@ -53,6 +53,12 @@
                   "minimum": 1,
                   "default": 600,
                   "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true)."
+                },
+                "bakeMinutes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 30,
+                  "description": "alert-gate's watch window after promotion, in minutes (Tech Spec D18), carried through the release into the alert.gate event (DEVOPS-319). Services with a known slow-burn history set a longer window. The chart renders nothing from it."
                 }
               }
             }

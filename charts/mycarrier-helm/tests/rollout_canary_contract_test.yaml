@@ -1082,3 +1082,62 @@ tests:
       - equal:
           path: spec.progressDeadlineSeconds
           value: 1800
+
+  # Tech Spec chart contract: "strategy.canary defaults: dynamicStableScale false, abortScaleDownDelaySeconds 30,
+  # minPodsPerReplicaSet 1".
+  - it: renders the Tech Spec's canary defaults on a canary Rollout
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.dynamicStableScale
+          value: false
+      - equal:
+          path: spec.strategy.canary.abortScaleDownDelaySeconds
+          value: 30
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 1
+
+  # D18: bakeMinutes is accepted release-wide and read by the release; the Rollout is unaffected.
+  - it: accepts global.strategy.canary.bakeMinutes
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            bakeMinutes: 60
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            setWeight: 10
