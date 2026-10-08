@@ -50,7 +50,7 @@ Other settings:
 | `alerts.observabilityName` | `global.appStack` | `observability.availability` service the availability alert reads |
 | `alerts.folderUID` | `1ca77e1c-c38b-400c-a7de-7478f3e2d127` | Grafana folder of the rule group (cannot change once created) |
 | `alerts.interval` | `60s` | Rule group evaluation interval |
-| `alerts.paused` | `false` | `isPaused` for every rule that does not set its own `paused` |
+| `alerts.paused` | `false` | `isPaused` for every standard and compact rule that does not set its own `paused`; raw rules keep their own `isPaused` |
 | `alerts.contactPoints.secretName` | `squadcast-webhooks` | Secret in `monitoring` holding the webhook URLs |
 | `alerts.contactPoints.secretKey` | `serviceName` lowercased | Key of the general webhook; the Sev1 contact point uses `<secretKey>-sev1` |
 | `alerts.additional.<key>.enabled` | `true` | `false` leaves that additional rule out |
@@ -64,8 +64,8 @@ Other settings:
 | `serverErrorRatio` | `[Sev1] <displayName> Server HTTP Errors > 30% in 5m` | 5xx responses exceed `threshold` percent of non-error responses | on | on |
 | `clientErrorRatio` | `[Sev2] <displayName> Client HTTP Errors > 30% in 5m` | 4xx responses exceed `threshold` percent of non-error responses | on | on |
 | `serverErrorCount` | `[Sev3] <displayName> HTTP Errors > 5 in 5m` | more than `threshold` 5xx responses | on | on |
-| `http503Returned` | `[Sev1] <displayName> HTTP 503 Service Unavailable in 5m` | the service returned a 503 outside `probePaths` | on | off |
-| `http503Received` | `[Sev2] <displayName> Dependency HTTP 503 in 5m` | the service received a 503 from a dependency outside `excludedHosts` | on | off |
+| `http503Returned` | `[Sev1] <displayName> HTTP 503 Service Unavailable in 5m` | the service returned more than `threshold` 503s outside `probePaths` (default threshold 0: any 503) | on | off |
+| `http503Received` | `[Sev2] <displayName> Dependency HTTP 503 in 5m` | the service received more than `threshold` 503s from dependencies outside `excludedHosts` (default threshold 0: any 503) | on | off |
 | `availabilityProbe` | `[Sev1] <displayName> Availability Probe Failure` | an availability probe reports state 0 | on | on |
 | `nonHttpErrors` | `[Sev3] <displayName> Non HTTP Errors > 5 in 5m` | more than `threshold` error log lines outside the `apiServiceSuffix` service (default `Api`) | on | on, paused |
 
