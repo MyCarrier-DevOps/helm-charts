@@ -1228,7 +1228,6 @@ infrastructure:
 ## templates/alerts/ only: application clusters exclude */alerts/*, the management cluster applies them.
 
 ## @param alerts.enabled Render the stack's alerts
-## @param alerts.environments [array] Environment names (environment.name) the alerts render in (default: prod)
 ## @param alerts.serviceName HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled
 ## @param alerts.displayName Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled
 ## @param alerts.observabilityName observability.availability Service name (default: global.appStack)
@@ -1243,8 +1242,6 @@ infrastructure:
 ## @param alerts.routing.routes [array] Extra child routes under the stack's notification route, after the Sev1 route
 alerts:
   enabled: false
-  environments:
-    - prod
   serviceName: ""
   displayName: ""
   observabilityName: ""

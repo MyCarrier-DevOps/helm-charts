@@ -16,9 +16,9 @@ Every alert resource lives under `templates/alerts/` and is rendered into namesp
 Application clusters never apply them: the app-cluster Applications exclude `*/alerts/*`, and the Applications that
 mc-environment's ApplicationSet generates (which render this chart from the Helm repository and so do render the
 alerts) run on an Argo CD that excludes the `grafana.integreatly.org` group. The management cluster applies only
-`*/alerts/*`. Alerts render only in the environments listed in `alerts.environments` (default `prod`): the queries
-read production telemetry, and resource names do not include the environment. While `alerts.enabled` is true, the
-values are validated in every environment, so a mistake fails the first environment's render rather than prod's.
+`*/alerts/*`. Alerts render wherever `alerts.enabled` is true, so enable them in the values file of the environment
+they belong to, normally prod: the queries read production telemetry, and resource names do not include the
+environment.
 
 ## Enabling alerts for a stack
 
@@ -35,8 +35,9 @@ alerts:
 - `observabilityName` is the `observability.availability` service the availability rule reads; it defaults to
   `global.appStack`.
 
-`alerts:` belongs to the stack, next to `secrets:`: set it once in `helm/values.yaml` (an mc-environment stack sets
-it at the top level and every environment's Application receives it).
+`alerts:` belongs to the stack, next to `secrets:`. Put the shared settings (`serviceName`, `displayName`, overrides,
+additional rules) in `helm/values.yaml` and `enabled: true` in the prod values file (`helm/values.prod.yaml`); an
+mc-environment stack does the same at the top level of its values files.
 
 The Squadcast webhooks must exist in Vault under the keys `<serviceName lowercased>` and
 `<serviceName lowercased>-sev1` (the `squadcast-webhooks` secret in `monitoring`), or set
@@ -46,7 +47,6 @@ Other settings:
 
 | Value | Default | Purpose |
 | --- | --- | --- |
-| `alerts.environments` | `prod` | Environments (`environment.name`) the alerts render in |
 | `alerts.observabilityName` | `global.appStack` | `observability.availability` service the availability alert reads |
 | `alerts.folderUID` | `1ca77e1c-c38b-400c-a7de-7478f3e2d127` | Grafana folder of the rule group (cannot change once created) |
 | `alerts.interval` | `60s` | Rule group evaluation interval |

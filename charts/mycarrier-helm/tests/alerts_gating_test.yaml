@@ -10,7 +10,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders nothing in an environment that is not listed
+  - it: renders in whichever environment enables alerts (per-environment values file)
     set:
       environment:
         name: preprod
@@ -20,25 +20,9 @@ tests:
         displayName: Invoice
     asserts:
       - hasDocuments:
-          count: 0
+          count: 1
 
-  - it: fails in an environment that is not listed when a compact rule lacks sql
-    set:
-      environment:
-        name: preprod
-      alerts:
-        enabled: true
-        serviceName: MC.Invoice
-        displayName: Invoice
-        additional:
-          smc3ParseErrors:
-            title: SMC3
-            severity: sev3
-    asserts:
-      - failedTemplate:
-          errorPattern: "alerts.additional.smc3ParseErrors.sql is required"
-
-  - it: renders the rule group in a listed environment, in the monitoring namespace
+  - it: renders the rule group in the monitoring namespace
     set:
       global:
         appStack: invoice
@@ -62,20 +46,6 @@ tests:
         name: prod
       alerts:
         enabled: true
-        serviceName: MC.Invoice
-        displayName: Invoice
-    asserts:
-      - hasDocuments:
-          count: 1
-
-  - it: renders in any environment listed in alerts.environments
-    set:
-      environment:
-        name: preprod
-      alerts:
-        enabled: true
-        environments:
-          - preprod
         serviceName: MC.Invoice
         displayName: Invoice
     asserts:

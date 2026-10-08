@@ -52,8 +52,8 @@ Apply the chart with your preferred Helm workflow and Argo CD will manage one `m
 
 ## Alerts
 
-`alerts:` is forwarded unchanged into every generated Application's values, so each environment renders
-mycarrier-helm's alerts from the same settings (see mycarrier-helm `ALERTS.md`). The Applications run on the
+`alerts:` is forwarded unchanged into every generated Application's values (see mycarrier-helm `ALERTS.md`). Like
+any other per-environment setting, enable it (`alerts.enabled: true`) only in the prod values file. The Applications run on the
 application cluster's Argo CD, which excludes the `grafana.integreatly.org` group; the pipeline's render step
 (chart-renderer) writes the same alerts into the environment's GitOps directory for the management cluster.
 

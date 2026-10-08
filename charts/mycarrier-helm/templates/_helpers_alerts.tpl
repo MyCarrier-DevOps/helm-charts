@@ -1,14 +1,13 @@
 {{/*
-Alert helpers. Alerts render only when alerts.enabled is true and environment.name is listed in
-alerts.environments, but are validated in every environment while alerts.enabled is true, so a values mistake fails
-the first environment's render rather than prod's. Every alert resource lives under templates/alerts/ so GitOps
-consumers can split them by path.
+Alert helpers. Alerts render when alerts.enabled is true; a stack enables them in the values file of the environment
+they belong to (normally prod), like any other per-environment setting. Every alert resource lives under
+templates/alerts/ so GitOps consumers can split them by path.
 */}}
 
 {{/* helm.alerts.enabled: "true" when the alert templates render. */}}
 {{- define "helm.alerts.enabled" -}}
 {{- $alerts := .Values.alerts | default dict -}}
-{{- if and $alerts.enabled (has .Values.environment.name ($alerts.environments | default list)) -}}
+{{- if $alerts.enabled -}}
 true
 {{- end -}}
 {{- end -}}

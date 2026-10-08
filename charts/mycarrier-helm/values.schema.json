@@ -2433,12 +2433,6 @@
           "type": "boolean",
           "default": false
         },
-        "environments": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
         "serviceName": {
           "type": "string"
         },
