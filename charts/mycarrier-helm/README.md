@@ -63,8 +63,9 @@ app that rendered on 4.4.0 can fail on 4.5.0, which blocks the whole release, un
 ## Upgrading to 4.6.0 (Rollouts only)
 
 4.6.0 adds `global.strategy.canary.coordinator` (off by default) for release-wide lockstep through the
-`mycarrier/canary-coordinator` step plugin. With it off, renders are unchanged. One Rollout app that rendered on 4.5.0
-fails on 4.6.0:
+`mycarrier/canary-coordinator` step plugin. With it off, renders are unchanged. Turning it on requires
+`global.correlationId` (deploy-core sets it): the plugin groups a release's Rollouts by that label. One Rollout app that
+rendered on 4.5.0 fails on 4.6.0:
 
 | 4.5.0 values | 4.6.0 edit |
 |---|---|
