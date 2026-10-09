@@ -1,0 +1,22 @@
+{{- if eq (include "helm.alerts.enabled" .) "true" }}
+{{- include "helm.alerts.validate" . }}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaAlertRuleGroup
+metadata:
+  name: {{ printf "%s-alerts" (include "helm.alerts.name" .) | quote }}
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: {{ .Values.global.appStack | quote }}
+  annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  name: {{ printf "%s Alerts" .Values.alerts.displayName | quote }}
+  interval: {{ .Values.alerts.interval }}
+  # The Service Alerts folder every stack's rules live in (AlertManagement's); immutable on the rule group.
+  folderUID: "1ca77e1c-c38b-400c-a7de-7478f3e2d127"
+  instanceSelector:
+    matchLabels:
+      grafana-instance: grafana
+  rules:
+    {{- include "helm.alerts.rules" . | fromJsonArray | toYaml | nindent 4 }}
+{{- end }}
