@@ -35,6 +35,15 @@
 {{- if and $canary (or (not (dig "networking" "istio" "enabled" true $appValues)) (dig "istioDisabled" false $appValues) (dig "service" "istioDisabled" false $appValues)) }}
 {{- fail (printf "application '%s': a Rollout needs the chart's Istio VirtualService for its canary weights; networking.istio.enabled, istioDisabled and service.istioDisabled must leave Istio on." $appName) }}
 {{- end }}
+{{- /* Argo Rollouts adds a managed route (the dark stage's canary-header) to every VirtualService the Rollout lists,
+       ahead of their other routes, and it matches only the header. In the shared <primary>-multifrontend VirtualService
+       it would send every path to this app's canary, and two frontend Rollouts would overwrite each other's route. */ -}}
+{{- if $canary }}
+{{- $virtualServices := include "helm.canary.virtualServices" $appContext | fromYamlArray }}
+{{- if and (gt (len $virtualServices) 1) (include "helm.canary.managedRoutes" $appContext | fromJsonArray) }}
+{{- fail (printf "application '%s': the dark stage's header route would also go into the shared %s VirtualService, where it matches every path. Set global.strategy.canary.dark: false for a multi-frontend release." $appName (index $virtualServices 1).name) }}
+{{- end }}
+{{- end }}
 {{- /* Canary settings are release-wide, so every Rollout of a release runs the same steps (DEVOPS-311, D20). */ -}}
 {{- if and (kindIs "map" $appValues.updateStrategy) (hasKey $appValues.updateStrategy "canary") }}
 {{- fail (printf "application '%s': updateStrategy.canary is no longer supported; canary settings are release-wide in global.strategy.canary (preset, steps, analysis)." $appName) }}

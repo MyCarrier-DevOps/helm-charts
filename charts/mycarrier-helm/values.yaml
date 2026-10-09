@@ -49,6 +49,8 @@ global:
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
   #                               # progressDeadlineSeconds overrides it for one slow-starting app.
+  #     dark: true                # header-gated dark stage before the weights (D11); renders only with the coordinator
+  #     darkReplicas: 1           # canary pods during the dark stage
   #     bakeMinutes: 30           # alert-gate's watch window after promotion (D18); set it longer for a service with
   #                               # a known slow-burn history. Read by the release (DEVOPS-319), not rendered.
   #     coordinator:              # release-wide lockstep (DEVOPS-325's mycarrier/canary-coordinator step plugin, D20);
@@ -56,6 +58,9 @@ global:
   #       barrierTimeouts: {start: 10m, dark-ready: 10m, dark-passed: 30m, w10: 15m, w25: 15m, w50: 15m}
   #   With the coordinator on, a preset starts with a start barrier (it arms the plugin's Abort hook) and gets a
   #   w<weight> barrier after each weight; an explicit steps list renders verbatim and carries its own barriers.
+  #   With dark on, the start barrier is followed by the dark stage: canary pods at weight 0 behind a canary-header
+  #   route matched on X-MyCarrier-Canary: <global.correlationId>, the dark-ready barrier, the leader's tests-dark
+  #   suite (first Rollout app in sort order, with analysis.enabled), the dark-passed barrier, then the route goes.
   #   Until the coordinator (DEVOPS-325) is on, each Rollout of a release runs its own steps: one can be at 50% while
   #   another is at 10%, or abort while another promotes. Don't enable canary for a prod release with more than one
   #   Rollout until then. mycarrier.tech/rolloutGroupSize on each Rollout is the number the coordinator waits for.
