@@ -59,6 +59,24 @@
                   "minimum": 1,
                   "default": 30,
                   "description": "alert-gate's watch window after promotion, in minutes (Tech Spec D18), carried through the release into the alert.gate event (DEVOPS-319). Services with a known slow-burn history set a longer window. The chart renders nothing from it."
+                },
+                "coordinator": {
+                  "type": "object",
+                  "description": "Release-wide lockstep through DEVOPS-325's mycarrier/canary-coordinator step plugin (Tech Spec D20). The controller rejects steps for a plugin that is not installed, so keep it off until the plugin is on the cluster.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Give a preset a start barrier before the ladder (it arms the plugin's Abort hook) and a w<weight> barrier after each weight. An explicit steps list renders verbatim and carries its own barriers."
+                    },
+                    "barrierTimeouts": {
+                      "type": "object",
+                      "description": "Timeout per barrier name; a barrier that times out aborts the Rollout and, through the plugin, its siblings.",
+                      "additionalProperties": { "type": "string", "pattern": "^[0-9]+(s|m|h)$" },
+                      "default": { "start": "10m", "dark-ready": "10m", "dark-passed": "30m", "w10": "15m", "w25": "15m", "w50": "15m" }
+                    }
+                  }
                 }
               }
             }
@@ -205,6 +223,14 @@
     "applications": {
       "type": "object",
       "patternProperties": {
+        "migration": {
+          "description": "A migrator runs to completion and exits, so it belongs in jobs with timing: pre-deploy, never in a canary Rollout (DEVOPS-311, A2).",
+          "properties": {
+            "deploymentType": {
+              "description": "An application whose name contains 'migration' cannot be deploymentType rollout (rollout.yaml refuses it); render the migrator through jobs with timing: pre-deploy."
+            }
+          }
+        },
         "^[a-z0-9_-]+$": {
           "type": "object",
           "required": ["image"],
