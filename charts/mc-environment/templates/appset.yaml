@@ -46,6 +46,10 @@ spec:
                 {{ with $env.infrastructure }}infrastructure:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
+                {{- with $.Values.alerts }}
+                alerts:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
                 {{ with $env.extraObjects }}extraObjects:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}

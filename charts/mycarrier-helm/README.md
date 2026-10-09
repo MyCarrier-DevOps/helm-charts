@@ -63,8 +63,9 @@ app that rendered on 4.4.0 can fail on 4.5.0, which blocks the whole release, un
 ## Upgrading to 4.6.0 (Rollouts only)
 
 4.6.0 adds `global.strategy.canary.coordinator` (off by default) for release-wide lockstep through the
-`mycarrier/canary-coordinator` step plugin. With it off, renders are unchanged. One Rollout app that rendered on 4.5.0
-fails on 4.6.0:
+`mycarrier/canary-coordinator` step plugin. With it off, renders are unchanged. Turning it on requires
+`global.correlationId` (deploy-core sets it): the plugin groups a release's Rollouts by that label. One Rollout app that
+rendered on 4.5.0 fails on 4.6.0:
 
 | 4.5.0 values | 4.6.0 edit |
 |---|---|
@@ -1446,6 +1447,7 @@ When contributing to this chart, please follow the coding standards defined in t
 | `global.gitbranch`                    | Name of the git branch (used for feature branches)                                                              | `""`          |
 | `global.branchlabel`                  | Label for the branch, used for reference label                                                                  | `""`          |
 | `global.language`                     | Default programming language for applications (can be overridden at application level)                          | `csharp`      |
+| `global.disableLanguageSecrets`       | Do not inject the language's default secrets and environment variables (the stack supplies its own)             | `false`       |
 | `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)                                | `false`       |
 | `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                                                   | `""`          |
 | `global.correlationId`                | Correlation ID for tracking deployments across systems                                                          | `""`          |
@@ -1525,6 +1527,22 @@ When contributing to this chart, please follow the coding standards defined in t
 | `infrastructure.azure.storage`                    | Azure Storage configuration                                            |       |
 | `infrastructure.azure.storage.accounts`           | Azure storage account configurations                                   | `[]`  |
 | `infrastructure.azure.servicebus`                 | Azure Service Bus namespace configurations                             | `[]`  |
+
+### Alerts
+
+| Name                              | Description                                                                                                                                                                                                                            | Value                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `alerts.enabled`                  | Render the stack's alerts                                                                                                                                                                                                              | `false`                                |
+| `alerts.serviceName`              | HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled                                                                                                                                                  | `""`                                   |
+| `alerts.displayName`              | Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled                                                                                                                                    | `""`                                   |
+| `alerts.interval`                 | Rule group evaluation interval                                                                                                                                                                                                         | `60s`                                  |
+| `alerts.paused`                   | Default isPaused for standard and compact rules (raw rules keep their own isPaused)                                                                                                                                                    | `false`                                |
+| `alerts.filters.excludedPaths`    | Paths left out of the alerts on the service's own HTTP responses (serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned): url.path values, or http.route values for nodejs                                             | `[]`                                   |
+| `alerts.standard`                 | Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1/sev2/sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists | `{}`                                   |
+| `alerts.additional`               | Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: a Grafana AlertRule)                                                                                                                                 | `{}`                                   |
+| `alerts.contactPoints.secretName` | Secret holding the Squadcast webhook URLs                                                                                                                                                                                              | `squadcast-webhooks`                   |
+| `alerts.contactPoints.secretKey`  | Secret key of the general webhook (default: serviceName lowercased); the Sev1 contact point uses this key plus -sev1                                                                                                                   | `""`                                   |
+| `alerts.routing.routes`           | Extra child routes under the stack's notification route, after the Sev1 route                                                                                                                                                          | `[]`                                   |
 
 ### Deployment Settings
 

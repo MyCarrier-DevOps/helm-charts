@@ -36,6 +36,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             dark: false
@@ -84,6 +85,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             preset: fast
@@ -126,6 +128,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             preset: manual
@@ -162,6 +165,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             preset: fast
@@ -195,6 +199,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             steps:
@@ -231,6 +236,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             dark: false
@@ -296,3 +302,28 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'db-migration': an application whose name contains 'migration' cannot be deploymentType rollout"
+
+  # The canary-coordinator finds a release's Rollouts by the mycarrier.tech/correlationId label (Tech Spec D20).
+  - it: requires global.correlationId when the coordinator is enabled
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.correlationId is required when the coordinator is enabled"

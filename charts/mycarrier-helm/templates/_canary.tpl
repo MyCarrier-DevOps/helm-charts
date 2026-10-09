@@ -46,6 +46,9 @@
 {{- define "helm.canary.steps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $coordinator := $cfg.coordinator -}}
+{{- if and $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
+  {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
+{{- end -}}
 {{- $fullName := include "helm.fullname" . -}}
 {{- $steps := list -}}
 {{- if $cfg.steps }}
