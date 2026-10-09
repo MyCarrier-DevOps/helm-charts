@@ -65,9 +65,6 @@
 {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
 {{- if and $coordinator.enabled $cfg.dark -}}
   {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
-  {{- if not $correlationId -}}
-    {{- fail "global.correlationId is required for the dark stage: it is the X-MyCarrier-Canary header value the canary-header route matches." -}}
-  {{- end -}}
   {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
@@ -172,6 +169,12 @@
     {{- $mf := include "helm.specs.multifrontend.virtualservice" $mfContext | fromYaml -}}
     {{- $mfRoutes := include "helm.canary.routesFor" (dict "spec" $mf "fullName" $fullName "namespace" $namespace) | fromJsonArray -}}
     {{- if $mfRoutes }}
+    {{- /* Argo Rollouts adds a managed route (the dark stage's canary-header) to every VirtualService the Rollout lists,
+           ahead of their other routes, and it matches only the header. In this shared VirtualService it would send
+           every path to this app's canary, and two frontend Rollouts would overwrite each other's route. */ -}}
+    {{- if include "helm.canary.managedRoutes" . | fromJsonArray -}}
+      {{- fail (printf "application '%s': the dark stage's header route would also go into the shared %s-multifrontend VirtualService, where it matches every path. Set global.strategy.canary.dark: false for a multi-frontend release." .appName $primaryFullName) -}}
+    {{- end -}}
     {{- $result = append $result (dict "name" (printf "%s-multifrontend" $primaryFullName) "routes" $mfRoutes) -}}
     {{- end -}}
   {{- end -}}

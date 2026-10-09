@@ -79,7 +79,6 @@ coordinator on:
 
 | 4.6.0 values | 4.7.0 edit |
 |---|---|
-| No `global.correlationId` | Set it (deploy-core does): it is the `X-MyCarrier-Canary` header value the dark stage's `canary-header` route matches. |
 | A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
 
 ## Chart Structure

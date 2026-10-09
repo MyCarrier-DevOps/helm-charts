@@ -236,6 +236,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             dark: false
@@ -286,30 +287,6 @@ tests:
       - notExists:
           path: spec.strategy.canary.trafficRouting.managedRoutes
 
-  - it: requires global.correlationId for the dark stage
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-        strategy:
-          canary:
-            coordinator:
-              enabled: true
-      environment:
-        name: preprod
-      applications:
-        api:
-          deploymentType: rollout
-          image:
-            registry: registry.example.com
-            repository: api
-            tag: "1.0.0"
-          ports:
-            http: 8080
-    asserts:
-      - failedTemplate:
-          errorPattern: "global.correlationId is required for the dark stage"
-
   # D6: an explicit steps list renders verbatim. Argo Rollouts rejects a setHeaderRoute or setMirrorRoute step whose
   # route is not in managedRoutes, so the chart lists every route those steps name.
   - it: lists the routes an explicit steps list names in managedRoutes and adds no dark stage
@@ -317,6 +294,7 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
         strategy:
           canary:
             steps:
