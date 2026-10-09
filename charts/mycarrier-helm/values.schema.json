@@ -69,6 +69,11 @@
           "description": "Programming language used by the application",
           "enum": ["csharp", "nodejs", "python", "go"]
         },
+        "disableLanguageSecrets": {
+          "type": "boolean",
+          "description": "Do not inject the language's default secrets and environment variables (the stack supplies its own)",
+          "default": false
+        },
         "gitbranch": {
           "oneOf": [
             { "type": "string", "description": "Name of the git branch (used for feature branches)" },
@@ -2435,6 +2440,420 @@
                     }
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "description": "Grafana alert rules, contact points and notification route for the stack (see ALERTS.md).",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "serviceName": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "interval": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "excludedPaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "standard": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "serverErrorRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 190
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
+                },
+                "execErrState": {
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            },
+            "clientErrorRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 190
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
+                },
+                "execErrState": {
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            },
+            "serverErrorCount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 190
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
+                },
+                "execErrState": {
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            },
+            "http503Returned": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 190
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
+                },
+                "execErrState": {
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "probePaths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "http503Received": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 190
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
+                },
+                "execErrState": {
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "excludedHosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "nonHttpErrors": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "sev1",
+                    "sev2",
+                    "sev3"
+                  ]
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 190
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "noDataState": {
+                  "type": "string",
+                  "enum": [
+                    "Alerting",
+                    "NoData",
+                    "OK",
+                    "KeepLast"
+                  ]
+                },
+                "execErrState": {
+                  "type": "string",
+                  "enum": [
+                    "OK",
+                    "Alerting",
+                    "Error",
+                    "KeepLast"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "apiServiceSuffix": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "additional": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 190
+              },
+              "noDataState": {
+                "type": "string",
+                "enum": [
+                  "Alerting",
+                  "NoData",
+                  "OK",
+                  "KeepLast"
+                ]
+              },
+              "execErrState": {
+                "type": "string",
+                "enum": [
+                  "OK",
+                  "Alerting",
+                  "Error",
+                  "KeepLast"
+                ]
+              },
+              "rule": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 190
+                  }
+                }
+              }
+            }
+          }
+        },
+        "contactPoints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string"
+            },
+            "secretKey": {
+              "type": "string"
+            }
+          }
+        },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "object"
               }
             }
           }

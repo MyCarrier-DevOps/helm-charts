@@ -396,6 +396,11 @@
     }
   },
   "properties": {
+    "alerts": {
+      "type": "object",
+      "description": "Alert values forwarded to every environment's mycarrier-helm Application as Values.alerts (see mycarrier-helm ALERTS.md). mycarrier-helm validates them.",
+      "default": {}
+    },
     "mycarrierChartVersion": {
       "oneOf": [
         { "type": "string", "description": "Version of the mycarrier-helm chart to deploy. Leave null to use the chart's own default, defined once in appset.yaml" },
