@@ -71,6 +71,16 @@ rendered on 4.5.0 fails on 4.6.0:
 |---|---|
 | An application whose name contains `migration` with `deploymentType: rollout` | Render the migrator through `jobs` with `timing: pre-deploy`: it runs to completion and exits, so it cannot be a canary. |
 
+## Upgrading to 4.7.0 (Rollouts with the coordinator on)
+
+4.7.0 adds the Tech Spec's header-gated dark stage (`global.strategy.canary.dark`, default `true`, and `darkReplicas`).
+It renders only with `global.strategy.canary.coordinator.enabled`, so other renders are unchanged. With the
+coordinator on:
+
+| 4.6.0 values | 4.7.0 edit |
+|---|---|
+| A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
+
 ## Chart Structure
 
 ```

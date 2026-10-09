@@ -1,4 +1,5 @@
 suite: Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)
+# These tests turn the dark stage off to cover the weight barriers; rollout_canary_dark_test.yaml covers the dark stage.
 templates:
   - rollout.yaml
 tests:
@@ -38,6 +39,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             coordinator:
               enabled: true
       environment:
@@ -90,6 +92,7 @@ tests:
             analysis:
               enabled: true
               templates: [health]
+            dark: false
             coordinator:
               enabled: true
       environment:
@@ -129,6 +132,7 @@ tests:
         strategy:
           canary:
             preset: manual
+            dark: false
             coordinator:
               enabled: true
       environment:
@@ -165,6 +169,7 @@ tests:
         strategy:
           canary:
             preset: fast
+            dark: false
             coordinator:
               enabled: true
               barrierTimeouts:
@@ -202,6 +207,7 @@ tests:
               - plugin:
                   name: mycarrier/canary-coordinator
                   config: {kind: barrier, name: w5, timeout: 5m}
+            dark: false
             coordinator:
               enabled: true
       environment:
@@ -233,6 +239,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             coordinator:
               enabled: true
       environment:

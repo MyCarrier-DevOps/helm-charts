@@ -54,6 +54,17 @@
                   "default": 600,
                   "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true)."
                 },
+                "dark": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Header-gated dark stage before the weight ladder (Tech Spec D11): canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary: <global.correlationId>, and the leader's tests-dark suite between the dark-ready and dark-passed barriers. Renders only with the coordinator on; false disables it."
+                },
+                "darkReplicas": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "Canary pods during the dark stage."
+                },
                 "bakeMinutes": {
                   "type": "integer",
                   "minimum": 1,

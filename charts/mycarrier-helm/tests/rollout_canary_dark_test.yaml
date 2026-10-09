@@ -1,0 +1,371 @@
+suite: Rollout canary dark stage (header-gated, Tech Spec D11 and D20)
+templates:
+  - rollout.yaml
+tests:
+  # Tech Spec chart contract: every preset starts with the dark stage after barrier start. The header route is removed
+  # after dark-passed. setCanaryScale {matchTrafficWeight: true} then hands the canary's size back to the weights:
+  # Argo Rollouts keeps the last setCanaryScale in force for every later step, so without it the canary would stay
+  # at darkReplicas pods through 10/25/50%.
+  - it: starts every preset with the dark stage when the coordinator is on
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: 0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
+        strategy:
+          canary:
+            preset: fast
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 10m}
+            - setCanaryScale:
+                replicas: 1
+            - setHeaderRoute:
+                name: canary-header
+                match:
+                  - headerName: X-MyCarrier-Canary
+                    headerValue:
+                      exact: 0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-ready, timeout: 10m}
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-passed, timeout: 30m}
+            - setHeaderRoute:
+                name: canary-header
+            - setCanaryScale:
+                matchTrafficWeight: true
+            - setWeight: 25
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 15m}
+            - setWeight: 100
+      - equal:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: canary-header
+
+  # D20: the leader (first Rollout application name in sort order) alone runs the dark-stage suite; followers hold at
+  # dark-passed. The tests-dark step renders only with analysis.enabled, like the other analysis steps.
+  - it: gives the tests-dark analysis step to the leader only
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              enabled: true
+              templates: [health]
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[4]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-test-stack-api-tests-dark
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - equal:
+          path: spec.strategy.canary.steps[4].plugin.config.name
+          value: dark-passed
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 12
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 11
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  - it: renders no tests-dark step while analysis is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[4].plugin.config.name
+          value: dark-passed
+
+  # The leader is chosen from the Rollouts that run canary steps (the rolloutGroupSize set): a migrating app is not one.
+  - it: skips a migrating application when choosing the leader
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          autoscaling:
+            enabled: true
+            minReplicas: 2
+            maxReplicas: 4
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[4]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-test-stack-worker-tests-dark
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  - it: sizes the dark canary from darkReplicas
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            darkReplicas: 2
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            setCanaryScale:
+              replicas: 2
+
+  # D11: strategy.canary.dark: false disables the dark stage.
+  - it: renders no dark stage and no managed route with dark false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            setWeight: 10
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+
+  # Followers rely on the dark-ready and dark-passed barriers, so the dark stage waits for the coordinator.
+  - it: renders no dark stage and no managed route while the coordinator is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            setWeight: 10
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+
+  # D6: an explicit steps list renders verbatim. Argo Rollouts rejects a setHeaderRoute or setMirrorRoute step whose
+  # route is not in managedRoutes, so the chart lists every route those steps name.
+  - it: lists the routes an explicit steps list names in managedRoutes and adds no dark stage
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setCanaryScale: {replicas: 1}
+              - setHeaderRoute:
+                  name: qa-header
+                  match:
+                    - headerName: X-QA
+                      headerValue: {exact: "1"}
+              - pause: {}
+              - setHeaderRoute: {name: qa-header}
+              - setWeight: 100
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 5
+      - equal:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: qa-header
+
+  # Argo Rollouts adds the header route to every VirtualService the Rollout lists, ahead of their other routes, and it
+  # matches only the header. In the shared <primary>-multifrontend VirtualService it would send every path to this
+  # app's canary, and two frontend Rollouts would overwrite each other's route.
+  - it: refuses the dark stage for a frontend Rollout that shares the multi-frontend VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        shell:
+          deploymentType: rollout
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          deploymentType: deployment
+          isFrontend: true
+          routePrefix: /admin
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'shell': the dark stage's header route would also go into the shared test-stack-shell-multifrontend VirtualService"

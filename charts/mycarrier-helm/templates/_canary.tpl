@@ -13,6 +13,8 @@
 {{- $defaults := dict
       "preset" "standard"
       "progressDeadlineSeconds" 600
+      "dark" true
+      "darkReplicas" 1
       "analysis" (dict "enabled" false "templates" (list "health" "compare" "alerts"))
       "coordinator" (dict
         "enabled" false
@@ -33,7 +35,14 @@
        been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
        release crosses each boundary together; the manual preset's pause stays before its barrier, so a resume of the
        group fans out and the barrier then holds it. An explicit steps list renders verbatim and carries its own
-       barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec. */ -}}
+       barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec.
+       With the coordinator on and dark (default true, D11), the start barrier is followed by the header-gated dark
+       stage: darkReplicas canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary:
+       <global.correlationId>, the dark-ready barrier, the <environment>-<fullName>-tests-dark analysis on the leader
+       only (with analysis.enabled), the dark-passed barrier, then the route is removed. setCanaryScale
+       {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
+       step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
+       coordinator because followers rely on its barriers to wait for the leader's suite. */ -}}
 {{- define "helm.canary.steps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $coordinator := $cfg.coordinator -}}
@@ -54,6 +63,18 @@
   {{- $analysisStep = dict "analysis" (dict "templates" $templates) -}}
 {{- end -}}
 {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
+{{- if and $coordinator.enabled $cfg.dark -}}
+  {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
+  {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
+  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
+  {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
+  {{- if and $cfg.analysis.enabled (eq (include "helm.canary.leader" .) .appName) -}}
+    {{- $steps = append $steps (dict "analysis" (dict "templates" (list (dict "templateName" (printf "%s-%s-tests-dark" .Values.environment.name $fullName))))) -}}
+  {{- end -}}
+  {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-passed" "coordinator" $coordinator) | fromJson) -}}
+  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header")) -}}
+  {{- $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) -}}
+{{- end -}}
 {{- $ladder := list -}}
 {{- $pause := dict -}}
 {{- if eq $cfg.preset "standard" -}}
@@ -148,6 +169,12 @@
     {{- $mf := include "helm.specs.multifrontend.virtualservice" $mfContext | fromYaml -}}
     {{- $mfRoutes := include "helm.canary.routesFor" (dict "spec" $mf "fullName" $fullName "namespace" $namespace) | fromJsonArray -}}
     {{- if $mfRoutes }}
+    {{- /* Argo Rollouts adds a managed route (the dark stage's canary-header) to every VirtualService the Rollout lists,
+           ahead of their other routes, and it matches only the header. In this shared VirtualService it would send
+           every path to this app's canary, and two frontend Rollouts would overwrite each other's route. */ -}}
+    {{- if include "helm.canary.managedRoutes" . | fromJsonArray -}}
+      {{- fail (printf "application '%s': the dark stage's header route would also go into the shared %s-multifrontend VirtualService, where it matches every path. Set global.strategy.canary.dark: false for a multi-frontend release." .appName $primaryFullName) -}}
+    {{- end -}}
     {{- $result = append $result (dict "name" (printf "%s-multifrontend" $primaryFullName) "routes" $mfRoutes) -}}
     {{- end -}}
   {{- end -}}
@@ -156,6 +183,28 @@
   {{- fail (printf "application '%s': no VirtualService route reaches %s, so the canary has nothing to weight." .appName $fullName) -}}
 {{- end -}}
 {{- toYaml $result -}}
+{{- end -}}
+
+{{- /* The leader of the release: the first application name in sort order among the Rollouts that run canary steps
+       (the helm.canary.groupSize set). It alone runs the dark-stage suite (D20). */ -}}
+{{- define "helm.canary.leader" -}}
+{{- $leader := "" -}}
+{{- range $name, $values := .Values.applications -}}
+  {{- if and (not $leader) (eq $values.deploymentType "rollout") (not $values.migratingToRollouts) }}{{ $leader = $name }}{{ end -}}
+{{- end -}}
+{{- $leader -}}
+{{- end -}}
+
+{{- /* trafficRouting.managedRoutes: every route a setHeaderRoute or setMirrorRoute step names, as JSON. Argo Rollouts
+       rejects those steps for a route that is not listed, and it puts the listed routes ahead of the VirtualService's
+       own routes while they exist. */ -}}
+{{- define "helm.canary.managedRoutes" -}}
+{{- $names := list -}}
+{{- range (include "helm.canary.steps" . | fromYamlArray) -}}
+  {{- $name := dig "setHeaderRoute" "name" (dig "setMirrorRoute" "name" "" .) . -}}
+  {{- if and $name (not (has $name $names)) }}{{ $names = append $names $name }}{{ end -}}
+{{- end -}}
+{{- toJson $names -}}
 {{- end -}}
 
 {{- /* Number of Rollouts in the release that run canary steps (mycarrier.tech/rolloutGroupSize). */ -}}
