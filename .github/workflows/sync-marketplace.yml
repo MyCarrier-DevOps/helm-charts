@@ -51,6 +51,7 @@ jobs:
       - name: Check the charts are in their released state
         id: state
         run: |
+          set -euo pipefail
           python helm-charts/.github/scripts/sync_helm_guidance.py released-state --repo helm-charts | tee -a "$GITHUB_OUTPUT"
 
       - name: Nothing released to publish
@@ -99,10 +100,14 @@ jobs:
         id: changes
         working-directory: marketplace
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
+          # The marketplace's .gitignore ignores .apm/ at any depth, which would hide the guidance file, so the
+          # package is force-added and changes are read from the index.
+          git add -A
+          git add -A -f -- packages/helm
+          if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"; echo "Marketplace already has this guidance."
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"; git status --short
+            echo "changed=true" >> "$GITHUB_OUTPUT"; git diff --cached --stat
           fi
 
       - name: Classify the release
@@ -110,7 +115,7 @@ jobs:
         id: bump
         run: |
           set -euo pipefail
-          PREV=$(git -C marketplace log -1 --format=%s -- packages/helm | sed -nE 's/.*\[helm-charts@([0-9a-f]+)\].*/\1/p')
+          PREV=$(git -C marketplace log -1 --format=%s --grep='\[helm-charts@[0-9a-f]*\]' -- packages/helm | sed -nE 's/.*\[helm-charts@([0-9a-f]+)\].*/\1/p')
           if [ -n "$PREV" ] && ! git -C helm-charts cat-file -e "$PREV^{commit}" 2>/dev/null; then PREV=""; fi
           python helm-charts/.github/scripts/sync_helm_guidance.py bump --previous "$PREV" --repo helm-charts | tee -a "$GITHUB_OUTPUT"
           echo "sha=$(git -C helm-charts rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -140,7 +145,6 @@ jobs:
                 --file packages/helm/.apm/instructions/helm.instructions.md)"
             fi
           } > "$RUNNER_TEMP/commit-msg"
-          git add -A
           git commit -q -F "$RUNNER_TEMP/commit-msg"
           for attempt in 1 2 3; do
             if git push origin HEAD:main; then echo "Pushed on attempt $attempt."; exit 0; fi
