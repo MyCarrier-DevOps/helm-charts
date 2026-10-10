@@ -9,9 +9,16 @@ set -euo pipefail
 GUIDANCE=agent-guidance/helm/.apm/instructions/helm.instructions.md
 CHARTS=(charts/mycarrier-helm charts/mc-environment)
 
+# Exit 2 blocks the push and shows stderr to the agent.
+fail_closed() {
+  echo "helm guidance check failed unexpectedly; the push is blocked until it can run" >&2
+  exit 2
+}
+
 deny() {
   jq -n --arg reason "$1" \
-    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}' \
+    || fail_closed
   exit 0
 }
 
@@ -35,7 +42,7 @@ done
 [ "${#before[@]}" -gt 0 ] || exit 0
 # From here on an unexpected failure blocks the push (exit 2) instead of letting it through unchecked. Earlier, a
 # failure (no jq, say) must not block every Bash call.
-trap 'echo "helm guidance check failed unexpectedly; the push is blocked until it can run" >&2; exit 2' ERR
+trap fail_closed ERR
 
 dir=$cwd
 if [[ $command =~ git[[:space:]]+-C[[:space:]]+([^[:space:]]+) ]]; then
@@ -64,14 +71,15 @@ gitdiff() {
 
 paths=("${CHARTS[@]}" ':(glob,exclude)charts/*/tests/**')
 
-# A push compares origin/main with HEAD. When something runs ahead of it in the same command (`git add -A && git commit
-# -m x && git push`), that commit does not exist yet while this hook runs, so the working tree is compared instead and
-# untracked files count as changed.
+# A push compares origin/main with HEAD. When a git command that commits runs ahead of it in the same command (`git add
+# -A && git commit -m x && git push`), that commit does not exist yet while this hook runs, so the working tree is
+# compared instead and untracked files count as changed. Anything else ahead of it (`cd repo && git push`) keeps HEAD:
+# an uncommitted guidance edit must not satisfy a push.
 range=("$base" HEAD)
 new_files=
 new_guidance=
-runs_ahead=$'(&&|[|;]|\n)'
-if [[ ${before[*]} =~ $runs_ahead ]]; then
+commits_re='(^|[;&|({[:space:]"'\''`/])git([[:space:]]+-[cC][[:space:]]+[^[:space:]]+)*[[:space:]]+(commit|merge|cherry-pick|revert|am|rebase|pull)([[:space:];&|)"'\''`]|$)'
+if [[ ${before[*]} =~ $commits_re ]]; then
   range=("$base")
   new_files=$(git -C "$top" ls-files --others --exclude-standard -- "${paths[@]}")
   new_guidance=$(git -C "$top" ls-files --others --exclude-standard -- "$GUIDANCE")
