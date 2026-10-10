@@ -1,0 +1,150 @@
+name: sync-marketplace
+
+# Publishes agent-guidance/helm/ to MyCarrier-DevOps/apm_marketplace (packages/helm/) for every released version of
+# mycarrier-helm and mc-environment, as the GitHub App "DevOps Marketplace Publisher". It always publishes this
+# repository's main, and only in its released state: each chart's latest change on main must be its version bump
+# (scripts: .github/scripts/sync_helm_guidance.py). Releases of other charts, prerelease manual releases from other
+# branches, and pushes whose chart changes are not released yet publish nothing.
+#
+# Required secrets: MARKETPLACE_PUBLISHER_APP_ID, MARKETPLACE_PUBLISHER_PRIVATE_KEY (the App, installed on
+# apm_marketplace with Contents: read and write).
+
+on:
+  workflow_run:
+    workflows: [Helm-Release, Helm-Manual-Release]
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - 'agent-guidance/**'
+      - '.github/scripts/sync_helm_guidance.py'
+      - '.github/workflows/sync-marketplace.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-marketplace-helm
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helm-charts main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          path: helm-charts
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Check the charts are in their released state
+        id: state
+        run: |
+          python helm-charts/.github/scripts/sync_helm_guidance.py released-state --repo helm-charts | tee -a "$GITHUB_OUTPUT"
+
+      - name: Nothing released to publish
+        if: steps.state.outputs.released != 'true'
+        run: echo "::notice::Release pending for ${{ steps.state.outputs.pending }}; its release run publishes the guidance."
+
+      - name: Mint the App token
+        if: steps.state.outputs.released == 'true'
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.MARKETPLACE_PUBLISHER_APP_ID }}
+          private-key: ${{ secrets.MARKETPLACE_PUBLISHER_PRIVATE_KEY }}
+          owner: MyCarrier-DevOps
+          repositories: apm_marketplace
+          permission-contents: write
+
+      - name: Checkout apm_marketplace
+        if: steps.state.outputs.released == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: MyCarrier-DevOps/apm_marketplace
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+          path: marketplace
+
+      - name: Assemble packages/helm
+        if: steps.state.outputs.released == 'true'
+        run: |
+          set -euo pipefail
+          SYNC=helm-charts/.github/scripts/sync_helm_guidance.py
+          DST=marketplace/packages/helm
+          PREV=$(mktemp -d)
+          if [ -d "$DST" ]; then cp -a "$DST/." "$PREV/"; fi
+          mkdir -p "$DST"
+          rsync -a --delete helm-charts/agent-guidance/helm/ "$DST/"
+          python "$SYNC" keep-versions --previous "$PREV" --package "$DST"
+          python "$SYNC" stamp --file "$DST/.apm/instructions/helm.instructions.md" \
+            --mycarrier-helm "${{ steps.state.outputs.mycarrier_helm }}" \
+            --mc-environment "${{ steps.state.outputs.mc_environment }}"
+          python "$SYNC" upsert --marketplace marketplace/apm.yml --package "$DST/apm.yml"
+          (cd marketplace && python scripts/pack.py)
+
+      - name: Detect changes
+        if: steps.state.outputs.released == 'true'
+        id: changes
+        working-directory: marketplace
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"; echo "Marketplace already has this guidance."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"; git status --short
+          fi
+
+      - name: Classify the release
+        if: steps.changes.outputs.changed == 'true'
+        id: bump
+        run: |
+          set -euo pipefail
+          PREV=$(git -C marketplace log -1 --format=%s -- packages/helm | sed -nE 's/.*\[helm-charts@([0-9a-f]+)\].*/\1/p')
+          if [ -n "$PREV" ] && ! git -C helm-charts cat-file -e "$PREV^{commit}" 2>/dev/null; then PREV=""; fi
+          python helm-charts/.github/scripts/sync_helm_guidance.py bump --previous "$PREV" --repo helm-charts | tee -a "$GITHUB_OUTPUT"
+          echo "sha=$(git -C helm-charts rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push as the App
+        if: steps.changes.outputs.changed == 'true'
+        working-directory: marketplace
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+          TYPE: ${{ steps.bump.outputs.type }}
+          BREAKING: ${{ steps.bump.outputs.breaking }}
+          SHA: ${{ steps.bump.outputs.sha }}
+          MH: ${{ steps.state.outputs.mycarrier_helm }}
+          ME: ${{ steps.state.outputs.mc_environment }}
+        run: |
+          set -euo pipefail
+          BOT_ID=$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${BOT_ID}+${SLUG}[bot]@users.noreply.github.com"
+          SUBJECT="${TYPE}(helm): guidance for mycarrier-helm ${MH} and mc-environment ${ME} [helm-charts@${SHA:0:7}]"
+          {
+            printf '%s\n\n' "$SUBJECT"
+            printf 'Mirrors agent-guidance/helm from MyCarrier-DevOps/helm-charts@%s.\n' "$SHA"
+            if [ "$BREAKING" = 1 ]; then
+              printf '\nBREAKING CHANGE: %s\n' "$(python ../helm-charts/.github/scripts/sync_helm_guidance.py breaking-entry \
+                --file packages/helm/.apm/instructions/helm.instructions.md)"
+            fi
+          } > "$RUNNER_TEMP/commit-msg"
+          git add -A
+          git commit -q -F "$RUNNER_TEMP/commit-msg"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then echo "Pushed on attempt $attempt."; exit 0; fi
+            git pull --rebase origin main
+          done
+          echo "::error::Push failed after 3 attempts."
+          exit 1
