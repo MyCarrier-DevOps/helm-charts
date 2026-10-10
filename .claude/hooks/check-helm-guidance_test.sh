@@ -109,6 +109,7 @@ expect "a pipe after the push keeps the HEAD comparison" deny "$(decide "$c" 'gi
 expect "cd before a plain push keeps the HEAD comparison" deny "$(decide "$c" "cd $c && git push")"
 expect "a command that does not commit before the push keeps the HEAD comparison" deny "$(decide "$c" 'git status && git add -A && git push')"
 expect "a push mentioned after the push keeps the HEAD comparison" deny "$(decide "$c" 'git push && echo "git push done"')"
+expect "a pull or rebase before the push keeps the HEAD comparison" deny "$(decide "$c" 'git pull --rebase && git push')"
 c=$(setup untracked); printf 'kind: Secret\n' > "$c/charts/mycarrier-helm/templates/secret.yaml"
 expect "untracked new template committed and pushed in one command is denied" deny "$(decide "$c" "$SAME")"
 says "reason names the untracked file" 'charts/mycarrier-helm/templates/secret.yaml' "$WORK/reason"

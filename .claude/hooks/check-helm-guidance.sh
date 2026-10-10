@@ -71,14 +71,14 @@ gitdiff() {
 
 paths=("${CHARTS[@]}" ':(glob,exclude)charts/*/tests/**')
 
-# A push compares origin/main with HEAD. When a git command that commits runs ahead of it in the same command (`git add
-# -A && git commit -m x && git push`), that commit does not exist yet while this hook runs, so the working tree is
-# compared instead and untracked files count as changed. Anything else ahead of it (`cd repo && git push`) keeps HEAD:
-# an uncommitted guidance edit must not satisfy a push.
+# A push compares origin/main with HEAD. When `git commit` runs ahead of it in the same command (`git add -A && git
+# commit -m x && git push`), that commit does not exist yet while this hook runs, so the working tree is compared instead
+# and untracked files count as changed. Anything else ahead of it (`cd repo &&`, `git pull &&`) keeps HEAD: those never
+# commit working-tree edits, so an uncommitted guidance edit must not satisfy the push.
 range=("$base" HEAD)
 new_files=
 new_guidance=
-commits_re='(^|[;&|({[:space:]"'\''`/])git([[:space:]]+-[cC][[:space:]]+[^[:space:]]+)*[[:space:]]+(commit|merge|cherry-pick|revert|am|rebase|pull)([[:space:];&|)"'\''`]|$)'
+commits_re='(^|[;&|({[:space:]"'\''`/])git([[:space:]]+-[cC][[:space:]]+[^[:space:]]+)*[[:space:]]+commit([[:space:];&|)"'\''`]|$)'
 if [[ ${before[*]} =~ $commits_re ]]; then
   range=("$base")
   new_files=$(git -C "$top" ls-files --others --exclude-standard -- "${paths[@]}")
