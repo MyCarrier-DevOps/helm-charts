@@ -15,7 +15,9 @@ With APM (Claude Code, GitHub Copilot, Cursor and other agents):
     apm install helm@apm_marketplace
 
 APM deploys the instruction for `helm/**`: `.claude/rules/helm.md` for Claude Code,
-`.github/instructions/helm.instructions.md` for Copilot, and the equivalent for other agents.
+`.github/instructions/helm.instructions.md` for Copilot, and the equivalent for other agents. It also adds the
+plugin's SessionStart hook and copies of its script (under `.claude/hooks/helm/` and `.github/hooks/scripts/helm/`);
+they do nothing outside a Claude Code plugin install.
 
 As a Claude Code plugin: install `helm` from this marketplace. A SessionStart hook writes the guidance to
 `.claude/rules/helm/helm.md` in the project; commit it with the repository's other rules.
