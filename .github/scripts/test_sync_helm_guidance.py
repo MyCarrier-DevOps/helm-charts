@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import subprocess
 import tempfile
@@ -144,6 +146,74 @@ class Upsert(unittest.TestCase):
         again, added_again = s.upsert_text(out, self.PKG)
         self.assertFalse(added_again)
         self.assertEqual(again, out)
+
+    def test_existing_entry_at_later_version_is_left_alone(self):
+        mp = self.MP + "  - name: helm\n    source: ./packages/helm\n    version: 0.4.2\n"
+        out, added = s.upsert_text(mp, self.PKG)
+        self.assertFalse(added)
+        self.assertEqual(out, mp)
+        entry = [p for p in yaml.safe_load(out)["marketplace"]["packages"] if p["name"] == "helm"][0]
+        self.assertEqual(entry["version"], "0.4.2")
+
+
+def run_cli(*argv):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        s.main(list(argv))
+    return dict(l.split("=", 1) for l in buf.getvalue().splitlines())
+
+
+class Cli(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        git(self.d, "init", "-q", "-b", "main")
+        for rel in ("charts/mycarrier-helm/values.yaml", "charts/mc-environment/values.yaml",
+                    "agent-guidance/helm/a.md", "README.md"):
+            f = self.d / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("0\n")
+        for chart, ver in (("mycarrier-helm", "4.4.0"), ("mc-environment", "0.3.0")):
+            (self.d / "charts" / chart / "Chart.yaml").write_text(f"name: {chart}\nversion: {ver}\n")
+        git(self.d, "add", "-A"); git(self.d, "commit", "-q", "-m", "init")
+        self.prev = subprocess.run(["git", "-C", str(self.d), "rev-parse", "HEAD"], check=True,
+                                   capture_output=True, text=True).stdout.strip()
+
+    def commit(self, rel, message):
+        f = self.d / rel
+        f.write_text(f.read_text() + "x\n")
+        git(self.d, "add", "-A"); git(self.d, "commit", "-q", "-m", message)
+
+    def bump(self):
+        return run_cli("bump", "--previous", self.prev, "--repo", str(self.d))
+
+    def test_fix_only_range(self):
+        self.commit("charts/mycarrier-helm/values.yaml", "fix(mycarrier-helm): a")
+        self.assertEqual(self.bump(), {"type": "fix", "breaking": "0"})
+
+    def test_feat_in_range(self):
+        self.commit("charts/mycarrier-helm/values.yaml", "fix(mycarrier-helm): a")
+        self.commit("charts/mc-environment/values.yaml", "feat(mc-environment): b")
+        self.assertEqual(self.bump(), {"type": "feat", "breaking": "0"})
+
+    def test_breaking_subject_or_footer(self):
+        self.commit("agent-guidance/helm/a.md", "feat(agent-guidance)!: c")
+        self.assertEqual(self.bump(), {"type": "feat", "breaking": "1"})
+        self.commit("charts/mycarrier-helm/values.yaml", "fix: d\n\nBREAKING CHANGE: e")
+        self.assertEqual(self.bump()["breaking"], "1")
+
+    def test_commits_outside_sources_are_ignored(self):
+        self.commit("charts/mycarrier-helm/values.yaml", "fix: a")
+        self.commit("README.md", "feat!: unrelated")
+        self.assertEqual(self.bump(), {"type": "fix", "breaking": "0"})
+
+    def test_first_publish(self):
+        self.assertEqual(run_cli("bump", "--previous", "", "--repo", str(self.d)),
+                         {"type": "feat", "breaking": "0"})
+
+    def test_released_state_prints_the_four_keys(self):
+        out = run_cli("released-state", "--repo", str(self.d))
+        self.assertEqual(set(out), {"released", "mycarrier_helm", "mc_environment", "pending"})
+        self.assertEqual(out["mycarrier_helm"], "4.4.0")
 
 
 if __name__ == "__main__":
