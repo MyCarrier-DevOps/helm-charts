@@ -483,6 +483,8 @@ applications:
 | `image.tag` | Image tag (typically set per-env) | Required in the merged values |
 | `ports.http` | HTTP port the container listens on; used by the Service, probes, routing and test triggers | Required |
 | `ports.metrics` | Metrics port (Prometheus scraping, see [ServiceMonitor](#servicemonitor-prometheus)) | Optional |
+| `command` | Container command, a list of strings. Only a **single element** without spaces or commas renders correctly: see the warning below | The image's `ENTRYPOINT` |
+| `args` | Container arguments, a list of strings. Same single-element limit as `command` | The image's `CMD` |
 | `replicas` | Static replica count (ignored when HPA/KEDA active) | Env-dependent default |
 | `resources.requests.cpu` | CPU request | `50m` |
 | `resources.requests.memory` | Memory request | `512Mi` |
@@ -498,6 +500,8 @@ applications:
 | `terminationGracePeriodSeconds` | Pod termination grace period | `10` |
 | `affinity.enablePodAntiAffinity` | Required pod anti-affinity outside prod (always on in prod) | `false` |
 | `enableDebugMode` | Adds a privileged debug sidecar; not allowed while `migratingToRollouts` is set | `false` |
+
+**Warning: an application's `command` and `args` collapse into one element.** For Deployments, StatefulSets and Rollouts the chart prints both lists inline, so `command: ["/bin/sh", "-c"]` renders as the single string `"/bin/sh -c"`, which the container cannot start, and `args: ["./run.sh", "--port", "8080"]` reaches the process as one argument, `"./run.sh --port 8080"`. A comma inside an element splits it instead: `["--hosts=a,b"]` becomes `["--hosts=a", "b"]`. Until the chart is fixed, give each a single element without spaces or commas (`command: ["./app"]`, `args: ["--verbose"]`), or leave both out and let the image's entrypoint run; anything longer belongs in a script in the image. `jobs[]` and `cronjobs[]` render `args` correctly (see [CronJobs](#cronjobs)).
 
 ### Lifecycle and Shutdown
 
@@ -653,6 +657,9 @@ environment:
 # helm/deployment/values.yaml
 applications:
   api:
+    # Every environment reads this file. Dev and feature<N> values files must also set
+    # networking.istio.offloadOperatorEnabled: false for api (see the table above), or keep
+    # deploymentType: deployment here and make the switch in values.prod.yaml.
     deploymentType: rollout             # release 1 of the switch to a Rollout
     migratingToRollouts: true           # remove in release 2
     image:
@@ -723,9 +730,9 @@ applications:
 
 ### KEDA (Event-Driven Autoscaling)
 
-KEDA scales based on Azure Service Bus message count. **HPA and KEDA are mutually exclusive per application.** When `keda.enabled` is true, HPA is never created regardless of any HPA settings.
+KEDA scales based on Azure Service Bus message count. **HPA and KEDA are mutually exclusive per application.** Wherever KEDA renders (`keda.enabled: true` outside feature environments), no HPA is created regardless of any HPA settings.
 
-KEDA does not render in feature environments (`feature<N>`): there the application gets no ScaledObject and runs its static replica count.
+KEDA does not render in feature environments (`feature<N>`): there the application gets no ScaledObject, and the HPA rules above apply as if KEDA were off. `autoscaling.enabled: true` (or a force setting) still creates an HPA; otherwise the application runs its static replica count.
 
 A ScaledObject uses either the flat fields below (one trigger) or `keda.triggers` (a list, multiple triggers) — never both. See [Multiple Triggers](#multiple-triggers).
 
