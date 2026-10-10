@@ -47,11 +47,14 @@ decide() {
 expect() {
   if [ "$2" = "$3" ]; then echo "  PASS  $1"; else echo "  FAIL  $1 (want $2, got $3)"; fail=$((fail + 1)); fi
 }
+# says <name> <text> <file>: the file (the last reason or stderr) contains the text
+says() {
+  if grep -qF -- "$2" "$3"; then echo "  PASS  $1"; else echo "  FAIL  $1"; fail=$((fail + 1)); fi
+}
 
 c=$(setup values); printf 'replicas: 2\n' > "$c/charts/mycarrier-helm/values.yaml"; commit "$c"
 expect "values change without guidance blocks git push" deny "$(decide "$c" 'git push -u origin work')"
-grep -q 'charts/mycarrier-helm/values.yaml' "$WORK/reason" && echo "  PASS  reason names the changed file" \
-  || { echo "  FAIL  reason names the changed file"; fail=$((fail + 1)); }
+says "reason names the changed file" 'charts/mycarrier-helm/values.yaml' "$WORK/reason"
 
 c=$(setup withguide); printf 'replicas: 2\n' > "$c/charts/mycarrier-helm/values.yaml"
 printf 'replicas default is now 2\n' >> "$c/$G"; commit "$c"
@@ -87,6 +90,67 @@ expect "git -c option before push is detected" deny "$(decide "$c" 'git -c push.
 expect "git -C <dir> push from elsewhere is detected" deny "$(decide "$WORK" "git -C $c push")"
 expect "quoted git -C dir is detected" deny "$(decide "$WORK" "git -C \"$c\" push")"
 expect "gh pr create is detected" deny "$(decide "$c" 'gh pr create --fill')"
+expect "git push inside bash -c \"...\" is detected" deny "$(decide "$c" 'bash -c "git push"')"
+expect "/usr/bin/git push is detected" deny "$(decide "$c" '/usr/bin/git push')"
+
+# A command that commits and then pushes: the hook runs before the commit exists, so the working tree counts.
+SAME='git add -A && git commit -m x && git push'
+c=$(setup samecmd); printf 'replicas: 8\n' > "$c/charts/mycarrier-helm/values.yaml"
+expect "uncommitted chart change committed and pushed in one command is denied" deny "$(decide "$c" "$SAME")"
+expect "commit and push on separate lines of one command are denied too" deny "$(decide "$c" $'git commit -am x\ngit push')"
+expect "commit then gh pr create in one command is denied too" deny "$(decide "$c" 'git commit -am x && gh pr create --fill')"
+printf 'replicas default is now 8\n' >> "$c/$G"
+expect "uncommitted chart and guidance changes pushed in one command are allowed" allow "$(decide "$c" "$SAME")"
+c=$(setup uncommittedguide); printf 'replicas: 9\n' > "$c/charts/mycarrier-helm/values.yaml"; commit "$c"
+printf 'replicas default is now 9\n' >> "$c/$G"
+expect "an uncommitted guidance change does not satisfy a plain git push" deny "$(decide "$c" 'git push')"
+expect "a pipe after the push keeps the HEAD comparison" deny "$(decide "$c" 'git push 2>&1 | tail -n 5')"
+c=$(setup untracked); printf 'kind: Secret\n' > "$c/charts/mycarrier-helm/templates/secret.yaml"
+expect "untracked new template committed and pushed in one command is denied" deny "$(decide "$c" "$SAME")"
+says "reason names the untracked file" 'charts/mycarrier-helm/templates/secret.yaml' "$WORK/reason"
+c=$(setup newguide); gitq -C "$c" rm -q "$G"; commit "$c"; git -C "$c" push -q origin work:main
+mkdir -p "$c/$(dirname "$G")"; printf -- '---\ndescription: guidance\n---\n# Guidance\n' > "$c/$G"
+printf 'replicas: 10\n' > "$c/charts/mycarrier-helm/values.yaml"
+expect "a new, untracked guidance file counts when it is committed in the same command" allow "$(decide "$c" "$SAME")"
+
+# noisy <clone>: diff settings a user may have in their git config, which must not change what the hook sees.
+noisy() {
+  git -C "$1" config color.ui always
+  git -C "$1" config color.diff always
+  git -C "$1" config diff.noprefix true
+  git -C "$1" config diff.mnemonicPrefix true
+  git -C "$1" config diff.external true
+}
+c=$(setup noisyreal); noisy "$c"; printf 'replicas: 6\n' > "$c/charts/mycarrier-helm/values.yaml"; commit "$c"
+expect "real change is denied whatever the user's diff config" deny "$(decide "$c" 'git push')"
+c=$(setup noisycomment); noisy "$c"; printf '# replicas for the api\nreplicas: 1\n' > "$c/charts/mycarrier-helm/values.yaml"
+commit "$c"
+expect "comment-only change is allowed whatever the user's diff config" allow "$(decide "$c" 'git push')"
+c=$(setup noisysame); noisy "$c"; printf '# replicas for the api\nreplicas: 1\n' > "$c/charts/mycarrier-helm/values.yaml"
+expect "uncommitted comment-only change is allowed whatever the user's diff config" allow "$(decide "$c" "$SAME")"
+
+# status <path dir> <cwd> <command> -> the hook's exit status with <path dir> first on PATH; stderr goes to $WORK/stderr
+status() {
+  local rc=0
+  jq -n --arg d "$2" --arg c "$3" '{cwd: $d, tool_name: "Bash", tool_input: {command: $c}}' \
+    | PATH="$1:$PATH" bash "$HOOK" >/dev/null 2>"$WORK/stderr" || rc=$?
+  echo "$rc"
+}
+# brokengit <name> <argument>: a git that works until it is given <argument>, then fails as a broken repository would.
+brokengit() {
+  mkdir -p "$WORK/$1"
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = %q ] && { echo "fatal: simulated" >&2; exit 128; }; done\nexec %q "$@"\n' \
+    "$2" "$(command -v git)" > "$WORK/$1/git"
+  chmod +x "$WORK/$1/git"
+}
+brokengit nodiff diff; brokengit nopatch -U0; brokengit noguide "$G"
+mkdir -p "$WORK/nojq"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nojq/jq"; chmod +x "$WORK/nojq/jq"
+c=$(setup broken); printf 'replicas: 7\n' > "$c/charts/mycarrier-helm/values.yaml"; commit "$c"
+expect "an unexpected failure after a push is detected blocks it (exit 2)" 2 "$(status "$WORK/nodiff" "$c" 'git push')"
+says "the failure is explained on stderr" 'failed unexpectedly' "$WORK/stderr"
+expect "a failure while reading the changed lines blocks too (exit 2)" 2 "$(status "$WORK/nopatch" "$c" 'git push')"
+expect "a failure while checking the guidance blocks too (exit 2)" 2 "$(status "$WORK/noguide" "$c" 'git push')"
+expect "a failure before a push is detected never blocks (exit 1)" 1 "$(status "$WORK/nojq" "$c" 'git status')"
 
 c=$(setup other nocharts); printf 'x\n' > "$c/README.md"; commit "$c"
 expect "repository without the charts is ignored" allow "$(decide "$c" 'git push')"
@@ -97,8 +161,12 @@ expect "nothing ahead of origin/main is allowed" allow "$(decide "$c" 'git push'
 c=$(setup noorigin); printf 'replicas: 4\n' > "$c/charts/mycarrier-helm/values.yaml"; commit "$c"
 git -C "$c" remote remove origin
 expect "unresolvable origin/main blocks" deny "$(decide "$c" 'git push')"
-grep -q 'could not compare' "$WORK/reason" && echo "  PASS  reason says the check could not run" \
-  || { echo "  FAIL  reason says the check could not run"; fail=$((fail + 1)); }
+says "reason says the check could not run" 'could not compare' "$WORK/reason"
+
+c=$(setup orphan); git -C "$c" checkout -q --orphan lone
+printf 'replicas: 11\n' > "$c/charts/mycarrier-helm/values.yaml"; commit "$c"
+expect "branch with no common history with origin/main blocks" deny "$(decide "$c" 'git push')"
+says "reason says the histories could not be compared" 'could not compare' "$WORK/reason"
 
 echo
 if [ "$fail" -ne 0 ]; then echo "FAILED: $fail"; exit 1; fi
