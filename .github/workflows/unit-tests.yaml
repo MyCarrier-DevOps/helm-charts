@@ -4,12 +4,18 @@ on:
     paths:
       - 'charts/**'
       - '.github/workflows/unit-tests.yaml'
+      - '.claude/hooks/**'
+      - 'agent-guidance/**'
+      - '.github/scripts/**'
   push:
     branches:
       - main
     paths:
       - 'charts/**'
       - '.github/workflows/unit-tests.yaml'
+      - '.claude/hooks/**'
+      - 'agent-guidance/**'
+      - '.github/scripts/**'
 
 jobs:
   discover:
@@ -183,3 +189,24 @@ jobs:
     steps:
       - name: Skip unit tests
         run: echo "No chart changes detected; skipping helm-unittest runs."
+
+  agent-guidance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v3
+        with:
+          version: v3.18.6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet pyyaml
+      - name: Push hook tests
+        run: bash .claude/hooks/check-helm-guidance_test.sh
+      - name: sync-rules tests
+        run: bash agent-guidance/tests/sync-rules_test.sh
+      - name: Guidance examples render with these charts
+        run: bash agent-guidance/tests/render-examples.sh
+      - name: Publishing helper tests
+        working-directory: .github/scripts
+        run: python -m unittest -v test_sync_helm_guidance
