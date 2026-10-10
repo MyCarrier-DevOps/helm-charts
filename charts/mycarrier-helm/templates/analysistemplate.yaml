@@ -20,7 +20,9 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: {{ $environment }}-{{ $template.name }}
+  {{- /* <environment>-<fullName>-<name>: the name the canary analysis steps reference (helm.canary.steps), unique per
+         app in a shared namespace. */}}
+  name: {{ $environment }}-{{ $fullName }}-{{ $template.name }}
   namespace: {{ $namespace }}
   labels:    
     {{ $standardLabels | nindent 4 | trim }}

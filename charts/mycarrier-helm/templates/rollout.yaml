@@ -18,9 +18,31 @@
        claims the same hosts as the Rollout's VirtualService. Istio does not merge VirtualServices for sidecars, and
        the order across resources at a gateway is undefined, so the canary weights might never apply. */ -}}
 {{- $offloadVSRendered := and (dig "networking" "istio" "enabled" true $appValues) (not (dig "istioDisabled" false $appValues)) (not (dig "service" "istioDisabled" false $appValues)) (hasPrefix "feature" $.Values.environment.name) (dig "networking" "istio" "offloadVSEnabled" true $appValues) (not (dig "networking" "krakend" "enabled" false $appValues)) }}
-{{- $trafficRouting := get (dig "updateStrategy" "canary" dict $appValues | default dict) "trafficRouting" | default dict }}
-{{- if and (eq $appValues.deploymentType "rollout") (get $trafficRouting "istio") $offloadVSRendered }}
-{{- fail (printf "application '%s': a Rollout with Istio trafficRouting in a feature environment also needs networking.istio.offloadVSEnabled: false; otherwise %s-offload claims the same hosts as the Rollout's VirtualService, and Istio does not merge VirtualServices for sidecars." $appName $fullName) }}
+{{- $canary := eq (include "helm.canary.enabled" $appContext) "true" }}
+{{- if and $canary $offloadVSRendered }}
+{{- fail (printf "application '%s': a Rollout in a feature environment also needs networking.istio.offloadVSEnabled: false; otherwise %s-offload claims the same hosts as the Rollout's VirtualService, and Istio does not merge VirtualServices for sidecars." $appName $fullName) }}
+{{- end }}
+{{- /* The shared <primary>-multifrontend-offload VirtualService of a feature environment follows the primary frontend's
+       offloadVSEnabled, so a non-primary frontend Rollout needs the primary's flag off too. */ -}}
+{{- if and $canary $appValues.isFrontend (hasPrefix "feature" $.Values.environment.name) }}
+{{- $frontendCount := 0 }}{{- $primaryValues := dict }}
+{{- range $name, $values := $.Values.applications }}{{ if $values.isFrontend }}{{ $frontendCount = add1 $frontendCount }}{{ if $values.isPrimary }}{{ $primaryValues = $values }}{{ end }}{{ end }}{{ end }}
+{{- if and (gt $frontendCount 1) $primaryValues (dig "networking" "istio" "offloadVSEnabled" true $primaryValues) }}
+{{- fail (printf "application '%s': a frontend Rollout in a feature environment also needs networking.istio.offloadVSEnabled: false on the primary frontend; otherwise the shared -multifrontend-offload VirtualService claims the same hosts and Istio does not merge VirtualServices for sidecars." $appName) }}
+{{- end }}
+{{- end }}
+{{- /* The canary weights live in the chart's VirtualService, so a Rollout that runs canary steps needs it rendered. */ -}}
+{{- if and $canary (or (not (dig "networking" "istio" "enabled" true $appValues)) (dig "istioDisabled" false $appValues) (dig "service" "istioDisabled" false $appValues)) }}
+{{- fail (printf "application '%s': a Rollout needs the chart's Istio VirtualService for its canary weights; networking.istio.enabled, istioDisabled and service.istioDisabled must leave Istio on." $appName) }}
+{{- end }}
+{{- /* Canary settings are release-wide, so every Rollout of a release runs the same steps (DEVOPS-311, D20). */ -}}
+{{- if and (kindIs "map" $appValues.updateStrategy) (hasKey $appValues.updateStrategy "canary") }}
+{{- fail (printf "application '%s': updateStrategy.canary is no longer supported; canary settings are release-wide in global.strategy.canary (preset, steps, analysis)." $appName) }}
+{{- end }}
+{{- /* Alias Services select every pod of the app without the rollouts-pod-template-hash the controller manages, so
+       traffic through them reaches canary pods in proportion to pod count, whatever the weights. */ -}}
+{{- if and (eq $appValues.deploymentType "rollout") (dig "service" "aliases" nil $appValues) }}
+{{- fail (printf "application '%s': service.aliases is not supported with deploymentType rollout; alias Services would send traffic to canary pods regardless of the canary weights." $appName) }}
 {{- end }}
 {{- /* While migrating, the Rollout runs the Deployment's pod template next to the Deployment, so the privileged debug
        sidecar would run in both pod sets. */ -}}
@@ -28,7 +50,7 @@
 {{- fail (printf "application '%s': enableDebugMode cannot be on while migratingToRollouts is set; both the Deployment and the Rollout would run the privileged debug sidecar. Turn enableDebugMode off for the two migration releases." $appName) }}
 {{- end }}
 {{- if dig "updateStrategy" "bluegreen" false $appValues }}
-{{- fail (printf "application '%s': updateStrategy.bluegreen is no longer supported; use updateStrategy.canary." $appName) }}
+{{- fail (printf "application '%s': updateStrategy.bluegreen is no longer supported; use global.strategy.canary." $appName) }}
 {{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -43,6 +65,10 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "10"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+    {{- if $canary }}
+    {{- /* How many Rollouts of this release run canary steps; the canary-coordinator (DEVOPS-325) waits for them. */}}
+    mycarrier.tech/rolloutGroupSize: {{ include "helm.canary.groupSize" $ | quote }}
+    {{- end }}
     {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:
   {{ include "helm.specs.rollout" $appContext | indent 2 | trim }}
