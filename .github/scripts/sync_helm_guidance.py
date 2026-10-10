@@ -34,7 +34,7 @@ def released_state(repo):
     for chart in CHARTS:
         versions[chart] = str(chart_version(repo, chart))
         last = git(repo, "log", "-1", "--format=%H", "--", f"charts/{chart}",
-                   f":(exclude)charts/{chart}/tests", f":(exclude)charts/{chart}/package.json",
+                   f":(glob,exclude)charts/{chart}/**/tests/**", f":(exclude)charts/{chart}/package.json",
                    f":(glob,exclude)charts/{chart}/**/*test*.yaml",
                    f":(glob,exclude)charts/{chart}/**/*test*.yml").strip()
         diff = git(repo, "show", "--format=", last, "--", f"charts/{chart}/Chart.yaml") if last else ""

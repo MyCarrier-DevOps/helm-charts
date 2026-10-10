@@ -87,6 +87,16 @@ class ReleasedState(unittest.TestCase):
                 git(d, "add", "-A"); git(d, "commit", "-q", "-m", "fix(mycarrier-helm): trigger")
                 self.assertEqual(s.released_state(d)[2], [])
 
+    def test_nested_tests_directories_do_not_make_a_release_pending(self):
+        # Helm-Release ignores charts/**/tests/** at any depth, not only the chart's own tests/.
+        d = self.repo()
+        self.bump(d, "mycarrier-helm", "4.4.1")
+        f = d / "charts/mycarrier-helm/templates/tests/connection.yaml"
+        f.parent.mkdir(parents=True)
+        f.write_text("kind: Pod\n")
+        git(d, "add", "-A"); git(d, "commit", "-q", "-m", "fix(mycarrier-helm): helm test pod")
+        self.assertEqual(s.released_state(d)[2], [])
+
 
 class Stamp(unittest.TestCase):
     def test_line_after_title(self):
