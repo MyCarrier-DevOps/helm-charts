@@ -35,6 +35,7 @@ check "second run leaves the file alone" '[ "$(stat -c %Y "$R")" = "$before" ]'
 mv "$WORK/cache/1.2.3" "$WORK/cache/1.2.4"
 out=$(run "$WORK/cache/1.2.4" "$P")
 check "new plugin version refreshes the stamp" '[ "$(tail -n 1 "$P/.claude/rules/helm/.plugin-version")" = 1.2.4 ]'
+check "an update leaves nothing else next to the rules" '[ "$(ls -A "$P/.claude/rules" | tr "\n" " ")" = "helm own.md " ]'
 
 root=$(plugin 2.0.0 'applyTo: "helm/**, charts/{a,b}/**"')
 run "$root" "$P" >/dev/null
@@ -49,9 +50,19 @@ rm "$root/.apm/instructions/helm.instructions.md"
 run "$root" "$P" >/dev/null
 check "removed instruction prunes the rule" '[ ! -e "$R" ] && [ -f "$P/.claude/rules/own.md" ]'
 
+F="$WORK/failing"; mkdir -p "$F/.claude/rules" "$WORK/noawk"
+printf '#!/bin/sh\nexit 1\n' > "$WORK/noawk/awk"; chmod +x "$WORK/noawk/awk"
+PATH="$WORK/noawk:$PATH" CLAUDE_PLUGIN_ROOT="$(plugin 4.0.0 'applyTo: "helm/**"')" CLAUDE_PROJECT_DIR="$F" \
+  bash "$SCRIPT" >/dev/null 2>&1 || true
+check "a failed run leaves no staging directory in .claude/rules" '[ -z "$(ls -A "$F/.claude/rules")" ]'
+
 Q="$WORK/none"; mkdir -p "$Q"
 out=$(cd "$Q" && env -u CLAUDE_PROJECT_DIR CLAUDE_PLUGIN_ROOT="$WORK/cache/2.0.0" bash "$SCRIPT")
 check "no project dir: nothing written" '[ -z "$out" ] && [ ! -e "$Q/.claude" ]'
+
+A="$WORK/apm"; mkdir -p "$A"
+out=$(env -u CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR="$A" bash "$SCRIPT" 2>&1 || echo "exit $?")
+check "no plugin root (an APM install runs it so): nothing written or printed" '[ -z "$out" ] && [ -z "$(ls -A "$A")" ]'
 
 echo
 if [ "$fail" -ne 0 ]; then echo "FAILED: $fail"; exit 1; fi

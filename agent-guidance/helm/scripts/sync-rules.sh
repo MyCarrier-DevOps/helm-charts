@@ -42,8 +42,11 @@ to_rule() {
   ' "$1"
 }
 
+# Both work directories sit next to the rules; whatever happens, neither may be left behind to load as rules.
 STAGE="$DEST.staged.$$"
-rm -rf "$STAGE"
+OLD="$DEST.old.$$"
+trap 'rm -rf "$STAGE" "$OLD"' EXIT
+rm -rf "$STAGE" "$OLD"
 mkdir -p "$STAGE"
 for f in "$SRC"/*.instructions.md; do
   [ -e "$f" ] || continue
@@ -52,7 +55,6 @@ for f in "$SRC"/*.instructions.md; do
 done
 
 if ! ls "$STAGE"/*.md >/dev/null 2>&1 && [ ! -d "$DEST" ]; then
-  rm -rf "$STAGE"
   exit 0
 fi
 
@@ -62,7 +64,6 @@ for f in "$STAGE"/*.md "$DEST"/*.md; do
   cmp -s "$STAGE/${f##*/}" "$DEST/${f##*/}" || same=0
 done
 if [ "$same" = 1 ] && [ "$(tail -n 1 "$DEST/$STAMP" 2>/dev/null)" = "$VERSION" ]; then
-  rm -rf "$STAGE"
   exit 0
 fi
 
@@ -72,13 +73,10 @@ fi
   echo "$VERSION"
 } > "$STAGE/$STAMP"
 
-OLD="$DEST.old.$$"
-rm -rf "$OLD" 2>/dev/null || true
 if [ -d "$DEST" ]; then
   mv "$DEST" "$OLD"
 fi
 mv "$STAGE" "$DEST"
-rm -rf "$OLD" 2>/dev/null || true
 
 COUNT=$(find "$DEST" -name '*.md' -type f | wc -l | tr -d ' ')
 echo "$NAME: updated .claude/rules/$NAME/ ($COUNT rules, version $VERSION). The developer reviews and commits these files."
