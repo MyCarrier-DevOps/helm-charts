@@ -219,8 +219,10 @@ Each `environments[]` entry supports these fields:
 | `global` | Merged over the root-level `global` | `{}` |
 | `environment` | mycarrier-helm `environment` block (`name` is always the entry's `name`) | `{}` |
 | `applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `extraObjects` | Passed to mycarrier-helm unchanged | — |
-| `enableVaultCA`, `manualOtelConfig`, `tolerations`, `deployment` | Passed to mycarrier-helm | `false`, `false`, `[]`, `deployment` |
+| `enableVaultCA`, `manualOtelConfig`, `deployment` | Passed to mycarrier-helm | `false`, `false`, `deployment` |
 | `disableOtelAutoinstrumentation` | Passed to mycarrier-helm; **defaults to `false` here** (auto-instrumentation on), the opposite of direct mycarrier-helm | `false` |
+
+Do not set `tolerations` on an entry: the schema accepts it, but mc-environment writes a non-empty list into the ApplicationSet in a form that is not valid YAML, and the render fails (`did not find expected ',' or ']'`).
 
 At the root, mc-environment reads only `environments`, `global`, `alerts` (passed to every entry; see [Alerts](#alerts)) and `mycarrierChartVersion` (set by the pipeline); the platform flags above take effect only inside an entry. The schema rejects unknown keys at the root and in an entry. It also accepts `releaseName`, `applicationName`, `destinationNamespace`, `helm`, `annotations`, `labels`, `syncPolicy`, `isEnvironmentDeploy`, `networking`, `serviceAccount` and `serviceMonitor` on an entry, but mc-environment does not use them: leave them out, and put `networking`, `serviceAccount` and `serviceMonitor` under `applications.<app>`. The Argo CD sync policy is fixed by the chart. `disableSecurity` cannot be set through mc-environment.
 
@@ -307,7 +309,7 @@ environment:
 | `global.language` | `csharp` (mc-environment: `nodejs`) | `csharp`, `nodejs`, `python` or `go` — the schema rejects anything else. Selects default probes, [language secrets](#language-secrets), the default endpoint allowlist and the [standard alerts](#standard-alerts). Always set it |
 | `global.disableLanguageSecrets` | `false` | See [Language secrets](#language-secrets) |
 | `global.dependencies.<name>` | `false` | See [Supported Dependencies](#supported-dependencies) |
-| `global.env` | `{}` | Environment variables for every container |
+| `global.env` | `{}` | Environment variables for every application container (not init containers, `jobs[]` or `cronjobs[]`) |
 | `global.forceAutoscaling` | unset | Leave unset. `true` creates an HPA for non-migration apps in every environment; `false` turns off automatic HPA everywhere, prod included (see [HPA](#hpa-horizontal-pod-autoscaler)) |
 | `environment.name` | `dev` | The environment the chart renders for and the namespace it deploys to |
 | `environment.namespaceOverride` | `""` | Deploy to a different namespace |
@@ -319,11 +321,13 @@ The pipeline sets `global.gitbranch`, `global.branchlabel`, `global.commitDeploy
 
 ### Language secrets
 
-With `language: csharp`, the chart adds Vault-backed environment variables to every container:
+With `language: csharp`, the chart adds Vault-backed environment variables to every application container and its init containers:
 - shared settings for dev (including feature environments), preprod and prod, such as the `Auth_*` service base URLs and `MyCarrierSqlConnections`;
 - common settings (Split.io, Strivacity, credential URLs) and the connection settings of each dependency flagged in `global.dependencies`, named after the environment.
 
 Other environment names (`qa`, `uat`, `preprod-saia`, …) get the common and dependency settings but no shared settings: supply those through `global.env` and `secrets`. Other languages get none of this.
+
+`jobs[]` and `cronjobs[]` get none of these settings and no `global.env` either: their containers receive only `secrets`, the OpenTelemetry settings and their own `env`, so list everything a Job or CronJob needs in its `env`. Init containers get these settings, `secrets` and the OpenTelemetry settings, plus their own `env`, but not `global.env` or the application's `env`.
 
 `global.disableLanguageSecrets: true` turns all of it off, for a stack that supplies its own settings. It also stops the chart from dropping `KeyVault_IsActive`, `KeyVault_SplitIoProxyApiKey` and `KeyVault_SplitIoProxyUrl` (with redis, also `KeyVault_RedisConnection` and `Auth_KeyVault_RedisConnection`) from a csharp stack's own `env`.
 
@@ -396,12 +400,12 @@ redis.key.prefix: 'dev:myservice:'   # dots not allowed
 ### Scope Rules
 | Scope | Where to define | Applies to |
 |-------|----------------|------------|
-| All apps, all envs | `helm/values.yaml` → `global.env` | Every container in every environment |
-| All apps, one env | `helm/values.{env}.yaml` → `global.env` | Every container in that environment |
+| All apps, all envs | `helm/values.yaml` → `global.env` | Every application container in every environment |
+| All apps, one env | `helm/values.{env}.yaml` → `global.env` | Every application container in that environment |
 | One app, all envs | `helm/deployment/values.yaml` → `applications.<app>.env` | Only that application |
 | One app, one env | `helm/deployment/values.{env}.yaml` → `applications.<app>.env` | Only that application in that environment |
 
-App-level `env` overrides `global.env` for the same key.
+App-level `env` overrides `global.env` for the same key. `global.env` does not reach init containers, `jobs[]` or `cronjobs[]`: give those their own `env`.
 
 ---
 
@@ -1201,3 +1205,12 @@ Newest first. Each entry names the chart version, what broke, and what a stack's
 - `networking.istio.allowAllEndpoints: true` fails to render outside dev and feature environments. Remove it from
   preprod, prod and every other environment's values (an explicit `false` is accepted) and list the paths in
   `networking.istio.allowedEndpoints` instead.
+
+### mycarrier-helm 4.1.0
+
+- Feature environments enforce the endpoint allowlist, as preprod and prod do: an application with one (every csharp
+  application by default, and any application that sets `networking.istio.allowedEndpoints`) answers 403 there for
+  every other path. The csharp defaults are `/liveness` and `/health` (exact), `/api` (prefix, only when the
+  application's full name contains `api`) and `/swagger` (prefix). Add every other path the application serves on
+  feature environments to `networking.istio.allowedEndpoints`, or set `networking.istio.allowAllEndpoints: true` in
+  the dev or feature values.
