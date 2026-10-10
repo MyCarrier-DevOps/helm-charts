@@ -62,7 +62,7 @@ def stamp_text(text, versions) -> str:
 
 
 def classify(messages):
-    breaking = any(re.match(r"^[a-z]+(\([^)]*\))?!:", m) or re.search(r"(^|\n)BREAKING CHANGE:", m) for m in messages)
+    breaking = any(re.match(r"^[a-z]+(\([^)]*\))?!:", m) or re.search(r"(^|\n)BREAKING[ -]CHANGE:", m) for m in messages)
     feat = breaking or any(re.match(r"^feat(\([^)]*\))?!?:", m) for m in messages)
     return ("feat" if feat else "fix"), breaking
 

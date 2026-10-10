@@ -115,6 +115,9 @@ class Classify(unittest.TestCase):
         self.assertEqual(s.classify(["feat(mycarrier-helm)!: drop x"]), ("feat", True))
         self.assertEqual(s.classify(["fix: y\n\nBREAKING CHANGE: z"]), ("feat", True))
 
+    def test_hyphenated_footer_is_breaking(self):
+        self.assertEqual(s.classify(["fix: y\n\nBREAKING-CHANGE: z"]), ("feat", True))
+
 
 class BreakingEntry(unittest.TestCase):
     def test_newest_entry(self):
