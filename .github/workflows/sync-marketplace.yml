@@ -2,9 +2,10 @@ name: sync-marketplace
 
 # Publishes agent-guidance/helm/ to MyCarrier-DevOps/apm_marketplace (packages/helm/) for every released version of
 # mycarrier-helm and mc-environment, as the GitHub App "DevOps Marketplace Publisher". It always publishes this
-# repository's main, and only in its released state: each chart's latest change on main must be its version bump
-# (scripts: .github/scripts/sync_helm_guidance.py). Releases of other charts, prerelease manual releases from other
-# branches, and pushes whose chart changes are not released yet publish nothing.
+# repository's main, and only in its released state: each chart's latest change on main must be its version bump,
+# not counting files Helm-Release does not release (tests, *test*.yaml, *test*.yml; scripts:
+# .github/scripts/sync_helm_guidance.py). Releases of other charts, prerelease manual releases from other branches,
+# and pushes whose chart changes are not released yet publish nothing.
 #
 # Required secrets: MARKETPLACE_PUBLISHER_APP_ID, MARKETPLACE_PUBLISHER_PRIVATE_KEY (the App, installed on
 # apm_marketplace with Contents: read and write).
@@ -56,7 +57,8 @@ jobs:
 
       - name: Nothing released to publish
         if: steps.state.outputs.released != 'true'
-        run: echo "::notice::Release pending for ${{ steps.state.outputs.pending }}; its release run publishes the guidance."
+        run: |
+          echo "::notice::Release pending for ${{ steps.state.outputs.pending }}; its release run publishes the guidance. If no release is coming, run Helm-Manual-Release for each pending chart (target_branch: main, chart_name: the chart)."
 
       - name: Mint the App token
         if: steps.state.outputs.released == 'true'

@@ -2,7 +2,8 @@
 """Publishing helpers for the helm guidance package (used by .github/workflows/sync-marketplace.yml).
 
 helm-charts `main` is published only in its released state: for mycarrier-helm and mc-environment, the latest commit
-touching the chart (outside tests/ and the generated package.json) must be the one that set its Chart.yaml version.
+touching the chart must be the one that set its Chart.yaml version. Changes Helm-Release does not release (tests/,
+*test*.yaml and *test*.yml) and the generated package.json do not count.
 """
 import argparse
 import json
@@ -33,7 +34,9 @@ def released_state(repo):
     for chart in CHARTS:
         versions[chart] = str(chart_version(repo, chart))
         last = git(repo, "log", "-1", "--format=%H", "--", f"charts/{chart}",
-                   f":(exclude)charts/{chart}/tests", f":(exclude)charts/{chart}/package.json").strip()
+                   f":(exclude)charts/{chart}/tests", f":(exclude)charts/{chart}/package.json",
+                   f":(glob,exclude)charts/{chart}/**/*test*.yaml",
+                   f":(glob,exclude)charts/{chart}/**/*test*.yml").strip()
         diff = git(repo, "show", "--format=", last, "--", f"charts/{chart}/Chart.yaml") if last else ""
         if not re.search(r"^\+version:", diff, re.M):
             pending.append(chart)

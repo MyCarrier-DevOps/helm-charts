@@ -75,6 +75,18 @@ class ReleasedState(unittest.TestCase):
         git(d, "add", "-A"); git(d, "commit", "-q", "-m", "test: only")
         self.assertTrue(s.released_state(d)[0])
 
+    def test_files_helm_release_ignores_do_not_make_a_release_pending(self):
+        # Helm-Release does not run for charts/**/*test*.yaml or *.yml, so they must not hold the guidance back.
+        for rel in ("templates/triggertestengine.yaml", "ci-test.yml"):
+            with self.subTest(rel=rel):
+                d = self.repo()
+                self.bump(d, "mycarrier-helm", "4.4.1")
+                f = d / "charts/mycarrier-helm" / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text("kind: Job\n")
+                git(d, "add", "-A"); git(d, "commit", "-q", "-m", "fix(mycarrier-helm): trigger")
+                self.assertEqual(s.released_state(d)[2], [])
+
 
 class Stamp(unittest.TestCase):
     def test_line_after_title(self):
