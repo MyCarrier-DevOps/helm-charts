@@ -265,10 +265,13 @@ This template generates the complete HTTP rules as strings to avoid duplication
 
 - name: {{ $fullName }}-forbidden
   route:
+    {{- if eq $.application.deploymentType "rollout" }}
+    {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $fullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $fullName $namespace) "ports" (list (default 8080 (dig "ports" "http" nil $.application)))) | trim | nindent 4 }}
+    {{- else }}
     - destination:
         host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
-          number: {{ default 8080 (dig "ports" "http" nil $.application) }}      
+          number: {{ default 8080 (dig "ports" "http" nil $.application) }}      {{ end }}
   fault:
     delay:
       fixedDelay: 29s

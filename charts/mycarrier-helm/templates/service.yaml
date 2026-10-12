@@ -44,7 +44,9 @@ metadata:
   labels:
     {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
 spec:
-  {{ include "helm.specs.service" $appContext | indent 2 | trim }}
+  {{- /* Always ClusterIP: only the mesh reaches the canary, and a LoadBalancer or NodePort here would expose a second
+         external Service for every Rollout app. */}}
+  {{ include "helm.specs.service" (merge (dict "clusterIPOnly" true) $appContext) | indent 2 | trim }}
 {{- end }}
 
 {{- if and (hasKey $appValues "service") (hasKey $appValues.service "aliases") }}

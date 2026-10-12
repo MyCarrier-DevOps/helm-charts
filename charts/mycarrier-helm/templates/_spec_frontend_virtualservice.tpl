@@ -58,7 +58,11 @@ http:
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $appName "application" $appValues) $) }}
 - name: {{ $fullName }}-env-match
   route:
-    {{- if and $appValues.service $appValues.service.ports }}
+    {{- if eq $appValues.deploymentType "rollout" }}
+    {{- $ports := list (default 4200 (dig "ports" "http" nil $appValues)) }}
+    {{- if and $appValues.service $appValues.service.ports }}{{ $ports = list }}{{ range $appValues.service.ports }}{{ $ports = append $ports .port }}{{ end }}{{ end }}
+    {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $fullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $fullName $namespace) "ports" $ports) | trim | nindent 4 }}
+    {{- else if and $appValues.service $appValues.service.ports }}
     {{- range $appValues.service.ports }}
     - destination:
         host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
@@ -92,7 +96,11 @@ http:
   match:
     - {{- toYaml $pathMatch | nindent 6 }}
   route:
-  {{- if and $appValues.service $appValues.service.ports }}
+  {{- if eq $appValues.deploymentType "rollout" }}
+  {{- $ports := list (default 4200 (dig "ports" "http" nil $appValues)) }}
+  {{- if and $appValues.service $appValues.service.ports }}{{ $ports = list }}{{ range $appValues.service.ports }}{{ $ports = append $ports .port }}{{ end }}{{ end }}
+  {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $fullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $fullName $namespace) "ports" $ports) | trim | nindent 2 }}
+  {{- else if and $appValues.service $appValues.service.ports }}
   {{- range $appValues.service.ports }}
   - destination:
       host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
@@ -131,10 +139,14 @@ http:
 - name: {{ $key }}-custom-route
   {{- tpl (toYaml $routeSpec) $ | nindent 2 }}
   route:
+  {{- if and (eq $appValues.deploymentType "rollout") (not $value.destination) }}
+  {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $routeFullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $routeFullName $namespace) "ports" (list 80)) | trim | nindent 2 }}
+  {{- else }}
   - destination:
       host: "{{ tpl (default (printf "%s.%s.svc.cluster.local" $routeFullName $namespace) $value.destination) $ }}"
       port:
         number: 80
+  {{- end }}
   {{ $headersBlock := include "helm.istioIngress.responseHeaders" $ }}
   {{- $responseHeaders := dig "networking" "istio" "responseHeaders" nil $appValues -}}
   {{- if $responseHeaders }}
@@ -191,10 +203,14 @@ http:
 {{- $fullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) $) }}
 - name: {{ $fullName }}-catchall
   route:
+  {{- if eq $primaryAppValues.deploymentType "rollout" }}
+  {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $fullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $fullName $namespace) "ports" (list 80)) | trim | nindent 2 }}
+  {{- else }}
   - destination:
       host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
       port:
         number: 80
+  {{- end }}
   {{- $catchallMatch := dict "uri" (dict "exact" "/") }}
   {{- $_ := set $catchallMatch "withoutHeaders" (dict "environment" (dict)) }}
   match:
@@ -206,7 +222,7 @@ http:
     {{- end }}
   headers:
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
-  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  {{- with (dig "networking" "istio" "corsPolicy" nil $primaryAppValues) }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
   timeout: {{ dig "service" "timeout" $serviceDefaults.timeout $primaryAppValues }}
@@ -416,7 +432,7 @@ http:
   {{- end }}
   headers:
 {{ include "helm.istioIngress.responseHeaders" $ | indent 4 }}
-  {{- with $primaryAppValues.networking.istio.corsPolicy }}
+  {{- with (dig "networking" "istio" "corsPolicy" nil $primaryAppValues) }}
   corsPolicy:{{ printf "\n%s" (toYaml . | indent 4) }}
   {{- end }}
 {{- end -}}

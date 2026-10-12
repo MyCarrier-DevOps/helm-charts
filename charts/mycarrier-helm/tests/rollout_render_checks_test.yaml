@@ -118,8 +118,8 @@ tests:
           of: Rollout
 
   # In a feature environment <fullName>-offload claims the same hosts as the Rollout's VirtualService, and Istio does
-  # not merge VirtualServices for sidecars, so a Rollout with Istio trafficRouting there needs offloadVSEnabled: false.
-  - it: refuses a Rollout with Istio trafficRouting in a feature environment while the -offload VirtualService renders
+  # not merge VirtualServices for sidecars, so a canary Rollout there needs offloadVSEnabled: false.
+  - it: refuses a canary Rollout in a feature environment while the -offload VirtualService renders
     set:
       global:
         appStack: test-stack
@@ -132,12 +132,6 @@ tests:
           networking:
             istio:
               offloadOperatorEnabled: false
-          updateStrategy:
-            canary:
-              trafficRouting:
-                istio:
-                  virtualService:
-                    name: test-stack-api-feature20-saia
           image:
             registry: registry.example.com
             repository: api
@@ -148,7 +142,7 @@ tests:
       - failedTemplate:
           errorPattern: "also needs networking.istio.offloadVSEnabled: false"
 
-  - it: renders a Rollout with Istio trafficRouting in a feature environment once the -offload VirtualService is off
+  - it: renders a canary Rollout in a feature environment once the -offload VirtualService is off
     set:
       global:
         appStack: test-stack
@@ -162,12 +156,6 @@ tests:
             istio:
               offloadOperatorEnabled: false
               offloadVSEnabled: false
-          updateStrategy:
-            canary:
-              trafficRouting:
-                istio:
-                  virtualService:
-                    name: test-stack-api-feature20-saia
           image:
             registry: registry.example.com
             repository: api

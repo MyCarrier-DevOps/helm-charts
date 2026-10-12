@@ -49,10 +49,14 @@ http:
 {{/* First route: explicit header match - routes traffic with environment header */}}
 - name: {{ $fullName }}
   route:
+    {{- if eq .application.deploymentType "rollout" }}
+    {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $fullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $fullName $namespace) "ports" (list (default 8080 (dig "ports" "http" nil .application)))) | trim | nindent 4 }}
+    {{- else }}
     - destination:
         host: "{{ $fullName }}.{{ $namespace }}.svc.cluster.local"
         port:
           number: {{ default 8080 (dig "ports" "http" nil .application) }}
+    {{- end }}
   match:
     - headers:
         environment:
@@ -78,10 +82,14 @@ http:
 - name: {{ $key }}
   {{- tpl (toYaml $routeSpec) $ | nindent 2 }}
   route:
+  {{- if and (eq $.application.deploymentType "rollout") (not $value.destination) }}
+  {{- include "helm.canary.destinations" (dict "stableHost" (printf "%s.%s.svc.cluster.local" $fullName $namespace) "previewHost" (printf "%s-preview.%s.svc.cluster.local" $fullName $namespace) "ports" (list (default (default 8080 (dig "ports" "http" nil $.application)) $value.port))) | trim | nindent 2 }}
+  {{- else }}
   - destination:
       host: "{{ tpl (default (printf "%s.%s.svc.cluster.local" $fullName $namespace) $value.destination) $ }}"
       port:
         number: {{ default (default 8080 (dig "ports" "http" nil $.application)) $value.port }}
+  {{- end }}
   {{- $routeHeaders := include "helm.istioIngress.responseHeaders" $ }}
   {{- if and $.application.networking.istio.responseHeaders -}}
     {{- with $.application.networking.istio.responseHeaders -}}

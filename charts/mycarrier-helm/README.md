@@ -45,6 +45,21 @@ To uninstall a release:
 helm uninstall mycarrier-app
 ```
 
+## Upgrading to 4.5.0 (Rollouts only)
+
+4.5.0 adds the canary contract for `deploymentType: rollout`. Deployment and StatefulSet apps render unchanged. A Rollout
+app that rendered on 4.4.0 can fail on 4.5.0, which blocks the whole release, until its values are edited:
+
+| 4.4.0 values | 4.5.0 edit |
+|---|---|
+| `applications.<app>.updateStrategy.canary` (steps, `scaleDownDelaySeconds`, `abortScaleDownDelaySeconds`, `scaleDownDelayRevisionLimit`, `backgroundanalysis`, Services, `trafficRouting`) | Remove it. Set `global.strategy.canary` (`preset`, `steps`, `analysis`, `progressDeadlineSeconds`) instead; the chart injects the Services and Istio routing. The scale-down delays use the Argo Rollouts defaults. |
+| Istio off (`networking.istio.enabled: false`, `istioDisabled`, `service.istioDisabled`) | Leave Istio on: the canary weights live in the chart's VirtualService. |
+| `service.aliases` | Remove the aliases: alias Services would send traffic to canary pods regardless of the weights. |
+| Feature environment with the `-offload` VirtualService | Set `networking.istio.offloadVSEnabled: false` (on the primary frontend too, in a multi-frontend release). |
+| A custom route key `canary` or equal to the app's full name, or the same custom route key on two frontend apps | Rename the key: Argo Rollouts weights only the first route with a name. |
+| A custom route whose `destination` is the app's own Service | Remove `destination` so the route gets the `-preview` destination. |
+| `applications.<app>.analysisTemplates` | The AnalysisTemplates are now named `<environment>-<fullName>-<name>`, matching the analysis steps. |
+
 ## Chart Structure
 
 ```

@@ -6,7 +6,7 @@
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
 {{- $serviceDefaults := $ctx.chartDefaults.service -}}
-type: {{ dig "service" "type" "ClusterIP" .application }}
+type: {{ if .clusterIPOnly }}ClusterIP{{ else }}{{ dig "service" "type" "ClusterIP" .application }}{{ end }}
 {{- if (dig "service" "headless" false .application) }}
 clusterIP: None
 {{ end }}

@@ -25,23 +25,43 @@ workloadRef:
   name: {{ $fullName }}
   scaleDown: never
 {{- end }}
+{{- $canary := eq (include "helm.canary.enabled" .) "true" }}
+{{- if $canary }}
+{{- $canaryConfig := include "helm.canary.config" . | fromJson }}
+{{- /* DEVOPS-307 defaults: a canary that makes no progress for this long aborts (and the Rollout goes back to
+       stable); a GitOps revert to one of the last 2 revisions skips the steps. applications.<app>.progressDeadlineSeconds
+       overrides the release-wide value for a slow-starting app; it is not a step setting, so lockstep is unaffected. */}}
+progressDeadlineSeconds: {{ dig "progressDeadlineSeconds" $canaryConfig.progressDeadlineSeconds .application }}
+progressDeadlineAbort: true
+rollbackWindow:
+  revisions: 2
+{{- end }}
 strategy:
+{{- if $canary }}
+{{- /* The canary contract: the chart's stable and -preview Services, the Tech Spec's canary defaults (stable keeps
+       full capacity, 30 s before an aborted canary scales down, at least one pod per ReplicaSet), Istio weights on
+       every route that reaches the app (helm.canary.virtualServices), and the release-wide steps (helm.canary.steps). */}}
+  canary:
+    stableService: {{ $fullName }}
+    canaryService: {{ $fullName }}-preview
+    dynamicStableScale: false
+    abortScaleDownDelaySeconds: 30
+    minPodsPerReplicaSet: 1
+    trafficRouting:
+      istio:
+        virtualServices:
+          {{- include "helm.canary.virtualServices" . | nindent 10 }}
+    steps:
+      {{- include "helm.canary.steps" . | nindent 6 }}
+{{- else }}
 {{- /* While migrating (either way): a bare canary, so the Rollout takes over no Service and no VirtualService. With
        stableService set, the controller points the stable Service at the Rollout's ReplicaSet as soon as it is fully
        available, which is at 1 pod before the autoscaler (wave 11) scales it, and the Deployment's pods stop getting
        traffic. Without it, both sets of pods serve behind the existing Services. A Rollout's first rollout runs no
-       steps, so nothing is lost on the way in; release 2 renders the configured strategy. maxUnavailable: 0 keeps
-       every Rollout pod serving while it is replaced (on the way back its template becomes the Deployment's).
-       Without a canary block the Rollout gets the same bare canary: the Rollout CRD rejects an empty strategy, and
-       Argo CD would still prune the Deployment in that sync, leaving the Rollout frozen on its old spec. */}}
-{{- if or .application.migratingToRollouts (not (dig "updateStrategy" "canary" false .application)) }}
+       steps, so nothing is lost on the way in; release 2 renders the canary contract. maxUnavailable: 0 keeps every
+       Rollout pod serving while it is replaced (on the way back its template becomes the Deployment's). */}}
   canary:
     maxUnavailable: 0
-{{- else }}
-  canary:
-    {{- with (dig "updateStrategy" "canary" dict .application) }}
-    {{ toYaml . | indent 4 | trim }}
-    {{- end }}
 {{- end }}
 {{- /* With workloadRef the pod template comes from the Deployment; Argo Rollouts rejects a Rollout that sets both.
        Otherwise the Rollout renders the Deployment's pod template (helm.specs.podTemplate), so the switch between
