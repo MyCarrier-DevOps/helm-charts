@@ -39,6 +39,12 @@
 {{- if and (kindIs "map" $appValues.updateStrategy) (hasKey $appValues.updateStrategy "canary") }}
 {{- fail (printf "application '%s': updateStrategy.canary is no longer supported; canary settings are release-wide in global.strategy.canary (preset, steps, analysis)." $appName) }}
 {{- end }}
+{{- /* A migrator runs to completion and exits, so it renders through jobs with timing: pre-deploy, never as a canary
+       Rollout (DEVOPS-311, A2). Same name test as helm.hpaCondition. A template check rather than a schema rule, so the
+       message stays readable (see allow_all_endpoints_guardrail_test.yaml). */ -}}
+{{- if and (eq $appValues.deploymentType "rollout") (contains "migration" $appName) }}
+{{- fail (printf "application '%s': an application whose name contains 'migration' cannot be deploymentType rollout; a migrator runs to completion and exits, so render it through jobs with timing: pre-deploy." $appName) }}
+{{- end }}
 {{- /* Alias Services select every pod of the app without the rollouts-pod-template-hash the controller manages, so
        traffic through them reaches canary pods in proportion to pod count, whatever the weights. */ -}}
 {{- if and (eq $appValues.deploymentType "rollout") (dig "service" "aliases" nil $appValues) }}
