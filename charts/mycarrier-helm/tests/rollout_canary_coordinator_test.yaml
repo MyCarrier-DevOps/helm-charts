@@ -1,0 +1,322 @@
+suite: Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)
+templates:
+  - rollout.yaml
+tests:
+  # R-coord: with the coordinator off (the default) no plugin step renders.
+  - it: renders no plugin step while the coordinator is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 7
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            setWeight: 10
+
+  # Tech Spec chart contract: every preset starts with barrier start, which arms the plugin's Abort hook and
+  # confirms the whole group has been applied; every step boundary is a barrier.
+  - it: starts with the start barrier and puts a barrier at every step boundary of the standard preset
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 10m}
+            - setWeight: 10
+            - pause:
+                duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w10, timeout: 15m}
+            - setWeight: 25
+            - pause:
+                duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 15m}
+            - setWeight: 50
+            - pause:
+                duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w50, timeout: 15m}
+            - setWeight: 100
+
+  - it: puts the barrier after the analysis and the pause of each weight
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              enabled: true
+              templates: [health]
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 10m}
+            - setWeight: 25
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 15m}
+            - setWeight: 100
+
+  # The manual preset's pause stays before its barrier, so a resume of the group fans out and the barrier holds it.
+  - it: keeps the manual pause before the w10 barrier
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 10m}
+            - setWeight: 10
+            - pause: {}
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w10, timeout: 15m}
+            - setWeight: 100
+
+  - it: takes barrier timeouts from coordinator.barrierTimeouts and keeps the other defaults
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            coordinator:
+              enabled: true
+              barrierTimeouts:
+                w25: 20m
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[0].plugin.config.timeout
+          value: 10m
+      - equal:
+          path: spec.strategy.canary.steps[2].plugin.config.timeout
+          value: 20m
+
+  # D6: an explicit steps list overrides the preset and renders verbatim; it carries its own barriers.
+  - it: renders an explicit steps list verbatim, with no barrier added
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 5
+              - plugin:
+                  name: mycarrier/canary-coordinator
+                  config: {kind: barrier, name: w5, timeout: 5m}
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 5
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w5, timeout: 5m}
+
+  # R-add: every Rollout of a release carries the same barrier sequence and the same group size.
+  - it: gives two Rollouts of a release the same barriers and a group size of 2
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "2"
+      # Same barriers at the same positions on both Rollouts.
+      - equal:
+          path: spec.strategy.canary.steps[0].plugin.config
+          value: {kind: barrier, name: start, timeout: 10m}
+      - equal:
+          path: spec.strategy.canary.steps[3].plugin.config
+          value: {kind: barrier, name: w10, timeout: 15m}
+      - equal:
+          path: spec.strategy.canary.steps[6].plugin.config
+          value: {kind: barrier, name: w25, timeout: 15m}
+      - equal:
+          path: spec.strategy.canary.steps[9].plugin.config
+          value: {kind: barrier, name: w50, timeout: 15m}
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 11
+
+  # A2: a migrator runs to completion, so it renders through jobs (timing: pre-deploy), never as a canary Rollout.
+  - it: rejects an application named like a migrator with deploymentType rollout
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        db-migration:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: migrator
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'db-migration': an application whose name contains 'migration' cannot be deploymentType rollout"
+
+  # The canary-coordinator finds a release's Rollouts by the mycarrier.tech/correlationId label (Tech Spec D20).
+  - it: requires global.correlationId when the coordinator is enabled
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.correlationId is required when the coordinator is enabled"

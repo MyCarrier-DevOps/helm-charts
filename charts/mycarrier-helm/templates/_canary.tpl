@@ -13,7 +13,10 @@
 {{- $defaults := dict
       "preset" "standard"
       "progressDeadlineSeconds" 600
-      "analysis" (dict "enabled" false "templates" (list "health" "compare" "alerts")) -}}
+      "analysis" (dict "enabled" false "templates" (list "health" "compare" "alerts"))
+      "coordinator" (dict
+        "enabled" false
+        "barrierTimeouts" (dict "start" "10m" "dark-ready" "10m" "dark-passed" "30m" "w10" "15m" "w25" "15m" "w50" "15m")) -}}
 {{- $global := .Values.global | default dict -}}
 {{- $cfg := deepCopy (dig "strategy" "canary" dict $global) -}}
 {{- toJson (mustMergeOverwrite (deepCopy $defaults) $cfg) -}}
@@ -24,14 +27,24 @@
          fast      25, analysis, 100
          manual    10, analysis, pause (until resumed), 100
        Analysis steps render only with analysis.enabled (default false until DEVOPS-312's AnalysisTemplates exist);
-       each references <environment>-<fullName>-<template>. The coordinator steps (PR 3) and the dark stage
-       (DEVOPS-326) go in front of the ladder. */ -}}
+       each references <environment>-<fullName>-<template>.
+       With coordinator.enabled (release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator step plugin) a
+       preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the whole group has
+       been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
+       release crosses each boundary together; the manual preset's pause stays before its barrier, so a resume of the
+       group fans out and the barrier then holds it. An explicit steps list renders verbatim and carries its own
+       barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec. */ -}}
 {{- define "helm.canary.steps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
-{{- if $cfg.steps }}
-{{- toYaml $cfg.steps }}
-{{- else }}
+{{- $coordinator := $cfg.coordinator -}}
+{{- if and $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
+  {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
+{{- end -}}
 {{- $fullName := include "helm.fullname" . -}}
+{{- $steps := list -}}
+{{- if $cfg.steps }}
+{{- $steps = $cfg.steps -}}
+{{- else }}
 {{- $analysisStep := dict -}}
 {{- if $cfg.analysis.enabled -}}
   {{- $templates := list -}}
@@ -40,28 +53,36 @@
   {{- end -}}
   {{- $analysisStep = dict "analysis" (dict "templates" $templates) -}}
 {{- end -}}
-{{- $steps := list -}}
+{{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
+{{- $ladder := list -}}
+{{- $pause := dict -}}
 {{- if eq $cfg.preset "standard" -}}
-  {{- range $weight := list 10 25 50 -}}
-    {{- $steps = append $steps (dict "setWeight" $weight) -}}
-    {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
-    {{- $steps = append $steps (dict "pause" (dict "duration" "5m")) -}}
-  {{- end -}}
-  {{- $steps = append $steps (dict "setWeight" 100) -}}
+  {{- $ladder = list 10 25 50 -}}{{- $pause = dict "duration" "5m" -}}
 {{- else if eq $cfg.preset "fast" -}}
-  {{- $steps = append $steps (dict "setWeight" 25) -}}
-  {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
-  {{- $steps = append $steps (dict "setWeight" 100) -}}
+  {{- $ladder = list 25 -}}
 {{- else if eq $cfg.preset "manual" -}}
-  {{- $steps = append $steps (dict "setWeight" 10) -}}
-  {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
-  {{- $steps = append $steps (dict "pause" (dict)) -}}
-  {{- $steps = append $steps (dict "setWeight" 100) -}}
+  {{- $ladder = list 10 -}}
 {{- else -}}
   {{- fail (printf "global.strategy.canary.preset '%s' is not one of standard, fast, manual" $cfg.preset) -}}
 {{- end -}}
-{{- toYaml $steps }}
+{{- range $weight := $ladder -}}
+  {{- $steps = append $steps (dict "setWeight" $weight) -}}
+  {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
+  {{- if eq $cfg.preset "manual" }}{{ $steps = append $steps (dict "pause" (dict)) }}{{ else if $pause }}{{ $steps = append $steps (dict "pause" $pause) }}{{ end -}}
+  {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" (printf "w%d" $weight) "coordinator" $coordinator) | fromJson) }}{{ end -}}
+{{- end -}}
+{{- $steps = append $steps (dict "setWeight" 100) -}}
 {{- end }}
+{{- toYaml $steps }}
+{{- end -}}
+
+{{- /* One canary-coordinator barrier step, as JSON; its timeout comes from coordinator.barrierTimeouts.<name>. */ -}}
+{{- define "helm.canary.barrier" -}}
+{{- $timeout := index .coordinator.barrierTimeouts .name -}}
+{{- if not $timeout -}}
+  {{- fail (printf "global.strategy.canary.coordinator.barrierTimeouts.%s is not set" .name) -}}
+{{- end -}}
+{{- toJson (dict "plugin" (dict "name" "mycarrier/canary-coordinator" "config" (dict "kind" "barrier" "name" .name "timeout" $timeout))) -}}
 {{- end -}}
 
 {{- /* Names of the HTTP routes in a rendered VirtualService spec that send traffic to the app's Service, as JSON.
