@@ -1,0 +1,19 @@
+{
+  "name": "helm",
+  "version": "0.1.0",
+  "description": "Guidance for writing a service's helm/ values with mycarrier-helm and mc-environment, kept current with every released chart version. Installs the guidance as a Claude Code rule for helm/** (.claude/rules/helm/).",
+  "author": {
+    "name": "MyCarrier",
+    "email": "bcarlock@mycarrier.io"
+  },
+  "homepage": "https://github.com/MyCarrier-DevOps/apm_marketplace/tree/main/packages/helm",
+  "license": "MIT",
+  "keywords": [
+    "instructions",
+    "helm",
+    "kubernetes",
+    "argocd",
+    "mycarrier-helm",
+    "mc-environment"
+  ]
+}

@@ -1,0 +1,23 @@
+name: helm
+version: 0.1.0
+description: >
+  Guidance for writing a service's helm/ values with MyCarrier's charts: mycarrier-helm (direct) and
+  mc-environment (an ApplicationSet with one Application per environment). Layouts and merge order, global
+  settings, applications, secrets, networking, scaling, test triggers, alerts and environment conventions, kept
+  current with every released chart version. An instruction for helm/** that APM deploys to Claude Code, Copilot,
+  Cursor and other agents; Claude Code plugin installs get it as a rule in .claude/rules/helm/.
+
+author:
+  name: MyCarrier
+  email: bcarlock@mycarrier.io
+
+license: MIT
+homepage: https://github.com/MyCarrier-DevOps/helm-charts/tree/main/agent-guidance/helm
+
+keywords:
+  - instructions
+  - helm
+  - kubernetes
+  - argocd
+  - mycarrier-helm
+  - mc-environment
