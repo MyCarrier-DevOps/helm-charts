@@ -310,6 +310,7 @@ environment:
 | `global.disableLanguageSecrets` | `false` | See [Language secrets](#language-secrets) |
 | `global.dependencies.<name>` | `false` | See [Supported Dependencies](#supported-dependencies) |
 | `global.env` | `{}` | Environment variables for every application container (not init containers, `jobs[]` or `cronjobs[]`) |
+| `global.strategy.canary` | preset `standard` | Canary settings for every Rollout of the release (see [Rollouts](#rollouts)) |
 | `global.forceAutoscaling` | unset | Leave unset. `true` creates an HPA for non-migration apps in every environment; `false` turns off automatic HPA everywhere, prod included (see [HPA](#hpa-horizontal-pod-autoscaler)) |
 | `environment.name` | `dev` | The environment the chart renders for and the namespace it deploys to |
 | `environment.namespaceOverride` | `""` | Deploy to a different namespace |
@@ -613,12 +614,32 @@ applications:
 
 ## Rollouts
 
-`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy, plus a `<fullName>-preview` Service next to the `<fullName>` Service. `updateStrategy.canary` is passed to the Rollout unchanged as its canary strategy (Argo Rollouts fields such as `steps`); without it the Rollout gets `canary: {maxUnavailable: 0}`. Canary is the only strategy: `updateStrategy.bluegreen` fails to render. A Rollout's replica count and pod template follow the same rules as a Deployment's.
+`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's.
+
+```yaml
+global:
+  strategy:
+    canary:
+      preset: standard                  # standard | fast | manual
+      # steps: []                       # replaces the preset, verbatim
+      analysis:
+        enabled: false                  # leave off until the platform AnalysisTemplates exist
+      progressDeadlineSeconds: 600      # a canary that makes no progress for this long aborts
+      bakeMinutes: 30                   # alert-gate's watch window after promotion; read by the release
+```
+
+| Preset | Steps |
+|--------|-------|
+| `standard` (default) | 10%, 25% and 50%, each followed by a 5-minute pause, then 100% |
+| `fast` | 25%, then 100% |
+| `manual` | 10%, then a pause with no time limit until someone promotes or aborts it, then 100% |
+
+With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` (`health`, `compare` and `alerts` by default); `applications.<app>.analysisTemplates` render under the same names. `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
 
 | Environment | What a Rollout needs |
 |-------------|----------------------|
-| prod, preprod and other non-dev environments | Nothing more |
-| `feature<N>` | `networking.istio.offloadOperatorEnabled: false`; with `updateStrategy.canary.trafficRouting.istio`, also `networking.istio.offloadVSEnabled: false` |
+| Every environment | Istio left on (`networking.istio.enabled`, `istioDisabled`, `service.istioDisabled`), no `service.aliases`, no custom route whose `destination` is the application's own Service, and no two routes with the same name that reach it |
+| `feature<N>` | `networking.istio.offloadOperatorEnabled: false` and `networking.istio.offloadVSEnabled: false` (on the primary frontend too, in a multi-frontend release) |
 | `dev` | `networking.istio.offloadOperatorEnabled: false`, which deletes the application's dev VirtualService until Argo CD self-heals — try Rollouts in a feature environment instead |
 
 The chart fails the render when one of these is missing.
@@ -629,7 +650,7 @@ Never change `deploymentType` in one release: Argo CD prunes the old workload be
 
 | Direction | Release 1 | Release 2 |
 |-----------|-----------|-----------|
-| Deployment → Rollout | `deploymentType: rollout` and `migratingToRollouts: true` | Remove `migratingToRollouts`: the Rollout gets its own pod template and `updateStrategy.canary`; Argo CD prunes the Deployment |
+| Deployment → Rollout | `deploymentType: rollout` and `migratingToRollouts: true` | Remove `migratingToRollouts`: the Rollout gets its own pod template and the canary from `global.strategy.canary`; Argo CD prunes the Deployment |
 | Rollout → Deployment | `deploymentType: deployment` and `migratingToRollouts: true` | Remove `migratingToRollouts`: Argo CD prunes the Rollout |
 
 In release 1 the chart renders both workloads: the Rollout borrows the Deployment's pod template (`workloadRef` with `scaleDown: never`) and a bare canary, both sets of pods serve behind the existing Services, and the HPA/KEDA autoscaler targets the workload `deploymentType` names.
@@ -649,6 +670,9 @@ Before release 2:
 global:
   appStack: myservice
   language: csharp
+  strategy:
+    canary:
+      preset: standard                  # used from release 2; release 1 runs no canary steps
 
 # helm/values.prod.yaml
 environment:
@@ -667,13 +691,6 @@ applications:
       repository: appstack/myservice/api
     ports:
       http: 8080
-    updateStrategy:
-      canary:                           # used from release 2
-        steps:
-          - setWeight: 25
-          - pause: {duration: 10m}
-          - setWeight: 50
-          - pause: {duration: 10m}
 
 # helm/deployment/values.prod.yaml
 applications:
@@ -1196,6 +1213,19 @@ When reviewing or creating helm value changes:
 ## Breaking changes
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
+
+### mycarrier-helm 4.5.0
+
+Rollouts only; Deployment and StatefulSet applications render unchanged.
+
+- `applications.<app>.updateStrategy.canary` fails to render on a Rollout. Remove it and set `global.strategy.canary`
+  (`preset` or `steps`, `analysis`, `progressDeadlineSeconds`) instead; the chart renders the Services and the Istio
+  routing.
+- A Rollout fails to render with Istio off, with `service.aliases`, with a custom route whose `destination` is its own
+  Service, or with two routes of the same name that reach it (for example a custom route key `canary`).
+- In feature environments every Rollout needs `networking.istio.offloadVSEnabled: false`, on the primary frontend too
+  in a multi-frontend release.
+- AnalysisTemplates from `applications.<app>.analysisTemplates` are named `<environment>-<fullName>-<name>`.
 
 ### mycarrier-helm 4.4.0
 
