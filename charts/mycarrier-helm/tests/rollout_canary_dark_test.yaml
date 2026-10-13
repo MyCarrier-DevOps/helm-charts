@@ -34,7 +34,7 @@ tests:
           value:
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: start, timeout: 10m}
+                config: {kind: barrier, name: start, timeout: 9m}
             - setCanaryScale:
                 replicas: 1
             - setHeaderRoute:
@@ -45,10 +45,10 @@ tests:
                       exact: 0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: dark-ready, timeout: 10m}
+                config: {kind: barrier, name: dark-ready, timeout: 9m}
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: dark-passed, timeout: 30m}
+                config: {kind: barrier, name: dark-passed, timeout: 9m}
             - setHeaderRoute:
                 name: canary-header
             - setCanaryScale:
@@ -56,7 +56,7 @@ tests:
             - setWeight: 25
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: w25, timeout: 15m}
+                config: {kind: barrier, name: w25, timeout: 9m}
             - setWeight: 100
       - equal:
           path: spec.strategy.canary.trafficRouting.managedRoutes

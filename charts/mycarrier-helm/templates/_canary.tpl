@@ -18,7 +18,7 @@
       "analysis" (dict "enabled" false "templates" (list "health" "compare" "alerts"))
       "coordinator" (dict
         "enabled" false
-        "barrierTimeouts" (dict "start" "10m" "dark-ready" "10m" "dark-passed" "30m" "w10" "15m" "w25" "15m" "w50" "15m")) -}}
+        "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
 {{- $global := .Values.global | default dict -}}
 {{- $cfg := deepCopy (dig "strategy" "canary" dict $global) -}}
 {{- toJson (mustMergeOverwrite (deepCopy $defaults) $cfg) -}}
@@ -94,7 +94,30 @@
 {{- end -}}
 {{- $steps = append $steps (dict "setWeight" 100) -}}
 {{- end }}
+{{- /* Argo Rollouts counts the time a Rollout waits at a plugin step toward progressDeadlineSeconds (only analysis,
+       experiment and pause steps are exempt: isIndefiniteStep in rollout/sync.go), so a barrier whose timeout is at or
+       above the deadline never times out; progressDeadlineAbort aborts the Rollout first. Checked for preset and
+       explicit steps alike, against the deadline that applies to this application. */ -}}
+{{- $deadline := int (dig "progressDeadlineSeconds" $cfg.progressDeadlineSeconds .application) -}}
+{{- range $steps -}}
+  {{- $plugin := dig "plugin" dict . -}}
+  {{- $timeout := toString (dig "config" "timeout" "" $plugin) -}}
+  {{- if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") $timeout -}}
+    {{- if ge (include "helm.canary.durationSeconds" $timeout | int) $deadline -}}
+      {{- fail (printf "barrier '%s' has timeout %s, which is not below progressDeadlineSeconds (%d s). Argo Rollouts aborts a Rollout that waits at a barrier once the progress deadline passes, so this timeout would never fire. Set the barrier timeout below %d s, or raise progressDeadlineSeconds." (toString (dig "config" "name" "" $plugin)) $timeout $deadline $deadline) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 {{- toYaml $steps }}
+{{- end -}}
+
+{{- /* A barrier timeout such as 90s, 9m or 1h, in seconds; any other form yields 0 and is not checked. */ -}}
+{{- define "helm.canary.durationSeconds" -}}
+{{- $v := toString . -}}
+{{- if regexMatch "^[0-9]+(s|m|h)$" $v -}}
+  {{- $n := trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v)) | int -}}
+  {{- if hasSuffix "h" $v }}{{ mul $n 3600 }}{{ else if hasSuffix "m" $v }}{{ mul $n 60 }}{{ else }}{{ $n }}{{ end -}}
+{{- else -}}0{{- end -}}
 {{- end -}}
 
 {{- /* One canary-coordinator barrier step, as JSON; its timeout comes from coordinator.barrierTimeouts.<name>. */ -}}

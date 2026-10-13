@@ -59,25 +59,25 @@ tests:
           value:
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: start, timeout: 10m}
+                config: {kind: barrier, name: start, timeout: 9m}
             - setWeight: 10
             - pause:
                 duration: 5m
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: w10, timeout: 15m}
+                config: {kind: barrier, name: w10, timeout: 9m}
             - setWeight: 25
             - pause:
                 duration: 5m
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: w25, timeout: 15m}
+                config: {kind: barrier, name: w25, timeout: 9m}
             - setWeight: 50
             - pause:
                 duration: 5m
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: w50, timeout: 15m}
+                config: {kind: barrier, name: w50, timeout: 9m}
             - setWeight: 100
 
   - it: puts the barrier after the analysis and the pause of each weight
@@ -112,14 +112,14 @@ tests:
           value:
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: start, timeout: 10m}
+                config: {kind: barrier, name: start, timeout: 9m}
             - setWeight: 25
             - analysis:
                 templates:
                   - templateName: preprod-test-stack-api-health
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: w25, timeout: 15m}
+                config: {kind: barrier, name: w25, timeout: 9m}
             - setWeight: 100
 
   # The manual preset's pause stays before its barrier, so a resume of the group fans out and the barrier holds it.
@@ -152,12 +152,12 @@ tests:
           value:
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: start, timeout: 10m}
+                config: {kind: barrier, name: start, timeout: 9m}
             - setWeight: 10
             - pause: {}
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: w10, timeout: 15m}
+                config: {kind: barrier, name: w10, timeout: 9m}
             - setWeight: 100
 
   - it: takes barrier timeouts from coordinator.barrierTimeouts and keeps the other defaults
@@ -173,7 +173,7 @@ tests:
             coordinator:
               enabled: true
               barrierTimeouts:
-                w25: 20m
+                w25: 5m
       environment:
         name: preprod
       applications:
@@ -188,10 +188,10 @@ tests:
     asserts:
       - equal:
           path: spec.strategy.canary.steps[0].plugin.config.timeout
-          value: 10m
+          value: 9m
       - equal:
           path: spec.strategy.canary.steps[2].plugin.config.timeout
-          value: 20m
+          value: 5m
 
   # D6: an explicit steps list overrides the preset and renders verbatim; it carries its own barriers.
   - it: renders an explicit steps list verbatim, with no barrier added
@@ -268,16 +268,16 @@ tests:
       # Same barriers at the same positions on both Rollouts.
       - equal:
           path: spec.strategy.canary.steps[0].plugin.config
-          value: {kind: barrier, name: start, timeout: 10m}
+          value: {kind: barrier, name: start, timeout: 9m}
       - equal:
           path: spec.strategy.canary.steps[3].plugin.config
-          value: {kind: barrier, name: w10, timeout: 15m}
+          value: {kind: barrier, name: w10, timeout: 9m}
       - equal:
           path: spec.strategy.canary.steps[6].plugin.config
-          value: {kind: barrier, name: w25, timeout: 15m}
+          value: {kind: barrier, name: w25, timeout: 9m}
       - equal:
           path: spec.strategy.canary.steps[9].plugin.config
-          value: {kind: barrier, name: w50, timeout: 15m}
+          value: {kind: barrier, name: w50, timeout: 9m}
       - lengthEqual:
           path: spec.strategy.canary.steps
           count: 11
@@ -327,3 +327,129 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "global.correlationId is required when the coordinator is enabled"
+
+  # Q26: Argo Rollouts counts the wait at a barrier (a plugin step) toward progressDeadlineSeconds, so a barrier
+  # timeout at or above the deadline would never fire.
+  - it: fails when a barrier timeout reaches progressDeadlineSeconds
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            dark: false
+            coordinator:
+              enabled: true
+              barrierTimeouts:
+                w25: 10m
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w25' has timeout 10m, which is not below progressDeadlineSeconds \\(600 s\\)"
+
+  - it: accepts a longer barrier timeout when the release raises progressDeadlineSeconds
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            dark: false
+            progressDeadlineSeconds: 1900
+            coordinator:
+              enabled: true
+              barrierTimeouts:
+                w25: 30m
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[2].plugin.config.timeout
+          value: 30m
+
+  - it: checks against the application's own progressDeadlineSeconds
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            dark: false
+            coordinator:
+              enabled: true
+              barrierTimeouts:
+                w25: 15m
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          progressDeadlineSeconds: 1200
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 1200
+      - equal:
+          path: spec.strategy.canary.steps[2].plugin.config.timeout
+          value: 15m
+
+  - it: checks the barriers of an explicit steps list too
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 5
+              - plugin:
+                  name: mycarrier/canary-coordinator
+                  config: {kind: barrier, name: w5, timeout: 20m}
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w5' has timeout 20m, which is not below progressDeadlineSeconds"
