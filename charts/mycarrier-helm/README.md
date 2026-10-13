@@ -71,6 +71,17 @@ rendered on 4.5.0 fails on 4.6.0:
 |---|---|
 | An application whose name contains `migration` with `deploymentType: rollout` | Render the migrator through `jobs` with `timing: pre-deploy`: it runs to completion and exits, so it cannot be a canary. |
 
+## Upgrading to 4.7.0 (Rollouts with the coordinator on)
+
+4.7.0 adds the Tech Spec's header-gated dark stage (`global.strategy.canary.dark`, default `true`, and `darkReplicas`).
+It renders only with `global.strategy.canary.coordinator.enabled`, so other renders are unchanged. With the
+coordinator on:
+
+| 4.6.0 values | 4.7.0 edit |
+|---|---|
+| A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
+| `coordinator.barrierTimeouts` at or above `progressDeadlineSeconds` (the 4.6.0 defaults were 10m, 15m and 30m) | The defaults are now 9m. Keep a custom timeout below `progressDeadlineSeconds`, or raise the deadline: Argo Rollouts counts the wait at a barrier toward it, so a longer barrier timeout never fires. |
+
 ## Chart Structure
 
 ```

@@ -40,7 +40,8 @@ strategy:
 {{- if $canary }}
 {{- /* The canary contract: the chart's stable and -preview Services, the Tech Spec's canary defaults (stable keeps
        full capacity, 30 s before an aborted canary scales down, at least one pod per ReplicaSet), Istio weights on
-       every route that reaches the app (helm.canary.virtualServices), and the release-wide steps (helm.canary.steps). */}}
+       every route that reaches the app (helm.canary.virtualServices), the routes the steps manage (the dark stage's
+       canary-header, helm.canary.managedRoutes), and the release-wide steps (helm.canary.steps). */}}
   canary:
     stableService: {{ $fullName }}
     canaryService: {{ $fullName }}-preview
@@ -48,6 +49,12 @@ strategy:
     abortScaleDownDelaySeconds: 30
     minPodsPerReplicaSet: 1
     trafficRouting:
+      {{- with include "helm.canary.managedRoutes" . | fromJsonArray }}
+      managedRoutes:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       istio:
         virtualServices:
           {{- include "helm.canary.virtualServices" . | nindent 10 }}

@@ -54,6 +54,17 @@
                   "default": 600,
                   "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true)."
                 },
+                "dark": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Header-gated dark stage before the weight ladder (Tech Spec D11): canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary: <global.correlationId>, and the leader's tests-dark suite between the dark-ready and dark-passed barriers. Renders only with the coordinator on; false disables it."
+                },
+                "darkReplicas": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "Canary pods during the dark stage."
+                },
                 "bakeMinutes": {
                   "type": "integer",
                   "minimum": 1,
@@ -72,9 +83,9 @@
                     },
                     "barrierTimeouts": {
                       "type": "object",
-                      "description": "Timeout per barrier name; a barrier that times out aborts the Rollout and, through the plugin, its siblings.",
+                      "description": "Timeout per barrier name; a barrier that times out aborts the Rollout and, through the plugin, its siblings. Each must stay below progressDeadlineSeconds: Argo Rollouts counts the wait at a barrier toward the deadline, and the render fails otherwise.",
                       "additionalProperties": { "type": "string", "pattern": "^[0-9]+(s|m|h)$" },
-                      "default": { "start": "10m", "dark-ready": "10m", "dark-passed": "30m", "w10": "15m", "w25": "15m", "w50": "15m" }
+                      "default": { "start": "9m", "dark-ready": "9m", "dark-passed": "9m", "w10": "9m", "w25": "9m", "w50": "9m" }
                     }
                   }
                 }

@@ -13,10 +13,12 @@
 {{- $defaults := dict
       "preset" "standard"
       "progressDeadlineSeconds" 600
+      "dark" true
+      "darkReplicas" 1
       "analysis" (dict "enabled" false "templates" (list "health" "compare" "alerts"))
       "coordinator" (dict
         "enabled" false
-        "barrierTimeouts" (dict "start" "10m" "dark-ready" "10m" "dark-passed" "30m" "w10" "15m" "w25" "15m" "w50" "15m")) -}}
+        "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
 {{- $global := .Values.global | default dict -}}
 {{- $cfg := deepCopy (dig "strategy" "canary" dict $global) -}}
 {{- toJson (mustMergeOverwrite (deepCopy $defaults) $cfg) -}}
@@ -33,7 +35,14 @@
        been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
        release crosses each boundary together; the manual preset's pause stays before its barrier, so a resume of the
        group fans out and the barrier then holds it. An explicit steps list renders verbatim and carries its own
-       barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec. */ -}}
+       barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec.
+       With the coordinator on and dark (default true, D11), the start barrier is followed by the header-gated dark
+       stage: darkReplicas canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary:
+       <global.correlationId>, the dark-ready barrier, the <environment>-<fullName>-tests-dark analysis on the leader
+       only (with analysis.enabled), the dark-passed barrier, then the route is removed. setCanaryScale
+       {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
+       step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
+       coordinator because followers rely on its barriers to wait for the leader's suite. */ -}}
 {{- define "helm.canary.steps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $coordinator := $cfg.coordinator -}}
@@ -54,6 +63,18 @@
   {{- $analysisStep = dict "analysis" (dict "templates" $templates) -}}
 {{- end -}}
 {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
+{{- if and $coordinator.enabled $cfg.dark -}}
+  {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
+  {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
+  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
+  {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
+  {{- if and $cfg.analysis.enabled (eq (include "helm.canary.leader" .) .appName) -}}
+    {{- $steps = append $steps (dict "analysis" (dict "templates" (list (dict "templateName" (printf "%s-%s-tests-dark" .Values.environment.name $fullName))))) -}}
+  {{- end -}}
+  {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-passed" "coordinator" $coordinator) | fromJson) -}}
+  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header")) -}}
+  {{- $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) -}}
+{{- end -}}
 {{- $ladder := list -}}
 {{- $pause := dict -}}
 {{- if eq $cfg.preset "standard" -}}
@@ -73,7 +94,30 @@
 {{- end -}}
 {{- $steps = append $steps (dict "setWeight" 100) -}}
 {{- end }}
+{{- /* Argo Rollouts counts the time a Rollout waits at a plugin step toward progressDeadlineSeconds (only analysis,
+       experiment and pause steps are exempt: isIndefiniteStep in rollout/sync.go), so a barrier whose timeout is at or
+       above the deadline never times out; progressDeadlineAbort aborts the Rollout first. Checked for preset and
+       explicit steps alike, against the deadline that applies to this application. */ -}}
+{{- $deadline := int (dig "progressDeadlineSeconds" $cfg.progressDeadlineSeconds .application) -}}
+{{- range $steps -}}
+  {{- $plugin := dig "plugin" dict . -}}
+  {{- $timeout := toString (dig "config" "timeout" "" $plugin) -}}
+  {{- if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") $timeout -}}
+    {{- if ge (include "helm.canary.durationSeconds" $timeout | int) $deadline -}}
+      {{- fail (printf "barrier '%s' has timeout %s, which is not below progressDeadlineSeconds (%d s). Argo Rollouts aborts a Rollout that waits at a barrier once the progress deadline passes, so this timeout would never fire. Set the barrier timeout below %d s, or raise progressDeadlineSeconds." (toString (dig "config" "name" "" $plugin)) $timeout $deadline $deadline) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 {{- toYaml $steps }}
+{{- end -}}
+
+{{- /* A barrier timeout such as 90s, 9m or 1h, in seconds; any other form yields 0 and is not checked. */ -}}
+{{- define "helm.canary.durationSeconds" -}}
+{{- $v := toString . -}}
+{{- if regexMatch "^[0-9]+(s|m|h)$" $v -}}
+  {{- $n := trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v)) | int -}}
+  {{- if hasSuffix "h" $v }}{{ mul $n 3600 }}{{ else if hasSuffix "m" $v }}{{ mul $n 60 }}{{ else }}{{ $n }}{{ end -}}
+{{- else -}}0{{- end -}}
 {{- end -}}
 
 {{- /* One canary-coordinator barrier step, as JSON; its timeout comes from coordinator.barrierTimeouts.<name>. */ -}}
@@ -148,6 +192,12 @@
     {{- $mf := include "helm.specs.multifrontend.virtualservice" $mfContext | fromYaml -}}
     {{- $mfRoutes := include "helm.canary.routesFor" (dict "spec" $mf "fullName" $fullName "namespace" $namespace) | fromJsonArray -}}
     {{- if $mfRoutes }}
+    {{- /* Argo Rollouts adds a managed route (the dark stage's canary-header) to every VirtualService the Rollout lists,
+           ahead of their other routes, and it matches only the header. In this shared VirtualService it would send
+           every path to this app's canary, and two frontend Rollouts would overwrite each other's route. */ -}}
+    {{- if include "helm.canary.managedRoutes" . | fromJsonArray -}}
+      {{- fail (printf "application '%s': the dark stage's header route would also go into the shared %s-multifrontend VirtualService, where it matches every path. Set global.strategy.canary.dark: false for a multi-frontend release." .appName $primaryFullName) -}}
+    {{- end -}}
     {{- $result = append $result (dict "name" (printf "%s-multifrontend" $primaryFullName) "routes" $mfRoutes) -}}
     {{- end -}}
   {{- end -}}
@@ -156,6 +206,28 @@
   {{- fail (printf "application '%s': no VirtualService route reaches %s, so the canary has nothing to weight." .appName $fullName) -}}
 {{- end -}}
 {{- toYaml $result -}}
+{{- end -}}
+
+{{- /* The leader of the release: the first application name in sort order among the Rollouts that run canary steps
+       (the helm.canary.groupSize set). It alone runs the dark-stage suite (D20). */ -}}
+{{- define "helm.canary.leader" -}}
+{{- $leader := "" -}}
+{{- range $name, $values := .Values.applications -}}
+  {{- if and (not $leader) (eq $values.deploymentType "rollout") (not $values.migratingToRollouts) }}{{ $leader = $name }}{{ end -}}
+{{- end -}}
+{{- $leader -}}
+{{- end -}}
+
+{{- /* trafficRouting.managedRoutes: every route a setHeaderRoute or setMirrorRoute step names, as JSON. Argo Rollouts
+       rejects those steps for a route that is not listed, and it puts the listed routes ahead of the VirtualService's
+       own routes while they exist. */ -}}
+{{- define "helm.canary.managedRoutes" -}}
+{{- $names := list -}}
+{{- range (include "helm.canary.steps" . | fromYamlArray) -}}
+  {{- $name := dig "setHeaderRoute" "name" (dig "setMirrorRoute" "name" "" .) . -}}
+  {{- if and $name (not (has $name $names)) }}{{ $names = append $names $name }}{{ end -}}
+{{- end -}}
+{{- toJson $names -}}
 {{- end -}}
 
 {{- /* Number of Rollouts in the release that run canary steps (mycarrier.tech/rolloutGroupSize). */ -}}
