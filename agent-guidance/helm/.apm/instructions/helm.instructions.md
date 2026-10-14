@@ -623,9 +623,13 @@ global:
       preset: standard                  # standard | fast | manual
       # steps: []                       # replaces the preset, verbatim
       analysis:
-        enabled: false                  # leave off until the platform AnalysisTemplates exist
+        enabled: false                  # an analysis step after each weight (see below)
+        templates: [health]             # the chart renders health; compare and alerts are not built yet
       progressDeadlineSeconds: 600      # a canary that makes no progress for this long aborts
       bakeMinutes: 30                   # alert-gate's watch window after promotion; read by the release
+      coordinator:
+        enabled: false                  # release-wide lockstep; off until the canary-coordinator plugin is on the cluster
+      dark: true                        # header-gated dark stage; renders only with the coordinator on
 ```
 
 | Preset | Steps |
@@ -634,7 +638,21 @@ global:
 | `fast` | 25%, then 100% |
 | `manual` | 10%, then a pause with no time limit until someone promotes or aborts it, then 100% |
 
-With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` (`health`, `compare` and `alerts` by default); `applications.<app>.analysisTemplates` render under the same names. `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
+`applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
+
+**Analysis.** With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` listed in `analysis.templates` (default `[health]`). Every listed template must render for each Rollout application, or the render fails: Argo Rollouts resolves them up front and would leave the Rollout InvalidSpec.
+
+- `health` is rendered by the chart. It calls the application's `-preview` Service at the path and numeric port of its `probes.readinessProbe` or `probes.startupProbe` `httpGet`, or `/health` on the `http` port for csharp, and needs the answer `Healthy` (a JSON body is read at `status`; a non-JSON 2xx body counts as healthy). Any non-2xx answer aborts the canary. Tune it with `analysis.health` (`count` 3, `interval` 30s, `consecutiveErrorLimit` 0). A non-csharp application without an HTTP probe fails the render while `health` is listed.
+- `compare` and `alerts` are not built yet.
+- `applications.<app>.analysisTemplates` render under the same names, and one named `health` replaces the chart's. Its `web` shorthand checks `result == "Healthy"` on the `-preview` Service's `/health` by default (`url`, `statusEndpoint`, `successCondition`); any other provider key passes through as an Argo Rollouts metric provider. The `job.container` shorthand fails to render.
+
+**Lockstep and the dark stage.** `coordinator.enabled` turns on release-wide lockstep through the canary-coordinator step plugin; keep it off until the plugin is on the cluster, because the controller rejects steps for a plugin it doesn't have. With it on:
+
+- `global.correlationId` must be set (the pipeline sets it); the plugin finds a release's Rollouts by that label.
+- A preset starts with a `start` barrier and gets a barrier after each weight. Every barrier timeout (`coordinator.barrierTimeouts`, 9m each) must stay below `progressDeadlineSeconds`, or the render fails: Argo Rollouts counts the wait at a barrier toward the deadline.
+- `dark` (default `true`) adds the header-gated dark stage: `darkReplicas` canary pods at weight 0 behind a route on `X-MyCarrier-Canary: <correlationId>`, and the leader (the first Rollout application by name) runs the `tests-dark` suite. With analysis on, a `tests-dark` AnalysisTemplate must render for the leader; the chart does not render it yet. A frontend Rollout in a multi-frontend release needs `dark: false`.
+
+An application whose name contains `migration` can't be `deploymentType: rollout`: a migrator runs to completion, so run it through `jobs` with `timing: pre-deploy`.
 
 | Environment | What a Rollout needs |
 |-------------|----------------------|
@@ -1213,6 +1231,26 @@ When reviewing or creating helm value changes:
 ## Breaking changes
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
+
+### mycarrier-helm 4.7.1
+
+Rollouts with `analysis.enabled`, and `applications.<app>.analysisTemplates`; other applications render unchanged.
+
+- `global.strategy.canary.analysis.templates` defaults to `[health]` (was `[health, compare, alerts]`), and every listed template must render for each Rollout application, or the render fails. The chart renders `health`; remove `compare` and `alerts`, or define them under `applications.<app>.analysisTemplates`.
+- The chart's `health` template needs an HTTP path: a non-csharp application without a `probes.readinessProbe` or `probes.startupProbe` `httpGet` fails the render while `health` is listed. Add the probe, or remove `health` from the list.
+- `applications.<app>.analysisTemplates` no longer accepts the `job.container` shorthand, and no longer injects `RELEASE_ID`, `RELEASE_DEFINITION_NAME` or `BRANCH_NAME`. Canary tests run through TestEngine; give a full Argo Rollouts provider instead. The `web` shorthand now puts `successCondition` at metric level (it never applied before) and calls `http://<fullName>-preview.<namespace>.svc.cluster.local:<http port>/health` by default.
+
+### mycarrier-helm 4.7.0
+
+Rollouts with `global.strategy.canary.coordinator.enabled` only.
+
+- The header-gated dark stage (`dark`, default `true`) renders with the coordinator on. Set `dark: false` to keep the 4.6.0 steps. A frontend Rollout in a multi-frontend release fails to render unless `dark: false`.
+- `coordinator.barrierTimeouts` default to 9m (were 10m, 15m and 30m), and a barrier timeout at or above `progressDeadlineSeconds` fails the render. Raise `progressDeadlineSeconds` for a longer barrier.
+
+### mycarrier-helm 4.6.0
+
+- An application whose name contains `migration` with `deploymentType: rollout` fails to render. Run the migrator through `jobs` with `timing: pre-deploy`.
+- With `global.strategy.canary.coordinator.enabled`, `global.correlationId` is required.
 
 ### mycarrier-helm 4.5.0
 

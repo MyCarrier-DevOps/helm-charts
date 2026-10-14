@@ -166,7 +166,7 @@ tests:
     set:
       global:
         appStack: test-stack
-        language: nodejs
+        language: csharp
         strategy:
           canary:
             analysis:
@@ -189,8 +189,6 @@ tests:
             analysis:
               templates:
                 - templateName: preprod-test-stack-api-health
-                - templateName: preprod-test-stack-api-compare
-                - templateName: preprod-test-stack-api-alerts
       - equal:
           path: spec.strategy.canary.steps[2]
           value:
@@ -205,7 +203,7 @@ tests:
     set:
       global:
         appStack: test-stack
-        language: nodejs
+        language: csharp
         strategy:
           canary:
             preset: fast

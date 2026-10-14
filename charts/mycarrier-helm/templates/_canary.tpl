@@ -15,7 +15,7 @@
       "progressDeadlineSeconds" 600
       "dark" true
       "darkReplicas" 1
-      "analysis" (dict "enabled" false "templates" (list "health" "compare" "alerts"))
+      "analysis" (dict "enabled" false "templates" (list "health") "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 0))
       "coordinator" (dict
         "enabled" false
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
@@ -28,8 +28,10 @@
          standard  10, analysis, pause 5m, 25, analysis, pause 5m, 50, analysis, pause 5m, 100
          fast      25, analysis, 100
          manual    10, analysis, pause (until resumed), 100
-       Analysis steps render only with analysis.enabled (default false until DEVOPS-312's AnalysisTemplates exist);
-       each references <environment>-<fullName>-<template>.
+       Analysis steps render only with analysis.enabled (default false); each references
+       <environment>-<fullName>-<template>, and every referenced template must render for the app
+       (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
+       when one is missing.
        With coordinator.enabled (release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator step plugin) a
        preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the whole group has
        been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
@@ -55,9 +57,17 @@
 {{- $steps = $cfg.steps -}}
 {{- else }}
 {{- $analysisStep := dict -}}
+{{- $available := list -}}
 {{- if $cfg.analysis.enabled -}}
+  {{- $available = include "helm.canary.analysis.available" . | fromJsonArray -}}
   {{- $templates := list -}}
   {{- range $cfg.analysis.templates -}}
+    {{- if not (has . $available) -}}
+      {{- if eq . "health" -}}
+        {{- fail (printf "application '%s': the canary health check needs an HTTP path. Give the app a probes.readinessProbe or probes.startupProbe with httpGet (csharp apps default to /health), or remove health from global.strategy.canary.analysis.templates." $.appName) -}}
+      {{- end -}}
+      {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health; compare (DEVOPS-322) and alerts are not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
+    {{- end -}}
     {{- $templates = append $templates (dict "templateName" (printf "%s-%s-%s" $.Values.environment.name $fullName .)) -}}
   {{- end -}}
   {{- $analysisStep = dict "analysis" (dict "templates" $templates) -}}
@@ -69,6 +79,9 @@
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
   {{- if and $cfg.analysis.enabled (eq (include "helm.canary.leader" .) .appName) -}}
+    {{- if not (has "tests-dark" $available) -}}
+      {{- fail (printf "application '%s': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet (DEVOPS-312, DEVOPS-326). Set global.strategy.canary.dark: false, or define tests-dark under applications.%s.analysisTemplates." .appName .appName) -}}
+    {{- end -}}
     {{- $steps = append $steps (dict "analysis" (dict "templates" (list (dict "templateName" (printf "%s-%s-tests-dark" .Values.environment.name $fullName))))) -}}
   {{- end -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-passed" "coordinator" $coordinator) | fromJson) -}}
@@ -118,6 +131,37 @@
   {{- $n := trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v)) | int -}}
   {{- if hasSuffix "h" $v }}{{ mul $n 3600 }}{{ else if hasSuffix "m" $v }}{{ mul $n 60 }}{{ else }}{{ $n }}{{ end -}}
 {{- else -}}0{{- end -}}
+{{- end -}}
+
+{{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
+       chart's own health template when the app has none of that name and its health URL is known. */ -}}
+{{- define "helm.canary.analysis.available" -}}
+{{- $names := list -}}
+{{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
+{{- if and (not (has "health" $names)) (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
+{{- toJson $names -}}
+{{- end -}}
+
+{{- /* The URL the canary health check calls on the app's -preview Service, or "" when the chart can't tell which HTTP
+       path reports the app's health: the path (and numeric port) of probes.readinessProbe or probes.startupProbe
+       httpGet, else /health on the http port for csharp, the path of the chart's own csharp startup probe. */ -}}
+{{- define "helm.canary.analysis.healthUrl" -}}
+{{- $ports := .application.ports | default dict -}}
+{{- $port := dig "http" (dig "healthcheck" "" $ports) $ports -}}
+{{- $path := "" -}}
+{{- range (list "readinessProbe" "startupProbe") -}}
+  {{- if not $path -}}
+    {{- $get := dig "probes" . "httpGet" dict $.application -}}
+    {{- if $get.path -}}
+      {{- $path = toString $get.path -}}
+      {{- if and $get.port (or (kindIs "float64" $get.port) (kindIs "int" $get.port) (kindIs "int64" $get.port)) }}{{ $port = $get.port }}{{ end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (not $path) (eq (lower (toString (dig "language" "csharp" (.Values.global | default dict)))) "csharp") }}{{ $path = "/health" }}{{ end -}}
+{{- if and $path $port -}}
+http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.svc.cluster.local:{{ $port }}{{ $path }}
+{{- end -}}
 {{- end -}}
 
 {{- /* One canary-coordinator barrier step, as JSON; its timeout comes from coordinator.barrierTimeouts.<name>. */ -}}

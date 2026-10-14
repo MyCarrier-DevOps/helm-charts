@@ -5,17 +5,51 @@
 {{- if (eq $appValues.deploymentType "rollout")  }}
 {{- $environment := $.Values.environment.name }}
 {{- $fullName := include "helm.fullname" $appContext }}
-{{- $instance := include "helm.instance" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $standardLabels := include "helm.labels.standard" $appContext }}
 {{- $versionLabels :=  include "helm.labels.version" $appContext }}
-{{- $vaultAnnotations := include "helm.annotations.vault" $ }}
-{{- $istioAnnotations :=  include "helm.annotations.istio" $appContext }}
-{{- $otelAnnotations :=  include "helm.otel.annotations" $ }}
-{{- $gitBranch := $.Values.global.gitbranch}}
-{{- $releaseId := $appValues.image.tag }}
-{{- $releaseDefinitionName := printf "%s-%s" $.Values.global.appStack $appName }}
+{{- $httpPort := dig "ports" "http" 8080 $appValues }}
+{{- $customNames := list }}
+{{- range ($appValues.analysisTemplates | default list) }}{{ $customNames = append $customNames (toString .name) }}{{ end }}
+{{- $cfg := include "helm.canary.config" $appContext | fromJson }}
+{{- $healthUrl := include "helm.canary.analysis.healthUrl" $appContext }}
+{{- /* The chart's own health template (DEVOPS-312) for a Rollout that runs canary steps with analysis on: the -preview
+       Service's health endpoint must answer "Healthy". A JSON body is read at $.status; a non-JSON 2xx body counts as
+       healthy, and any non-2xx answer is an error, which aborts the canary at the default consecutiveErrorLimit 0.
+       An applications.<app>.analysisTemplates entry named health replaces it. */}}
+{{- if and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "health" $cfg.analysis.templates) (not (has "health" $customNames)) $healthUrl }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $environment }}-{{ $fullName }}-health
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+spec:
+  metrics:
+  - name: health
+    interval: {{ $cfg.analysis.health.interval }}
+    count: {{ int $cfg.analysis.health.count }}
+    failureLimit: 0
+    consecutiveErrorLimit: {{ int $cfg.analysis.health.consecutiveErrorLimit }}
+    successCondition: result == "Healthy"
+    provider:
+      web:
+        url: {{ $healthUrl }}
+        jsonPath: "{$.status}"
+        timeoutSeconds: 10
+{{- end }}
 {{- range $index, $template := $appValues.analysisTemplates }}
+{{- /* The release-era job contract (a test container run directly against -preview, with RELEASE_ID,
+       RELEASE_DEFINITION_NAME and BRANCH_NAME) is gone: canary tests run through TestEngine (DEVOPS-312). */}}
+{{- if dig "provider" "job" "container" nil $template }}
+{{- fail (printf "application '%s': analysisTemplates '%s' runs a test container through the job provider shorthand, which is no longer supported. Canary tests run through TestEngine (DEVOPS-312); give a full Argo Rollouts provider instead." $appName (toString $template.name)) }}
+{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
@@ -24,7 +58,7 @@ metadata:
          app in a shared namespace. */}}
   name: {{ $environment }}-{{ $fullName }}-{{ $template.name }}
   namespace: {{ $namespace }}
-  labels:    
+  labels:
     {{ $standardLabels | nindent 4 | trim }}
     {{ $versionLabels | nindent 4 | trim }}
   annotations:
@@ -35,51 +69,22 @@ spec:
   - name: {{ $environment }}-{{ $template.name }}
     count: {{ $template.count | default 1 }}
     failureLimit: {{ $template.failureLimit | default 0 }}
+    {{- if and (kindIs "map" $template.provider) (hasKey $template.provider "web") }}
+    {{- $web := $template.provider.web | default dict }}
+    {{- $url := printf "http://%s-preview.%s.svc.cluster.local:%v/health" $fullName $namespace $httpPort }}
+    {{- if $web.url }}
+    {{- $url = $web.url }}
+    {{- if $web.statusEndpoint }}{{ $url = printf "%s/%s" (trimSuffix "/" $web.url) (trimPrefix "/" $web.statusEndpoint) }}{{ end }}
+    {{- end }}
+    successCondition: {{ $web.successCondition | default `result == "Healthy"` | quote }}
     provider:
-      {{ if $template.provider.job }}
-      job:
-        spec:
-          backoffLimit: 1
-          template:
-            metadata:
-              labels:
-                sidecar.istio.io/inject: "false"
-              annotations:
-                {{ $vaultAnnotations | nindent 16 | trim }}
-                {{ $istioAnnotations | nindent 16 | trim }}
-                {{ $otelAnnotations | nindent 16 | trim }}
-            spec:
-              containers:
-              - name: {{ $environment }}-{{ $template.name }}
-                image: {{ $template.provider.job.container.image.registry }}/{{ $template.provider.job.container.image.repository }}:{{ $template.provider.job.container.image.tag }}
-                args: 
-                {{- range $template.provider.job.container.args }}
-                - "{{ . }}"
-                {{- end }}
-                env:
-                - name: SERVICE_ADDRESS
-                  value: http://{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local:8080
-                - name: RELEASE_ID
-                  value: {{ $releaseId }}
-                - name: RELEASE_DEFINITION_NAME
-                  value: {{ $releaseDefinitionName }}
-                - name: BRANCH_NAME
-                  value: {{ $gitBranch }}
-                {{- range $template.provider.job.container.env }}
-                - name: {{ .name }}
-                  value: "{{ .value }}"
-                {{- end }}
-              restartPolicy: Never
-      {{ else if $template.provider.web }}
       web:
-        url: {{ printf "%s/%s" $template.provider.web.url $template.provider.web.statusEndpoint | default (printf "%s-preview.%s.svc.cluster.local:8080/health" $fullName $namespace) }}
+        url: {{ $url }}
         jsonPath: "{$.status}"
-      successCondition: {{ $template.provider.web.successCondition | default `result == "Healthy"` }}
-      {{ else }}
-      {{- with $template.provider }}
-      {{- toYaml . | nindent 6 }}
-      {{- end }}
-      {{ end }}
+    {{- else }}
+    provider:
+      {{- toYaml $template.provider | nindent 6 }}
+    {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

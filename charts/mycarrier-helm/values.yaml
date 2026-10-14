@@ -46,8 +46,11 @@ global:
   #                               # fast: 25, then 100; manual: 10, then a pause until resumed, then 100
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
   #     analysis:
-  #       enabled: false          # an analysis step after each weight; off until DEVOPS-312's AnalysisTemplates exist
-  #       templates: [health, compare, alerts]   # run as <environment>-<fullName>-<template>
+  #       enabled: false          # an analysis step after each weight, and the chart's AnalysisTemplates for it
+  #       templates: [health]     # run as <environment>-<fullName>-<template>; the chart renders health (compare
+  #                               # and alerts are not built yet); every listed template must render for each app
+  #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 0}   # -preview Service at the readiness/startup
+  #                               # probe httpGet path, or /health for csharp; any non-2xx answer aborts the canary
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
   #                               # progressDeadlineSeconds overrides it for one slow-starting app.
