@@ -372,3 +372,79 @@ tests:
       - notContains:
           path: spec.hosts
           content: devopstest-apex.dev.mycarrier.dev
+
+  #
+  # cloudflare-proxied annotation on the operator-managed VirtualService
+  #
+  - it: should set cloudflare-proxied to true on OffloadBase by default in dev
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+    asserts:
+      - equal:
+          path: spec.virtualServiceAnnotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+
+  - it: should set cloudflare-proxied to true on OffloadBase when cloudflareProxied is true
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.cloudflareProxied: true
+    asserts:
+      - equal:
+          path: spec.virtualServiceAnnotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "true"
+
+  - it: should set cloudflare-proxied to false on OffloadBase when cloudflareProxied is false
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.cloudflareProxied: false
+      applications.routetester.networking.istio.offloadVirtualServiceAnnotations.foo: "bar"
+    asserts:
+      - equal:
+          path: spec.virtualServiceAnnotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"
+      - equal:
+          path: spec.virtualServiceAnnotations.foo
+          value: "bar"
+
+  - it: should let offloadVirtualServiceAnnotations override cloudflare-proxied on OffloadBase
+    template: offloadBase.yaml
+    set:
+      environment.name: "dev"
+      global.appStack: "devopstest"
+      global.language: "go"
+      applications.routetester.deploymentType: deployment
+      applications.routetester.image.registry: "myregistry.example.com"
+      applications.routetester.image.repository: "mycarrier/routetester"
+      applications.routetester.image.tag: "1.0.0"
+      applications.routetester.ports.http: 8080
+      applications.routetester.networking.istio.cloudflareProxied: true
+      applications.routetester.networking.istio.offloadVirtualServiceAnnotations:
+        external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    asserts:
+      - equal:
+          path: spec.virtualServiceAnnotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+          value: "false"
