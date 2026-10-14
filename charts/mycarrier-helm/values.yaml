@@ -52,7 +52,8 @@ global:
   #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 0}   # -preview Service at the path of the pod's
   #                               # first httpGet probe (readiness, startup, liveness; csharp defaults to /health);
   #                               # any non-2xx answer aborts the canary
-  #         # path: /health         # call this path on the http port instead; set it when every probe is TCP
+  #         # path: /health         # call this path on the http port instead; set it when every probe is TCP.
+  #                               # applications.<app>.canaryHealthPath overrides it for one application
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
   #                               # progressDeadlineSeconds overrides it for one slow-starting app.

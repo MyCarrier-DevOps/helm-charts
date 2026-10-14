@@ -525,6 +525,7 @@
             "enum": ["deployment", "statefulset", "rollout"],
             "default": "deployment"
           },
+          "canaryHealthPath": { "type": "string", "pattern": "^/", "description": "Overrides global.strategy.canary.analysis.health.path for this application: the HTTP path the canary health check calls on its http (or healthcheck) port. Set it for an application whose probes are all TCP, or one whose health path differs from the stack's." },
           "progressDeadlineSeconds": {
             "type": "integer",
             "minimum": 1,

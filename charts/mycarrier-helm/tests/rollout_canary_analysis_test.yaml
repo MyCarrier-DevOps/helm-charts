@@ -348,6 +348,104 @@ tests:
       - failedTemplate:
           errorPattern: "analysis[./]health[./]path.*[Dd]oes not match pattern"
 
+  # applications.<app>.canaryHealthPath overrides the stack's path for one application.
+  - it: gives each application its own canaryHealthPath, over the stack's analysis.health.path
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                path: /healthz
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /api/health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 10000
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 10000
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:10000/api/health
+        documentIndex: 0
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:10000/healthz
+        documentIndex: 1
+
+  - it: uses canaryHealthPath over the probe-derived path without a stack path
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /ready
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/ready
+
+  - it: rejects a canaryHealthPath without a leading slash
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          canaryHealthPath: healthz
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+    asserts:
+      - failedTemplate:
+          errorPattern: "canaryHealthPath.*[Dd]oes not match pattern"
+
   - it: applies analysis.health overrides
     template: analysistemplate.yaml
     set:
@@ -466,7 +564,7 @@ tests:
             http: 3000
     asserts:
       - failedTemplate:
-          errorPattern: "application 'web': the canary health check has no HTTP path"
+          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.web.canaryHealthPath"
 
   - it: fails the render when the probe port is not on the -preview Service
     template: rollout.yaml
@@ -496,7 +594,7 @@ tests:
                 port: 3001
     asserts:
       - failedTemplate:
-          errorPattern: "application 'web': the canary health check has no HTTP path"
+          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.web.canaryHealthPath"
 
   # Argo Rollouts resolves every referenced AnalysisTemplate up front, so a step may only reference one that renders.
   - it: fails the render when analysis.templates lists a template that does not render
