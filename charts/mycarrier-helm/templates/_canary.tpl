@@ -64,7 +64,7 @@
   {{- range $cfg.analysis.templates -}}
     {{- if not (has . $available) -}}
       {{- if eq . "health" -}}
-        {{- fail (printf "application '%s': the canary health check reuses the path of the app's first HTTP probe (readiness, startup, then liveness), and its probes have none on a port its -preview Service exposes. The chart's default probes are HTTP only for global.language csharp. Give the app an httpGet probe under applications.%s.probes, or remove health from global.strategy.canary.analysis.templates." $.appName $.appName) -}}
+        {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet probe under applications.%s.probes (the chart's default probes are HTTP only for global.language csharp), or remove health from global.strategy.canary.analysis.templates." $.appName $.appName) -}}
       {{- end -}}
       {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health; compare (DEVOPS-322) and alerts are not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
     {{- end -}}
@@ -142,21 +142,25 @@
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* The URL the canary health check calls on the app's -preview Service, or "" when the app has no HTTP probe to
-       reuse. It follows the probes the pod renders with (_spec_workload.tpl): readiness, then startup, then liveness,
-       each from applications.<app>.probes or else the chart's default for global.language (HTTP only for csharp), and
-       skips a probe turned off by probes.enable*. The first httpGet path wins, on the Service port that targets the
-       probe's container port. */ -}}
+{{- /* The URL the canary health check calls on the app's -preview Service, or "" when the chart finds no path.
+       global.strategy.canary.analysis.health.path, when set, is called on the app's http (or healthcheck) port.
+       Otherwise the check reuses the probes the pod renders with (_spec_workload.tpl): readiness, then startup, then
+       liveness, each from applications.<app>.probes or else the chart's default for global.language (HTTP only for
+       csharp), skipping a probe turned off by probes.enable*; the first httpGet path wins. The port is the Service
+       port that targets that container port. */ -}}
 {{- define "helm.canary.analysis.healthUrl" -}}
 {{- $probes := .application.probes | default dict -}}
+{{- $ports := .application.ports | default dict -}}
 {{- $get := dict -}}
+{{- with (include "helm.canary.config" . | fromJson).analysis.health.path -}}
+  {{- $get = dict "path" . "port" (or (index $ports "http") (index $ports "healthcheck")) -}}
+{{- end -}}
 {{- range (list (list "readinessProbe" "enableReadiness" "helm.defaultReadinessProbe") (list "startupProbe" "enableStartup" "helm.defaultStartupProbe") (list "livenessProbe" "enableLiveness" "helm.defaultLivenessProbe")) -}}
   {{- if and (not $get.path) (dig (index . 1) true $probes) -}}
     {{- $probe := index $probes (index . 0) | default (get (include (index . 2) $ | fromYaml) (index . 0)) | default dict -}}
     {{- $get = $probe.httpGet | default dict -}}
   {{- end -}}
 {{- end -}}
-{{- $ports := .application.ports | default dict -}}
 {{- $containerPort := "" -}}
 {{- $portName := "" -}}
 {{- if kindIs "string" $get.port -}}

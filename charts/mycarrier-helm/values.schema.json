@@ -49,8 +49,9 @@
                     "health": {
                       "type": "object",
                       "additionalProperties": false,
-                      "description": "The chart's health template: it calls the app's -preview Service at the path of the pod's first httpGet probe (readiness, startup, then liveness, after the global.language defaults; csharp defaults to /health), and needs the answer Healthy (a JSON body is read at $.status; a non-JSON 2xx body counts as healthy).",
+                      "description": "The chart's health template: it calls the app's -preview Service at health.path on the http port, or else at the path of the pod's first httpGet probe (readiness, startup, then liveness, after the global.language defaults; csharp defaults to /health), and needs the answer Healthy (a JSON body is read at $.status; a non-JSON 2xx body counts as healthy).",
                       "properties": {
+                        "path": { "type": "string", "pattern": "^/", "description": "HTTP path the health check calls on each Rollout application's http (or healthcheck) port. Unset: the path of the pod's first httpGet probe. Set it for an application whose probes are all TCP." },
                         "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements per analysis step." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements." },
                         "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 0, "description": "Errors in a row (any non-2xx answer, timeout or connection error) before the run ends as Error, which aborts the canary. 0 aborts on the first error." }
