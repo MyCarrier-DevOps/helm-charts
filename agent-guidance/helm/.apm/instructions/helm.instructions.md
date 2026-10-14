@@ -559,6 +559,8 @@ applications:
 | `networking.istio.allowAllEndpoints` | `false` | Dev and feature environments only: skip the allowlist and route every path |
 | `networking.istio.offloadOperatorEnabled` | `true` in dev and feature environments, `false` elsewhere | The offload operator owns the application's routing instead of a chart VirtualService |
 | `networking.istio.offloadVSEnabled` | `true` | Feature environments: render the `<fullName>-offload` VirtualService |
+| `networking.istio.cloudflareProxied` | `true` | Sets the `external-dns.alpha.kubernetes.io/cloudflare-proxied` annotation on the application's VirtualServices, including the operator-managed one in dev (through the OffloadBase `virtualServiceAnnotations`) |
+| `networking.istio.offloadVirtualServiceAnnotations` | `{}` | Dev: extra annotations on the operator-managed VirtualService; a `cloudflare-proxied` key here overrides `cloudflareProxied` |
 | `networking.istio.internalEnabled` | `true` | The mesh-internal host described below |
 
 **Endpoint allowlist.** When an application has an allowlist, the gateway answers every other path with a 403. A csharp application has one by default, built from: `/liveness` and `/health` (exact), `/api` (prefix, only when the application's full name contains `api`), and `/swagger` (prefix) in dev and feature environments only. `allowedEndpoints` entries are added after the defaults. A non-csharp application without `allowedEndpoints` has no allowlist. The allowlist is enforced in every environment except plain `dev`, including feature environments (since mycarrier-helm 4.1.0).
