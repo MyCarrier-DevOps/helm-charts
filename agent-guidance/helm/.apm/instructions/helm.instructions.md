@@ -1232,7 +1232,7 @@ When reviewing or creating helm value changes:
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
 
-### mycarrier-helm 4.7.1
+### mycarrier-helm, the release after 4.7.0
 
 Rollouts with `analysis.enabled`, and `applications.<app>.analysisTemplates`; other applications render unchanged.
 
