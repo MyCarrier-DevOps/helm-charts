@@ -49,7 +49,7 @@
                     "health": {
                       "type": "object",
                       "additionalProperties": false,
-                      "description": "The chart's health template: it calls the app's -preview Service at the readinessProbe or startupProbe httpGet path, or /health for csharp, and needs the answer Healthy (a JSON body is read at $.status; a non-JSON 2xx body counts as healthy).",
+                      "description": "The chart's health template: it calls the app's -preview Service at the path of the pod's first httpGet probe (readiness, startup, then liveness, after the global.language defaults; csharp defaults to /health), and needs the answer Healthy (a JSON body is read at $.status; a non-JSON 2xx body counts as healthy).",
                       "properties": {
                         "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements per analysis step." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements." },

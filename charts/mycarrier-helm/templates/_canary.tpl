@@ -64,7 +64,7 @@
   {{- range $cfg.analysis.templates -}}
     {{- if not (has . $available) -}}
       {{- if eq . "health" -}}
-        {{- fail (printf "application '%s': the canary health check needs an HTTP path. Give the app a probes.readinessProbe or probes.startupProbe with httpGet (csharp apps default to /health), or remove health from global.strategy.canary.analysis.templates." $.appName) -}}
+        {{- fail (printf "application '%s': the canary health check reuses the path of the app's first HTTP probe (readiness, startup, then liveness), and its probes have none on a port its -preview Service exposes. The chart's default probes are HTTP only for global.language csharp. Give the app an httpGet probe under applications.%s.probes, or remove health from global.strategy.canary.analysis.templates." $.appName $.appName) -}}
       {{- end -}}
       {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health; compare (DEVOPS-322) and alerts are not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
     {{- end -}}
@@ -142,25 +142,39 @@
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* The URL the canary health check calls on the app's -preview Service, or "" when the chart can't tell which HTTP
-       path reports the app's health: the path (and numeric port) of probes.readinessProbe or probes.startupProbe
-       httpGet, else /health on the http port for csharp, the path of the chart's own csharp startup probe. */ -}}
+{{- /* The URL the canary health check calls on the app's -preview Service, or "" when the app has no HTTP probe to
+       reuse. It follows the probes the pod renders with (_spec_workload.tpl): readiness, then startup, then liveness,
+       each from applications.<app>.probes or else the chart's default for global.language (HTTP only for csharp), and
+       skips a probe turned off by probes.enable*. The first httpGet path wins, on the Service port that targets the
+       probe's container port. */ -}}
 {{- define "helm.canary.analysis.healthUrl" -}}
-{{- $ports := .application.ports | default dict -}}
-{{- $port := dig "http" (dig "healthcheck" "" $ports) $ports -}}
-{{- $path := "" -}}
-{{- range (list "readinessProbe" "startupProbe") -}}
-  {{- if not $path -}}
-    {{- $get := dig "probes" . "httpGet" dict $.application -}}
-    {{- if $get.path -}}
-      {{- $path = toString $get.path -}}
-      {{- if and $get.port (or (kindIs "float64" $get.port) (kindIs "int" $get.port) (kindIs "int64" $get.port)) }}{{ $port = $get.port }}{{ end -}}
-    {{- end -}}
+{{- $probes := .application.probes | default dict -}}
+{{- $get := dict -}}
+{{- range (list (list "readinessProbe" "enableReadiness" "helm.defaultReadinessProbe") (list "startupProbe" "enableStartup" "helm.defaultStartupProbe") (list "livenessProbe" "enableLiveness" "helm.defaultLivenessProbe")) -}}
+  {{- if and (not $get.path) (dig (index . 1) true $probes) -}}
+    {{- $probe := index $probes (index . 0) | default (get (include (index . 2) $ | fromYaml) (index . 0)) | default dict -}}
+    {{- $get = $probe.httpGet | default dict -}}
   {{- end -}}
 {{- end -}}
-{{- if and (not $path) (eq (lower (toString (dig "language" "csharp" (.Values.global | default dict)))) "csharp") }}{{ $path = "/health" }}{{ end -}}
-{{- if and $path $port -}}
-http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.svc.cluster.local:{{ $port }}{{ $path }}
+{{- $ports := .application.ports | default dict -}}
+{{- $containerPort := "" -}}
+{{- $portName := "" -}}
+{{- if kindIs "string" $get.port -}}
+  {{- range $name, $number := $ports }}{{ if eq (lower $name) $get.port }}{{ $containerPort = toString $number }}{{ $portName = lower $name }}{{ end }}{{ end -}}
+{{- else if $get.port -}}
+  {{- $containerPort = toString $get.port -}}
+{{- end -}}
+{{- $servicePort := "" -}}
+{{- if $containerPort -}}
+  {{- $custom := dig "service" "ports" list .application -}}
+  {{- if $custom -}}
+    {{- range $custom }}{{ $target := toString (default .port .targetPort) }}{{ if and (not $servicePort) (or (eq $target $containerPort) (and $portName (eq $target $portName))) }}{{ $servicePort = toString .port }}{{ end }}{{ end -}}
+  {{- else -}}
+    {{- range $name, $number := $ports }}{{ if eq (toString $number) $containerPort }}{{ $servicePort = $containerPort }}{{ end }}{{ end -}}
+  {{- end -}}
+{{- end -}}
+{{- if and $get.path $servicePort -}}
+http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.svc.cluster.local:{{ $servicePort }}{{ if not (hasPrefix "/" (toString $get.path)) }}/{{ end }}{{ $get.path }}
 {{- end -}}
 {{- end -}}
 
