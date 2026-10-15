@@ -404,6 +404,81 @@ tests:
           path: spec.additionalEndpointsBasePath
           value: /api/v1/quote
 
+  - it: should default method to GET on additionalEndpoints and keep a supplied method
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.additionalEndpoints:
+        - endpoint: /liveness
+        - endpoint: /submit
+          method: POST
+    asserts:
+      - equal:
+          path: spec.additionalEndpoints[0].method
+          value: GET
+      - equal:
+          path: spec.additionalEndpoints[1].method
+          value: POST
+
+  - it: should render an empty additionalEndpoints list without error
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.additionalEndpoints: []
+    asserts:
+      - notExists:
+          path: spec.additionalEndpoints[0]
+
+  - it: should reject a lowercase method on additionalEndpoints
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.additionalEndpoints:
+        - endpoint: /liveness
+          method: get
+    asserts:
+      - failedTemplate:
+          errorPattern: "additionalEndpoints/0/method.*must be one of"
+
+  - it: should reject an empty method on additionalEndpoints
+    set:
+      environment.name: dev
+      applications.api.image.registry: r
+      applications.api.image.repository: api
+      applications.api.image.tag: "1"
+      applications.api.ports.http: 8080
+      applications.api.networking.istio.enabled: true
+      applications.api.networking.istio.internalEnabled: true
+      applications.api.networking.krakend.enabled: true
+      applications.api.networking.krakend.gatewayRef.name: gw
+      applications.api.networking.krakend.additionalEndpoints:
+        - endpoint: /liveness
+          method: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "additionalEndpoints/0/method.*must be one of"
+
   - it: should honor autoConfigNamespace override
     set:
       environment.name: dev

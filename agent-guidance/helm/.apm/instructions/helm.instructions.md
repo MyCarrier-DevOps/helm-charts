@@ -567,6 +567,8 @@ applications:
 
 **`allowAllEndpoints`** is an escape hatch for dev and feature environments; prefer adding the path to `allowedEndpoints`. Setting it to `true` in any other environment fails the render (an explicit `false` is accepted everywhere), so keep it in the dev values file and out of shared ones. In Layout B, `values.dev.yaml` also serves feature environments that have no file of their own.
 
+**KrakenD `additionalEndpoints`.** With `networking.krakend.enabled: true`, each `networking.krakend.additionalEndpoints[]` entry (endpoints missing from the OpenAPI document, such as liveness) renders with a `method`. `method` defaults to `GET` when the entry omits it. A `method` you set must be one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE` (uppercase, the CRD enum); `values.schema.json` rejects anything else (lowercase, empty, null) at render, and the chart keeps a valid value as written.
+
 When Istio ingress is enabled, the chart also advertises mesh-internal DNS entries per application using the pattern `{appStack}-{application}.{environment}.internal` (not in feature environments). In dev, these support header-based routing to feature namespaces via the `environment` request header.
 
 ### Probes

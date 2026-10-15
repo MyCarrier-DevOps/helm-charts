@@ -1158,13 +1158,14 @@
                       },
                       "additionalEndpoints": {
                         "type": "array",
-                        "description": "Endpoints not present in the OpenAPI document (e.g. health/liveness probes). Mirrors KrakenDAutoConfigSpec.AdditionalEndpoints. Only `endpoint` is required; remaining fields are passed through and validated by the operator's CRD and admission webhook.",
+                        "description": "Endpoints not present in the OpenAPI document (e.g. health/liveness probes). Mirrors KrakenDAutoConfigSpec.AdditionalEndpoints. Only `endpoint` is required; `method` (optional, defaults to GET) must be an uppercase CRD enum value; remaining fields are passed through and validated by the operator's CRD and admission webhook.",
                         "items": {
                           "type": "object",
                           "required": ["endpoint"],
                           "additionalProperties": true,
                           "properties": {
-                            "endpoint": { "type": "string" }
+                            "endpoint": { "type": "string" },
+                            "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] }
                           }
                         }
                       },
