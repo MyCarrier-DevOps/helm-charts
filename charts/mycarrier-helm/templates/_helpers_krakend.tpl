@@ -314,7 +314,12 @@ cue:
        document (e.g. liveness/readiness). Mirrors KrakenDAutoConfigSpec.AdditionalEndpoints. */ -}}
 {{- if hasKey $krakend "additionalEndpoints" }}
 additionalEndpoints:
-{{ toYaml $krakend.additionalEndpoints | indent 2 }}
+{{- /* The CRD keys this list by endpoint+method. Argo CD builds its diff schema from OpenAPI v2, which drops CRD defaults, so always render method. */ -}}
+{{- $additionalEndpoints := list }}
+{{- range $krakend.additionalEndpoints }}
+{{- $additionalEndpoints = append $additionalEndpoints (merge (dict) . (dict "method" "GET")) }}
+{{- end }}
+{{ toYaml $additionalEndpoints | indent 2 }}
 {{- end }}
 {{- /* additionalEndpointsBasePath passthrough — overrides the operator's auto-derived base path for scoping additionalEndpoints */ -}}
 {{- if hasKey $krakend "additionalEndpointsBasePath" }}
