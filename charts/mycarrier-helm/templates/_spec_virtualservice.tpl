@@ -16,13 +16,16 @@
 {{- $envName := $.Values.environment.name -}}
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true .application -}}
+{{- $externalEnabled := dig "networking" "istio" "externalEnabled" true .application -}}
 {{- include "helm.assertExternalHostConfig" (dict "appName" .appName "application" .application) -}}
 hosts:
 - {{ $fullName }}
 {{- if and $metaenv (not $isFeatureEnv) $internalEnabled }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
 {{- end }}
-{{- if $isFeatureEnv }}
+{{- /* Public hosts only while the application is reachable from outside the mesh (networking.istio.externalEnabled). */ -}}
+{{- if not $externalEnabled }}
+{{- else if $isFeatureEnv }}
 - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
 {{- if and .application.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
 - {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}

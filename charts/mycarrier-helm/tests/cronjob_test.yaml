@@ -175,6 +175,10 @@ tests:
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
           value: "Prune=true"
+      # The workloads' wave, so the CronJob updates after the pre-deploy jobs complete.
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "10"
 
   - it: should render custom annotations onto the pod template too (e.g. istio sidecar opt-out)
     set:

@@ -57,7 +57,8 @@ spec:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
-  {{- if and ($.Values.isEnvironmentDeploy | default false) $appValues.staticHostname }}
+  {{- if not (dig "networking" "istio" "externalEnabled" true $appValues) }}
+  {{- else if and ($.Values.isEnvironmentDeploy | default false) $appValues.staticHostname }}
   - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
   {{- else }}
   - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}

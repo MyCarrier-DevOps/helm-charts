@@ -36,6 +36,9 @@ rather than hardcoding the key twice and risking drift.
 */}}
 {{- define "helm.annotations.cronjobMetadata" -}}
 argocd.argoproj.io/sync-options: Prune=true
+{{- /* The workloads' wave: a CronJob updates after the pre-deploy jobs (the migration) complete, so a schedule that
+       fires during a sync never runs the new image against the old schema. */}}
+argocd.argoproj.io/sync-wave: "10"
 {{- end -}}
 
 {{/*
@@ -46,4 +49,18 @@ rather than hardcoding the key twice and risking drift.
 */}}
 {{- define "helm.annotations.jobMetadata" -}}
 argocd.argoproj.io/sync-options: Force=true,Replace=true
+{{- /* timing makes the Job an Argo CD hook. Argo CD reads hook, sync-wave and hook-delete-policy only from the
+       resource's own metadata, never from its pod template. order sorts hooks of the same phase. */ -}}
+{{- if .timing }}
+{{- $order := .order | default 0 }}
+{{- if eq .timing "pre-deploy" }}
+argocd.argoproj.io/hook: PreSync
+argocd.argoproj.io/sync-wave: {{ sub $order 100 | toString | quote }}
+argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+{{- else if eq .timing "post-deploy" }}
+argocd.argoproj.io/hook: PostSync
+argocd.argoproj.io/sync-wave: {{ add $order 100 | toString | quote }}
+argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+{{- end }}
+{{- end }}
 {{- end -}}

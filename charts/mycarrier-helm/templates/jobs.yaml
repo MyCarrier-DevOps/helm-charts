@@ -21,7 +21,9 @@ metadata:
     {{- end }}
   annotations:
     {{ include "helm.annotations.jobMetadata" . | indent 4 | trim }}
-  {{- $reserved := include "helm.annotations.jobMetadata" . | fromYaml }}
+  {{- /* The four argocd.argoproj.io/* keys are reserved whether or not timing is set, so the hook comes only from
+         timing and a user annotation cannot turn a Job into a hook or move its wave. */}}
+  {{- $reserved := merge (dict "argocd.argoproj.io/sync-options" "" "argocd.argoproj.io/hook-delete-policy" "" "argocd.argoproj.io/sync-wave" "" "argocd.argoproj.io/hook" "") (include "helm.annotations.jobMetadata" . | fromYaml) }}
   {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .annotations) }}
   {{- if $extra }}
     {{ $extra | indent 4 | trim }}

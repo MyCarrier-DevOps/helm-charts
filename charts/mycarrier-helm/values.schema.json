@@ -59,6 +59,11 @@
                   "default": true,
                   "description": "Header-gated dark stage before the weight ladder (Tech Spec D11): canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary: <global.correlationId>, and the leader's tests-dark suite between the dark-ready and dark-passed barriers. Renders only with the coordinator on; false disables it."
                 },
+                "leader": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The application whose Rollout runs the dark-stage test suite (<environment>-<fullName>-tests-dark). Must be an application with deploymentType rollout that runs canary steps. Required when the dark stage runs (coordinator on, dark true) with more than one canary Rollout; a release with one canary Rollout defaults to it."
+                },
                 "darkReplicas": {
                   "type": "integer",
                   "minimum": 1,
@@ -843,6 +848,11 @@
                           "internalEnabled": {
                             "type": "boolean",
                             "description": "Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host for feature-routing via WASM fallback. When false, these resources are not rendered and feature-header requests fall through to the default route.",
+                            "default": true
+                          },
+                          "externalEnabled": {
+                            "type": "boolean",
+                            "description": "Expose the application through the ingress gateway on its public host. When false, its VirtualServices bind only the mesh gateway and keep only the in-mesh hosts (<fullName> and the .internal host), so it is reachable only inside the cluster; useRootDomain and staticHostname then fail the render. Set it to false for a migrator Rollout.",
                             "default": true
                           },
                           "offloadVSEnabled": {

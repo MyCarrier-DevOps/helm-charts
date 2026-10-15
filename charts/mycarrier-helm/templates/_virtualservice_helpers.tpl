@@ -113,12 +113,15 @@ Returns networking.istio.gateway, defaulting to istio-system/default when unset 
 {{/*
 Renders the gateways block for VirtualService-style specs.
 Context: the application values dict.
-Always emits mesh first, then the resolved ingress gateway.
+Always emits mesh first, then the resolved ingress gateway unless networking.istio.externalEnabled is false: such an
+application is reachable only inside the mesh (a migrator Rollout, for example).
 */}}
 {{- define "helm.virtualservice.gateways" -}}
 gateways:
 - mesh
+{{- if dig "networking" "istio" "externalEnabled" true . }}
 - {{ include "helm.istio.gateway" . }}
+{{- end }}
 {{- end -}}
 
 {{/*

@@ -25,6 +25,9 @@
 {{- if and (dig "useRootDomain" false .application) (dig "staticHostname" "" .application) -}}
 {{- fail (printf "application %q: set either useRootDomain or staticHostname, not both" .appName) -}}
 {{- end -}}
+{{- if and (not (dig "networking" "istio" "externalEnabled" true .application)) (or (dig "useRootDomain" false .application) (dig "staticHostname" "" .application)) -}}
+{{- fail (printf "application %q: networking.istio.externalEnabled is false, so it has no public host; remove useRootDomain and staticHostname, or set externalEnabled to true" .appName) -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Does this resolved namespace belong to a protected shared environment?

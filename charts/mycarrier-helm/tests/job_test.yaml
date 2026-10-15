@@ -910,7 +910,7 @@ tests:
           path: spec.template.metadata.annotations["vault.security.banzaicloud.io/run-as-non-root"]
           value: "true"
 
-  - it: should reserve the argocd hook annotations on the job pod template unconditionally, even when timing is not set
+  - it: should reserve the argocd hook annotations on the Job and its pod template, even when timing is not set
     set:
       environment.name: "dev"
       jobs:
@@ -932,6 +932,11 @@ tests:
           path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
       - notExists:
           path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+      # The hook comes only from timing, so the user's values do not reach the Job's metadata either.
+      - notExists:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+      - notExists:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
 
   - it: should reject readOnlyRootFileSystem (capital S typo) via the values schema
     set:

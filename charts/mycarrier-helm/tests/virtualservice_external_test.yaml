@@ -1,0 +1,125 @@
+suite: VirtualService external exposure (networking.istio.externalEnabled)
+templates:
+  - virtualService.yaml
+tests:
+  - it: binds the ingress gateway and a public host by default
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.gateways
+          value: [mesh, istio-system/default]
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - lengthEqual:
+          path: spec.hosts
+          count: 3
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+
+  # A migrator Rollout holds the database credentials; the canary needs only in-mesh routes (Argo Rollouts weights
+  # routes by destination, and the health check calls the -preview Service).
+  - it: keeps a migrator Rollout inside the mesh when externalEnabled is false
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        db-migration:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: migrator
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              externalEnabled: false
+    asserts:
+      - equal:
+          path: spec.gateways
+          value: [mesh]
+        documentSelector:
+          path: metadata.name
+          value: test-stack-db-migration
+      - equal:
+          path: spec.hosts
+          value:
+            - test-stack-db-migration
+            - test-stack-db-migration.prod.internal
+        documentSelector:
+          path: metadata.name
+          value: test-stack-db-migration
+
+  - it: drops the public host from the feature-environment offload VirtualService when externalEnabled is false
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature7
+      applications:
+        worker:
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              externalEnabled: false
+    asserts:
+      - notContains:
+          path: spec.gateways
+          content: istio-system/default
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker-feature7-offload
+      - lengthEqual:
+          path: spec.hosts
+          count: 3
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker-feature7-offload
+
+  - it: fails the render when externalEnabled is false and a public host is set
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api:
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          staticHostname: api
+          networking:
+            istio:
+              externalEnabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "networking.istio.externalEnabled is false, so it has no public host"

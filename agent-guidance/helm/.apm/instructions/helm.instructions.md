@@ -562,6 +562,7 @@ applications:
 | `networking.istio.cloudflareProxied` | `true` | Sets the `external-dns.alpha.kubernetes.io/cloudflare-proxied` annotation on the application's VirtualServices, including the operator-managed one in dev (through the OffloadBase `virtualServiceAnnotations`) |
 | `networking.istio.offloadVirtualServiceAnnotations` | `{}` | Dev: extra annotations on the operator-managed VirtualService; a `cloudflare-proxied` key here overrides `cloudflareProxied` |
 | `networking.istio.internalEnabled` | `true` | The mesh-internal host described below |
+| `networking.istio.externalEnabled` | `true` | `false` binds the application's VirtualServices only to `mesh` and drops its public hosts, so only in-cluster callers reach it; `useRootDomain` and `staticHostname` then fail the render |
 
 **Endpoint allowlist.** When an application has an allowlist, the gateway answers every other path with a 403. A csharp application has one by default, built from: `/liveness` and `/health` (exact), `/api` (prefix, only when the application's full name contains `api`), and `/swagger` (prefix) in dev and feature environments only. `allowedEndpoints` entries are added after the defaults. A non-csharp application without `allowedEndpoints` has no allowlist. The allowlist is enforced in every environment except plain `dev`, including feature environments (since mycarrier-helm 4.1.0).
 
@@ -638,7 +639,7 @@ global:
 | `fast` | 25%, then 100% |
 | `manual` | 10%, then a pause with no time limit until someone promotes or aborts it, then 100% |
 
-With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` (`health`, `compare` and `alerts` by default); `applications.<app>.analysisTemplates` render under the same names. `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
+With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` (`health`, `compare` and `alerts` by default); `applications.<app>.analysisTemplates` render under the same names. `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application. With the release-wide coordinator (`global.strategy.canary.coordinator.enabled`) and the dark stage (`global.strategy.canary.dark`, default `true`), one Rollout, the leader, runs the dark-stage test suite: set `global.strategy.canary.leader` to an application that serves the release's traffic. It must be an application with `deploymentType: rollout`; with more than one such application the render fails until it is set, and a release with one defaults to it.
 
 | Environment | What a Rollout needs |
 |-------------|----------------------|
@@ -648,7 +649,7 @@ With `analysis.enabled`, an analysis step follows each weight and runs the Analy
 
 The chart fails the render when one of these is missing.
 
-**Migrations.** A database migration runs in one of two ways. A migrator that runs to completion and exits goes in `jobs` with `timing: pre-deploy`: it has no port and gets no canary steps. A long-running migrator application, which runs the migration when it starts and keeps running (like a worker), is an entry under `applications`; with `deploymentType: rollout` it takes part in the canary like any other Rollout, so give it an HTTP port for the health check. Either way, migrations stay compatible with the previous version, so an abort or a revert needs no database rollback. Applications with `migration` in the name are left out of automatic HPA (see [HPA](#hpa-horizontal-pod-autoscaler)).
+**Migrations.** A database migration runs in one of two ways. A migrator that runs to completion and exits goes in `jobs` with `timing: pre-deploy`: Argo CD runs the Job as a PreSync hook, ahead of the workloads (sync wave 10), and waits for it to complete, so the migration finishes before any Deployment, StatefulSet or Rollout of the release is updated, and a failed Job fails the sync; it has no port and gets no canary steps. A long-running migrator application, which runs the migration when it starts and keeps running (like a worker), is an entry under `applications`; with `deploymentType: rollout` it takes part in the canary like any other Rollout, so give it an HTTP port for the health check, and set `networking.istio.externalEnabled: false` so that only in-cluster callers reach the pod that holds the database credentials. It gives no start order: it syncs in wave 10 with every Deployment, StatefulSet and Rollout, so their new pods start alongside it and can serve before the migration finishes. By default each Rollout of a release runs its own steps, so a migrator Rollout that aborts does not stop the others from promoting (with `global.strategy.canary.coordinator.enabled` the release moves in lockstep and an abort stops all of it), and the default readiness probe is a TCP check that passes once the port opens, so it does not catch a migration that fails while the process keeps running. Use it only when the migrator's readiness waits for its migration and every other application's readiness waits for the schema version it needs (`probes.readinessProbe`): keep the port, startup and liveness probes answering while the migration runs, and set `applications.<app>.progressDeadlineSeconds` above the longest migration on every Rollout whose readiness waits for it, or that Rollout aborts. Otherwise use the pre-deploy job. Either way, a migration must stay compatible with the previous version, whose pods keep running against the migrated schema, so an abort or a revert needs no database rollback. Applications with `migration` in the name are left out of automatic HPA (see [HPA](#hpa-horizontal-pod-autoscaler)).
 
 ### Switching between Deployment and Rollout
 
@@ -949,6 +950,8 @@ cronjobs:
 
 `command` renders correctly only with a single element; a multi-element `command` collapses into one string. In Layout B, CronJobs go in `environments[].cronjobs`.
 
+A CronJob syncs in wave 10 with the workloads, after the pre-deploy jobs, so a schedule that fires during a release never runs the new image against the old schema. `jobs` with `timing: pre-deploy` are Argo CD PreSync hooks (they run on every sync, before anything else is applied) and `timing: post-deploy` are PostSync hooks; `order` sorts jobs of the same timing. Without `timing` a Job syncs in wave 0, ahead of the workloads. On a Rollout a PostSync hook can fire before promotion or after an abort, so do not use a post-deploy job to check a canary release.
+
 ---
 
 ## Alerts
@@ -1219,6 +1222,12 @@ When reviewing or creating helm value changes:
 ## Breaking changes
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
+
+### mycarrier-helm, the release after 4.7.2
+
+- With the coordinator and the dark stage on, a release with more than one `deploymentType: rollout` application fails to render until `global.strategy.canary.leader` names the application that runs the dark-stage suite. Before, the first name in sort order was the leader. A release with one Rollout application needs no change.
+- `jobs` with `timing` are now real Argo CD hooks: the hook, sync-wave and hook-delete-policy annotations render on the Job's metadata instead of its pod template, where Argo CD ignored them. A `pre-deploy` job is a PreSync hook that runs on every sync; a `post-deploy` job is a PostSync hook and now runs after the workloads instead of alongside the pre-deploy jobs. `argocd.argoproj.io/hook`, `sync-wave` and `hook-delete-policy` under `jobs[].annotations` are dropped; use `timing` and `order`.
+- CronJobs sync in wave 10 with the workloads instead of wave 0.
 
 ### mycarrier-helm 4.5.0
 

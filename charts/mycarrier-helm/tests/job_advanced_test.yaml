@@ -185,13 +185,13 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PreSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-100"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          path: metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
           value: "BeforeHookCreation"
 
   - it: should set post-deploy ArgoCD hook with default order
@@ -208,13 +208,13 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PostSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "100"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          path: metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
           value: "BeforeHookCreation"
 
   - it: should set pre-deploy ArgoCD hook with custom order
@@ -232,10 +232,10 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PreSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-95"
 
   - it: should set post-deploy ArgoCD hook with custom order
@@ -253,10 +253,10 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PostSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "110"
 
   - it: should not set ArgoCD hooks when timing is not specified
@@ -272,9 +272,9 @@ tests:
       - isKind:
           of: Job
       - notExists:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
       - notExists:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
 
   - it: should create multiple jobs with different timings
     set:
@@ -466,10 +466,10 @@ tests:
           path: metadata.name
           value: prod-myapp-comprehensive-pre-deploy-job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PreSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-95"
       - equal:
           path: spec.activeDeadlineSeconds
