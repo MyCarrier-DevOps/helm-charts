@@ -71,6 +71,8 @@ rendered on 4.5.0 fails on 4.6.0:
 |---|---|
 | An application whose name contains `migration` with `deploymentType: rollout` | Render the migrator through `jobs` with `timing: pre-deploy`: it runs to completion and exits, so it cannot be a canary. |
 
+Since the release after 4.7.2 this refusal is lifted: a long-running migrator application (it runs the migration when it starts and keeps running) may be `deploymentType: rollout` and takes part in the canary. A migrator that exits stays a pre-deploy job.
+
 ## Upgrading to 4.7.0 (Rollouts with the coordinator on)
 
 4.7.0 adds the Tech Spec's header-gated dark stage (`global.strategy.canary.dark`, default `true`, and `darkReplicas`).

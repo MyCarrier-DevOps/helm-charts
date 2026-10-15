@@ -648,6 +648,8 @@ With `analysis.enabled`, an analysis step follows each weight and runs the Analy
 
 The chart fails the render when one of these is missing.
 
+**Migrations.** A database migration runs in one of two ways. A migrator that runs to completion and exits goes in `jobs` with `timing: pre-deploy`: it has no port and gets no canary steps. A long-running migrator application, which runs the migration when it starts and keeps running (like a worker), is an entry under `applications`; with `deploymentType: rollout` it takes part in the canary like any other Rollout, so give it an HTTP port for the health check. Either way, migrations stay compatible with the previous version, so an abort or a revert needs no database rollback. Applications with `migration` in the name are left out of automatic HPA (see [HPA](#hpa-horizontal-pod-autoscaler)).
+
 ### Switching between Deployment and Rollout
 
 Never change `deploymentType` in one release: Argo CD prunes the old workload before any new pod is ready, which is an outage. Switch in two releases, in either direction, with `migratingToRollouts`:
