@@ -84,7 +84,7 @@ tests:
     set:
       global:
         appStack: test-stack
-        language: nodejs
+        language: csharp
         correlationId: corr-1
         strategy:
           canary:

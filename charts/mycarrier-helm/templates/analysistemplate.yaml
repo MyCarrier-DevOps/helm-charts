@@ -5,17 +5,56 @@
 {{- if (eq $appValues.deploymentType "rollout")  }}
 {{- $environment := $.Values.environment.name }}
 {{- $fullName := include "helm.fullname" $appContext }}
-{{- $instance := include "helm.instance" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $standardLabels := include "helm.labels.standard" $appContext }}
 {{- $versionLabels :=  include "helm.labels.version" $appContext }}
-{{- $vaultAnnotations := include "helm.annotations.vault" $ }}
-{{- $istioAnnotations :=  include "helm.annotations.istio" $appContext }}
-{{- $otelAnnotations :=  include "helm.otel.annotations" $ }}
-{{- $gitBranch := $.Values.global.gitbranch}}
-{{- $releaseId := $appValues.image.tag }}
-{{- $releaseDefinitionName := printf "%s-%s" $.Values.global.appStack $appName }}
+{{- $httpPort := dig "ports" "http" 8080 $appValues }}
+{{- $customNames := list }}
+{{- range ($appValues.analysisTemplates | default list) }}{{ $customNames = append $customNames (toString .name) }}{{ end }}
+{{- $cfg := include "helm.canary.config" $appContext | fromJson }}
+{{- /* The chart's own health template (DEVOPS-312) for a Rollout that runs canary steps with analysis on: the -preview
+       Service's health endpoint must meet analysis.health.successCondition (default result == "Healthy"), read at
+       $.status of a JSON body. Argo Rollouts up to v1.10.1 counts a 2xx body that is not JSON as Successful without
+       evaluating the condition; argo-rollouts#4770 (merged, not yet released) evaluates it on the raw body, so an app
+       whose health path serves HTML needs successCondition "true". A non-2xx answer is an error; at the default
+       consecutiveErrorLimit 1, a second error in a row aborts the canary. An applications.<app>.analysisTemplates entry named health replaces it. The URL is resolved only
+       when the check is in use, so a probe the check cannot reuse fails the render only then. */}}
+{{- $wantHealth := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "health" $cfg.analysis.templates) (not (has "health" $customNames)) }}
+{{- $healthUrl := "" }}
+{{- if $wantHealth }}{{ $healthUrl = include "helm.canary.analysis.healthUrl" $appContext }}{{ end }}
+{{- if and $wantHealth $healthUrl }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $environment }}-{{ $fullName }}-health
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+spec:
+  metrics:
+  - name: health
+    interval: {{ $cfg.analysis.health.interval }}
+    count: {{ int $cfg.analysis.health.count }}
+    failureLimit: 0
+    consecutiveErrorLimit: {{ int $cfg.analysis.health.consecutiveErrorLimit }}
+    successCondition: {{ $cfg.analysis.health.successCondition | quote }}
+    provider:
+      web:
+        url: {{ $healthUrl }}
+        jsonPath: "{$.status}"
+        timeoutSeconds: 10
+{{- end }}
 {{- range $index, $template := $appValues.analysisTemplates }}
+{{- /* The release-era job contract (a test container run directly against -preview, with RELEASE_ID,
+       RELEASE_DEFINITION_NAME and BRANCH_NAME) is gone: canary tests run through TestEngine (DEVOPS-312). */}}
+{{- if dig "provider" "job" "container" nil $template }}
+{{- fail (printf "application '%s': analysisTemplates '%s' runs a test container through the job provider shorthand, which is no longer supported. Canary tests run through TestEngine (DEVOPS-312); give a full Argo Rollouts provider instead." $appName (toString $template.name)) }}
+{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
@@ -24,7 +63,7 @@ metadata:
          app in a shared namespace. */}}
   name: {{ $environment }}-{{ $fullName }}-{{ $template.name }}
   namespace: {{ $namespace }}
-  labels:    
+  labels:
     {{ $standardLabels | nindent 4 | trim }}
     {{ $versionLabels | nindent 4 | trim }}
   annotations:
@@ -35,51 +74,39 @@ spec:
   - name: {{ $environment }}-{{ $template.name }}
     count: {{ $template.count | default 1 }}
     failureLimit: {{ $template.failureLimit | default 0 }}
+    {{- with $template.interval }}
+    interval: {{ . }}
+    {{- end }}
+    {{- if hasKey $template "consecutiveErrorLimit" }}
+    consecutiveErrorLimit: {{ int $template.consecutiveErrorLimit }}
+    {{- end }}
+    {{- /* Only the web shorthand and a raw job provider are supported (values.schema.json): a query provider would need
+           metric-level conditions, and with none Argo Rollouts counts every measurement as Successful. */}}
+    {{- if and (kindIs "map" $template.provider) (hasKey $template.provider "web") }}
+    {{- $web := $template.provider.web | default dict }}
+    {{- /* Default: the -preview Service port that reaches the http container port (service.ports may remap it). */}}
+    {{- $previewPort := include "helm.canary.previewPort" (dict "application" $appValues "port" $httpPort) | default $httpPort }}
+    {{- $base := $web.url | default (printf "http://%s-preview.%s.svc.cluster.local:%v" $fullName $namespace $previewPort) }}
+    {{- $url := $base }}
+    {{- if $web.statusEndpoint }}
+    {{- $url = printf "%s/%s" (trimSuffix "/" $base) (trimPrefix "/" $web.statusEndpoint) }}
+    {{- else if not $web.url }}
+    {{- $url = printf "%s/health" $base }}
+    {{- end }}
+    successCondition: {{ $web.successCondition | default `result == "Healthy"` | quote }}
     provider:
-      {{ if $template.provider.job }}
-      job:
-        spec:
-          backoffLimit: 1
-          template:
-            metadata:
-              labels:
-                sidecar.istio.io/inject: "false"
-              annotations:
-                {{ $vaultAnnotations | nindent 16 | trim }}
-                {{ $istioAnnotations | nindent 16 | trim }}
-                {{ $otelAnnotations | nindent 16 | trim }}
-            spec:
-              containers:
-              - name: {{ $environment }}-{{ $template.name }}
-                image: {{ $template.provider.job.container.image.registry }}/{{ $template.provider.job.container.image.repository }}:{{ $template.provider.job.container.image.tag }}
-                args: 
-                {{- range $template.provider.job.container.args }}
-                - "{{ . }}"
-                {{- end }}
-                env:
-                - name: SERVICE_ADDRESS
-                  value: http://{{ $fullName }}-preview.{{ $namespace }}.svc.cluster.local:8080
-                - name: RELEASE_ID
-                  value: {{ $releaseId }}
-                - name: RELEASE_DEFINITION_NAME
-                  value: {{ $releaseDefinitionName }}
-                - name: BRANCH_NAME
-                  value: {{ $gitBranch }}
-                {{- range $template.provider.job.container.env }}
-                - name: {{ .name }}
-                  value: "{{ .value }}"
-                {{- end }}
-              restartPolicy: Never
-      {{ else if $template.provider.web }}
       web:
-        url: {{ printf "%s/%s" $template.provider.web.url $template.provider.web.statusEndpoint | default (printf "%s-preview.%s.svc.cluster.local:8080/health" $fullName $namespace) }}
-        jsonPath: "{$.status}"
-      successCondition: {{ $template.provider.web.successCondition | default `result == "Healthy"` }}
-      {{ else }}
-      {{- with $template.provider }}
-      {{- toYaml . | nindent 6 }}
-      {{- end }}
-      {{ end }}
+        url: {{ $url }}
+        jsonPath: {{ $web.jsonPath | default "{$.status}" | quote }}
+        {{- with $web.timeoutSeconds }}
+        timeoutSeconds: {{ int . }}
+        {{- end }}
+    {{- else if and (kindIs "map" $template.provider) (hasKey $template.provider "job") }}
+    provider:
+      {{- toYaml $template.provider | nindent 6 }}
+    {{- else }}
+    {{- fail (printf "application '%s': analysisTemplates '%s' needs provider web or job; other metric providers are not supported" $appName (toString $template.name)) }}
+    {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

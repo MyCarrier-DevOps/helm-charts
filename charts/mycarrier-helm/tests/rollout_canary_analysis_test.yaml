@@ -1,0 +1,1047 @@
+suite: Rollout canary analysis (chart AnalysisTemplates, DEVOPS-312)
+templates:
+  - analysistemplate.yaml
+  - rollout.yaml
+tests:
+  # R3: the chart's health template calls the -preview Service and needs "Healthy"; a non-2xx answer is an error,
+  # and a second error in a row aborts the canary (consecutiveErrorLimit 1).
+  - it: renders the chart's health template for a csharp canary Rollout with analysis on
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: metadata.name
+          value: preprod-test-stack-api-health
+      - equal:
+          path: spec.metrics[0]
+          value:
+            name: health
+            interval: 30s
+            count: 3
+            failureLimit: 0
+            consecutiveErrorLimit: 1
+            successCondition: result == "Healthy"
+            provider:
+              web:
+                url: http://test-stack-api-preview.preprod.svc.cluster.local:8080/health
+                jsonPath: "{$.status}"
+                timeoutSeconds: 10
+
+  # The check reuses the probes the pod renders with: readiness, then startup, then liveness, each from the app's
+  # probes or the chart's default for global.language.
+  - it: takes the health path and port from the readinessProbe httpGet
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+            management: 3001
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: 3001
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3001/ready
+
+  - it: falls back to the startupProbe httpGet path and resolves its named port
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+          probes:
+            startupProbe:
+              httpGet:
+                path: /started
+                port: http
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3000/started
+
+  - it: falls through a TCP readinessProbe to the csharp default startup probe
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          probes:
+            readinessProbe:
+              tcpSocket:
+                port: 8080
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/health
+
+  - it: skips a startup probe turned off and uses the csharp default liveness probe
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          probes:
+            enableStartup: false
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/liveness
+
+  - it: uses the livenessProbe httpGet of a nodejs app
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+          probes:
+            livenessProbe:
+              httpGet:
+                path: alive
+                port: 3000
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3000/alive
+
+  - it: calls the service.ports port that targets the probe's container port
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 8080
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:80/health
+
+  # analysis.health.path: an app whose probes are all TCP names its health path for the canary check only.
+  - it: calls analysis.health.path on the http port when every probe is TCP
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                path: /healthz
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3000/healthz
+  - it: prefers analysis.health.path over the probe-derived path
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                path: /ready
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/ready
+  - it: maps analysis.health.path through service.ports
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                path: /status
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 10000
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 10000
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:80/status
+  - it: rejects an analysis.health.path without a leading slash
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                path: healthz
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis[./]health[./]path.*[Dd]oes not match pattern"
+
+  # applications.<app>.canaryHealthPath overrides the stack's path for one application.
+  - it: gives each application its own canaryHealthPath, over the stack's analysis.health.path
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                path: /healthz
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /api/health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 10000
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 10000
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:10000/api/health
+        documentIndex: 0
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:10000/healthz
+        documentIndex: 1
+
+  - it: uses canaryHealthPath over the probe-derived path without a stack path
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /ready
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/ready
+
+  - it: rejects a canaryHealthPath without a leading slash
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          canaryHealthPath: healthz
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+    asserts:
+      - failedTemplate:
+          errorPattern: "canaryHealthPath.*[Dd]oes not match pattern"
+
+  - it: applies analysis.health overrides
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                count: 5
+                interval: 1m
+                consecutiveErrorLimit: 2
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.metrics[0].count
+          value: 5
+      - equal:
+          path: spec.metrics[0].interval
+          value: 1m
+      - equal:
+          path: spec.metrics[0].consecutiveErrorLimit
+          value: 2
+
+  - it: renders no AnalysisTemplate while analysis is off
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders no health template for a migrating Rollout or a Deployment
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          autoscaling:
+            enabled: true
+            minReplicas: 2
+            maxReplicas: 4
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails the render when the chart can't find an app's health path
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.web.canaryHealthPath"
+
+  - it: fails the render when the probe port is not on the -preview Service
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: 3001
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.web.canaryHealthPath"
+
+  # Argo Rollouts resolves every referenced AnalysisTemplate up front, so a step may only reference one that renders.
+  - it: fails the render when analysis.templates lists a template that does not render
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              templates: [health, compare]
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': global.strategy.canary.analysis.templates lists 'compare', but no AnalysisTemplate of that name renders for it"
+
+  - it: accepts a listed template that the app defines itself
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              enabled: true
+              templates: [health, smoke]
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: smoke
+              provider:
+                web:
+                  url: http://smoke.example/check
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1].analysis.templates
+          value:
+            - templateName: preprod-test-stack-api-health
+            - templateName: preprod-test-stack-api-smoke
+
+  - it: lets an app's own health template replace the chart's
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: health
+              provider:
+                web:
+                  url: http://health.example
+                  statusEndpoint: /status
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://health.example/status
+
+  # R1 and the D7-era defect: the legacy web shorthand puts successCondition at metric level (under provider it never
+  # applied) and its default URL has a scheme and the app's port.
+  - it: renders the legacy web shorthand with successCondition at metric level
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 5000
+          analysisTemplates:
+            - name: status
+              provider:
+                web: {}
+    asserts:
+      - equal:
+          path: spec.metrics[0].successCondition
+          value: result == "Healthy"
+      - notExists:
+          path: spec.metrics[0].provider.successCondition
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:5000/health
+
+  - it: refuses the job container shorthand
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: tests
+              provider:
+                job:
+                  container:
+                    image:
+                      registry: registry.example.com
+                      repository: tests
+                      tag: "1"
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': analysisTemplates 'tests' runs a test container through the job provider shorthand, which is no longer supported"
+
+  # The dark stage's tests-dark template is not rendered by the chart yet (DEVOPS-312, DEVOPS-326).
+  - it: fails the render when the leader's dark stage needs a tests-dark template that does not render
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet"
+
+  # The legacy web shorthand: its default URL uses the -preview Service port that reaches the http container port, and
+  # statusEndpoint applies with or without url.
+  - it: maps the web shorthand's default URL through service.ports
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 4200
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 4200
+          analysisTemplates:
+            - name: status
+              provider:
+                web: {}
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:8080/health
+
+  - it: applies the web shorthand's statusEndpoint without url
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: status
+              provider:
+                web:
+                  statusEndpoint: /status
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/status
+
+  # The check calls plain http with no host or headers, so a probe that needs them fails the render while the check is
+  # in use, instead of erroring on every measurement.
+  - it: fails the render when the reused probe needs HTTPS
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 8443
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+                scheme: HTTPS
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'web': the canary health check would reuse the path of its readinessProbe, which sets scheme HTTPS, host or httpHeaders"
+
+  - it: uses canaryHealthPath instead of a probe the check cannot reuse
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          canaryHealthPath: /status
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 8080
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+                httpHeaders:
+                  - name: X-Probe
+                    value: "1"
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:8080/status
+
+  - it: leaves a probe the check cannot reuse alone while analysis is off
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 8443
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+                scheme: HTTPS
+    asserts:
+      - hasDocuments:
+          count: 0
+
+
+  # analysis.health.successCondition: "true" accepts any 2xx answer, for a health path that serves HTML (argo-rollouts
+  # #4770 evaluates the condition on a body that is not JSON).
+  - it: applies analysis.health.successCondition
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                successCondition: "true"
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports: {http: 3000}
+          probes:
+            readinessProbe:
+              httpGet: {path: /, port: http}
+    asserts:
+      - equal:
+          path: spec.metrics[0].successCondition
+          value: "true"
+
+  # analysisTemplates: the metric-level fields render when set, and only web or job providers are accepted.
+  - it: renders interval, consecutiveErrorLimit, jsonPath and timeoutSeconds on the web shorthand
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          analysisTemplates:
+            - name: health
+              count: 3
+              interval: 1m
+              consecutiveErrorLimit: 2
+              provider:
+                web:
+                  statusEndpoint: /ready
+                  successCondition: result == "UP"
+                  jsonPath: "{$.state}"
+                  timeoutSeconds: 5
+    asserts:
+      - equal:
+          path: spec.metrics[0]
+          value:
+            name: preprod-health
+            count: 3
+            failureLimit: 0
+            interval: 1m
+            consecutiveErrorLimit: 2
+            successCondition: result == "UP"
+            provider:
+              web:
+                url: http://test-stack-api-preview.preprod.svc.cluster.local:8080/ready
+                jsonPath: "{$.state}"
+                timeoutSeconds: 5
+
+  - it: passes a raw job provider through with its interval
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          analysisTemplates:
+            - name: smoke
+              interval: 30s
+              provider:
+                job:
+                  spec:
+                    backoffLimit: 0
+    asserts:
+      - equal:
+          path: spec.metrics[0].interval
+          value: 30s
+      - equal:
+          path: spec.metrics[0].provider.job.spec.backoffLimit
+          value: 0
+
+  - it: refuses a provider other than web or job
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          analysisTemplates:
+            - name: alerts
+              provider:
+                prometheus:
+                  address: http://prometheus
+                  query: up
+    asserts:
+      - failedTemplate:
+          errorPattern: "prometheus"

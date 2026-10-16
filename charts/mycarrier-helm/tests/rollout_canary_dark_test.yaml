@@ -70,7 +70,7 @@ tests:
     set:
       global:
         appStack: test-stack
-        language: nodejs
+        language: csharp
         correlationId: corr-1
         strategy:
           canary:
@@ -94,6 +94,11 @@ tests:
             http: 8080
         worker:
           deploymentType: rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/run
           image:
             registry: registry.example.com
             repository: worker
@@ -262,7 +267,7 @@ tests:
     set:
       global:
         appStack: test-stack
-        language: nodejs
+        language: csharp
         correlationId: corr-1
         strategy:
           canary:
@@ -288,6 +293,11 @@ tests:
             http: 8080
         worker:
           deploymentType: rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/run
           image:
             registry: registry.example.com
             repository: worker
