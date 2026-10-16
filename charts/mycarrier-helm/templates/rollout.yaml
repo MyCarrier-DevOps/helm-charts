@@ -1,5 +1,8 @@
 {{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
+{{- /* global.strategy.canary.leader is checked whenever it is set, not only when the dark stage needs it, so a stale or
+       misspelled leader fails now rather than on the day the coordinator is turned on. */}}
+{{- if dig "strategy" "canary" "leader" "" (.Values.global | default dict) }}{{ $_ := include "helm.canary.leader" $ }}{{ end }}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- /* Also rendered for a Deployment app while migratingToRollouts is set: on the way back from a Rollout, the Rollout

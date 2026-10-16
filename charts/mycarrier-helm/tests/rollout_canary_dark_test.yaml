@@ -473,3 +473,28 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'shell': the dark stage's header route would also go into the shared test-stack-shell-multifrontend VirtualService"
+
+  # The leader is checked whenever it is set, so a stale value fails before the coordinator is turned on.
+  - it: fails the render for a leader that is not a canary Rollout even while the coordinator is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            leader: worker
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.leader 'worker' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
+

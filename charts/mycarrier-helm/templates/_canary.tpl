@@ -229,7 +229,7 @@
 {{- $set := toString (dig "strategy" "canary" "leader" "" (.Values.global | default dict)) -}}
 {{- if $set -}}
   {{- if not (has $set $rollouts) -}}
-    {{- fail (printf "global.strategy.canary.leader '%s' is not an application with deploymentType rollout that runs canary steps; choose one of: %s." $set (join ", " $rollouts)) -}}
+    {{- fail (printf "global.strategy.canary.leader '%s' is not an application with deploymentType rollout that runs canary steps; %s." $set (ternary "this release has none" (printf "choose one of: %s" (join ", " $rollouts)) (empty $rollouts))) -}}
   {{- end -}}
   {{- $set -}}
 {{- else if eq (len $rollouts) 1 -}}

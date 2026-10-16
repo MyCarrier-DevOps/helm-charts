@@ -123,3 +123,51 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "networking.istio.externalEnabled is false, so it has no public host"
+
+  - it: fails the render when externalEnabled is false and custom hosts are set
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api:
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              externalEnabled: false
+              hosts: [api.example.com]
+    asserts:
+      - failedTemplate:
+          errorPattern: "networking.istio.externalEnabled is false, so it has no public host"
+
+  - it: leaves the cloudflare DNS annotation off a mesh-only VirtualService
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api:
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              externalEnabled: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/cloudflare-proxied"]
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api

@@ -13,6 +13,14 @@
 
 {{/* Only create multi-frontend VirtualService if we have multiple frontend apps and a primary */}}
 {{- if and (gt (len $frontendApps) 1) $hasPrimary }}
+{{- /* The shared multi-frontend VirtualService binds the primary's gateways and routes to every frontend, so one
+       frontend cannot be mesh-only. This file renders in every release, so the check also guards the frontend
+       Rollouts' trafficRouting (helm.canary.virtualServices builds the same frontend set). */}}
+{{- range $appName, $appValues := $frontendApps }}
+{{- if not (dig "networking" "istio" "externalEnabled" true $appValues) }}
+{{- fail (printf "application %q: networking.istio.externalEnabled is false, but a multi-frontend release routes every frontend application through the shared multi-frontend VirtualService on the ingress gateway; remove isFrontend from it or set externalEnabled to true" $appName) }}
+{{- end }}
+{{- end }}
 {{- $primaryApp := "" }}
 {{- range $appName, $appValues := $frontendApps }}
 {{- if $appValues.isPrimary }}{{ $primaryApp = $appName }}{{ end }}

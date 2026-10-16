@@ -985,3 +985,19 @@ tests:
             runAsUser: 1000
             runAsGroup: 3000
             runAsNonRoot: true
+
+  - it: should fail the render when cronjobs[].annotations sets argocd.argoproj.io/sync-wave
+    set:
+      environment.name: "dev"
+      cronjobs:
+        - name: nightly
+          schedule: "0 2 * * *"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/nightly"
+            tag: "1.0.0"
+          annotations:
+            argocd.argoproj.io/sync-wave: "-3"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'cronjob "nightly": annotation argocd.argoproj.io/sync-wave is set by the chart'

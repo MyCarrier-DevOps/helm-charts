@@ -852,7 +852,7 @@
                           },
                           "externalEnabled": {
                             "type": "boolean",
-                            "description": "Expose the application through the ingress gateway on its public host. When false, its VirtualServices bind only the mesh gateway and keep only the in-mesh hosts (<fullName> and the .internal host), so it is reachable only inside the cluster; useRootDomain and staticHostname then fail the render. Set it to false for a migrator Rollout.",
+                            "description": "Expose the application through the ingress gateway on its public host. When false, its VirtualServices bind only the mesh gateway, keep only the in-mesh hosts (<fullName> and the .internal host) and drop the cloudflare-proxied and mycarrier.io/gateway annotations, so it is reachable only inside the cluster; useRootDomain, staticHostname, networking.istio.hosts and networking.istio.legacyHostAliases then fail the render, as does a frontend application in a multi-frontend release. Set it to false for a migrator Rollout.",
                             "default": true
                           },
                           "offloadVSEnabled": {

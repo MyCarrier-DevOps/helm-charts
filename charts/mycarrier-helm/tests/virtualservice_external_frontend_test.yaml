@@ -1,0 +1,54 @@
+suite: Multi-frontend release refuses a mesh-only frontend (networking.istio.externalEnabled)
+templates:
+  - frontendVirtualService.yaml
+tests:
+  # The shared multi-frontend VirtualService binds the primary's gateways and routes to every frontend.
+  - it: fails the render when a non-primary frontend sets externalEnabled false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          image: {registry: registry.example.com, repository: shell, tag: "1.0.0"}
+          ports: {http: 8080}
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          image: {registry: registry.example.com, repository: admin, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              externalEnabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: 'application "admin": networking.istio.externalEnabled is false, but a multi-frontend release routes every frontend'
+
+  - it: fails the render when the primary frontend sets externalEnabled false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          image: {registry: registry.example.com, repository: shell, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              externalEnabled: false
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          image: {registry: registry.example.com, repository: admin, tag: "1.0.0"}
+          ports: {http: 8080}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'application "shell": networking.istio.externalEnabled is false'
