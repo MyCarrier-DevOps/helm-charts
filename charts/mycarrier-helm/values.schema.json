@@ -49,8 +49,9 @@
                     "health": {
                       "type": "object",
                       "additionalProperties": false,
-                      "description": "The chart's health template: it calls the app's -preview Service at health.path on the http port, or else at the path of the pod's first httpGet probe (readiness, startup, then liveness, after the global.language defaults; csharp defaults to /health), and needs the answer Healthy (a JSON body is read at $.status; a non-JSON 2xx body counts as healthy).",
+                      "description": "The chart's health template: it calls the app's -preview Service at canaryHealthPath or health.path on the http port, or else at the path of the pod's first httpGet probe (readiness, startup, then liveness, after the global.language defaults; csharp defaults to /health), reads a JSON body at $.status and evaluates successCondition. Argo Rollouts up to v1.10.1 counts a 2xx body that is not JSON as Successful without evaluating the condition; argo-rollouts#4770 (merged, not yet released) evaluates it on the raw body instead, so an application whose health path serves HTML needs successCondition \"true\".",
                       "properties": {
+                        "successCondition": { "type": "string", "default": "result == \"Healthy\"", "description": "Condition on the value read at $.status (on the raw body when it is not JSON, from argo-rollouts#4770 on). \"true\" accepts any 2xx answer; a non-2xx answer is an error either way." },
                         "path": { "type": "string", "pattern": "^/", "description": "HTTP path the health check calls on each Rollout application's http (or healthcheck) port. Unset: the path of the pod's first httpGet probe. Set it for an application whose probes are all TCP." },
                         "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements per analysis step." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements." },
@@ -1328,6 +1329,7 @@
             "items": {
               "type": "object",
               "required": ["name", "provider"],
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
@@ -1340,18 +1342,27 @@
                   "type": "integer",
                   "default": 0
                 },
+                "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "description": "Time between measurements." },
+                "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "description": "Errors in a row the metric tolerates; one more ends the run as Error, which aborts the canary." },
                 "provider": {
                   "type": "object",
-                  "description": "web: the chart's shorthand for a health-style check (url, statusEndpoint, successCondition; default url is the -preview Service's /health). Any other key is passed through as an Argo Rollouts metric provider. The job.container shorthand is no longer supported: canary tests run through TestEngine.",
+                  "description": "Exactly one of web (the chart's shorthand for a health-style check: url, statusEndpoint, successCondition, jsonPath, timeoutSeconds; default url is the -preview Service's /health) or job (an Argo Rollouts job provider, passed through; its phase comes from the Job's status). Other metric providers are not supported. The job.container shorthand is no longer supported: canary tests run through TestEngine.",
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "maxProperties": 1,
                   "properties": {
                     "web": {
                       "type": "object",
+                      "additionalProperties": false,
                       "properties": {
                         "url": { "type": "string" },
                         "statusEndpoint": { "type": "string" },
-                        "successCondition": { "type": "string", "default": "result == \"Healthy\"" }
+                        "successCondition": { "type": "string", "default": "result == \"Healthy\"" },
+                        "jsonPath": { "type": "string", "default": "{$.status}" },
+                        "timeoutSeconds": { "type": "integer", "minimum": 1 }
                       }
-                    }
+                    },
+                    "job": { "type": "object", "description": "An Argo Rollouts job provider (metadata, spec), passed through as written." }
                   }
                 }
               }

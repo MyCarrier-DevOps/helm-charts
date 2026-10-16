@@ -924,3 +924,124 @@ tests:
       - hasDocuments:
           count: 0
 
+
+  # analysis.health.successCondition: "true" accepts any 2xx answer, for a health path that serves HTML (argo-rollouts
+  # #4770 evaluates the condition on a body that is not JSON).
+  - it: applies analysis.health.successCondition
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              health:
+                successCondition: "true"
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports: {http: 3000}
+          probes:
+            readinessProbe:
+              httpGet: {path: /, port: http}
+    asserts:
+      - equal:
+          path: spec.metrics[0].successCondition
+          value: "true"
+
+  # analysisTemplates: the metric-level fields render when set, and only web or job providers are accepted.
+  - it: renders interval, consecutiveErrorLimit, jsonPath and timeoutSeconds on the web shorthand
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          analysisTemplates:
+            - name: health
+              count: 3
+              interval: 1m
+              consecutiveErrorLimit: 2
+              provider:
+                web:
+                  statusEndpoint: /ready
+                  successCondition: result == "UP"
+                  jsonPath: "{$.state}"
+                  timeoutSeconds: 5
+    asserts:
+      - equal:
+          path: spec.metrics[0]
+          value:
+            name: preprod-health
+            count: 3
+            failureLimit: 0
+            interval: 1m
+            consecutiveErrorLimit: 2
+            successCondition: result == "UP"
+            provider:
+              web:
+                url: http://test-stack-api-preview.preprod.svc.cluster.local:8080/ready
+                jsonPath: "{$.state}"
+                timeoutSeconds: 5
+
+  - it: passes a raw job provider through with its interval
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          analysisTemplates:
+            - name: smoke
+              interval: 30s
+              provider:
+                job:
+                  spec:
+                    backoffLimit: 0
+    asserts:
+      - equal:
+          path: spec.metrics[0].interval
+          value: 30s
+      - equal:
+          path: spec.metrics[0].provider.job.spec.backoffLimit
+          value: 0
+
+  - it: refuses a provider other than web or job
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          analysisTemplates:
+            - name: alerts
+              provider:
+                prometheus:
+                  address: http://prometheus
+                  query: up
+    asserts:
+      - failedTemplate:
+          errorPattern: "prometheus"

@@ -15,7 +15,7 @@
       "progressDeadlineSeconds" 600
       "dark" true
       "darkReplicas" 1
-      "analysis" (dict "enabled" false "templates" (list "health") "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 1))
+      "analysis" (dict "enabled" false "templates" (list "health") "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\""))
       "coordinator" (dict
         "enabled" false
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
