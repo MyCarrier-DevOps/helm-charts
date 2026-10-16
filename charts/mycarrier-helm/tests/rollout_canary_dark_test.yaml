@@ -474,15 +474,16 @@ tests:
       - failedTemplate:
           errorPattern: "application 'shell': the dark stage's header route would also go into the shared test-stack-shell-multifrontend VirtualService"
 
-  # The leader is checked whenever it is set, so a stale value fails before the coordinator is turned on.
-  - it: fails the render for a leader that is not a canary Rollout even while the coordinator is off
+  # The leader must name an application of the release whenever it is set, so a misspelled value fails before the
+  # coordinator is turned on; that it is a canary Rollout is checked only where the dark stage needs it.
+  - it: fails the render for a leader that is not an application of the release even while the coordinator is off
     set:
       global:
         appStack: test-stack
         language: nodejs
         strategy:
           canary:
-            leader: worker
+            leader: wroker
       environment:
         name: preprod
       applications:
@@ -496,5 +497,29 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "global.strategy.canary.leader 'worker' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
+          errorPattern: "global.strategy.canary.leader 'wroker' is not an application of this release"
 
+  # A leader set in shared values still renders where that application is a Deployment or migrating, as long as the
+  # dark stage does not need it there.
+  - it: renders a release whose leader is still a Deployment while the coordinator is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            leader: api
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0

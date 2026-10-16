@@ -62,7 +62,7 @@
                 "leader": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "The application whose Rollout runs the dark-stage test suite (<environment>-<fullName>-tests-dark). Must be an application with deploymentType rollout that runs canary steps. Required when the dark stage runs (coordinator on, dark true) with more than one canary Rollout; a release with one canary Rollout defaults to it."
+                  "description": "The application whose Rollout runs the dark-stage test suite (<environment>-<fullName>-tests-dark). When set, it must name an application of the release; where the dark stage runs (coordinator on, dark true) it must be an application with deploymentType rollout and without migratingToRollouts. Required there when the release has more than one such application; a release with one defaults to it."
                 },
                 "darkReplicas": {
                   "type": "integer",

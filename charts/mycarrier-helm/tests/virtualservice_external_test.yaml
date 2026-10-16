@@ -171,3 +171,24 @@ tests:
         documentSelector:
           path: metadata.name
           value: test-stack-api
+
+  # Feature environments render the -offload VirtualService instead of the main one (the offload operator is on), so
+  # the same host check runs there.
+  - it: fails the render for custom hosts with externalEnabled false in a feature environment
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: feature7
+      applications:
+        worker:
+          image: {registry: registry.example.com, repository: worker, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              externalEnabled: false
+              hosts: [api.example.com]
+    asserts:
+      - failedTemplate:
+          errorPattern: "networking.istio.externalEnabled is false, so it has no public host"
