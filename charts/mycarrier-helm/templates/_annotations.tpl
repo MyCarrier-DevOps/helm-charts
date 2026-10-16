@@ -49,9 +49,11 @@ rather than hardcoding the key twice and risking drift.
 */}}
 {{- define "helm.annotations.jobMetadata" -}}
 argocd.argoproj.io/sync-options: Force=true,Replace=true
-{{- /* timing makes the Job an Argo CD hook. Argo CD reads hook, sync-wave and hook-delete-policy only from the
-       resource's own metadata, never from its pod template. order sorts hooks of the same phase. */ -}}
-{{- if .timing }}
+{{- /* timing makes the Job a real Argo CD hook unless runAsHook is false. Argo CD reads hook, sync-wave and
+       hook-delete-policy only from the resource's own metadata, never from its pod template. order sorts hooks of the
+       same phase. A hook runs on every sync, not only when its manifest changes; runAsHook: false keeps the Job a plain
+       resource. */ -}}
+{{- if and .timing (dig "runAsHook" true .) }}
 {{- $order := .order | default 0 }}
 {{- if eq .timing "pre-deploy" }}
 argocd.argoproj.io/hook: PreSync

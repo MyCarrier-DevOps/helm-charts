@@ -21,15 +21,15 @@ metadata:
     {{- end }}
   annotations:
     {{ include "helm.annotations.jobMetadata" . | indent 4 | trim }}
-  {{- /* The four argocd.argoproj.io/* keys are reserved whether or not timing is set, so the hook comes only from
-         timing and a user annotation cannot turn a Job into a hook or move its wave. */}}
+  {{- $reserved := include "helm.annotations.jobMetadata" . | fromYaml }}
+  {{- if and .timing (dig "runAsHook" true .) }}
   {{- $job := . }}
   {{- range (list "argocd.argoproj.io/hook" "argocd.argoproj.io/sync-wave" "argocd.argoproj.io/hook-delete-policy") }}
   {{- if hasKey ($job.annotations | default dict) . }}
-  {{- fail (printf "job %q: annotation %s is set by the chart from timing and order; remove it from jobs[].annotations and use timing (pre-deploy or post-deploy) and order instead" (toString $job.name) .) }}
+  {{- fail (printf "job %q: the chart sets annotation %s from timing and order; remove it from jobs[].annotations, or set runAsHook: false to keep the job a plain resource" (toString $job.name) .) }}
   {{- end }}
   {{- end }}
-  {{- $reserved := merge (dict "argocd.argoproj.io/sync-options" "" "argocd.argoproj.io/hook-delete-policy" "" "argocd.argoproj.io/sync-wave" "" "argocd.argoproj.io/hook" "") (include "helm.annotations.jobMetadata" . | fromYaml) }}
+  {{- end }}
   {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .annotations) }}
   {{- if $extra }}
     {{ $extra | indent 4 | trim }}

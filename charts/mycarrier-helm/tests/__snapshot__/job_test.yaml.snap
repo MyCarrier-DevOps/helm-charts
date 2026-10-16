@@ -1,5 +1,6 @@
 should render pod-template annotations and pod securityContext byte-identical to snapshot (regression guard):
   1: |
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     argocd.argoproj.io/sync-options: Prune=true,Replace=true
     vault.security.banzaicloud.io/mutate-probes: "true"
     vault.security.banzaicloud.io/run-as-group: "1000"

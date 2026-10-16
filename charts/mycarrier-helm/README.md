@@ -1372,8 +1372,8 @@ chart doesn't set) is applied to the pod/resource as-is.
 | Application pod template (Deployment / StatefulSet / Rollout) | vault keys + otel keys (see below) + `sidecar.istio.io/inject`, `proxy.istio.io/config` + `mycarrier.io/gateway` |
 | CronJob resource metadata | `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/sync-wave` (`"10"`, the workloads' wave, so a CronJob updates after the pre-deploy jobs) |
 | CronJob pod template | vault keys + otel keys only (no argocd/istio/gateway keys) |
-| Job resource metadata | `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/hook`, `argocd.argoproj.io/sync-wave`, `argocd.argoproj.io/hook-delete-policy` (reserved whether or not `.timing` is set; `timing` renders the hook here, where Argo CD reads it: `pre-deploy` is a PreSync hook with wave `order - 100`, `post-deploy` a PostSync hook with wave `order + 100`) |
-| Job pod template | vault keys + otel keys + the same four argocd keys (Argo CD ignores them on a pod template, so they are dropped there) |
+| Job resource metadata | `argocd.argoproj.io/sync-options`; for a job with `.timing` (unless `runAsHook: false`) also `argocd.argoproj.io/hook`, `argocd.argoproj.io/sync-wave` and `argocd.argoproj.io/hook-delete-policy`, which the chart renders here, where Argo CD reads them (`pre-deploy`: PreSync, wave `order - 100`; `post-deploy`: PostSync, wave `order + 100`), and a user value for them fails the render |
+| Job pod template | vault keys + otel keys + `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/hook-delete-policy`, `argocd.argoproj.io/sync-wave`, `argocd.argoproj.io/hook` (reserved unconditionally; with `runAsHook: false` the chart renders the timing annotations here, where Argo CD ignores them, as before) |
 
 **vault keys**: `vault-addr`, `vault-auth-method`, `vault-path`, `vault-role`,
 `vault-agent-env-variables`, `mutate-probes`, `run-as-non-root`, `run-as-user`, `run-as-group`, plus

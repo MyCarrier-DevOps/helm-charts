@@ -910,7 +910,7 @@ tests:
           path: spec.template.metadata.annotations["vault.security.banzaicloud.io/run-as-non-root"]
           value: "true"
 
-  - it: should fail the render when jobs[].annotations sets an argocd hook key, even when timing is not set
+  - it: should reserve the argocd hook annotations on the job pod template unconditionally, even when timing is not set
     set:
       environment.name: "dev"
       jobs:
@@ -923,10 +923,15 @@ tests:
             argocd.argoproj.io/hook: "PreSync"
             argocd.argoproj.io/sync-wave: "5"
     asserts:
-      # The hook, wave and delete policy come only from timing and order; a user value would be dropped silently, so
-      # the render fails and names the replacement instead.
-      - failedTemplate:
-          errorPattern: 'job "regular-job": annotation argocd.argoproj.io/hook is set by the chart from timing and order'
+      - isKind:
+          of: Job
+      # No .job.timing set, so the chart itself would not render these keys - but they are
+      # reserved unconditionally (see _spec_job.tpl $argocdReserved), so the user-supplied
+      # values must still be dropped rather than leaking through.
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
 
   - it: should reject readOnlyRootFileSystem (capital S typo) via the values schema
     set:

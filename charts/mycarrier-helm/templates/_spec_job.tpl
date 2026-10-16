@@ -19,11 +19,25 @@ template:
       {{ include "helm.otel.labels" . | indent 6 | trim }}
     annotations:
       argocd.argoproj.io/sync-options: Prune=true,Replace=true
+      argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+      {{- /* With runAsHook: false these timing annotations stay on the pod template, where Argo CD ignores them, as
+           before: the Job syncs as a plain resource in wave 0, ahead of the workloads, and runs once per manifest change.
+           Otherwise they render on the Job's own metadata (helm.annotations.jobMetadata). */}}
+      {{- if and .job.timing (not (dig "runAsHook" true .job)) }}
+      {{- $order := .job.order | default 0 }}
+      {{- if eq .job.timing "pre-deploy" }}
+      argocd.argoproj.io/sync-wave: {{ ((sub $order 100) | toString | quote) }}
+      argocd.argoproj.io/hook: PreSync
+      {{- else if eq .job.timing "post-deploy" }}
+      argocd.argoproj.io/sync-wave: {{ ((add $order 100) | toString | quote) }}
+      argocd.argoproj.io/hook: PostSync
+      {{- end }}
+      {{- end }}
       {{ include "helm.annotations.vault" . | indent 6 | trim }}
       {{ include "helm.otel.annotations" . | indent 6 | trim }}
-      {{- /* The four argocd.argoproj.io/* keys are reserved on the pod template too: Argo CD ignores them there,
-           so a user value would only look like a hook without being one. The hook itself renders on the Job's
-           metadata (helm.annotations.jobMetadata). */}}
+      {{- /* The four argocd.argoproj.io/* keys are reserved unconditionally, even though sync-wave/hook
+           only render when .job.timing is set. This keeps the reserved set independent of .job.timing,
+           so enabling a hook later cannot silently change which user keys survive. */}}
       {{- $argocdReserved := dict "argocd.argoproj.io/sync-options" "" "argocd.argoproj.io/hook-delete-policy" "" "argocd.argoproj.io/sync-wave" "" "argocd.argoproj.io/hook" "" }}
       {{- $reserved := merge (dict) $argocdReserved (include "helm.annotations.vault" . | fromYaml) (include "helm.otel.annotations" . | fromYaml) }}
       {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .job.annotations) }}

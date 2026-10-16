@@ -1643,6 +1643,11 @@
             "type": "integer",
             "default": 0
           },
+          "runAsHook": {
+            "type": "boolean",
+            "default": true,
+            "description": "With timing, the Job is a real Argo CD hook (pre-deploy: PreSync, post-deploy: PostSync) on its own metadata; a hook runs on every sync (manual, self-heal, each retry), not only when the manifest changes, and Argo CD waits for it. false (opt-out) keeps the Job a plain resource in wave 0, ahead of the workloads, that runs once per manifest change."
+          },
           "labels": {
             "type": "object",
             "additionalProperties": {
