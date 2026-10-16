@@ -850,6 +850,11 @@
                             "description": "Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host for feature-routing via WASM fallback. When false, these resources are not rendered and feature-header requests fall through to the default route.",
                             "default": true
                           },
+                          "enforceAllowlistOnEnvironmentHeader": {
+                            "type": "boolean",
+                            "description": "When an endpoint allowlist applies, give the environment-header route one match per allowed endpoint, so a request that carries the environment header (the frontend and the API gateway send it on every call) meets the allowlist too. false keeps the header route matching every path: an escape hatch for an application that needs a path outside its allowlist from those callers.",
+                            "default": true
+                          },
                           "externalEnabled": {
                             "type": "boolean",
                             "description": "Expose the application through the ingress gateway on its public host. When false, its VirtualServices bind only the mesh gateway, keep only the in-mesh hosts (<fullName> and the .internal host) and drop the cloudflare-proxied and mycarrier.io/gateway annotations, so it is reachable only inside the cluster; useRootDomain, staticHostname, networking.istio.hosts and networking.istio.legacyHostAliases then fail the render, as does a frontend application in a multi-frontend release. Set it to false for a migrator Rollout.",
