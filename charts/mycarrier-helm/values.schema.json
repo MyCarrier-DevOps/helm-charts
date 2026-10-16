@@ -852,8 +852,8 @@
                           },
                           "enforceAllowlistOnEnvironmentHeader": {
                             "type": "boolean",
-                            "description": "When an endpoint allowlist applies, give the environment-header route one match per allowed endpoint, so a request that carries the environment header (the frontend and the API gateway send it on every call) meets the allowlist too. false keeps the header route matching every path: an escape hatch for an application that needs a path outside its allowlist from those callers.",
-                            "default": true
+                            "description": "Opt-in. When an endpoint allowlist applies, give the environment-header route one match per allowed endpoint, so a request that carries the environment header (the frontend and the API gateway send it on every call) meets the allowlist too. Unset or false: the header route matches every path, so the allowlist restricts only requests without the header.",
+                            "default": false
                           },
                           "externalEnabled": {
                             "type": "boolean",

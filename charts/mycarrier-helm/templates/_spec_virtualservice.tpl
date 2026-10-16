@@ -93,12 +93,12 @@ http:
         port:
           number: {{ default 8080 (dig "ports" "http" nil .application) }}
     {{- end }}
-  {{- /* When an allowlist applies, the header route carries one match per allowed endpoint (the header AND that path),
-         so a request with the environment header meets the allowlist too. The frontend and the API gateway send the
-         header on every call, so without this the allowlist never applied to them.
-         networking.istio.enforceAllowlistOnEnvironmentHeader: false is the per-application escape hatch. */}}
+  {{- /* With networking.istio.enforceAllowlistOnEnvironmentHeader (opt-in) and an allowlist, the header route carries one
+         match per allowed endpoint (the header AND that path), so a request with the environment header meets the
+         allowlist too. The frontend and the API gateway send the header on every call; without the opt-in the header
+         route reaches every path. */}}
   match:
-  {{- if and $hasAllowedEndpoints (dig "networking" "istio" "enforceAllowlistOnEnvironmentHeader" true .application) }}
+  {{- if and $hasAllowedEndpoints (dig "networking" "istio" "enforceAllowlistOnEnvironmentHeader" false .application) }}
   {{- range (include "helm.virtualservice.allowedEndpointList" . | fromJsonArray) }}
     - headers:
         environment:
