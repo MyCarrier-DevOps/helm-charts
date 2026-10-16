@@ -12,12 +12,15 @@
 {{- $customNames := list }}
 {{- range ($appValues.analysisTemplates | default list) }}{{ $customNames = append $customNames (toString .name) }}{{ end }}
 {{- $cfg := include "helm.canary.config" $appContext | fromJson }}
-{{- $healthUrl := include "helm.canary.analysis.healthUrl" $appContext }}
 {{- /* The chart's own health template (DEVOPS-312) for a Rollout that runs canary steps with analysis on: the -preview
        Service's health endpoint must answer "Healthy". A JSON body is read at $.status; a non-JSON 2xx body counts as
-       healthy, and any non-2xx answer is an error, which aborts the canary at the default consecutiveErrorLimit 0.
-       An applications.<app>.analysisTemplates entry named health replaces it. */}}
-{{- if and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "health" $cfg.analysis.templates) (not (has "health" $customNames)) $healthUrl }}
+       healthy, and a non-2xx answer is an error; at the default consecutiveErrorLimit 1, a second error in a row aborts
+       the canary. An applications.<app>.analysisTemplates entry named health replaces it. The URL is resolved only
+       when the check is in use, so a probe the check cannot reuse fails the render only then. */}}
+{{- $wantHealth := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "health" $cfg.analysis.templates) (not (has "health" $customNames)) }}
+{{- $healthUrl := "" }}
+{{- if $wantHealth }}{{ $healthUrl = include "helm.canary.analysis.healthUrl" $appContext }}{{ end }}
+{{- if and $wantHealth $healthUrl }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
@@ -71,10 +74,14 @@ spec:
     failureLimit: {{ $template.failureLimit | default 0 }}
     {{- if and (kindIs "map" $template.provider) (hasKey $template.provider "web") }}
     {{- $web := $template.provider.web | default dict }}
-    {{- $url := printf "http://%s-preview.%s.svc.cluster.local:%v/health" $fullName $namespace $httpPort }}
-    {{- if $web.url }}
-    {{- $url = $web.url }}
-    {{- if $web.statusEndpoint }}{{ $url = printf "%s/%s" (trimSuffix "/" $web.url) (trimPrefix "/" $web.statusEndpoint) }}{{ end }}
+    {{- /* Default: the -preview Service port that reaches the http container port (service.ports may remap it). */}}
+    {{- $previewPort := include "helm.canary.previewPort" (dict "application" $appValues "port" $httpPort) | default $httpPort }}
+    {{- $base := $web.url | default (printf "http://%s-preview.%s.svc.cluster.local:%v" $fullName $namespace $previewPort) }}
+    {{- $url := $base }}
+    {{- if $web.statusEndpoint }}
+    {{- $url = printf "%s/%s" (trimSuffix "/" $base) (trimPrefix "/" $web.statusEndpoint) }}
+    {{- else if not $web.url }}
+    {{- $url = printf "%s/health" $base }}
     {{- end }}
     successCondition: {{ $web.successCondition | default `result == "Healthy"` | quote }}
     provider:

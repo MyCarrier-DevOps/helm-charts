@@ -15,7 +15,7 @@
       "progressDeadlineSeconds" 600
       "dark" true
       "darkReplicas" 1
-      "analysis" (dict "enabled" false "templates" (list "health") "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 0))
+      "analysis" (dict "enabled" false "templates" (list "health") "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 1))
       "coordinator" (dict
         "enabled" false
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
@@ -141,8 +141,33 @@
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
 {{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
-{{- if and (not (has "health" $names)) (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
+{{- if and (not (has "health" $names)) (has "health" (include "helm.canary.config" . | fromJson).analysis.templates) (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
 {{- toJson $names -}}
+{{- end -}}
+
+{{- /* The -preview Service port that reaches a container port of the app, given as a number or a port name, or "" when
+       the Service does not expose it: the matching ports entry, or with service.ports the entry whose targetPort is
+       that number or name. */ -}}
+{{- define "helm.canary.previewPort" -}}
+{{- $ports := .application.ports | default dict -}}
+{{- $want := .port -}}
+{{- $containerPort := "" -}}
+{{- $portName := "" -}}
+{{- if kindIs "string" $want -}}
+  {{- range $name, $number := $ports }}{{ if eq (lower $name) $want }}{{ $containerPort = toString $number }}{{ $portName = lower $name }}{{ end }}{{ end -}}
+{{- else if $want -}}
+  {{- $containerPort = toString $want -}}
+{{- end -}}
+{{- $servicePort := "" -}}
+{{- if $containerPort -}}
+  {{- $custom := dig "service" "ports" list .application -}}
+  {{- if $custom -}}
+    {{- range $custom }}{{ $target := toString (default .port .targetPort) }}{{ if and (not $servicePort) (or (eq $target $containerPort) (and $portName (eq $target $portName))) }}{{ $servicePort = toString .port }}{{ end }}{{ end -}}
+  {{- else -}}
+    {{- range $name, $number := $ports }}{{ if eq (toString $number) $containerPort }}{{ $servicePort = $containerPort }}{{ end }}{{ end -}}
+  {{- end -}}
+{{- end -}}
+{{- $servicePort -}}
 {{- end -}}
 
 {{- /* The URL the canary health check calls on the app's -preview Service, or "" when the chart finds no path.
@@ -156,6 +181,7 @@
 {{- $probes := .application.probes | default dict -}}
 {{- $ports := .application.ports | default dict -}}
 {{- $get := dict -}}
+{{- $from := "" -}}
 {{- with dig "canaryHealthPath" (include "helm.canary.config" . | fromJson).analysis.health.path .application -}}
   {{- $get = dict "path" . "port" (or (index $ports "http") (index $ports "healthcheck")) -}}
 {{- end -}}
@@ -163,24 +189,15 @@
   {{- if and (not $get.path) (dig (index . 1) true $probes) -}}
     {{- $probe := index $probes (index . 0) | default (get (include (index . 2) $ | fromYaml) (index . 0)) | default dict -}}
     {{- $get = $probe.httpGet | default dict -}}
+    {{- if $get.path }}{{ $from = index . 0 }}{{ end -}}
   {{- end -}}
 {{- end -}}
-{{- $containerPort := "" -}}
-{{- $portName := "" -}}
-{{- if kindIs "string" $get.port -}}
-  {{- range $name, $number := $ports }}{{ if eq (lower $name) $get.port }}{{ $containerPort = toString $number }}{{ $portName = lower $name }}{{ end }}{{ end -}}
-{{- else if $get.port -}}
-  {{- $containerPort = toString $get.port -}}
+{{- /* The check calls plain http with no host or headers; a probe that needs them would make every measurement an
+       Error, so it fails the render instead of aborting the canary. */ -}}
+{{- if and $from (or (and $get.scheme (ne (upper (toString $get.scheme)) "HTTP")) $get.host $get.httpHeaders) -}}
+  {{- fail (printf "application '%s': the canary health check would reuse the path of its %s, which sets scheme HTTPS, host or httpHeaders; the check calls plain http with none of these. Set applications.%s.canaryHealthPath to a path served over plain http, or define a health template under applications.%s.analysisTemplates." .appName $from .appName .appName) -}}
 {{- end -}}
-{{- $servicePort := "" -}}
-{{- if $containerPort -}}
-  {{- $custom := dig "service" "ports" list .application -}}
-  {{- if $custom -}}
-    {{- range $custom }}{{ $target := toString (default .port .targetPort) }}{{ if and (not $servicePort) (or (eq $target $containerPort) (and $portName (eq $target $portName))) }}{{ $servicePort = toString .port }}{{ end }}{{ end -}}
-  {{- else -}}
-    {{- range $name, $number := $ports }}{{ if eq (toString $number) $containerPort }}{{ $servicePort = $containerPort }}{{ end }}{{ end -}}
-  {{- end -}}
-{{- end -}}
+{{- $servicePort := include "helm.canary.previewPort" (dict "application" .application "port" $get.port) -}}
 {{- if and $get.path $servicePort -}}
 http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.svc.cluster.local:{{ $servicePort }}{{ if not (hasPrefix "/" (toString $get.path)) }}/{{ end }}{{ $get.path }}
 {{- end -}}

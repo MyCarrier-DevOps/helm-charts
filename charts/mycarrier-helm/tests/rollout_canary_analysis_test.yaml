@@ -4,7 +4,7 @@ templates:
   - rollout.yaml
 tests:
   # R3: the chart's health template calls the -preview Service and needs "Healthy"; a non-2xx answer is an error,
-  # which aborts the canary at consecutiveErrorLimit 0.
+  # and a second error in a row aborts the canary (consecutiveErrorLimit 1).
   - it: renders the chart's health template for a csharp canary Rollout with analysis on
     template: analysistemplate.yaml
     set:
@@ -41,7 +41,7 @@ tests:
             interval: 30s
             count: 3
             failureLimit: 0
-            consecutiveErrorLimit: 0
+            consecutiveErrorLimit: 1
             successCondition: result == "Healthy"
             provider:
               web:
@@ -783,3 +783,144 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'api': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet"
+
+  # The legacy web shorthand: its default URL uses the -preview Service port that reaches the http container port, and
+  # statusEndpoint applies with or without url.
+  - it: maps the web shorthand's default URL through service.ports
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 4200
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 4200
+          analysisTemplates:
+            - name: status
+              provider:
+                web: {}
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:8080/health
+
+  - it: applies the web shorthand's statusEndpoint without url
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: status
+              provider:
+                web:
+                  statusEndpoint: /status
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/status
+
+  # The check calls plain http with no host or headers, so a probe that needs them fails the render while the check is
+  # in use, instead of erroring on every measurement.
+  - it: fails the render when the reused probe needs HTTPS
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 8443
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+                scheme: HTTPS
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'web': the canary health check would reuse the path of its readinessProbe, which sets scheme HTTPS, host or httpHeaders"
+
+  - it: uses canaryHealthPath instead of a probe the check cannot reuse
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          canaryHealthPath: /status
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 8080
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+                httpHeaders:
+                  - name: X-Probe
+                    value: "1"
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:8080/status
+
+  - it: leaves a probe the check cannot reuse alone while analysis is off
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
+          ports:
+            http: 8443
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+                scheme: HTTPS
+    asserts:
+      - hasDocuments:
+          count: 0
+

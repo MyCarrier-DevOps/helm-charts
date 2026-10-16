@@ -54,7 +54,7 @@
                         "path": { "type": "string", "pattern": "^/", "description": "HTTP path the health check calls on each Rollout application's http (or healthcheck) port. Unset: the path of the pod's first httpGet probe. Set it for an application whose probes are all TCP." },
                         "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements per analysis step." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements." },
-                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 0, "description": "Errors in a row (any non-2xx answer, timeout or connection error) before the run ends as Error, which aborts the canary. 0 aborts on the first error." }
+                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 1, "description": "Errors in a row (any non-2xx answer, timeout or connection error) that the check tolerates; one more ends the run as Error, which aborts the canary. The default 1 rides out a single transient error (an error is retried after about 10 s); 0 aborts on the first error." }
                       }
                     }
                   }

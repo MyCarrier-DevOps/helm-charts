@@ -49,7 +49,7 @@ global:
   #       enabled: false          # an analysis step after each weight, and the chart's AnalysisTemplates for it
   #       templates: [health]     # run as <environment>-<fullName>-<template>; the chart renders health (compare
   #                               # and alerts are not built yet); every listed template must render for each app
-  #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 0}   # -preview Service at the path of the pod's
+  #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 1}   # -preview Service at the path of the pod's
   #                               # first httpGet probe (readiness, startup, liveness; csharp defaults to /health);
   #                               # any non-2xx answer aborts the canary
   #         # path: /health         # call this path on the http port instead; set it when every probe is TCP.
