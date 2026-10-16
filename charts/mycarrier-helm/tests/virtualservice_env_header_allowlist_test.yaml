@@ -1,10 +1,10 @@
-suite: Environment-header route carries the endpoint allowlist (opt-in, networking.istio.enforceAllowlistOnEnvironmentHeader)
+suite: Environment-header route carries the endpoint allowlist (opt-out, networking.istio.enforceAllowlistOnEnvironmentHeader)
 templates:
   - virtualService.yaml
 tests:
   # The frontend and the API gateway send the environment header on every call, so the header route must meet the
   # allowlist too: one match per allowed endpoint (the header AND that path).
-  - it: gives the prod header route one match per allowed endpoint when opted in
+  - it: gives the prod header route one match per allowed endpoint by default
     set:
       global:
         appStack: test-stack
@@ -15,9 +15,6 @@ tests:
         api:
           image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
           ports: {http: 8080}
-          networking:
-            istio:
-              enforceAllowlistOnEnvironmentHeader: true
     asserts:
       - equal:
           path: spec.http[0].name
@@ -48,7 +45,6 @@ tests:
           ports: {http: 8080}
           networking:
             istio:
-              enforceAllowlistOnEnvironmentHeader: true
               allowedEndpoints: ["/hooks/*"]
     asserts:
       - equal:
@@ -62,7 +58,7 @@ tests:
           count: 2
         documentSelector: {path: metadata.name, value: test-stack-api}
 
-  - it: keeps the header-only match by default
+  - it: keeps the header-only match when enforceAllowlistOnEnvironmentHeader is false
     set:
       global:
         appStack: test-stack
@@ -73,6 +69,9 @@ tests:
         api:
           image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
           ports: {http: 8080}
+          networking:
+            istio:
+              enforceAllowlistOnEnvironmentHeader: false
     asserts:
       - equal:
           path: spec.http[0].match
@@ -80,7 +79,7 @@ tests:
             - headers: {environment: {exact: prod}}
         documentSelector: {path: metadata.name, value: test-stack-api}
 
-  - it: keeps the header-only match when no allowlist applies, even when opted in
+  - it: keeps the header-only match when no allowlist applies
     set:
       global:
         appStack: test-stack
@@ -91,9 +90,6 @@ tests:
         web:
           image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
           ports: {http: 3000}
-          networking:
-            istio:
-              enforceAllowlistOnEnvironmentHeader: true
     asserts:
       - equal:
           path: spec.http[0].match
