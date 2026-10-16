@@ -185,13 +185,13 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PreSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-100"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          path: metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
           value: "BeforeHookCreation"
 
   - it: should set post-deploy ArgoCD hook with default order
@@ -208,13 +208,13 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PostSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "100"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          path: metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
           value: "BeforeHookCreation"
 
   - it: should set pre-deploy ArgoCD hook with custom order
@@ -232,10 +232,10 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PreSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-95"
 
   - it: should set post-deploy ArgoCD hook with custom order
@@ -253,10 +253,10 @@ tests:
       - isKind:
           of: Job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PostSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "110"
 
   - it: should not set ArgoCD hooks when timing is not specified
@@ -272,9 +272,9 @@ tests:
       - isKind:
           of: Job
       - notExists:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
       - notExists:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
 
   - it: should create multiple jobs with different timings
     set:
@@ -466,10 +466,10 @@ tests:
           path: metadata.name
           value: prod-myapp-comprehensive-pre-deploy-job
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          path: metadata.annotations["argocd.argoproj.io/hook"]
           value: "PreSync"
       - equal:
-          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-95"
       - equal:
           path: spec.activeDeadlineSeconds
@@ -503,3 +503,57 @@ tests:
       - equal:
           path: spec.backoffLimit
           value: 0
+
+  # runAsHook: false (opt-out) keeps a timed job a plain wave-0 resource that runs once per manifest change, with the
+  # timing annotations on the pod template (where Argo CD ignores them), as before.
+  - it: keeps a timed job with runAsHook false off the Job's metadata hook keys
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migrate
+          timing: "pre-deploy"
+          runAsHook: false
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migrate"
+            tag: "1.0.0"
+    asserts:
+      - notExists:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+      - notExists:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+          value: PreSync
+
+  - it: leaves a timed hook job's pod template without hook or wave
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migrate
+          timing: "pre-deploy"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migrate"
+            tag: "1.0.0"
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/hook"]
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+
+  - it: fails the render for a hook job with a user hook annotation
+    set:
+      environment.name: "dev"
+      jobs:
+        - name: migrate
+          timing: "pre-deploy"
+          annotations:
+            argocd.argoproj.io/sync-wave: "-3"
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/migrate"
+            tag: "1.0.0"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'job "migrate": the chart sets annotation argocd.argoproj.io/sync-wave from timing and order'

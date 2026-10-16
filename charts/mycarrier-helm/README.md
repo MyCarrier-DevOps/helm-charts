@@ -71,6 +71,8 @@ rendered on 4.5.0 fails on 4.6.0:
 |---|---|
 | An application whose name contains `migration` with `deploymentType: rollout` | Render the migrator through `jobs` with `timing: pre-deploy`: it runs to completion and exits, so it cannot be a canary. |
 
+Since the release after 4.7.2 this refusal is lifted: a long-running migrator application (it runs the migration when it starts and keeps running) may be `deploymentType: rollout` and takes part in the canary. A migrator that exits stays a pre-deploy job. Unlike the pre-deploy job, it gives no start order: the release's other workloads start alongside it, so their readiness must wait for the schema version they need. Set `networking.istio.externalEnabled: false` on it so that it is reachable only inside the cluster.
+
 ## Upgrading to 4.7.0 (Rollouts with the coordinator on)
 
 4.7.0 adds the Tech Spec's header-gated dark stage (`global.strategy.canary.dark`, default `true`, and `darkReplicas`).
@@ -1368,10 +1370,10 @@ chart doesn't set) is applied to the pod/resource as-is.
 | Surface | Reserved keys |
 | --- | --- |
 | Application pod template (Deployment / StatefulSet / Rollout) | vault keys + otel keys (see below) + `sidecar.istio.io/inject`, `proxy.istio.io/config` + `mycarrier.io/gateway` |
-| CronJob resource metadata | `argocd.argoproj.io/sync-options` |
+| CronJob resource metadata | `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/sync-wave` (`"10"`, the workloads' wave, so a CronJob updates after the pre-deploy jobs) |
 | CronJob pod template | vault keys + otel keys only (no argocd/istio/gateway keys) |
-| Job resource metadata | `argocd.argoproj.io/sync-options` |
-| Job pod template | vault keys + otel keys + `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/hook-delete-policy`, `argocd.argoproj.io/sync-wave`, `argocd.argoproj.io/hook` (the four argocd keys are reserved unconditionally, even though `sync-wave`/`hook` only render when `.timing` is set) |
+| Job resource metadata | `argocd.argoproj.io/sync-options`; for a job with `.timing` (unless `runAsHook: false`) also `argocd.argoproj.io/hook`, `argocd.argoproj.io/sync-wave` and `argocd.argoproj.io/hook-delete-policy`, which the chart renders here, where Argo CD reads them (`pre-deploy`: PreSync, wave `order - 100`; `post-deploy`: PostSync, wave `order + 100`), and a user value for them fails the render |
+| Job pod template | vault keys + otel keys + `argocd.argoproj.io/sync-options`, `argocd.argoproj.io/hook-delete-policy`, `argocd.argoproj.io/sync-wave`, `argocd.argoproj.io/hook` (reserved unconditionally; with `runAsHook: false` the chart renders the timing annotations here, where Argo CD ignores them, as before) |
 
 **vault keys**: `vault-addr`, `vault-auth-method`, `vault-path`, `vault-role`,
 `vault-agent-env-variables`, `mutate-probes`, `run-as-non-root`, `run-as-user`, `run-as-group`, plus

@@ -59,6 +59,11 @@
                   "default": true,
                   "description": "Header-gated dark stage before the weight ladder (Tech Spec D11): canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary: <global.correlationId>, and the leader's tests-dark suite between the dark-ready and dark-passed barriers. Renders only with the coordinator on; false disables it."
                 },
+                "leader": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The application whose Rollout runs the dark-stage test suite (<environment>-<fullName>-tests-dark). When set, it must name an application of the release; where the dark stage runs (coordinator on, dark true) it must be an application with deploymentType rollout and without migratingToRollouts. Required there when the release has more than one such application; a release with one defaults to it."
+                },
                 "darkReplicas": {
                   "type": "integer",
                   "minimum": 1,
@@ -235,12 +240,7 @@
       "type": "object",
       "patternProperties": {
         "migration": {
-          "description": "A migrator runs to completion and exits, so it belongs in jobs with timing: pre-deploy, never in a canary Rollout (DEVOPS-311, A2).",
-          "properties": {
-            "deploymentType": {
-              "description": "An application whose name contains 'migration' cannot be deploymentType rollout (rollout.yaml refuses it); render the migrator through jobs with timing: pre-deploy."
-            }
-          }
+          "description": "A migrator runs either as a job with timing: pre-deploy, or as a long-running application that runs the migration when it starts and keeps running; as an application it may be deploymentType rollout and then takes part in the canary like any other Rollout (A2). Applications with migration in the name are left out of automatic HPA."
         },
         "^[a-z0-9_-]+$": {
           "type": "object",
@@ -848,6 +848,16 @@
                           "internalEnabled": {
                             "type": "boolean",
                             "description": "Enable internal ServiceEntry, WasmPlugin, and VirtualService internal host for feature-routing via WASM fallback. When false, these resources are not rendered and feature-header requests fall through to the default route.",
+                            "default": true
+                          },
+                          "enforceAllowlistOnEnvironmentHeader": {
+                            "type": "boolean",
+                            "description": "When an endpoint allowlist applies, the environment-header route has one match per allowed endpoint, so a request that carries the environment header (the frontend and the API gateway send it on every call) meets the allowlist too. false (opt-out) lets the header route match every path, so the allowlist restricts only requests without the header.",
+                            "default": true
+                          },
+                          "externalEnabled": {
+                            "type": "boolean",
+                            "description": "Expose the application through the ingress gateway on its public host. When false, its VirtualServices bind only the mesh gateway, keep only the in-mesh hosts (<fullName> and the .internal host) and drop the cloudflare-proxied and mycarrier.io/gateway annotations, so it is reachable only inside the cluster; useRootDomain, staticHostname, networking.istio.hosts and networking.istio.legacyHostAliases then fail the render, as does a frontend application in a multi-frontend release. Set it to false for a migrator Rollout.",
                             "default": true
                           },
                           "offloadVSEnabled": {
@@ -1632,6 +1642,11 @@
           "order": {
             "type": "integer",
             "default": 0
+          },
+          "runAsHook": {
+            "type": "boolean",
+            "default": true,
+            "description": "With timing, the Job is a real Argo CD hook (pre-deploy: PreSync, post-deploy: PostSync) on its own metadata; a hook runs on every sync (manual, self-heal, each retry), not only when the manifest changes, and Argo CD waits for it. false (opt-out) keeps the Job a plain resource in wave 0, ahead of the workloads, that runs once per manifest change."
           },
           "labels": {
             "type": "object",

@@ -20,7 +20,10 @@ template:
     annotations:
       argocd.argoproj.io/sync-options: Prune=true,Replace=true
       argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-      {{- if .job.timing }}
+      {{- /* With runAsHook: false these timing annotations stay on the pod template, where Argo CD ignores them, as
+           before: the Job syncs as a plain resource in wave 0, ahead of the workloads, and runs once per manifest change.
+           Otherwise they render on the Job's own metadata (helm.annotations.jobMetadata). */}}
+      {{- if and .job.timing (not (dig "runAsHook" true .job)) }}
       {{- $order := .job.order | default 0 }}
       {{- if eq .job.timing "pre-deploy" }}
       argocd.argoproj.io/sync-wave: {{ ((sub $order 100) | toString | quote) }}

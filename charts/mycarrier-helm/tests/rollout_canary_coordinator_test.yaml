@@ -282,8 +282,9 @@ tests:
           path: spec.strategy.canary.steps
           count: 11
 
-  # A2: a migrator runs to completion, so it renders through jobs (timing: pre-deploy), never as a canary Rollout.
-  - it: rejects an application named like a migrator with deploymentType rollout
+  # A2: a long-running migrator application (it runs the migration when it starts and keeps running) may be a canary
+  # Rollout; a migrator that runs to completion stays a job with timing: pre-deploy.
+  - it: renders a long-running migrator application as a canary Rollout
     set:
       global:
         appStack: test-stack
@@ -300,8 +301,15 @@ tests:
           ports:
             http: 8080
     asserts:
-      - failedTemplate:
-          errorPattern: "application 'db-migration': an application whose name contains 'migration' cannot be deploymentType rollout"
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Rollout
+      - equal:
+          path: metadata.name
+          value: test-stack-db-migration
+      - exists:
+          path: spec.strategy.canary.steps
 
   # The canary-coordinator finds a release's Rollouts by the mycarrier.tech/correlationId label (Tech Spec D20).
   - it: requires global.correlationId when the coordinator is enabled

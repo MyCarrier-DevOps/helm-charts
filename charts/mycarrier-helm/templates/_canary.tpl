@@ -64,6 +64,9 @@
 {{- end -}}
 {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
 {{- if and $coordinator.enabled $cfg.dark -}}
+  {{- if not (include "helm.canary.leader" .) -}}
+    {{- fail (printf "the dark stage runs its test suite on one leader, and this release has %d canary Rollouts; set global.strategy.canary.leader to one of: %s." (len (include "helm.canary.rollouts" . | fromJsonArray)) (join ", " (include "helm.canary.rollouts" . | fromJsonArray))) -}}
+  {{- end -}}
   {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
   {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
@@ -208,14 +211,30 @@
 {{- toYaml $result -}}
 {{- end -}}
 
-{{- /* The leader of the release: the first application name in sort order among the Rollouts that run canary steps
-       (the helm.canary.groupSize set). It alone runs the dark-stage suite (D20). */ -}}
-{{- define "helm.canary.leader" -}}
-{{- $leader := "" -}}
+{{- /* The Rollouts that run canary steps (the helm.canary.groupSize set), in name order, as JSON. */ -}}
+{{- define "helm.canary.rollouts" -}}
+{{- $names := list -}}
 {{- range $name, $values := .Values.applications -}}
-  {{- if and (not $leader) (eq $values.deploymentType "rollout") (not $values.migratingToRollouts) }}{{ $leader = $name }}{{ end -}}
+  {{- if and (eq $values.deploymentType "rollout") (not $values.migratingToRollouts) }}{{ $names = append $names $name }}{{ end -}}
 {{- end -}}
-{{- $leader -}}
+{{- toJson $names -}}
+{{- end -}}
+
+{{- /* The leader of the release, which alone runs the dark-stage suite (D20): global.strategy.canary.leader, which must
+       name one of the canary Rollouts, or the only canary Rollout when there is one; "" otherwise (helm.canary.steps
+       fails when the dark stage needs a leader and there is none). Chosen on purpose, not by name order, so adding or
+       renaming a Rollout (a migrator Rollout, for example) cannot move the suite. */ -}}
+{{- define "helm.canary.leader" -}}
+{{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
+{{- $set := toString (dig "strategy" "canary" "leader" "" (.Values.global | default dict)) -}}
+{{- if $set -}}
+  {{- if not (has $set $rollouts) -}}
+    {{- fail (printf "global.strategy.canary.leader '%s' is not an application with deploymentType rollout that runs canary steps; %s." $set (ternary "this release has none" (printf "choose one of: %s" (join ", " $rollouts)) (empty $rollouts))) -}}
+  {{- end -}}
+  {{- $set -}}
+{{- else if eq (len $rollouts) 1 -}}
+  {{- first $rollouts -}}
+{{- end -}}
 {{- end -}}
 
 {{- /* trafficRouting.managedRoutes: every route a setHeaderRoute or setMirrorRoute step names, as JSON. Argo Rollouts

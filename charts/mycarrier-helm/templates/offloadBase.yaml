@@ -37,7 +37,8 @@ spec:
   {{- if $internalEnabled }}
   - {{ $baseFullName }}.{{ $metaenv }}.internal
   {{- end }}
-  {{- if (dig "useRootDomain" false $appValues) }}
+  {{- if not (dig "networking" "istio" "externalEnabled" true $appValues) }}
+  {{- else if (dig "useRootDomain" false $appValues) }}
   - {{ $domain }}
   {{- else if $appValues.staticHostname }}
   - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
