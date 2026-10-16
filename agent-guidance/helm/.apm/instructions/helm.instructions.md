@@ -630,10 +630,13 @@ global:
       # steps: []                       # replaces the preset, verbatim
       analysis:
         enabled: false                  # an analysis step after each weight (see below)
-        templates: [health]             # the chart renders health; compare and alerts are not built yet
+        templates: [health, alerts]     # the chart renders health and alerts; compare is not built yet
         # health:
         #   path: /health               # only when every probe is TCP; otherwise the probe path is used
         #                               # applications.<app>.canaryHealthPath overrides it per application
+        # alerts:
+        #   service: mycarrier          # the service label of the service's Grafana alert rules;
+        #                               # default alerts.serviceName lower-cased
       progressDeadlineSeconds: 600      # a canary that makes no progress for this long aborts
       bakeMinutes: 30                   # alert-gate's watch window after promotion; read by the release
       coordinator:
@@ -649,11 +652,12 @@ global:
 
 `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
 
-**Analysis.** With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` listed in `analysis.templates` (default `[health]`). Every listed template must render for each Rollout application, or the render fails: Argo Rollouts resolves them up front and would leave the Rollout InvalidSpec.
+**Analysis.** With `analysis.enabled`, an analysis step follows each weight and runs the AnalysisTemplates `<environment>-<fullName>-<template>` listed in `analysis.templates` (default `[health, alerts]`). Every listed template must render for each Rollout application, or the render fails: Argo Rollouts resolves them up front and would leave the Rollout InvalidSpec. The exception is `alerts`, which renders in prod and preprod only; in other environments the steps leave it out.
 
 - `health` is rendered by the chart. When `applications.<app>.canaryHealthPath` or else `analysis.health.path` is set, it calls that path on the application's `http` port (or `healthcheck`). Otherwise it reuses the application's probes as the pod renders them (see Probes): the first `httpGet` path of readiness, startup, then liveness, each taken from `probes.*Probe` or else from the default for `global.language`, and skipping a probe turned off by `probes.enable*`. A csharp application with default probes uses `/health` from its startup probe, so it needs no `path`. Set `analysis.health.path` when the stack's applications have all-TCP probes and share one health path; set `applications.<app>.canaryHealthPath` for one application, or when the applications' paths differ. The check calls the `-preview` Service port that targets that container port (`ports`, or `service.ports` by `targetPort`), reads a JSON body at `status`, and evaluates `analysis.health.successCondition` (default `result == "Healthy"`). Argo Rollouts up to v1.10.1 counts a 2xx body that is not JSON as healthy without evaluating the condition; argo-rollouts#4770 (merged, not yet released) evaluates the condition on the raw body, so a stack whose health path serves HTML (a frontend's `/`) sets `successCondition: "true"`, which accepts any 2xx answer. A non-2xx answer, a timeout or a connection error is an error, retried after about 10 s; a second error in a row aborts the canary. Tune it with `analysis.health` (`count` 3, `interval` 30s, `consecutiveErrorLimit` 1, 0 aborts on the first error; `successCondition`). The `-preview` Service keeps ClientIP affinity, so the check's calls usually land on one canary pod: it catches a defect of the version, not one that only some pods show. The check calls plain http with no host or headers, so a reused probe with `scheme: HTTPS`, `host` or `httpHeaders` fails the render while `health` is listed; set `canaryHealthPath` instead. An application with no path set and no HTTP probe on a Service port, such as a non-csharp application with default TCP probes, fails the render while `health` is listed.
-- `compare` and `alerts` are not built yet.
-- `applications.<app>.analysisTemplates` render under the same names, and one named `health` replaces the chart's. Its provider is exactly one of `web`, the chart's shorthand, which checks `result == "Healthy"` on the `-preview` Service's `/health` by default, on the Service port that reaches the `http` container port (`url`, `statusEndpoint` with or without `url`, `successCondition`, `jsonPath`, `timeoutSeconds`), or `job`, an Argo Rollouts job provider passed through as written. Other metric providers are not supported. An entry takes `name`, `count`, `failureLimit`, `interval` and `consecutiveErrorLimit`; an unknown key fails the render. The `job.container` shorthand fails to render.
+- `alerts` is rendered by the chart in prod and preprod; no application alert rules exist in other environments. It reads Grafana alerts with the matchers alert-gate uses: the service label, the environment (in prod, alerts with no `environment` label match too, because the Service Alerts carry none), and a folder other than Platform. The service label is `analysis.alerts.service`, or else `alerts.serviceName` lower-cased (the label the chart's own alert rules carry). Set `analysis.alerts.service` to the label the service's rules carry: the lower-cased repository name (`mc.order` for MC.Order), or its alias (`mycarrier` for MC.MyCarrier, `curant` for MC.Curant). In prod and preprod the render fails when neither value is set. Each analysis step runs two metrics. `alert-rules` is a Job that runs once; it fails unless at least one alert rule that can fire (not paused, not in error) matches, so a wrong label cannot pass silently. `alerts` calls Grafana's Alertmanager API `count` times, `interval` apart, and fails when a matching alert fires that is not silenced. An alert that already fires when the release starts also aborts the canary. A Grafana error, or an answer that is not a list of alerts, is an error, retried after about 10 s; a second error in a row aborts the canary. Argo Rollouts up to v1.10.1 counts a 2xx answer that is not JSON as a pass. Tune it with `analysis.alerts` (`count` 3, `interval` 30s, `consecutiveErrorLimit` 1). The chart also renders an ExternalSecret `<environment>-<fullName>-alerts`, which holds the Grafana token the `alerts` metric sends; there is nothing to set for it.
+- `compare` is not built yet.
+- `applications.<app>.analysisTemplates` render under the same names, and one named `health` or `alerts` replaces the chart's. Its provider is exactly one of `web`, the chart's shorthand, which checks `result == "Healthy"` on the `-preview` Service's `/health` by default, on the Service port that reaches the `http` container port (`url`, `statusEndpoint` with or without `url`, `successCondition`, `jsonPath`, `timeoutSeconds`), or `job`, an Argo Rollouts job provider passed through as written. Other metric providers are not supported. An entry takes `name`, `count`, `failureLimit`, `interval` and `consecutiveErrorLimit`; an unknown key fails the render. The `job.container` shorthand fails to render.
 
 **Lockstep and the dark stage.** `coordinator.enabled` turns on release-wide lockstep through the canary-coordinator step plugin; keep it off until the plugin is on the cluster, because the controller rejects steps for a plugin it doesn't have. With it on:
 
@@ -1245,7 +1249,14 @@ When reviewing or creating helm value changes:
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
 
-### mycarrier-helm, the release after 4.7.3
+### mycarrier-helm, the release after 4.7.4
+
+Rollouts with `analysis.enabled` in prod and preprod; other environments and other applications render unchanged.
+
+- `global.strategy.canary.analysis.templates` defaults to `[health, alerts]` (was `[health]`). In prod and preprod, `alerts` needs the service label of the service's Grafana alert rules: set `global.strategy.canary.analysis.alerts.service` (the lower-cased repository name, or its alias, such as `mycarrier` for MC.MyCarrier), or `alerts.serviceName`. Otherwise the render fails. To keep the previous steps, set `templates: [health]`.
+- With `alerts` listed, each analysis step aborts the canary when an alert of the service fires (also one that already fired before the release), when no alert rule that can fire matches the service label, or after a second Grafana error in a row.
+
+### mycarrier-helm 4.7.4
 
 Rollouts with `analysis.enabled`, and `applications.<app>.analysisTemplates`; other applications render unchanged.
 

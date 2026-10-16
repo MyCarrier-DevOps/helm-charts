@@ -1,0 +1,398 @@
+suite: Rollout canary alerts (chart AnalysisTemplate on DEVOPS-329's label contract, DEVOPS-312)
+templates:
+  - analysistemplate.yaml
+  - rollout.yaml
+tests:
+  # prod: an ExternalSecret for the web metric's token, and a template with the alert-rules Job and the alerts metric.
+  - it: renders the token ExternalSecret from the DevOps mount in prod
+    template: analysistemplate.yaml
+    documentSelector:
+      path: kind
+      value: ExternalSecret
+    set: &prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: prod
+      alerts:
+        serviceName: MyCarrier
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: metadata.name
+          value: prod-mycarrier-api-alerts
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "8"
+      - equal:
+          path: spec.secretStoreRef
+          value:
+            kind: ClusterSecretStore
+            name: vault-backend-devops
+      - equal:
+          path: spec.target
+          value:
+            name: prod-mycarrier-api-alerts
+            creationPolicy: Owner
+      - equal:
+          path: spec.data
+          value:
+            - secretKey: token
+              remoteRef:
+                key: grafana/service-accounts/api/tokens
+                property: ci-alert-gate
+
+  - it: passes the token to the web metric through an AnalysisTemplate arg
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set: *prod
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: spec.args
+          value:
+            - name: grafana-token
+              valueFrom:
+                secretKeyRef:
+                  name: prod-mycarrier-api-alerts
+                  key: token
+
+  # The alerts metric fails on a firing alert that is not silenced, re-checking alert-gate's matchers on the answer.
+  - it: queries the Alertmanager API with alert-gate's prod matchers and fails on a matching alert
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set: *prod
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: spec.metrics[1]
+          value:
+            name: alerts
+            interval: 30s
+            count: 3
+            failureLimit: 0
+            consecutiveErrorLimit: 1
+            failureCondition: >-
+              any(result, {(#.labels?.service ?? "") == "mycarrier" && (#.labels?.environment ?? "") in ["prod", ""]
+              && (#.labels?.grafana_folder ?? "") != "Platform" && !((#.status?.state ?? "") == "suppressed"
+              && len(#.status?.silencedBy ?? []) > 0)})
+            provider:
+              web:
+                url: https://grafana.mycarrier.tech/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=true&filter=service%3D%22mycarrier%22&filter=environment%3D~%22prod%7C%22&filter=grafana_folder%21%3D%22Platform%22
+                headers:
+                  - key: Authorization
+                    value: Bearer {{args.grafana-token}}
+                  - key: Accept
+                    value: application/json
+                jsonPath: "{$}"
+                timeoutSeconds: 15
+
+  # The alert-rules Job fails unless a rule that can fire matches, so a wrong service label cannot pass silently.
+  - it: runs the alert-rules check once per step as a Job with its token from Vault
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.metrics[0].name
+          value: alert-rules
+      - equal:
+          path: spec.metrics[0].count
+          value: 1
+      - equal:
+          path: spec.metrics[0].failureLimit
+          value: 0
+      - equal:
+          path: spec.metrics[0].provider.job.spec.backoffLimit
+          value: 0
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.restartPolicy
+          value: Never
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
+          value: python:3.13.15-alpine3.23
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
+          value:
+            - name: GRAFANA_URL
+              value: https://grafana.mycarrier.tech
+            - name: ALERTS_SERVICE
+              value: mycarrier
+            - name: ALERTS_ENVIRONMENT
+              value: prod
+            - name: GRAFANA_API_KEY
+              value: vault:DevOps/data/grafana/service-accounts/api/tokens#ci-alert-gate
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[0]
+          value: python3
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: (?s)def why_not_evaluable\(rule\):.*sys\.exit\(main\(\)\)
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  # The Job pod must never become an endpoint of the app's Service, and must finish without an Istio sidecar.
+  - it: gives the Job pod no selector labels of the app and no Istio sidecar
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.metadata.labels
+          value:
+            app.kubernetes.io/name: mycarrier-api-alert-rules
+            app.kubernetes.io/component: canary-analysis
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-role"]
+          value: appcluster
+      - notExists:
+          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-env-from-path"]
+
+  - it: does not hand the app's bulk Vault secrets to the Job
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set:
+      <<: *prod
+      secrets:
+        bulk:
+          path: secrets/data/prod/mycarrier
+    asserts:
+      - notExists:
+          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-env-from-path"]
+      - notExists:
+          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-env-daemon"]
+
+  - it: uses preprod's exact environment matcher in preprod
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set:
+      <<: *prod
+      environment:
+        name: preprod
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: spec.metrics[1].provider.web.url
+          value: https://grafana.mycarrier.tech/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=true&filter=service%3D%22mycarrier%22&filter=environment%3D%22preprod%22&filter=grafana_folder%21%3D%22Platform%22
+      - matchRegex:
+          path: spec.metrics[1].failureCondition
+          pattern: '\(#\.labels\?\.environment \?\? ""\) == "preprod"'
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2]
+          value:
+            name: ALERTS_ENVIRONMENT
+            value: preprod
+
+  - it: takes analysis.alerts.service over alerts.serviceName, and applies the alerts settings
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              alerts:
+                service: mc.order
+                count: 5
+                interval: 1m
+                consecutiveErrorLimit: 2
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[1]
+          value:
+            name: ALERTS_SERVICE
+            value: mc.order
+      - matchRegex:
+          path: spec.metrics[1].provider.web.url
+          pattern: filter=service%3D%22mc\.order%22
+      - matchRegex:
+          path: spec.metrics[1].failureCondition
+          pattern: '\(#\.labels\?\.service \?\? ""\) == "mc\.order"'
+      - equal:
+          path: spec.metrics[1].count
+          value: 5
+      - equal:
+          path: spec.metrics[1].interval
+          value: 1m
+      - equal:
+          path: spec.metrics[1].consecutiveErrorLimit
+          value: 2
+
+  - it: adds the alerts template to every analysis step in prod
+    template: rollout.yaml
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
+                - templateName: prod-mycarrier-api-alerts
+
+  # No application alert rules exist outside prod and preprod.
+  - it: renders no alerts template and leaves alerts out of the steps in uat
+    template: rollout.yaml
+    set:
+      <<: *prod
+      environment:
+        name: uat
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            analysis:
+              templates:
+                - templateName: uat-mycarrier-api-health
+
+  - it: renders no ExternalSecret or alerts template in uat
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      environment:
+        name: uat
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: uat-mycarrier-api-health
+
+  - it: renders no analysis step at all when alerts is the only template outside prod and preprod
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              templates: [alerts]
+      environment:
+        name: uat
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 7
+
+  - it: fails the render in prod when no service label is known
+    template: rollout.yaml
+    set:
+      <<: *prod
+      alerts:
+        serviceName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it"
+
+  - it: lets an app's own alerts template replace the chart's
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      alerts:
+        serviceName: ""
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: alerts
+              provider:
+                web:
+                  url: http://alerts.example/check
+    asserts:
+      - hasDocuments:
+          count: 2
+      - notEqual:
+          path: kind
+          value: ExternalSecret
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://alerts.example/check
+        documentIndex: 1
+
+  - it: renders no alerts template when alerts is not listed
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              templates: [health]
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: prod-mycarrier-api-health
+
+  - it: renders no alerts template for a Rollout that is migrating
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses a setting the alerts block does not have
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        strategy:
+          canary:
+            analysis:
+              alerts:
+                grafanaUrl: https://grafana.example
+    asserts:
+      - failedTemplate:
+          errorPattern: grafanaUrl

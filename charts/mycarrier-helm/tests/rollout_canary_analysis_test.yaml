@@ -14,6 +14,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -60,6 +61,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -92,6 +94,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -123,6 +126,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -153,6 +157,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -181,6 +186,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -212,6 +218,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -244,6 +251,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
               health:
                 path: /healthz
@@ -271,6 +279,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
               health:
                 path: /ready
@@ -298,6 +307,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
               health:
                 path: /status
@@ -358,6 +368,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
               health:
                 path: /healthz
@@ -402,6 +413,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -455,6 +467,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
               health:
                 count: 5
@@ -667,6 +680,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -766,6 +780,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
             coordinator:
               enabled: true
@@ -877,6 +892,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
       environment:
         name: preprod
@@ -936,6 +952,7 @@ tests:
         strategy:
           canary:
             analysis:
+              templates: [health]
               enabled: true
               health:
                 successCondition: "true"

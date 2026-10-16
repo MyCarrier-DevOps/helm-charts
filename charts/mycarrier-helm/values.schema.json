@@ -43,8 +43,8 @@
                     "templates": {
                       "type": "array",
                       "items": { "type": "string" },
-                      "default": ["health"],
-                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-. The chart renders health; compare (DEVOPS-322) and alerts are not built yet. applications.<app>.analysisTemplates render under the same names, and one named health replaces the chart's."
+                      "default": ["health", "alerts"],
+                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-. The chart renders health and alerts; compare (DEVOPS-322) is not built yet. alerts renders in prod and preprod only and is left out of the steps elsewhere. applications.<app>.analysisTemplates render under the same names, and one named health or alerts replaces the chart's."
                     },
                     "health": {
                       "type": "object",
@@ -56,6 +56,17 @@
                         "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements per analysis step." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements." },
                         "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 1, "description": "Errors in a row (any non-2xx answer, timeout or connection error) that the check tolerates; one more ends the run as Error, which aborts the canary. The default 1 rides out a single transient error (an error is retried after about 10 s); 0 aborts on the first error." }
+                      }
+                    },
+                    "alerts": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "The chart's alerts template, rendered in prod and preprod (DEVOPS-329's label contract, shared with alert-gate). Its alert-rules Job runs once per analysis step and fails unless an alert rule that can fire matches the service; its alerts web metric fails when a firing alert that is not silenced carries the service label, the environment (in prod, also no environment label) and a folder other than Platform. The Grafana token comes from Vault (DevOps grafana/service-accounts/api/tokens, ci-alert-gate): through an ExternalSecret on vault-backend-devops for the web metric, through bank-vaults for the Job.",
+                      "properties": {
+                        "service": { "type": "string", "description": "The service label the service's Grafana alert rules carry: the lower-cased repository name, or its alias (mycarrier for MC.MyCarrier, curant for MC.Curant). Unset: alerts.serviceName lower-cased. The render fails when neither is set." },
+                        "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements of the alerts metric per analysis step." },
+                        "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements of the alerts metric." },
+                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 1, "description": "Errors in a row (any non-2xx answer, timeout, connection error, or an answer that is not a list of alerts) that the alerts metric tolerates; one more ends the run as Error, which aborts the canary." }
                       }
                     }
                   }

@@ -173,6 +173,8 @@ tests:
               enabled: true
       environment:
         name: preprod
+      alerts:
+        serviceName: MC.Test
       applications:
         api:
           deploymentType: rollout
@@ -189,6 +191,7 @@ tests:
             analysis:
               templates:
                 - templateName: preprod-test-stack-api-health
+                - templateName: preprod-test-stack-api-alerts
       - equal:
           path: spec.strategy.canary.steps[2]
           value:
