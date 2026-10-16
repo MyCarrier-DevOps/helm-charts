@@ -21,6 +21,9 @@ metadata:
     {{- end }}
   annotations:
     {{ include "helm.annotations.cronjobMetadata" . | indent 4 | trim }}
+  {{- if hasKey (.annotations | default dict) "argocd.argoproj.io/sync-wave" }}
+  {{- fail (printf "cronjob %q: annotation argocd.argoproj.io/sync-wave is set by the chart (\"10\", the workloads' wave, so a CronJob updates after the pre-deploy jobs); remove it from cronjobs[].annotations" (toString .name)) }}
+  {{- end }}
   {{- $reserved := include "helm.annotations.cronjobMetadata" . | fromYaml }}
   {{- $extra := include "helm.annotations.userExtra" (dict "reserved" $reserved "user" .annotations) }}
   {{- if $extra }}

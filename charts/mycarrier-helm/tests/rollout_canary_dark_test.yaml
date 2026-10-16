@@ -63,8 +63,9 @@ tests:
           value:
             - name: canary-header
 
-  # D20: the leader (first Rollout application name in sort order) alone runs the dark-stage suite; followers hold at
-  # dark-passed. The tests-dark step renders only with analysis.enabled, like the other analysis steps.
+  # D20: the leader (global.strategy.canary.leader, chosen on purpose rather than by name order) alone runs the
+  # dark-stage suite; followers hold at dark-passed. The tests-dark step renders only with analysis.enabled, like the
+  # other analysis steps.
   - it: gives the tests-dark analysis step to the leader only
     set:
       global:
@@ -74,6 +75,7 @@ tests:
         strategy:
           canary:
             preset: fast
+            leader: worker
             analysis:
               enabled: true
               templates: [health]
@@ -84,11 +86,137 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
           analysisTemplates:
             - name: tests-dark
               provider:
                 web:
                   url: http://tests.example/run
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[4]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-test-stack-worker-tests-dark
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+      - equal:
+          path: spec.strategy.canary.steps[4].plugin.config.name
+          value: dark-passed
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 12
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 11
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+
+  - it: fails the render when the dark stage has several canary Rollouts and no leader
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        db-migration:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: migrator
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "the dark stage runs its test suite on one leader, and this release has 2 canary Rollouts; set global.strategy.canary.leader to one of: api, db-migration"
+
+  - it: fails the render when the leader is not a canary Rollout
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            leader: web
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        web:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.leader 'web' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
+
+  - it: needs no leader while the dark stage is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
+            coordinator:
+              enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
           image:
             registry: registry.example.com
             repository: api
@@ -104,33 +232,8 @@ tests:
           ports:
             http: 8080
     asserts:
-      - equal:
-          path: spec.strategy.canary.steps[4]
-          value:
-            analysis:
-              templates:
-                - templateName: preprod-test-stack-api-tests-dark
-        documentSelector:
-          path: metadata.name
-          value: test-stack-api
-      - equal:
-          path: spec.strategy.canary.steps[4].plugin.config.name
-          value: dark-passed
-        documentSelector:
-          path: metadata.name
-          value: test-stack-worker
-      - lengthEqual:
-          path: spec.strategy.canary.steps
-          count: 12
-        documentSelector:
-          path: metadata.name
-          value: test-stack-api
-      - lengthEqual:
-          path: spec.strategy.canary.steps
-          count: 11
-        documentSelector:
-          path: metadata.name
-          value: test-stack-worker
+      - hasDocuments:
+          count: 2
 
   - it: renders no tests-dark step while analysis is off
     set:
@@ -158,8 +261,9 @@ tests:
           path: spec.strategy.canary.steps[4].plugin.config.name
           value: dark-passed
 
-  # The leader is chosen from the Rollouts that run canary steps (the rolloutGroupSize set): a migrating app is not one.
-  - it: skips a migrating application when choosing the leader
+  # With one Rollout that runs canary steps (the rolloutGroupSize set) the leader defaults to it: a migrating app is not
+  # one, so no leader setting is needed.
+  - it: defaults the leader to the only canary Rollout, skipping a migrating application
     set:
       global:
         appStack: test-stack
@@ -379,3 +483,53 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'shell': the dark stage's header route would also go into the shared test-stack-shell-multifrontend VirtualService"
+
+  # The leader must name an application of the release whenever it is set, so a misspelled value fails before the
+  # coordinator is turned on; that it is a canary Rollout is checked only where the dark stage needs it.
+  - it: fails the render for a leader that is not an application of the release even while the coordinator is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            leader: wroker
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.leader 'wroker' is not an application of this release"
+
+  # A leader set in shared values still renders where that application is a Deployment or migrating, as long as the
+  # dark stage does not need it there.
+  - it: renders a release whose leader is still a Deployment while the coordinator is off
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            leader: api
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0

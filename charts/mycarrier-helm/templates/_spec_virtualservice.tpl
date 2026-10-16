@@ -16,13 +16,16 @@
 {{- $envName := $.Values.environment.name -}}
 {{- $isFeatureEnv := hasPrefix "feature" $envName -}}
 {{- $internalEnabled := dig "networking" "istio" "internalEnabled" true .application -}}
+{{- $externalEnabled := dig "networking" "istio" "externalEnabled" true .application -}}
 {{- include "helm.assertExternalHostConfig" (dict "appName" .appName "application" .application) -}}
 hosts:
 - {{ $fullName }}
 {{- if and $metaenv (not $isFeatureEnv) $internalEnabled }}
 - {{ $baseFullName }}.{{ $metaenv }}.internal
 {{- end }}
-{{- if $isFeatureEnv }}
+{{- /* Public hosts only while the application is reachable from outside the mesh (networking.istio.externalEnabled). */ -}}
+{{- if not $externalEnabled }}
+{{- else if $isFeatureEnv }}
 - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}
 {{- if and .application.staticHostname ($.Values.isEnvironmentDeploy | default false) }}
 - {{ .application.staticHostname | trimSuffix "."}}.{{ $domain }}
@@ -44,6 +47,39 @@ hosts:
 {{- range (dig "networking" "istio" "legacyHostAliases" list .application) }}
 - {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
 {{- end }}
+{{/* 
+  Determine if we should use allowedEndpoints logic:
+  1. Check if istio is enabled
+  2. Check if there are language-specific default endpoints (e.g., C# has /liveness, /health, /api)
+  3. Check if user has defined custom allowedEndpoints
+*/}}
+{{- $contextWithFullName := dict "Values" .Values "application" .application "fullName" $fullName }}
+{{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim }}
+{{- $hasLangEndpoints := ne $langEndpointsYaml "" }}
+{{- $istioConfig := dig "networking" "istio" dict .application }}
+{{- $istioEnabled := true }}
+{{- if and $istioConfig (hasKey $istioConfig "enabled") }}
+{{- $istioEnabled = $istioConfig.enabled }}
+{{- end }}
+{{- $hasUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
+{{- /* Feature environments get the allowlist; Swagger stays reachable there via the dev-gated
+       entry in helm.lang.endpoint.list. The plain dev environment is deliberately excluded:
+       its default route carries the -feature-routing rule and the withoutHeaders fallback in
+       the else branch below, which the allowlist branch does not emit and the EnvoyDevFallback
+       WASM plugin depends on.
+
+       networking.istio.allowAllEndpoints is the escape hatch for developers who need a path
+       outside the allowlist on a feature environment. It is honoured only in the dev metaenv,
+       so it can never open up preprod or prod. */ -}}
+{{- /* The resolved namespace is checked alongside the metaenv: helm.namespace honours
+       environment.namespaceOverride, so name/namespace can disagree and the name alone is not
+       enough to keep this off prod. */ -}}
+{{- /* The namespace clause is redundant by construction: helm.assertDevOnlyEndpointEscape
+       rejects every protected-namespace case before this gate is reached, so dropping it here
+       changes no render and no test. It is kept as defence in depth against a future relaxation
+       of the helper, and stated as unreachable so nobody assumes the drift cover protects it. */ -}}
+{{- $allowAllEndpoints := and (dig "allowAllEndpoints" false (default dict $istioConfig)) (eq $metaenv "dev") (ne (include "helm.isProtectedNamespace" $namespace) "true") }}
+{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (or (ne $metaenv "dev") $isFeatureEnv) (not $allowAllEndpoints) }}
 {{ include "helm.virtualservice.gateways" .application | trim }}
 http:
 {{/* First route: explicit header match - routes traffic with environment header */}}
@@ -57,7 +93,13 @@ http:
         port:
           number: {{ default 8080 (dig "ports" "http" nil .application) }}
     {{- end }}
+  {{- /* When an allowlist applies, the header route carries one match per allowed endpoint (the header AND that path), so
+         a request with the environment header meets the allowlist too. The frontend and the API gateway send the header
+         on every call. networking.istio.enforceAllowlistOnEnvironmentHeader: false (opt-out) lets the header route reach
+         every path again. */}}
   match:
+  {{- if and $hasAllowedEndpoints (dig "networking" "istio" "enforceAllowlistOnEnvironmentHeader" true .application) }}
+  {{- range (include "helm.virtualservice.allowedEndpointList" . | fromJsonArray) }}
     - headers:
         environment:
           {{- if $envHeaderIsRegex }}
@@ -65,6 +107,17 @@ http:
           {{- else }}
           exact: {{ $envHeaderValue }}
           {{- end }}
+      {{ include "helm.renderEndpointUri" . | indent 6 | trim }}
+  {{- end }}
+  {{- else }}
+    - headers:
+        environment:
+          {{- if $envHeaderIsRegex }}
+          regex: {{ $envHeaderValue }}
+          {{- else }}
+          exact: {{ $envHeaderValue }}
+          {{- end }}
+  {{- end }}
 {{- if and .application.networking .application.networking.istio .application.networking.istio.redirects }}
 {{- range $key, $value := .application.networking.istio.redirects }}
 - name: {{ $key }}
@@ -112,39 +165,6 @@ http:
 {{- end }}
 
 
-{{/* 
-  Determine if we should use allowedEndpoints logic:
-  1. Check if istio is enabled
-  2. Check if there are language-specific default endpoints (e.g., C# has /liveness, /health, /api)
-  3. Check if user has defined custom allowedEndpoints
-*/}}
-{{- $contextWithFullName := dict "Values" .Values "application" .application "fullName" $fullName }}
-{{- $langEndpointsYaml := include "helm.lang.endpoint.list" $contextWithFullName | trim }}
-{{- $hasLangEndpoints := ne $langEndpointsYaml "" }}
-{{- $istioConfig := dig "networking" "istio" dict .application }}
-{{- $istioEnabled := true }}
-{{- if and $istioConfig (hasKey $istioConfig "enabled") }}
-{{- $istioEnabled = $istioConfig.enabled }}
-{{- end }}
-{{- $hasUserEndpoints := and (hasKey $istioConfig "allowedEndpoints") $istioConfig.allowedEndpoints }}
-{{- /* Feature environments get the allowlist; Swagger stays reachable there via the dev-gated
-       entry in helm.lang.endpoint.list. The plain dev environment is deliberately excluded:
-       its default route carries the -feature-routing rule and the withoutHeaders fallback in
-       the else branch below, which the allowlist branch does not emit and the EnvoyDevFallback
-       WASM plugin depends on.
-
-       networking.istio.allowAllEndpoints is the escape hatch for developers who need a path
-       outside the allowlist on a feature environment. It is honoured only in the dev metaenv,
-       so it can never open up preprod or prod. */ -}}
-{{- /* The resolved namespace is checked alongside the metaenv: helm.namespace honours
-       environment.namespaceOverride, so name/namespace can disagree and the name alone is not
-       enough to keep this off prod. */ -}}
-{{- /* The namespace clause is redundant by construction: helm.assertDevOnlyEndpointEscape
-       rejects every protected-namespace case before this gate is reached, so dropping it here
-       changes no render and no test. It is kept as defence in depth against a future relaxation
-       of the helper, and stated as unreachable so nobody assumes the drift cover protects it. */ -}}
-{{- $allowAllEndpoints := and (dig "allowAllEndpoints" false (default dict $istioConfig)) (eq $metaenv "dev") (ne (include "helm.isProtectedNamespace" $namespace) "true") }}
-{{- $hasAllowedEndpoints := and $istioEnabled (or $hasLangEndpoints $hasUserEndpoints) (or (ne $metaenv "dev") $isFeatureEnv) (not $allowAllEndpoints) }}
 
 {{- if $hasAllowedEndpoints }}
 {{/* Use centralized helper template for endpoint rules generation */}}

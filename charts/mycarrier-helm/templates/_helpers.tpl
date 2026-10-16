@@ -25,6 +25,9 @@
 {{- if and (dig "useRootDomain" false .application) (dig "staticHostname" "" .application) -}}
 {{- fail (printf "application %q: set either useRootDomain or staticHostname, not both" .appName) -}}
 {{- end -}}
+{{- if and (not (dig "networking" "istio" "externalEnabled" true .application)) (or (dig "useRootDomain" false .application) (dig "staticHostname" "" .application) (dig "networking" "istio" "hosts" list .application) (dig "networking" "istio" "legacyHostAliases" list .application)) -}}
+{{- fail (printf "application %q: networking.istio.externalEnabled is false, so it has no public host; remove useRootDomain, staticHostname, networking.istio.hosts and networking.istio.legacyHostAliases, or set externalEnabled to true" .appName) -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Does this resolved namespace belong to a protected shared environment?
@@ -326,18 +329,21 @@ or service.istioDisabled).
 {{- $istioEnabled := dig "networking" "istio" "enabled" true .application -}}
 {{- $appIstioDisabled := dig "istioDisabled" false .application -}}
 {{- $serviceIstioDisabled := dig "service" "istioDisabled" false .application -}}
-{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) -}}
+{{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (dig "networking" "istio" "externalEnabled" true .application) -}}
 mycarrier.io/gateway: {{ include "helm.istio.gateway" .application }}
 {{- end -}}
 {{- end -}}
 
 {{- define "helm.annotations.virtualservice" -}}
-{{- /* Get cloudflareProxied from application's networking.istio.cloudflareProxied (default: true) */ -}}
+{{- /* Get cloudflareProxied from application's networking.istio.cloudflareProxied (default: true). An application
+       with networking.istio.externalEnabled false has no public host, so it gets no DNS annotation. */ -}}
 {{- $cloudflareProxied := true -}}
 {{- if .application -}}
   {{- $cloudflareProxied = dig "networking" "istio" "cloudflareProxied" true .application -}}
 {{- end -}}
+{{- if or (not .application) (dig "networking" "istio" "externalEnabled" true .application) -}}
 external-dns.alpha.kubernetes.io/cloudflare-proxied: '{{ $cloudflareProxied }}'
+{{- end -}}
 {{- end -}}
 
 {{- define "helm.istioIngress.responseHeaders" -}}

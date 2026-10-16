@@ -77,16 +77,22 @@ alongside the env-header arm, so header-less and header-carrying requests both l
 helm.specs.virtualservice.
 */}}
 {{- define "helm.renderEndpointMatch" -}}
-{{- if eq .kind "regex" -}}
-- uri:
-    regex: {{ .match | quote }}
-{{- else if eq .kind "prefix" -}}
-- uri:
-    prefix: {{ include "helm.processPrefixPath" .match | quote }}
-{{- else -}}
-- uri:
-    exact: {{ .match | quote }}
+- {{ include "helm.renderEndpointUri" . | indent 2 | trim }}
 {{- end -}}
+
+{{/*
+The uri condition of one allowed endpoint (no list marker), shared by the allowlist rules and the
+environment-header route's matches.
+*/}}
+{{- define "helm.renderEndpointUri" -}}
+uri:
+{{- if eq .kind "regex" }}
+  regex: {{ .match | quote }}
+{{- else if eq .kind "prefix" }}
+  prefix: {{ include "helm.processPrefixPath" .match | quote }}
+{{- else }}
+  exact: {{ .match | quote }}
+{{- end }}
 {{- end -}}
 
 {{/*
@@ -113,27 +119,25 @@ Returns networking.istio.gateway, defaulting to istio-system/default when unset 
 {{/*
 Renders the gateways block for VirtualService-style specs.
 Context: the application values dict.
-Always emits mesh first, then the resolved ingress gateway.
+Always emits mesh first, then the resolved ingress gateway unless networking.istio.externalEnabled is false: such an
+application is reachable only inside the mesh (a migrator Rollout, for example).
 */}}
 {{- define "helm.virtualservice.gateways" -}}
 gateways:
 - mesh
+{{- if dig "networking" "istio" "externalEnabled" true . }}
 - {{ include "helm.istio.gateway" . }}
+{{- end }}
 {{- end -}}
 
 {{/*
-Helper template to generate VirtualService HTTP rules for language-specific and user-defined endpoints
-This template generates the complete HTTP rules as strings to avoid duplication
+The application's allowed endpoints after the language defaults and networking.istio.allowedEndpoints are merged and
+deduplicated (by kind and normalized path, and by rule name), as JSON: [{"kind": "exact|prefix|regex", "match": ...}].
+Used by helm.virtualservice.allowedEndpoints for the allowlist rules and by helm.specs.virtualservice for the
+environment-header route, so both carry the same paths.
 */}}
-{{- define "helm.virtualservice.allowedEndpoints" -}}
-{{- $namespace := include "helm.namespace" . }}
+{{- define "helm.virtualservice.allowedEndpointList" -}}
 {{- $fullName := include "helm.fullname" . -}}
-{{- $metaenv := include "helm.metaEnvironment" . -}}
-{{- $ctx := .ctx -}}
-{{- if not $ctx -}}
-  {{- $ctx = include "helm.context" . | fromJson -}}
-{{- end -}}
-{{- $serviceDefaults := $ctx.chartDefaults.service -}}
 {{- $mergedEndpoints := list -}}
 {{- $istioConfig := dig "networking" "istio" dict $.application -}}
 
@@ -150,9 +154,6 @@ This template generates the complete HTTP rules as strings to avoid duplication
   {{- $mergedEndpoints = concat $mergedEndpoints $istioConfig.allowedEndpoints -}}
 {{- end }}
 
-{{/* Exit early if no endpoints to process */}}
-{{- if lt (len $mergedEndpoints) 1 -}}
-{{- else -}}
 
 {{/* Deduplicate endpoints by kind+normalizedPath AND check for name conflicts */}}
 {{- $seenPaths := dict -}}
@@ -205,6 +206,28 @@ This template generates the complete HTTP rules as strings to avoid duplication
     {{- end -}}
   {{- end -}}
 {{- end -}}
+{{- toJson $unique -}}
+{{- end -}}
+
+{{/*
+Helper template to generate VirtualService HTTP rules for language-specific and user-defined endpoints
+This template generates the complete HTTP rules as strings to avoid duplication
+*/}}
+{{- define "helm.virtualservice.allowedEndpoints" -}}
+{{- $namespace := include "helm.namespace" . }}
+{{- $fullName := include "helm.fullname" . -}}
+{{- $metaenv := include "helm.metaEnvironment" . -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $serviceDefaults := $ctx.chartDefaults.service -}}
+{{- $istioConfig := dig "networking" "istio" dict $.application -}}
+{{- $unique := include "helm.virtualservice.allowedEndpointList" . | fromJsonArray -}}
+
+{{/* Exit early if no endpoints to process */}}
+{{- if lt (len $unique) 1 -}}
+{{- else -}}
 
 {{/* render HTTP rules using centralized helper */}}
 {{- if gt (len $unique) 0 }}

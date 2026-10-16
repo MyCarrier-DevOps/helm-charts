@@ -480,6 +480,16 @@ tests:
       - equal:
           path: metadata.namespace
           value: feature20
-      # Shoul NOT have endpoint matching rules from language defaults (starting at http[0] for feature envs)
-      - notExists:
-          path: spec.http[0].match[0].uri
+      # http[0] is the environment-header route; it carries the allowlist too, one match per allowed endpoint
+      # (the header AND the path), so a request with the environment header cannot reach other paths.
+      - equal:
+          path: spec.http[0].match[0]
+          value:
+            headers:
+              environment:
+                exact: feature20
+            uri:
+              exact: /liveness
+      - lengthEqual:
+          path: spec.http[0].match
+          count: 4

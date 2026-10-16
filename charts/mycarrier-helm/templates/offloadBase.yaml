@@ -37,7 +37,8 @@ spec:
   {{- if $internalEnabled }}
   - {{ $baseFullName }}.{{ $metaenv }}.internal
   {{- end }}
-  {{- if (dig "useRootDomain" false $appValues) }}
+  {{- if not (dig "networking" "istio" "externalEnabled" true $appValues) }}
+  {{- else if (dig "useRootDomain" false $appValues) }}
   - {{ $domain }}
   {{- else if $appValues.staticHostname }}
   - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
@@ -53,11 +54,12 @@ spec:
   - {{ include "helm.legacyHostFqdn" (dict "alias" . "ctx" $) }}
   {{- end }}
   {{ include "helm.virtualservice.gateways" $appValues | indent 2 | trim }}
-  {{- if dig "networking" "istio" "offloadVirtualServiceAnnotations" nil $appValues }}
+  {{- /* cloudflare-proxied comes from networking.istio.cloudflareProxied, like the standard VirtualService.
+       offloadVirtualServiceAnnotations win on a key conflict. */ -}}
+  {{- $vsAnnotations := include "helm.annotations.virtualservice" $appContext | fromYaml }}
+  {{- $vsAnnotations = merge (dict) (dig "networking" "istio" "offloadVirtualServiceAnnotations" dict $appValues) $vsAnnotations }}
   virtualServiceAnnotations:
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
-    {{- toYaml $appValues.networking.istio.offloadVirtualServiceAnnotations | nindent 4 }}
-  {{- end }}
+    {{- toYaml $vsAnnotations | nindent 4 }}
   {{- if dig "networking" "istio" "offloadVirtualServiceLabels" nil $appValues }}
   virtualServiceLabels:
     {{- toYaml $appValues.networking.istio.offloadVirtualServiceLabels | nindent 4 }}

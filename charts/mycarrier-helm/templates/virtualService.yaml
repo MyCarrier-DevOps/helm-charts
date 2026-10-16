@@ -57,7 +57,9 @@ spec:
   - {{ $fullName }}
   - {{ $fullName }}.{{ $namespace }}.svc
   - {{ $fullName }}.{{ $namespace }}.svc.cluster.local
-  {{- if and ($.Values.isEnvironmentDeploy | default false) $appValues.staticHostname }}
+  {{- include "helm.assertExternalHostConfig" (dict "appName" $appName "application" $appValues) }}
+  {{- if not (dig "networking" "istio" "externalEnabled" true $appValues) }}
+  {{- else if and ($.Values.isEnvironmentDeploy | default false) $appValues.staticHostname }}
   - {{ $appValues.staticHostname | trimSuffix "." }}.{{ $domain }}
   {{- else }}
   - {{ $fullName }}.{{ $domainPrefix }}.{{ $domain }}

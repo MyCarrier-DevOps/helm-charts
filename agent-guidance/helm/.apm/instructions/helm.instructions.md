@@ -559,11 +559,17 @@ applications:
 | `networking.istio.allowAllEndpoints` | `false` | Dev and feature environments only: skip the allowlist and route every path |
 | `networking.istio.offloadOperatorEnabled` | `true` in dev and feature environments, `false` elsewhere | The offload operator owns the application's routing instead of a chart VirtualService |
 | `networking.istio.offloadVSEnabled` | `true` | Feature environments: render the `<fullName>-offload` VirtualService |
+| `networking.istio.cloudflareProxied` | `true` | Sets the `external-dns.alpha.kubernetes.io/cloudflare-proxied` annotation on the application's VirtualServices, including the operator-managed one in dev (through the OffloadBase `virtualServiceAnnotations`) |
+| `networking.istio.offloadVirtualServiceAnnotations` | `{}` | Dev: extra annotations on the operator-managed VirtualService; a `cloudflare-proxied` key here overrides `cloudflareProxied` |
 | `networking.istio.internalEnabled` | `true` | The mesh-internal host described below |
+| `networking.istio.enforceAllowlistOnEnvironmentHeader` | `true` | When an allowlist applies, requests with the `environment` header also reach only the allowed paths; `false` (opt-out) lets them reach every path |
+| `networking.istio.externalEnabled` | `true` | `false` binds the application's VirtualServices only to `mesh`, drops its public hosts and its `cloudflare-proxied` and `mycarrier.io/gateway` annotations, so only in-cluster callers reach it. `useRootDomain`, `staticHostname`, `networking.istio.hosts` and `networking.istio.legacyHostAliases` then fail the render, and so does a frontend application in a multi-frontend release (the shared VirtualService routes every frontend through the ingress gateway) |
 
-**Endpoint allowlist.** When an application has an allowlist, the gateway answers every other path with a 403. A csharp application has one by default, built from: `/liveness` and `/health` (exact), `/api` (prefix, only when the application's full name contains `api`), and `/swagger` (prefix) in dev and feature environments only. `allowedEndpoints` entries are added after the defaults. A non-csharp application without `allowedEndpoints` has no allowlist. The allowlist is enforced in every environment except plain `dev`, including feature environments (since mycarrier-helm 4.1.0).
+**Endpoint allowlist.** When an application has an allowlist, the gateway answers every other path with a 403. A csharp application has one by default, built from: `/liveness` and `/health` (exact), `/api` (prefix, only when the application's full name contains `api`), and `/swagger` (prefix) in dev and feature environments only. `allowedEndpoints` entries are added after the defaults. A non-csharp application without `allowedEndpoints` has no allowlist. The allowlist is enforced in every environment except plain `dev`, including feature environments (since mycarrier-helm 4.1.0). It also covers requests that carry the `environment` header (the frontend and the API gateway send it on every call): the header route has one match per allowed endpoint. `networking.istio.enforceAllowlistOnEnvironmentHeader: false` (opt-out) lets requests with the header reach every path again, for one application.
 
 **`allowAllEndpoints`** is an escape hatch for dev and feature environments; prefer adding the path to `allowedEndpoints`. Setting it to `true` in any other environment fails the render (an explicit `false` is accepted everywhere), so keep it in the dev values file and out of shared ones. In Layout B, `values.dev.yaml` also serves feature environments that have no file of their own.
+
+**KrakenD `additionalEndpoints`.** With `networking.krakend.enabled: true`, each `networking.krakend.additionalEndpoints[]` entry (endpoints missing from the OpenAPI document, such as liveness) renders with a `method`. `method` defaults to `GET` when the entry omits it. A `method` you set must be one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE` (uppercase, the CRD enum); `values.schema.json` rejects anything else (lowercase, empty, null) at render, and the chart keeps a valid value as written.
 
 When Istio ingress is enabled, the chart also advertises mesh-internal DNS entries per application using the pattern `{appStack}-{application}.{environment}.internal` (not in feature environments). In dev, these support header-based routing to feature namespaces via the `environment` request header.
 
@@ -653,9 +659,9 @@ global:
 
 - `global.correlationId` must be set (the pipeline sets it); the plugin finds a release's Rollouts by that label.
 - A preset starts with a `start` barrier and gets a barrier after each weight. Every barrier timeout (`coordinator.barrierTimeouts`, 9m each) must stay below `progressDeadlineSeconds`, or the render fails: Argo Rollouts counts the wait at a barrier toward the deadline.
-- `dark` (default `true`) adds the header-gated dark stage: `darkReplicas` canary pods at weight 0 behind a route on `X-MyCarrier-Canary: <correlationId>`, and the leader (the first Rollout application by name) runs the `tests-dark` suite. With analysis on, a `tests-dark` AnalysisTemplate must render for the leader; the chart does not render it yet. A frontend Rollout in a multi-frontend release needs `dark: false`.
+- `dark` (default `true`) adds the header-gated dark stage: `darkReplicas` canary pods at weight 0 behind a route on `X-MyCarrier-Canary: <correlationId>`, and the leader runs the `tests-dark` suite. With analysis on, a `tests-dark` AnalysisTemplate must render for the leader; the chart does not render it yet. A frontend Rollout in a multi-frontend release needs `dark: false`.
+- The leader is `global.strategy.canary.leader`. It must name an application of the release in every environment where it is set (a misspelled name fails the render), and where the dark stage runs it must be an application with `deploymentType: rollout` and without `migratingToRollouts`; with more than one such application the render fails until it is set, and a release with one defaults to it. A leader set in shared values is fine where that application is still a Deployment or migrating, as long as the coordinator or the dark stage is off there; an application defined only in one environment's values file needs the leader set in that same file. Set it to an application that serves the release's traffic.
 
-An application whose name contains `migration` can't be `deploymentType: rollout`: a migrator runs to completion, so run it through `jobs` with `timing: pre-deploy`.
 
 | Environment | What a Rollout needs |
 |-------------|----------------------|
@@ -664,6 +670,8 @@ An application whose name contains `migration` can't be `deploymentType: rollout
 | `dev` | `networking.istio.offloadOperatorEnabled: false`, which deletes the application's dev VirtualService until Argo CD self-heals — try Rollouts in a feature environment instead |
 
 The chart fails the render when one of these is missing.
+
+**Migrations.** A database migration runs in one of two ways. A migrator that runs to completion and exits goes in `jobs` with `timing: pre-deploy`: Argo CD runs the Job as a PreSync hook (or, with `runAsHook: false`, as a plain wave-0 resource that runs once per release), ahead of the workloads (sync wave 10), and waits for it to complete, so the migration finishes before any Deployment, StatefulSet or Rollout of the release is updated, and a failed Job fails the sync; it has no port and gets no canary steps. A long-running migrator application, which runs the migration when it starts and keeps running (like a worker), is an entry under `applications`; with `deploymentType: rollout` it takes part in the canary like any other Rollout, so give it an HTTP port for the health check, and set `networking.istio.externalEnabled: false` so that only in-cluster callers reach the pod that holds the database credentials. It gives no start order: it syncs in wave 10 with every Deployment, StatefulSet and Rollout, so their new pods start alongside it and can serve before the migration finishes. By default each Rollout of a release runs its own steps, so a migrator Rollout that aborts does not stop the others from promoting (with `global.strategy.canary.coordinator.enabled` the release moves in lockstep and an abort stops all of it), and the default readiness probe is a TCP check that passes once the port opens, so it does not catch a migration that fails while the process keeps running. Use it only when the migrator's readiness waits for its migration and every other application's readiness waits for the schema version it needs (`probes.readinessProbe`): keep the port, startup and liveness probes answering while the migration runs, and set `applications.<app>.progressDeadlineSeconds` above the longest migration on every Rollout whose readiness waits for it, or that Rollout aborts. With `global.strategy.canary.coordinator.enabled`, a Rollout whose schema is already in place (its readiness does not wait) reaches the next barrier first and waits there for the migrator; that wait counts toward its own progress deadline and is capped by `coordinator.barrierTimeouts` (9m by default), so a longer migration aborts the whole release. Raise the barrier timeouts above the longest migration, and `applications.<app>.progressDeadlineSeconds` above them on every Rollout of the release, not only the ones that wait (the chart fails the render when a barrier timeout reaches a Rollout's deadline); a longer deadline also delays the abort of a stuck canary pod, so keep it as low as the migration allows. Otherwise use the pre-deploy job. Either way, a migration must stay compatible with the previous version, whose pods keep running against the migrated schema, so an abort or a revert needs no database rollback. Applications with `migration` in the name are left out of automatic HPA (see [HPA](#hpa-horizontal-pod-autoscaler)).
 
 ### Switching between Deployment and Rollout
 
@@ -964,6 +972,8 @@ cronjobs:
 
 `command` renders correctly only with a single element; a multi-element `command` collapses into one string. In Layout B, CronJobs go in `environments[].cronjobs`.
 
+A CronJob syncs in wave 10 with the workloads, after the pre-deploy jobs, so a schedule that fires during a release never runs the new image against the old schema. `jobs` with `timing: pre-deploy` are Argo CD PreSync hooks (they run on every sync, before anything else of the release is applied, so a ConfigMap or Secret the job reads through `configmap`, `useSecret`, `configMapName` or `secretName` must come from outside the release or be a PreSync hook with a lower wave: one from `extraObjects` is applied after the job, so the job reads the previous release's values, and on a first deploy it fails and blocks the sync; `secrets.mounted` is fine) and `timing: post-deploy` are PostSync hooks; `order` sorts jobs of the same timing. `runAsHook: false` (opt-out) keeps a job with `timing` a plain resource: it syncs in wave 0, ahead of the workloads, and runs once per release, when its manifest changes, not on every sync. Without `timing` a Job syncs in wave 0, ahead of the workloads. On a Rollout a PostSync hook can fire before promotion or after an abort, so do not use a post-deploy job to check a canary release.
+
 ---
 
 ## Alerts
@@ -1235,13 +1245,21 @@ When reviewing or creating helm value changes:
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
 
-### mycarrier-helm, the release after 4.7.0
+### mycarrier-helm, the release after 4.7.3
 
 Rollouts with `analysis.enabled`, and `applications.<app>.analysisTemplates`; other applications render unchanged.
 
 - `global.strategy.canary.analysis.templates` defaults to `[health]` (was `[health, compare, alerts]`), and every listed template must render for each Rollout application, or the render fails. The chart renders `health`; remove `compare` and `alerts`, or define them under `applications.<app>.analysisTemplates`.
 - The chart's `health` template calls `applications.<app>.canaryHealthPath` or else `global.strategy.canary.analysis.health.path` on the `http` port when one is set, and otherwise the path of the application's first HTTP probe (readiness, startup, then liveness, after the `global.language` defaults). An application with neither on a `-preview` Service port, such as a non-csharp application with default TCP probes, fails the render while `health` is listed. Set `canaryHealthPath` or `analysis.health.path`, add an `httpGet` probe under `probes`, or remove `health` from the list.
 - `applications.<app>.analysisTemplates` no longer accepts the `job.container` shorthand, and no longer injects `RELEASE_ID`, `RELEASE_DEFINITION_NAME` or `BRANCH_NAME`. Canary tests run through TestEngine; give a full Argo Rollouts provider instead. The `web` shorthand now puts `successCondition` at metric level (it never applied before) and calls `http://<fullName>-preview.<namespace>.svc.cluster.local:<http port>/health` by default.
+
+### mycarrier-helm 4.7.3
+
+- With the coordinator and the dark stage on, a release with more than one `deploymentType: rollout` application fails to render until `global.strategy.canary.leader` names the application that runs the dark-stage suite (an application with `deploymentType: rollout` and without `migratingToRollouts`). Before, the first name in sort order was the leader. A leader that is set must name an application of the release, in every environment. A release with one Rollout application needs no change.
+- `jobs` with `timing` are now real Argo CD hooks: the hook, sync-wave and hook-delete-policy annotations render on the Job's metadata instead of its pod template, where Argo CD ignored them. A `pre-deploy` job is a PreSync hook; a `post-deploy` job is a PostSync hook and now runs after the workloads instead of alongside the pre-deploy jobs. A hook runs on every sync operation (manual, self-heal, each retry), not only when its manifest changes, and Argo CD waits for it: make the job idempotent and safe to re-run, and keep `activeDeadlineSeconds` as short as the job allows, because a hung PreSync job holds the sync for that long. A ConfigMap or Secret the job reads from `extraObjects` is applied after a PreSync job (see CronJobs). To keep a job as it was (a plain wave-0 resource that runs once per manifest change), set `runAsHook: false` on it.
+- `argocd.argoproj.io/hook`, `sync-wave` or `hook-delete-policy` under the `annotations` of a job with `timing` (unless `runAsHook: false`), or `argocd.argoproj.io/sync-wave` under `cronjobs[].annotations`, fails the render. Use `timing` and `order`.
+- CronJobs sync in wave 10 with the workloads instead of wave 0.
+- The endpoint allowlist now also applies to requests that carry the `environment` header (the frontend and the API gateway send it on every call); before, the header route reached every path. A prod audit of 7 days of traces found no served request outside its application's allowlist apart from calls that already failed. An application that needs a path outside its allowlist adds it to `networking.istio.allowedEndpoints`, or sets `networking.istio.enforceAllowlistOnEnvironmentHeader: false`.
 
 ### mycarrier-helm 4.7.0
 
@@ -1252,7 +1270,7 @@ Rollouts with `global.strategy.canary.coordinator.enabled` only.
 
 ### mycarrier-helm 4.6.0
 
-- An application whose name contains `migration` with `deploymentType: rollout` fails to render. Run the migrator through `jobs` with `timing: pre-deploy`.
+- An application whose name contains `migration` with `deploymentType: rollout` fails to render. Run the migrator through `jobs` with `timing: pre-deploy`. (4.7.3 lifts this for a long-running migrator application.)
 - With `global.strategy.canary.coordinator.enabled`, `global.correlationId` is required.
 
 ### mycarrier-helm 4.5.0
