@@ -50,17 +50,22 @@ spec:
         timeoutSeconds: 10
 {{- end }}
 {{- /* The chart's alerts template (DEVOPS-312, D15), in prod and preprod only, on alert-gate's label contract
-       (DEVOPS-329): firing alerts with the service label, the environment (prod also matches none) and a folder other
-       than Platform. Two metrics:
-       - alert-rules, a Job run once per analysis step (helm.canary.alerts.rulesCheck): fails unless at least one alert
-         rule that can fire matches, so a wrong service label cannot leave the check green. A Job, because a web metric
-         would store Grafana's whole rules document in the AnalysisRun; its token comes from Vault through bank-vaults.
-       - alerts, a web metric on the Alertmanager API: fails when an alert that is not silenced matches (re-checked on
-         the answer, as alert-gate does). The token reaches it from the Secret of an ExternalSecret, because Argo
-         Rollouts resolves web metric headers from AnalysisTemplate args. A non-2xx answer is an error; at the default
-         consecutiveErrorLimit 1, a second error in a row aborts the canary. Argo Rollouts up to v1.10.1 counts a 2xx
-         body that is not JSON as Successful without evaluating the condition (argo-rollouts#4770 changes that).
-       An applications.<app>.analysisTemplates entry named alerts replaces it. */}}
+       (DEVOPS-329): alerts with the service label, the environment (prod also matches none) and a folder other than
+       Platform. The Rollout runs it as background analysis from its first weight until promotion
+       (helm.canary.backgroundAnalysis), so it also checks during the pauses. Two metrics:
+       - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: fails unless an alert
+         rule that can fire matches, so a wrong service label cannot leave the check green. It fails only when both
+         runs fail (failureLimit 1), which rides out one transient Grafana or pod failure. A Job, because a web metric
+         would store Grafana's whole rules document in the AnalysisRun; a Job cannot report Inconclusive, so no
+         evaluable rule fails the run.
+       - alerts, a web metric on the Alertmanager API, every interval until promotion: fails when an alert that is not
+         silenced matches (re-checked on the answer, as alert-gate does). A non-2xx answer is an error; one more than
+         consecutiveErrorLimit (4) in a row fails the run. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
+         JSON as Successful without evaluating the condition (argo-rollouts#4770 changes that).
+       Both read the Grafana token from the Secret of one ExternalSecret (vault-backend-devops reads the DevOps mount;
+       vault-backend reads secrets). With analysis.alerts.dryRun (default true) both metrics run in Argo Rollouts dry
+       run: results are recorded in the AnalysisRun's dryRunSummary and never fail the run. An
+       applications.<app>.analysisTemplates entry named alerts replaces the template. */}}
 {{- $alertsEnvironment := include "helm.canary.alerts.environment" $appContext }}
 {{- $wantAlerts := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (not (has "alerts" $customNames)) $alertsEnvironment }}
 {{- $alertsService := "" }}
@@ -83,13 +88,14 @@ metadata:
     {{ $standardLabels | nindent 4 | trim }}
     {{ $versionLabels | nindent 4 | trim }}
   annotations:
+    {{- /* Before the Rollout (wave 10): Argo CD waits for it to be Ready, so a Vault read that fails stops the sync
+           here instead of failing the canary's analysis. */}}
     argocd.argoproj.io/sync-wave: "8"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  refreshInterval: 1h
+  refreshInterval: 5m
   secretStoreRef:
     kind: ClusterSecretStore
-    {{- /* vault-backend reads the secrets mount; the Grafana token is in the DevOps mount. */}}
     name: vault-backend-devops
   target:
     name: {{ $alertsName }}
@@ -98,7 +104,7 @@ spec:
   - secretKey: token
     remoteRef:
       key: grafana/service-accounts/api/tokens
-      property: ci-alert-gate
+      property: {{ $alerts.tokenKey }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
@@ -118,10 +124,16 @@ spec:
       secretKeyRef:
         name: {{ $alertsName }}
         key: token
+  {{- if $alerts.dryRun }}
+  dryRun:
+  - metricName: alert-rules
+  - metricName: alerts
+  {{- end }}
   metrics:
   - name: alert-rules
-    count: 1
-    failureLimit: 0
+    count: 2
+    interval: 30s
+    failureLimit: 1
     provider:
       job:
         spec:
@@ -135,13 +147,14 @@ spec:
                 app.kubernetes.io/component: canary-analysis
               annotations:
                 sidecar.istio.io/inject: "false"
-                {{- include "helm.annotations.vault" dict | nindent 16 }}
             spec:
               restartPolicy: Never
               {{- include "helm.podSecurityContext" (dict "Values" $.Values) | nindent 14 }}
               containers:
               - name: alert-rules
-                image: python:3.13.15-alpine3.23
+                image: {{ $alerts.image }}
+                {{- /* The pod status then carries the script's last lines, including its FAIL reason. */}}
+                terminationMessagePolicy: FallbackToLogsOnError
                 command:
                 - python3
                 - -I
@@ -157,7 +170,10 @@ spec:
                 - name: ALERTS_ENVIRONMENT
                   value: {{ $alertsEnvironment }}
                 - name: GRAFANA_API_KEY
-                  value: vault:DevOps/data/grafana/service-accounts/api/tokens#ci-alert-gate
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $alertsName }}
+                      key: token
                 resources:
                   requests:
                     cpu: 50m
@@ -168,7 +184,6 @@ spec:
                 {{- include "helm.containerSecurityContext" (dict "Values" $.Values) | nindent 16 }}
   - name: alerts
     interval: {{ $alerts.interval }}
-    count: {{ int $alerts.count }}
     failureLimit: 0
     consecutiveErrorLimit: {{ int $alerts.consecutiveErrorLimit }}
     failureCondition: {{ printf `any(result, {%s && !((#.status?.state ?? "") == "suppressed" && len(#.status?.silencedBy ?? []) > 0)})` (include "helm.canary.alerts.match" (merge (dict "labels" "#.labels") $alertsMatch)) | quote }}

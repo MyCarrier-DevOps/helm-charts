@@ -17,7 +17,8 @@
       "darkReplicas" 1
       "analysis" (dict "enabled" false "templates" (list "health" "alerts")
         "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
-        "alerts" (dict "service" "" "count" 3 "interval" "30s" "consecutiveErrorLimit" 1))
+        "alerts" (dict "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
+          "image" "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516"))
       "coordinator" (dict
         "enabled" false
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
@@ -33,7 +34,8 @@
        Analysis steps render only with analysis.enabled (default false); each references
        <environment>-<fullName>-<template>, and every referenced template must render for the app
        (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
-       when one is missing. alerts is the exception: outside prod and preprod it is left out of the steps.
+       when one is missing. alerts is the exception: it runs as background analysis (helm.canary.backgroundAnalysis),
+       not in these steps, and outside prod and preprod it is left out.
        With coordinator.enabled (release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator step plugin) a
        preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the whole group has
        been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
@@ -64,12 +66,15 @@
   {{- $available = include "helm.canary.analysis.available" . | fromJsonArray -}}
   {{- $templates := list -}}
   {{- range $cfg.analysis.templates -}}
-    {{- if not (has . $available) -}}
-      {{- /* No application alert rules exist outside prod and preprod, so the alerts check is left out there. */ -}}
-      {{- if and (eq . "alerts") (not (include "helm.canary.alerts.environment" $)) }}{{ continue }}{{ end -}}
-      {{- if eq . "alerts" -}}
+    {{- /* alerts runs as background analysis, not in these steps. No application alert rules exist outside prod and
+           preprod, so there it is left out; in prod and preprod it needs a service label. */ -}}
+    {{- if eq . "alerts" -}}
+      {{- if and (not (has . $available)) (include "helm.canary.alerts.environment" $) -}}
         {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName, or remove alerts from global.strategy.canary.analysis.templates." $.appName) -}}
       {{- end -}}
+      {{- continue -}}
+    {{- end -}}
+    {{- if not (has . $available) -}}
       {{- if eq . "health" -}}
         {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.%s.canaryHealthPath or global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet probe under applications.%s.probes (the chart's default probes are HTTP only for global.language csharp), or remove health from global.strategy.canary.analysis.templates." $.appName $.appName $.appName) -}}
       {{- end -}}
@@ -154,6 +159,22 @@
 {{- if and (not (has "health" $names)) (has "health" $templates) (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
 {{- if and (not (has "alerts" $names)) (has "alerts" $templates) (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
 {{- toJson $names -}}
+{{- end -}}
+
+{{- /* The Rollout's background analysis, as JSON, or "" when it has none: the alerts template (the chart's, or an
+       applications.<app>.analysisTemplates entry named alerts) while analysis is on and alerts is listed. It starts at
+       the first step that sends the canary traffic (setWeight above 0, after the dark stage) and runs until the Rollout
+       is promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
+       standard rules) run out; a step-by-step check would sample only the first minute of each weight. */ -}}
+{{- define "helm.canary.backgroundAnalysis" -}}
+{{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
+  {{- $analysis := dict "templates" (list (dict "templateName" (printf "%s-%s-alerts" .Values.environment.name (include "helm.fullname" .)))) -}}
+  {{- range $index, $step := (include "helm.canary.steps" . | fromYamlArray) -}}
+    {{- if and (not (hasKey $analysis "startingStep")) (gt (int (dig "setWeight" 0 $step)) 0) }}{{ $_ := set $analysis "startingStep" $index }}{{ end -}}
+  {{- end -}}
+  {{- toJson $analysis -}}
+{{- end -}}
 {{- end -}}
 
 {{- /* The environment whose Grafana alert rules the alerts check reads: prod or preprod, the environments alert-gate

@@ -44,7 +44,7 @@
                       "type": "array",
                       "items": { "type": "string" },
                       "default": ["health", "alerts"],
-                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-. The chart renders health and alerts; compare (DEVOPS-322) is not built yet. alerts renders in prod and preprod only and is left out of the steps elsewhere. applications.<app>.analysisTemplates render under the same names, and one named health or alerts replaces the chart's."
+                      "description": "AnalysisTemplates the canary runs, as suffixes of <environment>-<fullName>-. Each analysis step runs them, except alerts, which runs as background analysis from the first weight until promotion. The chart renders health and alerts (alerts in prod and preprod only; elsewhere it is left out); compare (DEVOPS-322) is not built yet. applications.<app>.analysisTemplates render under the same names, and one named health or alerts replaces the chart's."
                     },
                     "health": {
                       "type": "object",
@@ -61,12 +61,14 @@
                     "alerts": {
                       "type": "object",
                       "additionalProperties": false,
-                      "description": "The chart's alerts template, rendered in prod and preprod (DEVOPS-329's label contract, shared with alert-gate). Its alert-rules Job runs once per analysis step and fails unless an alert rule that can fire matches the service; its alerts web metric fails when a firing alert that is not silenced carries the service label, the environment (in prod, also no environment label) and a folder other than Platform. The Grafana token comes from Vault (DevOps grafana/service-accounts/api/tokens, ci-alert-gate): through an ExternalSecret on vault-backend-devops for the web metric, through bank-vaults for the Job.",
+                      "description": "The chart's alerts template, rendered in prod and preprod with DEVOPS-329's label contract (alert-gate's matchers). The Rollout runs it as background analysis from its first weight until promotion. Its alert-rules Job runs twice at the start and fails when neither run finds an alert rule that can fire for the service label (not paused, not in error); its alerts web metric fails when a firing alert that is not silenced carries the service label, the environment (in prod, also no environment label) and a folder other than Platform. In preprod only rules whose labels, or whose instances' labels, include environment: preprod count; the chart's standard alert rules carry no environment label. Both read the Grafana token from an ExternalSecret on vault-backend-devops (DevOps grafana/service-accounts/api/tokens).",
                       "properties": {
-                        "service": { "type": "string", "description": "The service label the service's Grafana alert rules carry: the lower-cased repository name, or its alias (mycarrier for MC.MyCarrier, curant for MC.Curant). Unset: alerts.serviceName lower-cased. The render fails when neither is set." },
-                        "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements of the alerts metric per analysis step." },
+                        "service": { "type": "string", "description": "The service label the service's Grafana alert rules carry: the lower-cased repository name, or its alias (mycarrier for MC.MyCarrier, curant for MC.Curant). Unset: alerts.serviceName lower-cased. In prod and preprod the render fails when neither is set." },
+                        "dryRun": { "type": "boolean", "default": true, "description": "Run both metrics in Argo Rollouts dry run: their results are recorded in the AnalysisRun's dryRunSummary and never fail the canary. Set false at go-live." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements of the alerts metric." },
-                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 1, "description": "Errors in a row (any non-2xx answer, timeout, connection error, or an answer that is not a list of alerts) that the alerts metric tolerates; one more ends the run as Error, which aborts the canary." }
+                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 4, "description": "Errors in a row of the alerts metric (a non-2xx answer, a timeout, a connection error, or JSON that is not a list of alerts) that the check tolerates; one more fails the run. A 2xx answer that is not JSON counts as a pass on Argo Rollouts up to v1.10.1." },
+                        "image": { "type": "string", "default": "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516", "description": "Image of the alert-rules Job: Python 3 with its standard library. Set it to a mirror of the default image." },
+                        "tokenKey": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "ci-alert-gate", "description": "Property of the Grafana token under DevOps grafana/service-accounts/api/tokens in Vault." }
                       }
                     }
                   }

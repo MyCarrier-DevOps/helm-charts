@@ -38,6 +38,9 @@ tests:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "8"
       - equal:
+          path: spec.refreshInterval
+          value: 5m
+      - equal:
           path: spec.secretStoreRef
           value:
             kind: ClusterSecretStore
@@ -84,9 +87,8 @@ tests:
           value:
             name: alerts
             interval: 30s
-            count: 3
             failureLimit: 0
-            consecutiveErrorLimit: 1
+            consecutiveErrorLimit: 4
             failureCondition: >-
               any(result, {(#.labels?.service ?? "") == "mycarrier" && (#.labels?.environment ?? "") in ["prod", ""]
               && (#.labels?.grafana_folder ?? "") != "Platform" && !((#.status?.state ?? "") == "suppressed"
@@ -102,8 +104,9 @@ tests:
                 jsonPath: "{$}"
                 timeoutSeconds: 15
 
-  # The alert-rules Job fails unless a rule that can fire matches, so a wrong service label cannot pass silently.
-  - it: runs the alert-rules check once per step as a Job with its token from Vault
+  # The alert-rules Job fails unless a rule that can fire matches, so a wrong service label cannot pass silently. It
+  # runs twice and fails only when both runs fail, so one transient failure does not end the run.
+  - it: runs the alert-rules check twice as a Job that reads the token from the ExternalSecret's Secret
     template: analysistemplate.yaml
     documentIndex: 2
     set: *prod
@@ -113,10 +116,13 @@ tests:
           value: alert-rules
       - equal:
           path: spec.metrics[0].count
-          value: 1
+          value: 2
+      - equal:
+          path: spec.metrics[0].interval
+          value: 30s
       - equal:
           path: spec.metrics[0].failureLimit
-          value: 0
+          value: 1
       - equal:
           path: spec.metrics[0].provider.job.spec.backoffLimit
           value: 0
@@ -125,7 +131,7 @@ tests:
           value: Never
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
-          value: python:3.13.15-alpine3.23
+          value: python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
           value:
@@ -136,10 +142,16 @@ tests:
             - name: ALERTS_ENVIRONMENT
               value: prod
             - name: GRAFANA_API_KEY
-              value: vault:DevOps/data/grafana/service-accounts/api/tokens#ci-alert-gate
+              valueFrom:
+                secretKeyRef:
+                  name: prod-mycarrier-api-alerts
+                  key: token
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[0]
           value: python3
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].terminationMessagePolicy
+          value: FallbackToLogsOnError
       - matchRegex:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
           pattern: (?s)def why_not_evaluable\(rule\):.*sys\.exit\(main\(\)\)
@@ -162,15 +174,11 @@ tests:
             app.kubernetes.io/name: mycarrier-api-alert-rules
             app.kubernetes.io/component: canary-analysis
       - equal:
-          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["sidecar.istio.io/inject"]
-          value: "false"
-      - equal:
-          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-role"]
-          value: appcluster
-      - notExists:
-          path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-env-from-path"]
+          path: spec.metrics[0].provider.job.spec.template.metadata.annotations
+          value:
+            sidecar.istio.io/inject: "false"
 
-  - it: does not hand the app's bulk Vault secrets to the Job
+  - it: gives the Job no Vault injection, so the app's bulk Vault secrets never reach it
     template: analysistemplate.yaml
     documentIndex: 2
     set:
@@ -220,7 +228,6 @@ tests:
               enabled: true
               alerts:
                 service: mc.order
-                count: 5
                 interval: 1m
                 consecutiveErrorLimit: 2
     asserts:
@@ -236,26 +243,109 @@ tests:
           path: spec.metrics[1].failureCondition
           pattern: '\(#\.labels\?\.service \?\? ""\) == "mc\.order"'
       - equal:
-          path: spec.metrics[1].count
-          value: 5
-      - equal:
           path: spec.metrics[1].interval
           value: 1m
       - equal:
           path: spec.metrics[1].consecutiveErrorLimit
           value: 2
 
-  - it: adds the alerts template to every analysis step in prod
+  # Background analysis checks through every pause, where the rules' 5m for windows run out; each step runs health.
+  - it: runs alerts as background analysis from the first weight, and health in each analysis step
     template: rollout.yaml
     set: *prod
     asserts:
+      - equal:
+          path: spec.strategy.canary.analysis
+          value:
+            startingStep: 0
+            templates:
+              - templateName: prod-mycarrier-api-alerts
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            setWeight: 10
       - equal:
           path: spec.strategy.canary.steps[1]
           value:
             analysis:
               templates:
                 - templateName: prod-mycarrier-api-health
-                - templateName: prod-mycarrier-api-alerts
+
+  - it: starts the background analysis at the first weight after the dark stage
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+            coordinator:
+              enabled: true
+      applications:
+        api:
+          deploymentType: rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/run
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.analysis.startingStep
+          value: 8
+      - equal:
+          path: spec.strategy.canary.steps[8]
+          value:
+            setWeight: 10
+
+  - it: runs both metrics in dry run by default
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.dryRun
+          value:
+            - metricName: alert-rules
+            - metricName: alerts
+
+  - it: renders no dry run with analysis.alerts.dryRun false, and takes the image and token key from values
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+              alerts:
+                dryRun: false
+                image: registry.example.com/mirror/python@sha256:0000000000000000000000000000000000000000000000000000000000000000
+                tokenKey: canary-analysis
+    template: analysistemplate.yaml
+    asserts:
+      - notExists:
+          path: spec.dryRun
+        documentIndex: 2
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
+          value: registry.example.com/mirror/python@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        documentIndex: 2
+      - equal:
+          path: spec.data[0].remoteRef.property
+          value: canary-analysis
+        documentIndex: 1
 
   # No application alert rules exist outside prod and preprod.
   - it: renders no alerts template and leaves alerts out of the steps in uat
@@ -265,6 +355,8 @@ tests:
       environment:
         name: uat
     asserts:
+      - notExists:
+          path: spec.strategy.canary.analysis
       - equal:
           path: spec.strategy.canary.steps[1]
           value:
