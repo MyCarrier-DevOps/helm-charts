@@ -55,7 +55,8 @@ spec:
        (helm.canary.backgroundAnalysis), so it also checks during the pauses. Two metrics:
        - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: fails unless an alert
          rule that can fire matches, so a wrong service label, paused rules or no rules refuse the deploy until they
-         are fixed (Q39, bcarlock 2026-10-19). It is never in dry run, and fails only when both runs fail
+         are fixed (Q39, bcarlock 2026-10-19). A configuration error (401/403, an empty token) fails it too; a Grafana
+         outage passes and is logged (Q40). It is never in dry run, and fails only when both runs fail
          (failureLimit 1), which rides out one transient Grafana or pod failure. A Job, because a web metric would
          store Grafana's whole rules document in the AnalysisRun.
        - alerts, a web metric on the Alertmanager API, every interval until promotion: fails when an alert that is not

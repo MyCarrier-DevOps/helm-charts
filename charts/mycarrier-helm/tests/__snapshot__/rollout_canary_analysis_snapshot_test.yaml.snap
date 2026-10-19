@@ -137,6 +137,10 @@ renders the default analysis template set:
                               return ""
 
 
+                          class Outage(Exception):
+                              """Grafana could not answer: a 5xx, a 429, a timeout, a network error or a body that is not JSON."""
+
+
                           class NoRedirect(urllib.request.HTTPRedirectHandler):
                               def redirect_request(self, *args, **kwargs):
                                   return None  # a redirect would carry the token to another location; it ends as an HTTP error instead
@@ -145,7 +149,7 @@ renders the default analysis template set:
                           def fetch():
                               token = (os.environ.get("GRAFANA_API_KEY") or "").strip()
                               if not token:
-                                  raise RuntimeError("GRAFANA_API_KEY is not set")
+                                  raise RuntimeError("GRAFANA_API_KEY is empty (check the Vault property)")
                               request = urllib.request.Request(URL, headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
                               error = "no attempt made"
                               for attempt in range(3):
@@ -153,19 +157,24 @@ renders the default analysis template set:
                                       with urllib.request.build_opener(NoRedirect).open(request, timeout=15) as response:
                                           return json.load(response)
                                   except urllib.error.HTTPError as e:
+                                      if e.code < 500 and e.code != 429:  # 401/403 (token, role), another 4xx or a redirect: ours to fix
+                                          raise RuntimeError("rules API: HTTP %d" % e.code)
                                       error = "HTTP %d" % e.code
-                                      if e.code < 500 and e.code != 429:
-                                          break
                                   except Exception as e:  # timeout, connection error, a body that is not JSON
                                       error = type(e).__name__  # never the message: some echo the request headers
                                   if attempt < 2:
                                       time.sleep((2, 4)[attempt])
-                              raise RuntimeError("rules API: " + error)
+                              raise Outage("rules API: " + error)
 
 
                           def main():
                               try:
                                   document = fetch()
+                              except Outage as e:
+                                  # Q40 (bcarlock, 2026-10-19): an outage says nothing about the release (DEVOPS-329 D3), so it does not
+                                  # refuse the deploy; a configuration error does.
+                                  print("SKIPPED: %s after 3 tries; Grafana could not be checked, so the canary goes on" % e)
+                                  return 0
                               except RuntimeError as e:
                                   print("FAIL: %s" % e)
                                   return 1
