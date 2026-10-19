@@ -204,6 +204,23 @@ spec:
 {{- if dig "provider" "job" "container" nil $template }}
 {{- fail (printf "application '%s': analysisTemplates '%s' runs a test container through the job provider shorthand, which is no longer supported. Canary tests run through TestEngine (DEVOPS-312); give a full Argo Rollouts provider instead." $appName (toString $template.name)) }}
 {{- end }}
+{{- /* count 0 with an interval runs indefinitely, which Argo Rollouts accepts only in background analysis: an analysis
+       step that references such a template leaves the Rollout InvalidSpec. Refused only for entries a step references
+       (explicit steps, or the preset's analysis.templates and the dark stage's tests-dark), so a spare template and
+       a replacement alerts entry (background analysis) still render. */}}
+{{- if and (eq (include "helm.canary.enabled" $appContext) "true") (hasKey $template "count") (eq (int $template.count) 0) $template.interval }}
+{{- $self := printf "%s-%s-%s" $environment $fullName (toString $template.name) }}
+{{- $stepRefs := list }}
+{{- if $cfg.steps }}
+{{- range $cfg.steps }}{{ range (dig "analysis" "templates" list .) }}{{ $stepRefs = append $stepRefs (toString .templateName) }}{{ end }}{{ end }}
+{{- else if $cfg.analysis.enabled }}
+{{- range $cfg.analysis.templates }}{{ if ne . "alerts" }}{{ $stepRefs = append $stepRefs (printf "%s-%s-%s" $environment $fullName .) }}{{ end }}{{ end }}
+{{- if and $cfg.coordinator.enabled $cfg.dark }}{{ $stepRefs = append $stepRefs (printf "%s-%s-tests-dark" $environment $fullName) }}{{ end }}
+{{- end }}
+{{- if has $self $stepRefs }}
+{{- fail (printf "application '%s': analysisTemplates '%s' has count 0 and an interval, so it runs indefinitely, and an analysis step references it; Argo Rollouts refuses that and leaves the Rollout InvalidSpec. Set a count above 0." $appName (toString $template.name)) }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate

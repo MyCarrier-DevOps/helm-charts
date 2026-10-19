@@ -499,6 +499,94 @@ tests:
           value:
             - templateName: uat-mycarrier-api-alerts
 
+  # count 0 with an interval runs indefinitely: Argo Rollouts accepts it only in background analysis.
+  - it: refuses count 0 on an entry that an analysis step references
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: health
+              count: 0
+              interval: 30s
+              provider:
+                web:
+                  url: http://health.example/check
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysisTemplates 'health' has count 0 and an interval, so it runs indefinitely, and an analysis step references it"
+
+  - it: refuses count 0 on an entry that explicit steps reference
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            steps:
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-smoke
+              - setWeight: 100
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: smoke
+              count: 0
+              interval: 30s
+              provider:
+                web:
+                  url: http://smoke.example/check
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysisTemplates 'smoke' has count 0"
+
+  - it: renders count 0 on an entry that no step references
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: spare
+              count: 0
+              interval: 30s
+              provider:
+                web:
+                  url: http://spare.example/check
+    asserts:
+      - equal:
+          path: spec.metrics[0].count
+          value: 0
+        documentSelector:
+          path: metadata.name
+          value: prod-mycarrier-api-spare
+
   - it: fails the render with explicit steps when no service label is known
     template: rollout.yaml
     set:
