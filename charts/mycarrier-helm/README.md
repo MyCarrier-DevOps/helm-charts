@@ -71,7 +71,7 @@ rendered on 4.5.0 fails on 4.6.0:
 |---|---|
 | An application whose name contains `migration` with `deploymentType: rollout` | Render the migrator through `jobs` with `timing: pre-deploy`: it runs to completion and exits, so it cannot be a canary. |
 
-Since the release after 4.7.2 this refusal is lifted: a long-running migrator application (it runs the migration when it starts and keeps running) may be `deploymentType: rollout` and takes part in the canary. A migrator that exits stays a pre-deploy job. Unlike the pre-deploy job, it gives no start order: the release's other workloads start alongside it, so their readiness must wait for the schema version they need. Set `networking.istio.externalEnabled: false` on it so that it is reachable only inside the cluster.
+Since 4.7.3 this refusal is lifted: a long-running migrator application (it runs the migration when it starts and keeps running) may be `deploymentType: rollout` and takes part in the canary. A migrator that exits stays a pre-deploy job. Unlike the pre-deploy job, it gives no start order: the release's other workloads start alongside it, so their readiness must wait for the schema version they need. Set `networking.istio.externalEnabled: false` on it so that it is reachable only inside the cluster.
 
 ## Upgrading to 4.7.0 (Rollouts with the coordinator on)
 

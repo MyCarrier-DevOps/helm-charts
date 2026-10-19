@@ -43,8 +43,8 @@
                     "templates": {
                       "type": "array",
                       "items": { "type": "string" },
-                      "default": ["health"],
-                      "description": "AnalysisTemplates each analysis step runs, as suffixes of <environment>-<fullName>-. The chart renders health; compare (DEVOPS-322) and alerts are not built yet. applications.<app>.analysisTemplates render under the same names, and one named health replaces the chart's."
+                      "default": ["health", "alerts"],
+                      "description": "AnalysisTemplates the canary runs, as suffixes of <environment>-<fullName>-. Each analysis step runs them, except alerts, which runs as background analysis from the first weight until promotion. The chart renders health and alerts (alerts in prod and preprod only; elsewhere it is left out); compare (DEVOPS-322) is not built yet. applications.<app>.analysisTemplates render under the same names, and one named health or alerts replaces the chart's; a replacement alerts runs as background analysis in every environment, and runs until promotion only with count 0 and an interval."
                     },
                     "health": {
                       "type": "object",
@@ -56,6 +56,19 @@
                         "count": { "type": "integer", "minimum": 1, "default": 3, "description": "Measurements per analysis step." },
                         "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements." },
                         "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 1, "description": "Errors in a row (any non-2xx answer, timeout or connection error) that the check tolerates; one more ends the run as Error, which aborts the canary. The default 1 rides out a single transient error (an error is retried after about 10 s); 0 aborts on the first error." }
+                      }
+                    },
+                    "alerts": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "The chart's alerts template, rendered in prod and preprod with DEVOPS-329's label contract (alert-gate's matchers). The Rollout runs it as background analysis from its first weight until promotion. Its alert-rules Job runs twice at the start and is never in dry run: it fails the canary when neither run finds an alert rule that can fire (not paused, not in error) for the service label, so the deploy is refused until the rules or the label are fixed, and also when it cannot run (a Grafana error after retries, a rejected token, an empty Vault property, or a pod that cannot reach Grafana or finish within 180 s); an image that cannot be pulled pauses the canary. Its alerts web metric fails when a firing alert that is not silenced carries the service label, the environment (in prod, also no environment label) and a folder other than Platform. In preprod only rules whose labels, or whose instances' labels, include environment: preprod count; the chart's standard alert rules carry no environment label. Both read the Grafana token from an ExternalSecret on vault-backend-devops (DevOps grafana/service-accounts/api/tokens).",
+                      "properties": {
+                        "service": { "type": "string", "description": "The service label the service's Grafana alert rules carry: the lower-cased repository name, or its alias (mycarrier for MC.MyCarrier, curant for MC.Curant). Unset: alerts.serviceName lower-cased. In prod and preprod the render fails when neither is set." },
+                        "dryRun": { "type": "boolean", "default": true, "description": "Run the alerts metric, and only that metric, in Argo Rollouts dry run: its results are recorded in the AnalysisRun's dryRunSummary and never fail the canary. Set false at go-live. The alert-rules check is always live, whatever this is set to." },
+                        "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "30s", "description": "Time between measurements of the alerts metric." },
+                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 4, "description": "Errors in a row of the alerts metric (a non-2xx answer, a timeout, a connection error, or JSON that is not a list of alerts) that the check tolerates; one more fails the run. A 2xx answer that is not JSON counts as a pass on Argo Rollouts up to v1.10.1." },
+                        "image": { "type": "string", "default": "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516", "description": "Image of the alert-rules Job: Python 3 with its standard library. Set it to a mirror of the default image." },
+                        "tokenKey": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "ci-alert-gate", "description": "Property of the Grafana token under DevOps grafana/service-accounts/api/tokens in Vault." }
                       }
                     }
                   }

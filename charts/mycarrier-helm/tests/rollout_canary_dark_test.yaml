@@ -273,6 +273,7 @@ tests:
           canary:
             analysis:
               enabled: true
+              templates: [health]
             coordinator:
               enabled: true
       environment:

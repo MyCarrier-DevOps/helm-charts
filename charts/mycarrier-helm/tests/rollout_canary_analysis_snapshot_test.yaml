@@ -1,0 +1,62 @@
+suite: Rollout canary analysis template set (committed snapshot, DEVOPS-312 R5)
+templates:
+  - analysistemplate.yaml
+  - rollout.yaml
+# The default template set for a strategy.canary service in prod with analysis on: the chart's health template, the
+# alerts template with its ExternalSecret, and the Rollout's canary strategy that references them. The snapshots cover
+# the specs only, so a chart version bump does not change them; any change to what the canary runs does.
+tests:
+  - it: renders the default analysis template set
+    template: analysistemplate.yaml
+    set: &prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: true
+      environment:
+        name: prod
+      alerts:
+        serviceName: MyCarrier
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: metadata.name
+          value: prod-mycarrier-api-health
+        documentIndex: 0
+      - matchSnapshot:
+          path: spec
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: ExternalSecret
+        documentIndex: 1
+      - matchSnapshot:
+          path: spec
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: prod-mycarrier-api-alerts
+        documentIndex: 2
+      - matchSnapshot:
+          path: spec
+        documentIndex: 2
+
+  - it: references the default template set from the canary strategy
+    template: rollout.yaml
+    set: *prod
+    asserts:
+      - matchSnapshot:
+          path: spec.strategy.canary

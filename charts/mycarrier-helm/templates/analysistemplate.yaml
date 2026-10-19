@@ -49,11 +49,177 @@ spec:
         jsonPath: "{$.status}"
         timeoutSeconds: 10
 {{- end }}
+{{- /* The chart's alerts template (DEVOPS-312, D15), in prod and preprod only, on alert-gate's label contract
+       (DEVOPS-329): alerts with the service label, the environment (prod also matches none) and a folder other than
+       Platform. The Rollout runs it as background analysis from its first weight until promotion
+       (helm.canary.backgroundAnalysis), so it also checks during the pauses. Two metrics:
+       - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: fails unless an alert
+         rule that can fire matches, so a wrong service label, paused rules or no rules refuse the deploy until they
+         are fixed (Q39, bcarlock 2026-10-19). It is never in dry run, and fails only when both runs fail
+         (failureLimit 1), which rides out one transient Grafana or pod failure. A Job, because a web metric would
+         store Grafana's whole rules document in the AnalysisRun.
+       - alerts, a web metric on the Alertmanager API, every interval until promotion: fails when an alert that is not
+         silenced matches (re-checked on the answer, as alert-gate does). A non-2xx answer is an error; one more than
+         consecutiveErrorLimit (4) in a row fails the run. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
+         JSON as Successful without evaluating the condition (argo-rollouts#4770 changes that).
+       Both read the Grafana token from the Secret of one ExternalSecret (vault-backend-devops reads the DevOps mount;
+       vault-backend reads secrets). With analysis.alerts.dryRun (default true) the alerts metric also runs in Argo
+       Rollouts dry run: results are recorded in the AnalysisRun's dryRunSummary and never fail the run. An
+       applications.<app>.analysisTemplates entry named alerts replaces the template, in every environment, and also
+       runs as background analysis. */}}
+{{- $alertsEnvironment := include "helm.canary.alerts.environment" $appContext }}
+{{- $wantAlerts := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (not (has "alerts" $customNames)) $alertsEnvironment }}
+{{- $alertsService := "" }}
+{{- if $wantAlerts }}{{ $alertsService = include "helm.canary.alerts.service" $appContext }}{{ end }}
+{{- if and $wantAlerts $alertsService }}
+{{- $alerts := $cfg.analysis.alerts }}
+{{- $alertsName := printf "%s-%s-alerts" $environment $fullName }}
+{{- $grafanaUrl := "https://grafana.mycarrier.tech" }}
+{{- $alertsMatch := dict "service" $alertsService "environment" $alertsEnvironment }}
+{{- $alertFilters := list (printf "service=%s" (toJson $alertsService)) (ternary `environment=~"prod|"` (printf "environment=%s" (toJson $alertsEnvironment)) (eq $alertsEnvironment "prod")) `grafana_folder!="Platform"` }}
+{{- $alertsQuery := list "active=true" "silenced=false" "inhibited=true" }}
+{{- range $alertFilters }}{{ $alertsQuery = append $alertsQuery (printf "filter=%s" (urlquery .)) }}{{ end }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $alertsName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    {{- /* Before the Rollout (wave 10): Argo CD waits for it to be Ready, so a Vault read that fails stops the sync
+           here instead of failing the canary's analysis. */}}
+    argocd.argoproj.io/sync-wave: "8"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend-devops
+  target:
+    name: {{ $alertsName }}
+    creationPolicy: Owner
+  data:
+  - secretKey: token
+    remoteRef:
+      key: grafana/service-accounts/api/tokens
+      property: {{ $alerts.tokenKey }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $alertsName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  args:
+  - name: grafana-token
+    valueFrom:
+      secretKeyRef:
+        name: {{ $alertsName }}
+        key: token
+  {{- if $alerts.dryRun }}
+  dryRun:
+  - metricName: alerts
+  {{- end }}
+  metrics:
+  - name: alert-rules
+    count: 2
+    interval: 30s
+    failureLimit: 1
+    provider:
+      job:
+        spec:
+          backoffLimit: 0
+          activeDeadlineSeconds: 180
+          template:
+            metadata:
+              {{- /* Not the app's selector labels, so the pod never becomes an endpoint of the app's Service. */}}
+              labels:
+                app.kubernetes.io/name: {{ printf "%s-alert-rules" $fullName | trunc 63 | trimSuffix "-" }}
+                app.kubernetes.io/component: canary-analysis
+              annotations:
+                sidecar.istio.io/inject: "false"
+            spec:
+              restartPolicy: Never
+              {{- include "helm.podSecurityContext" (dict "Values" $.Values) | nindent 14 }}
+              containers:
+              - name: alert-rules
+                image: {{ $alerts.image }}
+                {{- /* The pod status then carries the script's last lines, including its FAIL reason. */}}
+                terminationMessagePolicy: FallbackToLogsOnError
+                command:
+                - python3
+                - -I
+                - -B
+                - -c
+                - |
+                  {{- include "helm.canary.alerts.rulesCheck" $appContext | nindent 18 }}
+                env:
+                - name: GRAFANA_URL
+                  value: {{ $grafanaUrl }}
+                - name: ALERTS_SERVICE
+                  value: {{ $alertsService | quote }}
+                - name: ALERTS_ENVIRONMENT
+                  value: {{ $alertsEnvironment }}
+                - name: GRAFANA_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $alertsName }}
+                      key: token
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 64Mi
+                  limits:
+                    cpu: 500m
+                    memory: 256Mi
+                {{- include "helm.containerSecurityContext" (dict "Values" $.Values) | nindent 16 }}
+  - name: alerts
+    interval: {{ $alerts.interval }}
+    failureLimit: 0
+    consecutiveErrorLimit: {{ int $alerts.consecutiveErrorLimit }}
+    failureCondition: {{ printf `any(result, {%s && !((#.status?.state ?? "") == "suppressed" && len(#.status?.silencedBy ?? []) > 0)})` (include "helm.canary.alerts.match" (merge (dict "labels" "#.labels") $alertsMatch)) | quote }}
+    provider:
+      web:
+        url: {{ printf "%s/api/alertmanager/grafana/api/v2/alerts?%s" $grafanaUrl (join "&" $alertsQuery) | quote }}
+        headers:
+        - key: Authorization
+          value: {{ "Bearer {{args.grafana-token}}" | quote }}
+        - key: Accept
+          value: application/json
+        jsonPath: "{$}"
+        timeoutSeconds: 15
+{{- end }}
 {{- range $index, $template := $appValues.analysisTemplates }}
 {{- /* The release-era job contract (a test container run directly against -preview, with RELEASE_ID,
        RELEASE_DEFINITION_NAME and BRANCH_NAME) is gone: canary tests run through TestEngine (DEVOPS-312). */}}
 {{- if dig "provider" "job" "container" nil $template }}
 {{- fail (printf "application '%s': analysisTemplates '%s' runs a test container through the job provider shorthand, which is no longer supported. Canary tests run through TestEngine (DEVOPS-312); give a full Argo Rollouts provider instead." $appName (toString $template.name)) }}
+{{- end }}
+{{- /* count 0 with an interval runs indefinitely, which Argo Rollouts accepts only in background analysis: an analysis
+       step that references such a template leaves the Rollout InvalidSpec. Refused only for entries a step references
+       (explicit steps, or the preset's analysis.templates and the dark stage's tests-dark), so a spare template and
+       a replacement alerts entry (background analysis) still render. */}}
+{{- if and (eq (include "helm.canary.enabled" $appContext) "true") (hasKey $template "count") (eq (int $template.count) 0) $template.interval }}
+{{- $self := printf "%s-%s-%s" $environment $fullName (toString $template.name) }}
+{{- $stepRefs := list }}
+{{- if $cfg.steps }}
+{{- range $cfg.steps }}{{ range (dig "analysis" "templates" list .) }}{{ $stepRefs = append $stepRefs (toString .templateName) }}{{ end }}{{ end }}
+{{- else if $cfg.analysis.enabled }}
+{{- range $cfg.analysis.templates }}{{ if ne . "alerts" }}{{ $stepRefs = append $stepRefs (printf "%s-%s-%s" $environment $fullName .) }}{{ end }}{{ end }}
+{{- if and $cfg.coordinator.enabled $cfg.dark }}{{ $stepRefs = append $stepRefs (printf "%s-%s-tests-dark" $environment $fullName) }}{{ end }}
+{{- end }}
+{{- if has $self $stepRefs }}
+{{- fail (printf "application '%s': analysisTemplates '%s' has count 0 and an interval, so it runs indefinitely, and an analysis step references it; Argo Rollouts refuses that and leaves the Rollout InvalidSpec. Set a count above 0." $appName (toString $template.name)) }}
+{{- end }}
 {{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -72,7 +238,9 @@ metadata:
 spec:
   metrics:
   - name: {{ $environment }}-{{ $template.name }}
-    count: {{ $template.count | default 1 }}
+    {{- /* An explicit count is kept as written: count 0 (with an interval) is how a background analysis, such as a
+           replacement alerts entry, runs until promotion; Sprig's default would turn 0 into 1. */}}
+    count: {{ hasKey $template "count" | ternary $template.count 1 }}
     failureLimit: {{ $template.failureLimit | default 0 }}
     {{- with $template.interval }}
     interval: {{ . }}

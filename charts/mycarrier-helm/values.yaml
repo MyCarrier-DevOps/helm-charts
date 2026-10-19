@@ -47,13 +47,21 @@ global:
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
   #     analysis:
   #       enabled: false          # an analysis step after each weight, and the chart's AnalysisTemplates for it
-  #       templates: [health]     # run as <environment>-<fullName>-<template>; the chart renders health (compare
-  #                               # and alerts are not built yet); every listed template must render for each app
+  #       templates: [health, alerts]   # run as <environment>-<fullName>-<template>; the chart renders health and
+  #                               # alerts (compare is not built yet); every listed template must render for each app,
+  #                               # except alerts, which renders in prod and preprod only and is left out elsewhere.
+  #                               # Each analysis step runs them, except alerts: background analysis from the first
+  #                               # weight until promotion
   #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 1, successCondition: 'result == "Healthy"'}   # -preview Service at the path of the pod's
   #                               # first httpGet probe (readiness, startup, liveness; csharp defaults to /health);
   #                               # any non-2xx answer aborts the canary
   #         # path: /health         # call this path on the http port instead; set it when every probe is TCP.
   #                               # applications.<app>.canaryHealthPath overrides it for one application
+  #       alerts: {dryRun: true, interval: 30s, consecutiveErrorLimit: 4}   # Grafana alerts on alert-gate's label
+  #                               # contract (DEVOPS-329): fails on a firing alert of the service; dryRun covers only
+  #                               # that metric (go-live: false). The alert-rules check is always live: no rule that
+  #                               # can fire, a Grafana or token error, or a Job pod that cannot run fails the canary
+  #         # service: mycarrier    # the rules' service label; default alerts.serviceName lower-cased
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
   #                               # progressDeadlineSeconds overrides it for one slow-starting app.
