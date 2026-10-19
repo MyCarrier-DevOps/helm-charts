@@ -66,14 +66,9 @@
   {{- $available = include "helm.canary.analysis.available" . | fromJsonArray -}}
   {{- $templates := list -}}
   {{- range $cfg.analysis.templates -}}
-    {{- /* alerts runs as background analysis, not in these steps. No application alert rules exist outside prod and
-           preprod, so there it is left out; in prod and preprod it needs a service label. */ -}}
-    {{- if eq . "alerts" -}}
-      {{- if and (not (has . $available)) (include "helm.canary.alerts.environment" $) -}}
-        {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName, or remove alerts from global.strategy.canary.analysis.templates." $.appName) -}}
-      {{- end -}}
-      {{- continue -}}
-    {{- end -}}
+    {{- /* alerts runs as background analysis (helm.canary.backgroundAnalysis, which also checks its service label),
+           not in these steps. */ -}}
+    {{- if eq . "alerts" }}{{ continue }}{{ end -}}
     {{- if not (has . $available) -}}
       {{- if eq . "health" -}}
         {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.%s.canaryHealthPath or global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet probe under applications.%s.probes (the chart's default probes are HTTP only for global.language csharp), or remove health from global.strategy.canary.analysis.templates." $.appName $.appName $.appName) -}}
@@ -165,9 +160,16 @@
        applications.<app>.analysisTemplates entry named alerts) while analysis is on and alerts is listed. It starts at
        the first step that sends the canary traffic (setWeight above 0, after the dark stage) and runs until the Rollout
        is promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
-       standard rules) run out; a step-by-step check would sample only the first minute of each weight. */ -}}
+       standard rules) run out; a step-by-step check would sample only the first minute of each weight. A replacement
+       entry runs that long only with count 0 and an interval. The service-label check sits here, outside the steps,
+       so explicit global.strategy.canary.steps reach it too. */ -}}
 {{- define "helm.canary.backgroundAnalysis" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- $customAlerts := false -}}
+{{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "alerts" }}{{ $customAlerts = true }}{{ end }}{{ end -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (not $customAlerts) (include "helm.canary.alerts.environment" .) (not (include "helm.canary.alerts.service" .)) -}}
+  {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName, or remove alerts from global.strategy.canary.analysis.templates." .appName) -}}
+{{- end -}}
 {{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
   {{- $analysis := dict "templates" (list (dict "templateName" (printf "%s-%s-alerts" .Values.environment.name (include "helm.fullname" .)))) -}}
   {{- range $index, $step := (include "helm.canary.steps" . | fromYamlArray) -}}

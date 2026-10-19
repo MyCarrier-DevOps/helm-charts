@@ -53,19 +53,19 @@ spec:
        (DEVOPS-329): alerts with the service label, the environment (prod also matches none) and a folder other than
        Platform. The Rollout runs it as background analysis from its first weight until promotion
        (helm.canary.backgroundAnalysis), so it also checks during the pauses. Two metrics:
-       - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: fails unless an alert
-         rule that can fire matches, so a wrong service label cannot leave the check green. It fails only when both
-         runs fail (failureLimit 1), which rides out one transient Grafana or pod failure. A Job, because a web metric
-         would store Grafana's whole rules document in the AnalysisRun; a Job cannot report Inconclusive, so no
-         evaluable rule fails the run.
+       - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: it records whether an
+         alert rule that can fire matches, so a wrong service label or paused rules show in the AnalysisRun. It always
+         runs in dry run and never fails the canary (Q39, bcarlock 2026-10-19: the canary relies on its tests more than
+         on alerts). A Job, because a web metric would store Grafana's whole rules document in the AnalysisRun.
        - alerts, a web metric on the Alertmanager API, every interval until promotion: fails when an alert that is not
          silenced matches (re-checked on the answer, as alert-gate does). A non-2xx answer is an error; one more than
          consecutiveErrorLimit (4) in a row fails the run. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
          JSON as Successful without evaluating the condition (argo-rollouts#4770 changes that).
        Both read the Grafana token from the Secret of one ExternalSecret (vault-backend-devops reads the DevOps mount;
-       vault-backend reads secrets). With analysis.alerts.dryRun (default true) both metrics run in Argo Rollouts dry
-       run: results are recorded in the AnalysisRun's dryRunSummary and never fail the run. An
-       applications.<app>.analysisTemplates entry named alerts replaces the template. */}}
+       vault-backend reads secrets). With analysis.alerts.dryRun (default true) the alerts metric also runs in Argo
+       Rollouts dry run: results are recorded in the AnalysisRun's dryRunSummary and never fail the run. An
+       applications.<app>.analysisTemplates entry named alerts replaces the template, in every environment, and also
+       runs as background analysis. */}}
 {{- $alertsEnvironment := include "helm.canary.alerts.environment" $appContext }}
 {{- $wantAlerts := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (not (has "alerts" $customNames)) $alertsEnvironment }}
 {{- $alertsService := "" }}
@@ -124,9 +124,9 @@ spec:
       secretKeyRef:
         name: {{ $alertsName }}
         key: token
-  {{- if $alerts.dryRun }}
   dryRun:
   - metricName: alert-rules
+  {{- if $alerts.dryRun }}
   - metricName: alerts
   {{- end }}
   metrics:
@@ -221,7 +221,9 @@ metadata:
 spec:
   metrics:
   - name: {{ $environment }}-{{ $template.name }}
-    count: {{ $template.count | default 1 }}
+    {{- /* An explicit count is kept as written: count 0 (with an interval) is how a background analysis, such as a
+           replacement alerts entry, runs until promotion; Sprig's default would turn 0 into 1. */}}
+    count: {{ hasKey $template "count" | ternary $template.count 1 }}
     failureLimit: {{ $template.failureLimit | default 0 }}
     {{- with $template.interval }}
     interval: {{ . }}

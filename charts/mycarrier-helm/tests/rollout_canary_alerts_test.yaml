@@ -319,7 +319,9 @@ tests:
             - metricName: alert-rules
             - metricName: alerts
 
-  - it: renders no dry run with analysis.alerts.dryRun false, and takes the image and token key from values
+  # alert-rules always runs in dry run (Q39: the canary relies on its tests more than on alerts); dryRun false turns
+  # only the alerts metric live.
+  - it: keeps alert-rules in dry run with analysis.alerts.dryRun false, and takes the image and token key from values
     set:
       <<: *prod
       global:
@@ -335,8 +337,10 @@ tests:
                 tokenKey: canary-analysis
     template: analysistemplate.yaml
     asserts:
-      - notExists:
+      - equal:
           path: spec.dryRun
+          value:
+            - metricName: alert-rules
         documentIndex: 2
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
@@ -436,6 +440,89 @@ tests:
           path: spec.metrics[0].provider.web.url
           value: http://alerts.example/check
         documentIndex: 1
+
+  # A replacement runs as background analysis too, so count 0 with an interval keeps it running until promotion.
+  - it: runs a replacement alerts entry as background analysis and keeps its count 0
+    set: &replacement
+      <<: *prod
+      alerts:
+        serviceName: ""
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: alerts
+              count: 0
+              interval: 1m
+              provider:
+                web:
+                  url: http://alerts.example/check
+    template: rollout.yaml
+    asserts:
+      - equal:
+          path: spec.strategy.canary.analysis
+          value:
+            startingStep: 0
+            templates:
+              - templateName: prod-mycarrier-api-alerts
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
+
+  - it: renders a replacement alerts entry with its count 0 and interval
+    set: *replacement
+    template: analysistemplate.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.metrics[0].count
+          value: 0
+      - equal:
+          path: spec.metrics[0].interval
+          value: 1m
+
+  - it: runs a replacement alerts entry as background analysis outside prod and preprod too
+    set:
+      <<: *replacement
+      environment:
+        name: uat
+    template: rollout.yaml
+    asserts:
+      - equal:
+          path: spec.strategy.canary.analysis.templates
+          value:
+            - templateName: uat-mycarrier-api-alerts
+
+  - it: fails the render with explicit steps when no service label is known
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            steps:
+              - setWeight: 20
+              - pause:
+                  duration: 5m
+              - setWeight: 100
+            analysis:
+              enabled: true
+      alerts:
+        serviceName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it"
 
   - it: renders no alerts template when alerts is not listed
     template: analysistemplate.yaml

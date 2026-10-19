@@ -58,8 +58,8 @@ global:
   #         # path: /health         # call this path on the http port instead; set it when every probe is TCP.
   #                               # applications.<app>.canaryHealthPath overrides it for one application
   #       alerts: {dryRun: true, interval: 30s, consecutiveErrorLimit: 4}   # Grafana alerts on alert-gate's label
-  #                               # contract (DEVOPS-329): fails on a firing alert of the service, and when no
-  #                               # alert rule that can fire matches it; dryRun records and never fails (go-live: false)
+  #                               # contract (DEVOPS-329): fails on a firing alert of the service; dryRun records and
+  #                               # never fails (go-live: false). Whether a rule can fire is always only recorded
   #         # service: mycarrier    # the rules' service label; default alerts.serviceName lower-cased
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
