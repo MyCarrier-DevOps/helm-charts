@@ -53,10 +53,11 @@ spec:
        (DEVOPS-329): alerts with the service label, the environment (prod also matches none) and a folder other than
        Platform. The Rollout runs it as background analysis from its first weight until promotion
        (helm.canary.backgroundAnalysis), so it also checks during the pauses. Two metrics:
-       - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: it records whether an
-         alert rule that can fire matches, so a wrong service label or paused rules show in the AnalysisRun. It always
-         runs in dry run and never fails the canary (Q39, bcarlock 2026-10-19: the canary relies on its tests more than
-         on alerts). A Job, because a web metric would store Grafana's whole rules document in the AnalysisRun.
+       - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: fails unless an alert
+         rule that can fire matches, so a wrong service label, paused rules or no rules refuse the deploy until they
+         are fixed (Q39, bcarlock 2026-10-19). It is never in dry run, and fails only when both runs fail
+         (failureLimit 1), which rides out one transient Grafana or pod failure. A Job, because a web metric would
+         store Grafana's whole rules document in the AnalysisRun.
        - alerts, a web metric on the Alertmanager API, every interval until promotion: fails when an alert that is not
          silenced matches (re-checked on the answer, as alert-gate does). A non-2xx answer is an error; one more than
          consecutiveErrorLimit (4) in a row fails the run. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
@@ -124,9 +125,8 @@ spec:
       secretKeyRef:
         name: {{ $alertsName }}
         key: token
-  dryRun:
-  - metricName: alert-rules
   {{- if $alerts.dryRun }}
+  dryRun:
   - metricName: alerts
   {{- end }}
   metrics:

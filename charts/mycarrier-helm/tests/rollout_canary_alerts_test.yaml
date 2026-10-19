@@ -308,7 +308,9 @@ tests:
           value:
             setWeight: 10
 
-  - it: runs both metrics in dry run by default
+  # The alerts metric is in dry run until go-live; alert-rules is always live, so no rule that can fire refuses the
+  # deploy (Q39).
+  - it: runs the alerts metric in dry run by default, and never alert-rules
     template: analysistemplate.yaml
     documentIndex: 2
     set: *prod
@@ -316,12 +318,9 @@ tests:
       - equal:
           path: spec.dryRun
           value:
-            - metricName: alert-rules
             - metricName: alerts
 
-  # alert-rules always runs in dry run (Q39: the canary relies on its tests more than on alerts); dryRun false turns
-  # only the alerts metric live.
-  - it: keeps alert-rules in dry run with analysis.alerts.dryRun false, and takes the image and token key from values
+  - it: renders no dry run with analysis.alerts.dryRun false, and takes the image and token key from values
     set:
       <<: *prod
       global:
@@ -337,10 +336,8 @@ tests:
                 tokenKey: canary-analysis
     template: analysistemplate.yaml
     asserts:
-      - equal:
+      - notExists:
           path: spec.dryRun
-          value:
-            - metricName: alert-rules
         documentIndex: 2
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
