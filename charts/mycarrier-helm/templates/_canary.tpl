@@ -35,7 +35,7 @@
        <environment>-<fullName>-<template>, and every referenced template must render for the app
        (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
        when one is missing. alerts is the exception: it runs as background analysis (helm.canary.backgroundAnalysis),
-       not in these steps, and outside prod and preprod it is left out.
+       not in these steps, and outside prod it is left out.
        With coordinator.enabled (release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator step plugin) a
        preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the whole group has
        been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
@@ -145,7 +145,7 @@
 
 {{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
        chart's own health template when the app has none of that name and its health URL is known, and the chart's
-       alerts template when the app has none of that name, the environment is prod or preprod and the service label is
+       alerts template when the app has none of that name, the environment is prod and the service label is
        known. */ -}}
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
@@ -179,10 +179,11 @@
 {{- end -}}
 {{- end -}}
 
-{{- /* The environment whose Grafana alert rules the alerts check reads: prod or preprod, the environments alert-gate
-       supports (DEVOPS-329); "" elsewhere, where no application alert rules exist. */ -}}
+{{- /* The environment whose Grafana alert rules the alerts check reads: prod only, because canaries run only in prod
+       (Q42, bcarlock 2026-10-20; other environments run canaries only as test drills); "" elsewhere. alert-gate also
+       supports preprod, and helm.canary.alerts.match still takes any environment. */ -}}
 {{- define "helm.canary.alerts.environment" -}}
-{{- if has (toString .Values.environment.name) (list "prod" "preprod") }}{{ .Values.environment.name }}{{ end -}}
+{{- if eq (toString .Values.environment.name) "prod" }}prod{{ end -}}
 {{- end -}}
 
 {{- /* The Grafana service label the alerts check filters on: global.strategy.canary.analysis.alerts.service, else

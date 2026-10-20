@@ -49,7 +49,7 @@ global:
   #       enabled: false          # an analysis step after each weight, and the chart's AnalysisTemplates for it
   #       templates: [health, alerts]   # run as <environment>-<fullName>-<template>; the chart renders health and
   #                               # alerts (compare is not built yet); every listed template must render for each app,
-  #                               # except alerts, which renders in prod and preprod only and is left out elsewhere.
+  #                               # except alerts, which renders in prod only and is left out elsewhere.
   #                               # Each analysis step runs them, except alerts: background analysis from the first
   #                               # weight until promotion
   #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 1, successCondition: 'result == "Healthy"'}   # -preview Service at the path of the pod's
