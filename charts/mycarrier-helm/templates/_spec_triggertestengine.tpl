@@ -32,11 +32,18 @@
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
 backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
+{{- /* The pod keeps the application's standard labels except its identity: app.kubernetes.io/name and app become
+       <fullName>-trigger. With the application's own values they matched its Service selector, so the trigger pod
+       (no port, no readiness probe) could take the Service's traffic while it ran, and its PDB and HPA counted it. */}}
+{{- $podLabels := include "helm.labels.standard" . | fromYaml }}
+{{- $triggerName := printf "%s-trigger" (include "helm.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- $_ := set $podLabels "app.kubernetes.io/name" $triggerName }}
+{{- $_ := set $podLabels "app" $triggerName }}
 template:
   metadata:
     labels:
       {{ include "helm.labels.dependencies" . | indent 6 | trim }}
-      {{ include "helm.labels.standard" . | indent 6 | trim }}
+      {{- toYaml $podLabels | nindent 6 }}
   spec:
     {{ include "helm.podSecurityContext" . | indent 4 | trim }}
     serviceAccountName: default

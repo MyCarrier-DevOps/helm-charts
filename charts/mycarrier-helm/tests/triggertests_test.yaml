@@ -1983,3 +1983,37 @@ tests:
           content:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api#legacy_override"
+
+  # The trigger pod must not match the application's Service selector (name + instance), or it could take the
+  # Service's traffic while it runs, and the application's PDB and HPA would count it.
+  - it: gives the trigger pod its own name and app labels and keeps the rest
+    set:
+      fullnameOverride: app
+      namespace: dev
+      metaEnvironment: dev
+      applications:
+        app1:
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: app-app1-trigger
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: app-app1-trigger
+      - exists:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+      - exists:
+          path: spec.template.metadata.labels["mycarrier.tech/environment"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: app-app1
