@@ -2,7 +2,7 @@
 
 Renders the chart's prod alerts template with helm, takes the script from the alert-rules Job's command, and runs it
 against a local stub of Grafana's rules API. Exit 1 refuses the deploy (no rule that can fire, or a configuration
-error); exit 0 with SKIPPED lets the canary go on after a Grafana outage; exit 0 otherwise means a rule can fire.
+error); exit 0 with SKIPPED lets the canary go on after a Grafana outage (a TLS failure counts as one); exit 0 otherwise means a rule can fire.
 
 Run from the repository root: python3 .github/scripts/test_alert_rules_check.py
 """
@@ -166,6 +166,29 @@ class AlertRulesScript(unittest.TestCase):
         for base in ("/500", "/429", "/html", "/empty"):
             with self.subTest(base=base):
                 self.assertEqual(self.assert_skipped(base), 3)
+
+    def test_tls_failure_passes_skipped(self):
+        # A certificate Grafana's client does not trust counts as an outage, not a configuration error
+        # (smunukutla, 2026-10-20).
+        import shutil
+        import ssl
+        if not shutil.which("openssl"):
+            self.skipTest("openssl is not installed")
+        with tempfile.TemporaryDirectory() as d:
+            cert, key = os.path.join(d, "cert.pem"), os.path.join(d, "key.pem")
+            subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                            "-subj", "/CN=127.0.0.1", "-keyout", key, "-out", cert],
+                           check=True, capture_output=True)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Stub)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(cert, key)
+            server.socket = context.wrap_socket(server.socket, server_side=True)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                self.assert_skipped("/ok", url="https://127.0.0.1:%d/ok" % server.server_address[1])
+            finally:
+                server.shutdown()
+                server.server_close()
 
     def test_unreachable_grafana_passes_skipped(self):
         with socket.socket() as s:
