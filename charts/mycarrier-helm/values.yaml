@@ -729,6 +729,8 @@ applications: {}
 #         containerTag: "1.10.2"
 #         secretId: "vault:Secrets/data/app_authentication#SecretId"
 #         additionalEnvVars: "key1=value1;key2=value2"
+#         resultsApiKey: "vault:QA/data/autotests_results_api#ApiKey"  # Optional: AUTOTEST_RESULTS_API_KEY on the test container
+#         resultsApiUrl: "https://autotest-results-api.api.mycarrier.tech"  # Optional (default when resultsApiKey is set): AUTOTEST_RESULTS_API_URL
 #         legacyMode: false                      # Optional (default: false)
 #         hardenedSecurityContext: true           # Optional (default: true; set false to opt out of hardened test pods)
 #         useDefaultNodeAffinity: false          # Optional (default: false)

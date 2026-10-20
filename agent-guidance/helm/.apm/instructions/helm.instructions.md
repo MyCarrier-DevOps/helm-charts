@@ -947,6 +947,8 @@ applications:
 | `testdefinitions[].secretId` | Auth secret (vault ref) | Required |
 | `testdefinitions[].serviceAddress` | Override target service address | Auto: `http://<fullname>.<ns>.svc.cluster.local:<ports.http>` |
 | `testdefinitions[].additionalEnvVars` | Extra env vars for test container | `""` (format: `key1=value1;key2=value2`) |
+| `testdefinitions[].resultsApiKey` | autotest-results-api key, as `AUTOTEST_RESULTS_API_KEY` on the test container; a vault reference, never the key itself | Not set |
+| `testdefinitions[].resultsApiUrl` | autotest-results-api base URL, as `AUTOTEST_RESULTS_API_URL` on the test container | `https://autotest-results-api.api.mycarrier.tech` when `resultsApiKey` is set, otherwise not set |
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
 | `testdefinitions[].hardenedSecurityContext` | Run the test pod non-root with a read-only root filesystem | `true` |
 

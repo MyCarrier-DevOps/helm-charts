@@ -457,6 +457,14 @@
                       "type": "string",
                       "description": "Additional environment variables to pass to the test container"
                     },
+                    "resultsApiUrl": {
+                      "type": "string",
+                      "description": "autotest-results-api base URL, set on the test container as AUTOTEST_RESULTS_API_URL. Defaults to https://autotest-results-api.api.mycarrier.tech when resultsApiKey is set"
+                    },
+                    "resultsApiKey": {
+                      "type": "string",
+                      "description": "autotest-results-api key, set on the test container as AUTOTEST_RESULTS_API_KEY. Use a vault reference, never the key itself"
+                    },
                     "tolerations": {
                       "type": "array",
                       "description": "Tolerations for test pods scheduled by the test engine",

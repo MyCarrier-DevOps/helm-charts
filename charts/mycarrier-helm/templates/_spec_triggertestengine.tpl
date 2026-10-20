@@ -97,7 +97,14 @@ template:
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
+          {{- $resultsApiKey := .resultsApiKey | default "" }}
+          {{- $resultsApiUrl := .resultsApiUrl | default "" }}
+          {{- if and $resultsApiKey (not $resultsApiUrl) }}
+            {{- $resultsApiUrl = "https://autotest-results-api.api.mycarrier.tech" }}
+          {{- end }}
           {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
+          {{- if $resultsApiUrl }}{{- $_ := set $testEnv "ResultsApiUrl" $resultsApiUrl }}{{- end }}
+          {{- if $resultsApiKey }}{{- $_ := set $testEnv "ResultsApiKey" $resultsApiKey }}{{- end }}
           {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
           {{- $tests = append $tests $test }}
           {{- end }}
@@ -138,6 +145,11 @@ template:
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
+          {{- $resultsApiKey := .resultsApiKey | default "" }}
+          {{- $resultsApiUrl := .resultsApiUrl | default "" }}
+          {{- if and $resultsApiKey (not $resultsApiUrl) }}
+            {{- $resultsApiUrl = "https://autotest-results-api.api.mycarrier.tech" }}
+          {{- end }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
             --max-time 60 \
             -X POST \
@@ -165,7 +177,9 @@ template:
                   "BranchName": "{{ $gitBranch }}",
                   "AdditionalEnvVars": "{{ .additionalEnvVars}}",
                   "CorrelationId": "{{ $correlationId }}",
-                  "LegacyMode": "{{ $legacyMode }}"
+                  "LegacyMode": "{{ $legacyMode }}"{{- if $resultsApiUrl }},
+                  "ResultsApiUrl": {{ $resultsApiUrl | quote }}{{- end }}{{- if $resultsApiKey }},
+                  "ResultsApiKey": {{ $resultsApiKey | quote }}{{- end }}
                 }
               }' "$TESTENGINEHOOK_URL" || {
               rc=$?
