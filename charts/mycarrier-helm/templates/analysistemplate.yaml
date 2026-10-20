@@ -56,9 +56,10 @@ spec:
        - alert-rules, a Job (helm.canary.alerts.rulesCheck) run twice, 30s apart, at the start: fails unless an alert
          rule that can fire matches, so a wrong service label, paused rules or no rules refuse the deploy until they
          are fixed (Q39, bcarlock 2026-10-19). A configuration error (401/403, an empty token) fails it too; a Grafana
-         outage passes and is logged (Q40). It is never in dry run, and fails only when both runs fail
-         (failureLimit 1), which rides out one transient Grafana or pod failure. A Job, because a web metric would
-         store Grafana's whole rules document in the AnalysisRun.
+         outage passes and is logged (Q40). It is never in dry run, and fails when either run fails (failureLimit 0),
+         so a run that passes on an outage cannot hide the other run's configuration error; the Job retries a failed
+         pod once (backoffLimit 1), and the script retries Grafana itself. A Job, because a web metric would store
+         Grafana's whole rules document in the AnalysisRun.
        - alerts, a web metric on the Alertmanager API, every interval until promotion: fails when an alert that is not
          silenced matches (re-checked on the answer, as alert-gate does). A non-2xx answer is an error; one more than
          consecutiveErrorLimit (4) in a row fails the run. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
@@ -134,12 +135,12 @@ spec:
   - name: alert-rules
     count: 2
     interval: 30s
-    failureLimit: 1
+    failureLimit: 0
     provider:
       job:
         spec:
-          backoffLimit: 0
-          activeDeadlineSeconds: 180
+          backoffLimit: 1
+          activeDeadlineSeconds: 360
           template:
             metadata:
               {{- /* Not the app's selector labels, so the pod never becomes an endpoint of the app's Service. */}}

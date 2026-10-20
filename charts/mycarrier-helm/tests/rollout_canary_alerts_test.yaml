@@ -122,10 +122,13 @@ tests:
           value: 30s
       - equal:
           path: spec.metrics[0].failureLimit
-          value: 1
+          value: 0
       - equal:
           path: spec.metrics[0].provider.job.spec.backoffLimit
-          value: 0
+          value: 1
+      - equal:
+          path: spec.metrics[0].provider.job.spec.activeDeadlineSeconds
+          value: 360
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.restartPolicy
           value: Never
