@@ -930,6 +930,8 @@ applications:
           secretId: vault:QA/data/app_auth#SecretId
 ```
 
+The trigger Job's pod carries the application's labels, except `app.kubernetes.io/name` and `app`, which are `<fullName>-trigger`. So the pod is never an endpoint of the application's Service, and its PDB and HPA do not count it.
+
 ### Test Trigger Parameters
 
 | Parameter | Description | Default |
