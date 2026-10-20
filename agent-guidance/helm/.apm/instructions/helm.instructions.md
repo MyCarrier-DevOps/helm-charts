@@ -1261,11 +1261,16 @@ When reviewing or creating helm value changes:
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
 
-### mycarrier-helm, the release after 4.7.5
+### mycarrier-helm, the release after 4.7.6
+
+Not breaking; recorded because it changes 4.7.6's behaviour.
+
+- The chart's `alerts` template renders in prod only; 4.7.5 and 4.7.6 also rendered it in preprod. Canaries run only in prod, and a preprod canary is a test drill that no longer needs a service label or rules labelled `environment: preprod`.
+
+### mycarrier-helm 4.7.6
 
 Not breaking; recorded because it changes 4.7.5's behaviour.
 
-- The chart's `alerts` template renders in prod only; 4.7.5 also rendered it in preprod. Canaries run only in prod, and a preprod canary is a test drill that no longer needs a service label or rules labelled `environment: preprod`.
 - `alert-rules` now passes and logs `SKIPPED` on a Grafana outage (5xx, 429, timeout, network or TLS error, a body that is not JSON); 4xx, redirects, an empty token and a JSON answer of the wrong shape still fail. Either of its two runs failing now fails the check (it was both), and the Job retries a failed pod once.
 
 ### mycarrier-helm 4.7.5
