@@ -353,7 +353,7 @@ tests:
           value: canary-analysis
         documentIndex: 1
 
-  # No application alert rules exist outside prod and preprod.
+  # Canaries run only in prod (Q42), so the chart renders no alerts template elsewhere.
   - it: renders no alerts template and leaves alerts out of the steps in uat
     template: rollout.yaml
     set:
@@ -383,7 +383,7 @@ tests:
           path: metadata.name
           value: uat-mycarrier-api-health
 
-  - it: renders no analysis step at all when alerts is the only template outside prod and preprod
+  - it: renders no analysis step at all when alerts is the only template outside prod
     template: rollout.yaml
     set:
       <<: *prod
@@ -492,7 +492,7 @@ tests:
           path: spec.metrics[0].interval
           value: 1m
 
-  - it: runs a replacement alerts entry as background analysis outside prod and preprod too
+  - it: runs a replacement alerts entry as background analysis outside prod too
     set:
       <<: *replacement
       environment:
