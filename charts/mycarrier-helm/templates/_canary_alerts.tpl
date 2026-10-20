@@ -1,10 +1,11 @@
 {{- /* The script of the alerts template's alert-rules Job (analysistemplate.yaml): it reads Grafana's rules API once and
        exits 0 only when at least one alert rule that can fire matches the service, so a wrong service label or paused rules
        cannot leave the alerts check silently green. It repeats alert-gate's evaluate_rules (DEVOPS-329); keep the two in
-       step. Any API error, redirect or body that is not JSON exits 1, after up to three tries for 5xx, 429 and network
-       errors. */ -}}
+       step. A configuration error exits 1: a 401 or 403, another 4xx or a redirect, an empty token, or a JSON answer
+       of the wrong shape. A Grafana outage exits 0 with SKIPPED after three tries: a 5xx, a 429, a timeout, a network
+       error or a body that is not JSON (Q40). */ -}}
 {{- define "helm.canary.alerts.rulesCheck" -}}
-import json, os, sys, time, urllib.error, urllib.request
+import json, os, random, sys, time, urllib.error, urllib.request
 
 # Same contract as alert-gate's evaluate_rules (DEVOPS-329): a rule matches when its labels, or the labels of any of
 # its instances, carry the service and environment and are outside the Platform folder; it is evaluable when it is
@@ -41,6 +42,10 @@ def why_not_evaluable(rule):
     return ""
 
 
+class Outage(Exception):
+    """Grafana could not answer: a 5xx, a 429, a timeout, a network error or a body that is not JSON."""
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None  # a redirect would carry the token to another location; it ends as an HTTP error instead
@@ -49,27 +54,41 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def fetch():
     token = (os.environ.get("GRAFANA_API_KEY") or "").strip()
     if not token:
-        raise RuntimeError("GRAFANA_API_KEY is not set")
+        raise RuntimeError("GRAFANA_API_KEY is empty (check the Vault property)")
     request = urllib.request.Request(URL, headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
     error = "no attempt made"
     for attempt in range(3):
+        retry_after = None
         try:
             with urllib.request.build_opener(NoRedirect).open(request, timeout=15) as response:
                 return json.load(response)
         except urllib.error.HTTPError as e:
+            if e.code < 500 and e.code != 429:  # 401/403 (token, role), another 4xx or a redirect: ours to fix
+                raise RuntimeError("rules API: HTTP %d" % e.code)
             error = "HTTP %d" % e.code
-            if e.code < 500 and e.code != 429:
-                break
+            if e.code == 429 and str(e.headers.get("Retry-After") or "").isdigit():
+                retry_after = int(e.headers.get("Retry-After"))
         except Exception as e:  # timeout, connection error, a body that is not JSON
             error = type(e).__name__  # never the message: some echo the request headers
         if attempt < 2:
-            time.sleep((2, 4)[attempt])
-    raise RuntimeError("rules API: " + error)
+            # Jitter, so the Jobs of a release that start together do not retry in step; a 429's Retry-After
+            # is honoured up to 10 s.
+            delay = (2, 4)[attempt] * random.uniform(0.5, 1.5)
+            if retry_after is not None:
+                delay = max(delay, min(retry_after, 10))
+            time.sleep(delay)
+    raise Outage("rules API: " + error)
 
 
 def main():
     try:
         document = fetch()
+    except Outage as e:
+        # Q40 (bcarlock, 2026-10-19): an outage says nothing about the release (DEVOPS-329 D3), so it does not
+        # refuse the deploy; a configuration error does.
+        print("SKIPPED: %s after 3 tries; the alert-rules gate was NOT enforced for this run, so the canary goes on;"
+              " if this repeats, check Grafana's status and the Job's egress" % e)
+        return 0
     except RuntimeError as e:
         print("FAIL: %s" % e)
         return 1

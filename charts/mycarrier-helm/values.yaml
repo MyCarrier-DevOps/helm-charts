@@ -60,7 +60,8 @@ global:
   #       alerts: {dryRun: true, interval: 30s, consecutiveErrorLimit: 4}   # Grafana alerts on alert-gate's label
   #                               # contract (DEVOPS-329): fails on a firing alert of the service; dryRun covers only
   #                               # that metric (go-live: false). The alert-rules check is always live: no rule that
-  #                               # can fire, a Grafana or token error, or a Job pod that cannot run fails the canary
+  #                               # can fire or a configuration error (401/403, empty token) fails the canary; a
+  #                               # Grafana outage passes and is logged
   #         # service: mycarrier    # the rules' service label; default alerts.serviceName lower-cased
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
