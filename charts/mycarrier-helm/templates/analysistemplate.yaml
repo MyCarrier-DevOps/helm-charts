@@ -49,7 +49,7 @@ spec:
         jsonPath: "{$.status}"
         timeoutSeconds: 10
 {{- end }}
-{{- /* The chart's alerts template (DEVOPS-312, D15), in prod and preprod only, on alert-gate's label contract
+{{- /* The chart's alerts template (DEVOPS-312, D15), in prod only (canaries run only in prod, Q42), on alert-gate's label contract
        (DEVOPS-329): alerts with the service label, the environment (prod also matches none) and a folder other than
        Platform. The Rollout runs it as background analysis from its first weight until promotion
        (helm.canary.backgroundAnalysis), so it also checks during the pauses. Two metrics:
