@@ -195,27 +195,29 @@ tests:
       - notExists:
           path: spec.metrics[0].provider.job.spec.template.metadata.annotations["vault.security.banzaicloud.io/vault-env-daemon"]
 
-  - it: uses preprod's exact environment matcher in preprod
+  # Canaries run only in prod (Q42); preprod runs a canary only as a test drill, without the alerts check.
+  - it: renders no alerts template or ExternalSecret in preprod
     template: analysistemplate.yaml
-    documentIndex: 2
     set:
       <<: *prod
       environment:
         name: preprod
     asserts:
-      - isKind:
-          of: AnalysisTemplate
+      - hasDocuments:
+          count: 1
       - equal:
-          path: spec.metrics[1].provider.web.url
-          value: https://grafana.mycarrier.tech/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=true&filter=service%3D%22mycarrier%22&filter=environment%3D%22preprod%22&filter=grafana_folder%21%3D%22Platform%22
-      - matchRegex:
-          path: spec.metrics[1].failureCondition
-          pattern: '\(#\.labels\?\.environment \?\? ""\) == "preprod"'
-      - equal:
-          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2]
-          value:
-            name: ALERTS_ENVIRONMENT
-            value: preprod
+          path: metadata.name
+          value: preprod-mycarrier-api-health
+
+  - it: leaves alerts out of the canary in preprod
+    template: rollout.yaml
+    set:
+      <<: *prod
+      environment:
+        name: preprod
+    asserts:
+      - notExists:
+          path: spec.strategy.canary.analysis
 
   - it: takes analysis.alerts.service over alerts.serviceName, and applies the alerts settings
     template: analysistemplate.yaml

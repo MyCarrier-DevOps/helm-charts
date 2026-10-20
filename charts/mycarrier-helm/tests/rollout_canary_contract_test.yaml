@@ -191,12 +191,8 @@ tests:
             analysis:
               templates:
                 - templateName: preprod-test-stack-api-health
-      - equal:
+      - notExists:
           path: spec.strategy.canary.analysis
-          value:
-            startingStep: 0
-            templates:
-              - templateName: preprod-test-stack-api-alerts
       - equal:
           path: spec.strategy.canary.steps[2]
           value:
