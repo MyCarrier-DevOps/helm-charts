@@ -115,6 +115,7 @@ class AlertRulesScript(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
 
     def run_script(self, base, service="mycarrier", token="tok", url=None):
         env = dict(os.environ, ALERTS_SERVICE=service, ALERTS_ENVIRONMENT="prod",
