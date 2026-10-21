@@ -1,0 +1,81 @@
+suite: offload ApplicationSet sync options for Rollout-managed fields
+# The offload Applications get the Rollouts-safe sync wiring that DEVOPS-313 gave mc-environment
+# (charts/mc-environment/templates/appset.yaml): no Replace=true, ignoreDifferences for the fields
+# rollouts-controller and the per-deploy labels own, and the CSA->SSA managedFields migration annotation
+# when the offload renders no Jobs. Without it, selfHeal re-applied the Rollout and its Services on every
+# reconcile and the offload slot stayed OutOfSync for good (example-offload-feature20, 2026-10-20/21).
+templates:
+  - offloads.yaml
+set:
+  environment.name: "dev"
+  isEnvironmentDeploy: false
+  global.appStack: "devopstest"
+  global.language: "go"
+  applications.testapp.deploymentType: rollout
+  applications.testapp.image.registry: "myregistry.example.com"
+  applications.testapp.image.repository: "mycarrier/testapp"
+  applications.testapp.image.tag: "1.0.0"
+  applications.testapp.ports.http: 8080
+tests:
+  - it: does not use Replace=true
+    asserts:
+      - notContains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: Replace=true
+      - contains:
+          path: spec.template.spec.syncPolicy.syncOptions
+          content: ServerSideApply=true
+  - it: ignores the Rollout-managed fields like mc-environment
+    asserts:
+      - equal:
+          path: spec.template.spec.ignoreDifferences
+          value:
+            - group: ""
+              kind: Service
+              managedFieldsManagers:
+                - rollouts-controller
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
+            - group: networking.istio.io
+              kind: VirtualService
+              jqPathExpressions:
+                - '.spec.http[] | select(((.route // []) | length) > 1 and any(.route[]; (.destination.host // "") | test("-preview(\\.|$)"))) | .route[].weight'
+                - '.spec.http[] | select(.name == "canary-header")'
+            - group: autoscaling
+              kind: HorizontalPodAutoscaler
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
+                - /metadata/labels/version
+                - /metadata/labels/mycarrier~1service-version
+            - group: keda.sh
+              kind: ScaledObject
+              jsonPointers:
+                - /metadata/labels/mycarrier.tech~1correlationId
+                - /metadata/labels/mycarrier.tech~1commitDeployed
+                - /metadata/labels/mycarrier.tech~1reference
+                - /metadata/labels/version
+                - /metadata/labels/mycarrier~1service-version
+  - it: renders the CSA migration annotation when the offload has no jobs
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]
+          value: argocd-application-controller
+      - equal:
+          path: spec.template.metadata.annotations["notifications.argoproj.io/subscribe.on-deployed.deploy-reporter"]
+          value: ""
+  - it: omits the CSA migration annotation when the offload renders jobs
+    set:
+      jobs:
+        - name: db-migration
+          timing: pre-deploy
+          image:
+            registry: myregistry.example.com
+            repository: mycarrier/db-migration
+            tag: "1.0.0"
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/client-side-apply-migration-manager"]

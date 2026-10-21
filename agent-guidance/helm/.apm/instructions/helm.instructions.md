@@ -699,7 +699,7 @@ Never change `deploymentType` in one release: Argo CD prunes the old workload be
 In release 1 the chart renders both workloads: the Rollout borrows the Deployment's pod template (`workloadRef` with `scaleDown: never`) and a bare canary, both sets of pods serve behind the existing Services, and the HPA/KEDA autoscaler targets the workload `deploymentType` names.
 
 Before release 1:
-- The application must sync without app-level `Replace=true`. mc-environment 0.3.0 and later sync without it; feature environments from the legacy offload generator (`offloads.yaml`) still set it.
+- The application must sync without app-level `Replace=true`. mc-environment 0.3.0 and later sync without it, and so do feature environments from the offload generator (`offloads.yaml`) rendered by a mycarrier-helm version with this change: their Applications also ignore the fields rollouts-controller and the per-deploy labels own, as mc-environment's do. A feature environment keeps the chart version its stack's dev release was rendered with, so an older one still sets `Replace=true` and shows the Rollout and its Services OutOfSync until dev renders on a newer chart.
 - The autoscaler must already be on. Turning HPA/KEDA on removes `replicas` from the manifest, so the workload drops to 1 pod until the autoscaler scales it; do that in an earlier release.
 
 Before release 2:
