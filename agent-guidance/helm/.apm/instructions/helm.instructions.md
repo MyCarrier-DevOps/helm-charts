@@ -947,8 +947,8 @@ The trigger Job's pod carries the application's labels, except `app.kubernetes.i
 | `testdefinitions[].secretId` | Auth secret (vault ref) | Required |
 | `testdefinitions[].serviceAddress` | Override target service address | Auto: `http://<fullname>.<ns>.svc.cluster.local:<ports.http>` |
 | `testdefinitions[].additionalEnvVars` | Extra env vars for test container | `""` (format: `key1=value1;key2=value2`) |
-| `testdefinitions[].resultsApiKey` | autotest-results-api key, as `AUTOTEST_RESULTS_API_KEY` on the test container. Must be a `vault:` reference: a literal value fails the render. Set together with `resultsApiUrl` | Not set |
-| `testdefinitions[].resultsApiUrl` | autotest-results-api base URL, a `vault:` reference or an absolute `https` URL, as `AUTOTEST_RESULTS_API_URL` on the test container. Set together with `resultsApiKey`: one without the other fails the render. No default | Not set |
+| `testdefinitions[].resultsApiKey` | autotest-results-api key, as `AUTOTEST_RESULTS_API_KEY` on the test container: `vault:DevOps/data/autotestresults_api/api#key`, the key the results API reads. Must be a `vault:` reference: a literal value fails the render. Set together with `resultsApiUrl` | Not set |
+| `testdefinitions[].resultsApiUrl` | autotest-results-api base URL, as `AUTOTEST_RESULTS_API_URL` on the test container: `vault:QA/data/autotestresults_api#url`, or an `https` URL under `mycarrier.tech` with no user info (the schema refuses anything else). Set together with `resultsApiKey`: one without the other fails the render. No default | Not set |
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
 | `testdefinitions[].hardenedSecurityContext` | Run the test pod non-root with a read-only root filesystem | `true` |
 

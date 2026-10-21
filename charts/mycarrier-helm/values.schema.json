@@ -459,8 +459,8 @@
                     },
                     "resultsApiUrl": {
                       "type": "string",
-                      "pattern": "^(https://[^/@ ]+(/.*)?|vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?)$",
-                      "description": "autotest-results-api base URL: a vault reference or an absolute https URL with no user info, set on the test container as AUTOTEST_RESULTS_API_URL. Set together with resultsApiKey or not at all"
+                      "pattern": "^((https://[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.mycarrier\\.tech(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?)|(vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?))?$",
+                      "description": "autotest-results-api base URL: a vault reference, or an https URL under mycarrier.tech with no user info, set on the test container as AUTOTEST_RESULTS_API_URL. Set together with resultsApiKey or not at all"
                     },
                     "resultsApiKey": {
                       "type": "string",
