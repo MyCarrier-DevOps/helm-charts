@@ -460,7 +460,7 @@
                     "resultsApiUrl": {
                       "type": "string",
                       "pattern": "^https://[^/@ ]+(/.*)?$",
-                      "description": "autotest-results-api base URL (absolute https, no user info), set on the test container as AUTOTEST_RESULTS_API_URL. Needs resultsApiKey. Defaults to https://autotest-results-api.api.mycarrier.tech when resultsApiKey is set"
+                      "description": "autotest-results-api base URL (absolute https, no user info), set on the test container as AUTOTEST_RESULTS_API_URL. Needs resultsApiKey. When only the key is set, TestEngine uses its default URL"
                     },
                     "resultsApiKey": {
                       "type": "string",

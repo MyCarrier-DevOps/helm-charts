@@ -2045,7 +2045,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApi(Url|Key)"'
 
-  - it: should send the results API key and default its URL to the production API
+  - it: should send the results API key alone and leave the URL to TestEngine
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -2072,9 +2072,9 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
-      - matchRegex:
+      - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiUrl":\s*"https://autotest-results-api\.api\.mycarrier\.tech"'
+          pattern: '"ResultsApiUrl"'
 
   - it: should keep a results API URL that is set
     set:
@@ -2133,9 +2133,9 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
-      - matchRegex:
+      - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiUrl":\s*"https://autotest-results-api\.api\.mycarrier\.tech"'
+          pattern: '"ResultsApiUrl"'
 
   - it: should not send the results API settings on the v1 path when they are not set
     set:

@@ -112,9 +112,6 @@ template:
           {{- end }}
           {{- $resultsApiKey := .resultsApiKey | default "" }}
           {{- $resultsApiUrl := .resultsApiUrl | default "" }}
-          {{- if and $resultsApiKey (not $resultsApiUrl) }}
-            {{- $resultsApiUrl = "https://autotest-results-api.api.mycarrier.tech" }}
-          {{- end }}
           {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
           {{- if $resultsApiUrl }}{{- $_ := set $testEnv "ResultsApiUrl" $resultsApiUrl }}{{- end }}
           {{- if $resultsApiKey }}{{- $_ := set $testEnv "ResultsApiKey" $resultsApiKey }}{{- end }}
@@ -166,9 +163,6 @@ template:
           {{- end }}
           {{- $resultsApiKey := .resultsApiKey | default "" }}
           {{- $resultsApiUrl := .resultsApiUrl | default "" }}
-          {{- if and $resultsApiKey (not $resultsApiUrl) }}
-            {{- $resultsApiUrl = "https://autotest-results-api.api.mycarrier.tech" }}
-          {{- end }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
             --max-time 60 \
             -X POST \
