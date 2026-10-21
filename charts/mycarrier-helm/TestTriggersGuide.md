@@ -107,7 +107,7 @@ Each test definition under `testdefinitions` supports the following parameters:
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
 | `releaseDefinitionName` | Optional release definition name - overrides default value = stack-component | No | stack-compoent | `"somestack-somecomponent"`
 | `additionalEnvVars` | Additional environment variables to pass to container as key-value pairs delimited by colon | No | `""` | `"key1=value1;key2=value2"` |
-| `resultsApiKey` | autotest-results-api key, set on the test container as `AUTOTEST_RESULTS_API_KEY`. Use a vault reference, never the key itself | No | None (the variable is not set) | `"vault:QA/data/autotests_results_api#ApiKey"` |
+| `resultsApiKey` | autotest-results-api key, set on the test container as `AUTOTEST_RESULTS_API_KEY`. Use a vault reference, never the key itself | No | None (the variable is not set) | `"vault:DevOps/data/autotestresults_api/api#key"` |
 | `resultsApiUrl` | autotest-results-api base URL, set on the test container as `AUTOTEST_RESULTS_API_URL` | No | `"https://autotest-results-api.api.mycarrier.tech"` when `resultsApiKey` is set, otherwise not set | `"https://autotest-results-api-test.api.mycarrier.tech"` |
 | `legacyMode` | Enable legacy mode for test execution. Accepts boolean or string. | No | `false` | `true` |
 | `tolerations` | Tolerations for test pods scheduled by the test engine | No | Spot instance toleration* | See example below |
