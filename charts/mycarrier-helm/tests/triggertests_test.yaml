@@ -2170,6 +2170,65 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApiUrl":\s*"https://autotest-results-api-test\.api\.mycarrier\.tech"'
 
+  - it: should send a versioned results API key reference
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key#1"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key#1"'
+
+  - it: should send a versioned results API key reference on the v1 path
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key#1"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key#1"'
+
   - it: should fail the render for a results API key without a URL
     set:
       fullnameOverride: app

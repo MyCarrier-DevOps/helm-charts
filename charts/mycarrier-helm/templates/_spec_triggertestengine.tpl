@@ -104,12 +104,7 @@ template:
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
-          {{- if and .resultsApiKey (not (regexMatch "^vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?$" .resultsApiKey)) }}
-            {{- fail (printf "test definition '%s' of '%s': resultsApiKey must be a vault reference, never the key itself" .name $fullName) }}
-          {{- end }}
-          {{- if ne (empty .resultsApiUrl) (empty .resultsApiKey) }}
-            {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" .name $fullName) }}
-          {{- end }}
+          {{- include "helm.testtrigger.validateResultsApi" (dict "def" . "fullName" $fullName) }}
           {{- $resultsApiKey := .resultsApiKey | default "" }}
           {{- $resultsApiUrl := .resultsApiUrl | default "" }}
           {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
@@ -155,12 +150,7 @@ template:
           {{- end }}
           {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
           {{- $podResources := .podResources | default $defaultPodResources }}
-          {{- if and .resultsApiKey (not (regexMatch "^vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?$" .resultsApiKey)) }}
-            {{- fail (printf "test definition '%s' of '%s': resultsApiKey must be a vault reference, never the key itself" .name $fullName) }}
-          {{- end }}
-          {{- if ne (empty .resultsApiUrl) (empty .resultsApiKey) }}
-            {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" .name $fullName) }}
-          {{- end }}
+          {{- include "helm.testtrigger.validateResultsApi" (dict "def" . "fullName" $fullName) }}
           {{- $resultsApiKey := .resultsApiKey | default "" }}
           {{- $resultsApiUrl := .resultsApiUrl | default "" }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
@@ -206,5 +196,22 @@ template:
             fi
             exit 0
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
+{{- end }}
+{{- end }}
+
+{{/*
+Checks a test definition's results API settings, for both the v1 and the legacy path: the key and the URL
+go together, and the key is a whole-value vault reference. The error names the field, never the value, so
+a literal key does not reach the render log; that is why the key is not checked in values.schema.json.
+The vault reference pattern is also the vault branch of the resultsApiUrl pattern in values.schema.json:
+change both together.
+*/}}
+{{- define "helm.testtrigger.validateResultsApi" -}}
+{{- $def := .def }}
+{{- if and $def.resultsApiKey (not (regexMatch "^vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?$" $def.resultsApiKey)) }}
+  {{- fail (printf "test definition '%s' of '%s': resultsApiKey must be a vault reference, never the key itself" $def.name .fullName) }}
+{{- end }}
+{{- if ne (empty $def.resultsApiUrl) (empty $def.resultsApiKey) }}
+  {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" $def.name .fullName) }}
 {{- end }}
 {{- end }}
