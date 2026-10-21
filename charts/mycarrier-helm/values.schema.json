@@ -459,11 +459,12 @@
                     },
                     "resultsApiUrl": {
                       "type": "string",
-                      "description": "autotest-results-api base URL, set on the test container as AUTOTEST_RESULTS_API_URL. Defaults to https://autotest-results-api.api.mycarrier.tech when resultsApiKey is set"
+                      "pattern": "^https://[^/@ ]+(/.*)?$",
+                      "description": "autotest-results-api base URL (absolute https, no user info), set on the test container as AUTOTEST_RESULTS_API_URL. Needs resultsApiKey. Defaults to https://autotest-results-api.api.mycarrier.tech when resultsApiKey is set"
                     },
                     "resultsApiKey": {
                       "type": "string",
-                      "description": "autotest-results-api key, set on the test container as AUTOTEST_RESULTS_API_KEY. Use a vault reference, never the key itself"
+                      "description": "vault reference to the autotest-results-api key (a literal key is refused), set on the test container as AUTOTEST_RESULTS_API_KEY"
                     },
                     "tolerations": {
                       "type": "array",

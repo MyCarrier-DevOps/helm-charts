@@ -2164,3 +2164,131 @@ tests:
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApi(Url|Key)"'
+
+  - it: should fail the render for a results API URL without a key
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiUrl: "https://autotest-results-api-test.api.mycarrier.tech"
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiUrl needs resultsApiKey"
+
+  - it: should fail the render for a results API URL without a key on the v1 path
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiUrl: "https://autotest-results-api-test.api.mycarrier.tech"
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiUrl needs resultsApiKey"
+
+  - it: should fail the render for a literal results API key
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "plain-results-api-key"
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiKey must be a vault reference"
+
+  - it: should fail the render for a literal results API key on the v1 path
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "plain-results-api-key"
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiKey must be a vault reference"
+
+  - it: should refuse a results API URL that is not https
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
+                resultsApiUrl: "http://autotest-results-api.api.mycarrier.tech"
+    asserts:
+      - failedTemplate:
+          errorPattern: "does not match pattern"
