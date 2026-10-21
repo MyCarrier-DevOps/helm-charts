@@ -6,7 +6,7 @@ Namespace-scoped Istio `Sidecar` resources for the dev cluster. One `default` Si
 
 | Key | Default | Meaning |
 |---|---|---|
-| `strict` | `false` | CI passes `--set strict=true`: any bad input fails the render. ArgoCD never sets it: bad input is skipped and the render never fails. |
+| `strict` | `false` | Use `--set strict=true` for local render checks (`helm template ... --set strict=true`): any bad input fails the render. ArgoCD never sets it: it renders lenient, bad input is skipped and the render never fails. |
 | `sharedHosts` | five hosts | Hosts of the `dev` Sidecar. `<name>/*` is appended for every valid feature entry. |
 | `featureHosts` | six hosts, with `dev/*` | Hosts of every feature Sidecar. |
 | `dev.enabled` | `false` | Renders the `dev` Sidecar. Must be a boolean. |
@@ -26,7 +26,7 @@ All Sidecars carry `Prune=false`. Removing a name, or setting `sidecar: false`, 
 
 ## 3. Blind spot (G18)
 
-A typo committed by a direct push is skipped silently in lenient mode, and nothing alerts. Because of `Prune=false`, a skipped typo leaves the old Sidecar live and stale (OutOfSync, pending prune). The PR check (`strict=true`) is the only detection, and it runs only when the values file is edited through a PR. There is no detection job and no alert.
+A typo committed by a direct push is skipped silently in lenient mode, and nothing alerts. Because of `Prune=false`, a skipped typo leaves the old Sidecar live and stale (OutOfSync, pending prune). There is no automated check of the values file: no PR check, no workflow and no detection job. A bad entry is skipped silently and nothing alerts. A YAML syntax error stalls dev `bootstrap-base` until it is reverted (section 6). The only way to find a bad entry is a local render with `helm template ... --set strict=true` before you push.
 
 ## 4. Paths that must not change
 
