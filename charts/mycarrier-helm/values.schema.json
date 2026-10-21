@@ -459,12 +459,12 @@
                     },
                     "resultsApiUrl": {
                       "type": "string",
-                      "pattern": "^https://[^/@ ]+(/.*)?$",
-                      "description": "autotest-results-api base URL (absolute https, no user info), set on the test container as AUTOTEST_RESULTS_API_URL. Needs resultsApiKey. When only the key is set, TestEngine uses its default URL"
+                      "pattern": "^(https://[^/@ ]+(/.*)?|vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?)$",
+                      "description": "autotest-results-api base URL: a vault reference or an absolute https URL with no user info, set on the test container as AUTOTEST_RESULTS_API_URL. Set together with resultsApiKey or not at all"
                     },
                     "resultsApiKey": {
                       "type": "string",
-                      "description": "vault reference to the autotest-results-api key (a literal key is refused), set on the test container as AUTOTEST_RESULTS_API_KEY"
+                      "description": "vault reference to the autotest-results-api key (a literal key is refused), set on the test container as AUTOTEST_RESULTS_API_KEY. Set together with resultsApiUrl or not at all"
                     },
                     "tolerations": {
                       "type": "array",

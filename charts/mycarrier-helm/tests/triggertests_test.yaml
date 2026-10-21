@@ -2045,98 +2045,6 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApi(Url|Key)"'
 
-  - it: should send the results API key alone and leave the URL to TestEngine
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
-    asserts:
-      - isKind:
-          of: Job
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiUrl"'
-
-  - it: should keep a results API URL that is set
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
-                resultsApiUrl: "https://autotest-results-api-test.api.mycarrier.tech"
-    asserts:
-      - isKind:
-          of: Job
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiUrl":\s*"https://autotest-results-api-test\.api\.mycarrier\.tech"'
-
-  - it: should send the results API settings on the v1 path
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            ttlSecondsAfterFinished: "300"
-            enableV1: true
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
-    asserts:
-      - isKind:
-          of: Job
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiUrl"'
-
   - it: should not send the results API settings on the v1 path when they are not set
     set:
       fullnameOverride: app
@@ -2165,7 +2073,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApi(Url|Key)"'
 
-  - it: should fail the render for a results API URL without a key
+  - it: should send the results API key and URL
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -2185,12 +2093,19 @@ tests:
                 containerImage: "alpine/curl"
                 containerTag: "latest"
                 secretId: "vault:Secret/data/secret#SecretId"
-                resultsApiUrl: "https://autotest-results-api-test.api.mycarrier.tech"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
     asserts:
-      - failedTemplate:
-          errorPattern: "resultsApiUrl needs resultsApiKey"
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiUrl":\s*"vault:QA/data/autotestresults_api#url"'
 
-  - it: should fail the render for a results API URL without a key on the v1 path
+  - it: should send the results API key and URL on the v1 path
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -2211,10 +2126,122 @@ tests:
                 containerImage: "alpine/curl"
                 containerTag: "latest"
                 secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiUrl":\s*"vault:QA/data/autotestresults_api#url"'
+
+  - it: should send an https results API URL as given
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
                 resultsApiUrl: "https://autotest-results-api-test.api.mycarrier.tech"
     asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiUrl":\s*"https://autotest-results-api-test\.api\.mycarrier\.tech"'
+
+  - it: should fail the render for a results API key without a URL
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
+    asserts:
       - failedTemplate:
-          errorPattern: "resultsApiUrl needs resultsApiKey"
+          errorPattern: "resultsApiKey and resultsApiUrl go together"
+
+  - it: should fail the render for a results API key without a URL on the v1 path
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            enableV1: true
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiKey and resultsApiUrl go together"
+
+  - it: should fail the render for a results API URL without a key
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiKey and resultsApiUrl go together"
 
   - it: should fail the render for a literal results API key
     set:
@@ -2237,6 +2264,7 @@ tests:
                 containerTag: "latest"
                 secretId: "vault:Secret/data/secret#SecretId"
                 resultsApiKey: "plain-results-api-key"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
     asserts:
       - failedTemplate:
           errorPattern: "resultsApiKey must be a vault reference"
@@ -2263,11 +2291,12 @@ tests:
                 containerTag: "latest"
                 secretId: "vault:Secret/data/secret#SecretId"
                 resultsApiKey: "plain-results-api-key"
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
     asserts:
       - failedTemplate:
           errorPattern: "resultsApiKey must be a vault reference"
 
-  - it: should refuse a results API URL that is not https
+  - it: should refuse a results API URL that is neither a vault reference nor https
     set:
       fullnameOverride: app
       namespace: dev-app

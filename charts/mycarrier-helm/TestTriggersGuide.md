@@ -45,7 +45,7 @@ applications:
           serviceAddress: "<optional-service-address>"
           additionalEnvVars: "key1=value1;key2=value2"
           resultsApiKey: "<optional-vault-reference-to-the-results-api-key>"
-          resultsApiUrl: "<optional-results-api-url>"
+          resultsApiUrl: "<vault-reference-or-https-url, set together with resultsApiKey>"
           legacyMode: <true|false>
           useDefaultNodeAffinity: <true|false>
           spreadAcrossNodes: <true|false>
@@ -107,8 +107,8 @@ Each test definition under `testdefinitions` supports the following parameters:
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
 | `releaseDefinitionName` | Optional release definition name - overrides default value = stack-component | No | stack-compoent | `"somestack-somecomponent"`
 | `additionalEnvVars` | Additional environment variables to pass to container as key-value pairs delimited by colon | No | `""` | `"key1=value1;key2=value2"` |
-| `resultsApiKey` | Vault reference to the autotest-results-api key, set on the test container as `AUTOTEST_RESULTS_API_KEY`. A value that is not a `vault:` reference fails the render, so the key itself never goes in a values file | No | None (the variable is not set) | `"vault:DevOps/data/autotestresults_api/api#key"` |
-| `resultsApiUrl` | autotest-results-api base URL (absolute `https`), set on the test container as `AUTOTEST_RESULTS_API_URL`. Needs `resultsApiKey`: a URL without a key fails the render, since the test uploads only when both are set | No | Not set (TestEngine uses its default URL when only `resultsApiKey` is set) | `"https://autotest-results-api-test.api.mycarrier.tech"` |
+| `resultsApiKey` | Vault reference to the autotest-results-api key, set on the test container as `AUTOTEST_RESULTS_API_KEY`. A value that is not a `vault:` reference fails the render, so the key itself never goes in a values file. Set together with `resultsApiUrl`, or not at all | No | None (the variable is not set) | `"vault:DevOps/data/autotestresults_api/api#key"` |
+| `resultsApiUrl` | autotest-results-api base URL, a `vault:` reference or an absolute `https` URL, set on the test container as `AUTOTEST_RESULTS_API_URL`. Set together with `resultsApiKey`: one without the other fails the render, since the test uploads only when both are set. There is no default | No | None (the variable is not set) | `"vault:QA/data/autotestresults_api#url"` |
 | `legacyMode` | Enable legacy mode for test execution. Accepts boolean or string. | No | `false` | `true` |
 | `tolerations` | Tolerations for test pods scheduled by the test engine | No | Spot instance toleration* | See example below |
 | `nodeAffinity` | Node affinity rules for test pods scheduled by the test engine | No | `[]` (empty array) | See example below |

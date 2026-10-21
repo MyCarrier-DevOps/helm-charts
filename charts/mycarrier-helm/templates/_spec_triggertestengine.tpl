@@ -107,8 +107,8 @@ template:
           {{- if and .resultsApiKey (not (regexMatch "^vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?$" .resultsApiKey)) }}
             {{- fail (printf "test definition '%s' of '%s': resultsApiKey must be a vault reference, never the key itself" .name $fullName) }}
           {{- end }}
-          {{- if and .resultsApiUrl (not .resultsApiKey) }}
-            {{- fail (printf "test definition '%s' of '%s': resultsApiUrl needs resultsApiKey; the test container uploads results only when both are set" .name $fullName) }}
+          {{- if ne (empty .resultsApiUrl) (empty .resultsApiKey) }}
+            {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" .name $fullName) }}
           {{- end }}
           {{- $resultsApiKey := .resultsApiKey | default "" }}
           {{- $resultsApiUrl := .resultsApiUrl | default "" }}
@@ -158,8 +158,8 @@ template:
           {{- if and .resultsApiKey (not (regexMatch "^vault:[A-Za-z0-9_./-]+#[A-Za-z0-9_.-]+(#[0-9]+)?$" .resultsApiKey)) }}
             {{- fail (printf "test definition '%s' of '%s': resultsApiKey must be a vault reference, never the key itself" .name $fullName) }}
           {{- end }}
-          {{- if and .resultsApiUrl (not .resultsApiKey) }}
-            {{- fail (printf "test definition '%s' of '%s': resultsApiUrl needs resultsApiKey; the test container uploads results only when both are set" .name $fullName) }}
+          {{- if ne (empty .resultsApiUrl) (empty .resultsApiKey) }}
+            {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" .name $fullName) }}
           {{- end }}
           {{- $resultsApiKey := .resultsApiKey | default "" }}
           {{- $resultsApiUrl := .resultsApiUrl | default "" }}
