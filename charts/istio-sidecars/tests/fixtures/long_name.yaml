@@ -1,0 +1,5 @@
+featureNamespaces:
+  - name: feature01-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - name: feature11
+dev:
+  enabled: true

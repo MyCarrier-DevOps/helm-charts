@@ -1,0 +1,962 @@
+suite: validation strict and lenient
+templates:
+  - templates/sidecar-feature.yaml
+  - templates/sidecar-dev.yaml
+tests:
+  - it: "[N-4] strict duplicate feature05 fails naming it"
+    values:
+      - fixtures/dup_feature05.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature05"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-5] strict bad name Feature05 fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "Feature05"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "Feature05"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-5] strict bad name feature5 fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature5"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature5"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-5] strict bad name feature05_x fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature05_x"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature05_x"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-5] strict bad name featureAB fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "featureAB"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "featureAB"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-5] strict bad name staging fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "staging"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "staging"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name dev fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "dev"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "dev"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name preprod fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "preprod"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "preprod"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name uat fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "uat"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "uat"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name qa fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "qa"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "qa"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name istio-system fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "istio-system"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "istio\\-system"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name kube-system fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "kube-system"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "kube\\-system"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name default fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "default"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "default"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-6] strict reserved name monitoring fails naming it"
+    set: {"strict": true, "featureNamespaces": [{"name": "monitoring"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "monitoring"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-7] strict sidecar string false fails"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature12", "sidecar": "false"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature12"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-7] strict sidecar 0 (number) fails"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature13", "sidecar": 0}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature13"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-7] lenient non-boolean flags: no Sidecar for them, host kept, feature14 rendered"
+    values:
+      - fixtures/bad_flags.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature14"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature12/*", "feature13/*", "feature14/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-8] strict extraHosts '' fails"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature15", "extraHosts": [""]}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature15"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-8] strict extraHosts '*/*' fails"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature15", "extraHosts": ["*/*"]}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature15"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-8] strict extraHosts 'feature*/*' fails"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature15", "extraHosts": ["feature*/*"]}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature15"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-8] strict extraHosts 'dev/*' fails"
+    set: {"strict": true, "featureNamespaces": [{"name": "feature15", "extraHosts": ["dev/*"]}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature15"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-8] lenient invalid extraHosts dropped: feature15 keeps the six feature hosts"
+    values:
+      - fixtures/bad_extrahosts.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature15"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature16"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature15/*", "feature16/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-8] lenient dropped extraHosts leave exact feature hosts"
+    values:
+      - fixtures/bad_extrahosts.yaml
+    asserts:
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+
+  - it: "[N-9] lenient N-4 duplicate fixture: feature05 and feature06 once each"
+    values:
+      - fixtures/dup_feature05.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature05"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature06"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature05/*", "feature06/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-5 bad-name fixture: only feature11 renders, no bad host"
+    values:
+      - fixtures/bad_names.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature11"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature11/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-6 reserved-name fixture: only feature11 renders"
+    values:
+      - fixtures/reserved_names.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature11"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature11/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-7 flag fixture"
+    values:
+      - fixtures/bad_flags.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature14"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature12/*", "feature13/*", "feature14/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-8 extraHosts fixture"
+    values:
+      - fixtures/bad_extrahosts.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature15"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature16"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 1
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature15/*", "feature16/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-14 shape-entries fixture: only feature65"
+    values:
+      - fixtures/shape_entries.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature65"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature65/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-14 null-at-index-1 fixture"
+    values:
+      - fixtures/shape_null_entry_index1.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature65"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature65/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-15 scalar featureNamespaces fixture"
+    values:
+      - fixtures/fn_scalar.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-15 map featureNamespaces fixture"
+    values:
+      - fixtures/fn_map.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-15 null featureNamespaces fixture"
+    values:
+      - fixtures/fn_null.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-16 dev true fixture"
+    values:
+      - fixtures/dev_true.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature20"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+
+  - it: "[N-9] lenient N-16 dev enabled yes fixture"
+    values:
+      - fixtures/dev_enabled_yes.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature20"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+
+  - it: "[N-9] lenient N-16 dev null fixture"
+    values:
+      - fixtures/dev_null.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature20"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+
+  - it: "[N-9] lenient N-16 dev absent fixture"
+    values:
+      - fixtures/dev_absent.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature20"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+
+  - it: "[N-9] lenient N-17 name-type fixture: only feature73"
+    values:
+      - fixtures/bad_name_types.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature73"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature73/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-17 scalar extraHosts fixture: feature70 rendered"
+    values:
+      - fixtures/extrahosts_scalar.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature70"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature70/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-9] lenient N-17 non-string extraHosts fixture: feature72 rendered"
+    values:
+      - fixtures/extrahosts_nonstring.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature72"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature72/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-14] strict plain string at index 0 fails naming index 0"
+    values:
+      - fixtures/shape_entries.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "\\b0\\b"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-14] strict null entry at index 1 fails naming index 1"
+    values:
+      - fixtures/shape_null_entry_index1.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "\\b1\\b"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-14] lenient: no feature64 Sidecar, no feature64/* host, feature65 rendered"
+    values:
+      - fixtures/shape_entries.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature65"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - notContains:
+          path: spec.egress[0].hosts
+          content: "feature64/*"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.egress[0].hosts
+          content: "feature65/*"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-15] strict scalar featureNamespaces fails"
+    values:
+      - fixtures/fn_scalar.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "featureNamespaces"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-15] strict map featureNamespaces fails"
+    values:
+      - fixtures/fn_map.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "featureNamespaces"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-15] lenient fn_scalar: zero feature Sidecars, dev Sidecar with shared five hosts"
+    values:
+      - fixtures/fn_scalar.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-15] lenient fn_map: zero feature Sidecars, dev Sidecar with shared five hosts"
+    values:
+      - fixtures/fn_map.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-15] lenient fn_null: zero feature Sidecars, dev Sidecar with shared five hosts"
+    values:
+      - fixtures/fn_null.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-16] strict dev true fails"
+    values:
+      - fixtures/dev_true.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "dev"
+        template: templates/sidecar-dev.yaml
+
+  - it: "[N-16] strict dev.enabled string yes fails"
+    values:
+      - fixtures/dev_enabled_yes.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "dev"
+        template: templates/sidecar-dev.yaml
+
+  - it: "[N-16] lenient dev_true: no dev Sidecar, exit 0"
+    values:
+      - fixtures/dev_true.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-16] lenient dev_enabled_yes: no dev Sidecar, exit 0"
+    values:
+      - fixtures/dev_enabled_yes.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-16] lenient dev_null: no dev Sidecar, exit 0"
+    values:
+      - fixtures/dev_null.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-16] lenient dev_absent: no dev Sidecar, exit 0"
+    values:
+      - fixtures/dev_absent.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] strict entry with name 5 fails"
+    set: {"strict": true, "featureNamespaces": [{"name": 5}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)name|index 0"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] strict entry with name list fails"
+    set: {"strict": true, "featureNamespaces": [{"name": ["a"]}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)name|index 0"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] strict entry with name null fails"
+    set: {"strict": true, "featureNamespaces": [{"name": null}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)name|index 0"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] strict entry with empty map fails"
+    set: {"strict": true, "featureNamespaces": [{}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "(?i)name|index 0"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] strict scalar extraHosts fails"
+    values:
+      - fixtures/extrahosts_scalar.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraHosts|feature70"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] strict non-string extraHosts fails"
+    values:
+      - fixtures/extrahosts_nonstring.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraHosts|feature72"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[N-17] lenient bad-name-type entries skipped, no host; feature73 only"
+    values:
+      - fixtures/bad_name_types.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature73"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature73/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-17] lenient scalar extraHosts dropped, feature70 rendered with feature hosts"
+    values:
+      - fixtures/extrahosts_scalar.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature70"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - notContains:
+          path: spec.egress[0].hosts
+          content: "feature71/*"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-17] lenient non-string extraHosts dropped, feature72 rendered with feature hosts"
+    values:
+      - fixtures/extrahosts_nonstring.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature72"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[E-3] strict 70-character name fails"
+    values:
+      - fixtures/long_name.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature01-a{60}|feature01-aaaa"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-3] lenient 70-character name skipped, feature11 rendered"
+    values:
+      - fixtures/long_name.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature11"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[E-4] strict duplicate false/true fails"
+    values:
+      - fixtures/dup_false_true.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature05"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-4] strict duplicate true/false fails"
+    values:
+      - fixtures/dup_true_false.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "feature05"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-9] strict plain string first fails"
+    values:
+      - fixtures/plain_string_first.yaml
+    set: {"strict": true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "\\b0\\b"
+        template: templates/sidecar-feature.yaml
+

@@ -1,0 +1,40 @@
+# DEVOPS-389: namespace-scoped egress for the dev cluster.
+#
+# Measured on feature21 (commit 8059d28b5f): istio-proxy memory p50 457Mi -> 264Mi (-42%),
+# p99 518Mi -> 284Mi (-45%), zero regressions, all 162 <svc>.dev.internal clusters kept.
+#
+# featureHosts keeps dev/* on purpose: the EnvoyDevFallback path lets a feature environment reach
+# ANY dev service through <svc>.dev.internal on demand, so a narrower scope breaks the first time
+# an unobserved service is requested.
+#
+# spec.outboundTrafficPolicy is NOT set anywhere. The mesh default ALLOW_ANY must stay: most
+# egress is raw-IP / non-HTTP TCP to off-mesh infra (OTel collectors on :4317, Azure IMDS), which
+# REGISTRY_ONLY would blackhole.
+#
+# Rollback is a git revert of the values change. Every Sidecar carries Prune=false, so a revert
+# does not delete a live Sidecar: see README.md (manual delete).
+#
+# MAINTENANCE HAZARD: the dev Sidecar lists every feature namespace (Istio egress.hosts has no
+# namespace wildcard). A feature namespace missing from featureNamespaces makes dev -> that
+# namespace fall to PassthroughCluster silently. Detect with: PassthroughCluster rows from ns=dev
+# whose authority matches %.svc.cluster.local% or %.internal% (baseline 0).
+# Full rules in README.md.
+
+# CI passes --set strict=true; ArgoCD never sets it. Strict fails on any bad input; lenient
+# (default) skips the bad entry and never fails.
+strict: false
+
+# Hosts of the dev namespace Sidecar (feature namespace hosts are appended).
+sharedHosts: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+
+# Hosts of every feature namespace Sidecar (dev/* is deliberate, see above).
+featureHosts: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+
+dev:
+  enabled: false
+
+# Entries: {name: feature21, sidecar: true, extraHosts: [...]}
+#   name        required, ^feature[0-9]{2}(-[a-z0-9]+)?$, at most 63 characters, not reserved
+#   sidecar     optional boolean, default true; false = no feature Sidecar, dev host kept
+#   extraHosts  optional list of extra "<namespace>/*" hosts for this entry's Sidecar
+featureNamespaces: []

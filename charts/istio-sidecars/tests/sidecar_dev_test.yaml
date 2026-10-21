@@ -1,0 +1,205 @@
+suite: dev sidecar
+templates:
+  - templates/sidecar-dev.yaml
+tests:
+  - it: "[P-3] single edit adds feature99/* to the dev hosts; dev annotation set"
+    values:
+      - fixtures/feature99_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: metadata.namespace
+          value: "dev"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: "Sidecar"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: apiVersion
+          value: "networking.istio.io/v1"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Prune=false"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.egress[0].hosts
+          content: "feature99/*"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature99/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[P-3] dev Sidecar has no workloadSelector or outboundTrafficPolicy"
+    values:
+      - fixtures/feature99_dev.yaml
+    asserts:
+      - notExists:
+          path: spec.workloadSelector
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - notExists:
+          path: spec.outboundTrafficPolicy
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[P-7] dev Sidecar namespace is dev under --namespace foo"
+    values:
+      - fixtures/feature99_dev.yaml
+    release:
+      namespace: foo
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: metadata.namespace
+          value: "dev"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[P-7] dev Sidecar namespace is dev under --namespace bar"
+    values:
+      - fixtures/feature99_dev.yaml
+    release:
+      namespace: bar
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: metadata.namespace
+          value: "dev"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[N-2] sidecar false entry still gets its dev host"
+    values:
+      - fixtures/sidecar_false_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - contains:
+          path: spec.egress[0].hosts
+          content: "feature10/*"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature10/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-1] empty featureNamespaces: dev Sidecar with the shared five hosts"
+    values:
+      - fixtures/empty_list_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Prune=false"
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-8] only dev.enabled: shared five hosts (lenient)"
+    values:
+      - fixtures/only_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-8] only dev.enabled: shared five hosts (strict)"
+    values:
+      - fixtures/only_dev.yaml
+    set: {"strict": true}
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-4] lenient duplicate false/true: dev host feature05/* exactly once"
+    values:
+      - fixtures/dup_false_true.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature05/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-4] lenient duplicate true/false: dev host feature05/* exactly once"
+    values:
+      - fixtures/dup_true_false.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature05/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-9] lenient: feature05 host once, feature06 host, string not promoted"
+    values:
+      - fixtures/plain_string_first.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature05/*", "feature06/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+
+  - it: "[E-3] lenient over-long name skipped: no host; valid entry kept"
+    values:
+      - fixtures/long_name.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "istio-system/*", "default/*", "kube-system/*", "feature11/*"]
+        template: templates/sidecar-dev.yaml
+        documentIndex: 0
+

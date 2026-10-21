@@ -1,0 +1,21 @@
+{{- $m := include "istio-sidecars.model" . | fromJson -}}
+{{- $devEnabled := include "istio-sidecars.devEnabled" . | eq "true" -}}
+{{- if and $devEnabled $m.sharedHosts }}
+---
+apiVersion: networking.istio.io/v1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: dev
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=false
+spec:
+  egress:
+    - hosts:
+{{- range $m.sharedHosts }}
+        - {{ . | quote }}
+{{- end }}
+{{- range $m.entries }}
+        - {{ printf "%s/*" .name | quote }}
+{{- end }}
+{{- end }}

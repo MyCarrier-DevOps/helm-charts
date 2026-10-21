@@ -1,0 +1,146 @@
+suite: stage 6 fix round 1 (F-01 reserved names, F-02 empty and duplicate host lists)
+templates:
+  - templates/sidecar-feature.yaml
+  - templates/sidecar-dev.yaml
+tests:
+  - it: "[F01-1] strict reserved name dev is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "dev"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"dev\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-2] strict reserved name preprod is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "preprod"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"preprod\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-3] strict reserved name uat is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "uat"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"uat\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-4] strict reserved name qa is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "qa"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"qa\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-5] strict reserved name istio-system is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "istio-system"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"istio-system\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-6] strict reserved name kube-system is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "kube-system"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"kube-system\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-7] strict reserved name default is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "default"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"default\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-8] strict reserved name monitoring is reported as reserved"
+    set: {"strict": true, "featureNamespaces": [{"name": "monitoring"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "name \"monitoring\" is reserved"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-10] lenient reserved name only: no feature Sidecar"
+    set: {"featureNamespaces": [{"name": "dev"}]}
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F01-11] lenient reserved name skipped, dev host list has no default/* from the entry"
+    set:
+      dev: {"enabled": true}
+      sharedHosts: ["./*"]
+      featureNamespaces: [{"name": "default"}, {"name": "feature11"}]
+    asserts:
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "feature11/*"]
+        template: templates/sidecar-dev.yaml
+
+  - it: "[F02-1] strict empty sharedHosts fails naming sharedHosts"
+    set: {"strict": true, "dev": {"enabled": true}, "sharedHosts": [], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "sharedHosts is empty"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F02-2] strict empty featureHosts fails naming featureHosts"
+    set: {"strict": true, "featureHosts": [], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "featureHosts is empty"
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F02-3] strict duplicate sharedHosts fails naming the host"
+    set: {"strict": true, "dev": {"enabled": true}, "sharedHosts": ["./*", "monitoring/*", "./*"], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "sharedHosts index 2 is a duplicate host \"./\\*\""
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F02-4] strict duplicate featureHosts fails naming the host"
+    set: {"strict": true, "featureHosts": ["./*", "dev/*", "dev/*"], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "featureHosts index 2 is a duplicate host \"dev/\\*\""
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F02-5] lenient empty sharedHosts never fails, no dev Sidecar"
+    set: {"dev": {"enabled": true}, "sharedHosts": [], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-dev.yaml
+
+  - it: "[F02-6] lenient empty featureHosts never fails, no feature Sidecar"
+    set: {"featureHosts": [], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F02-7] lenient duplicate sharedHosts deduped, first wins"
+    set: {"dev": {"enabled": true}, "sharedHosts": ["./*", "monitoring/*", "./*"], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "monitoring/*", "feature11/*"]
+        template: templates/sidecar-dev.yaml
+
+  - it: "[F02-8] lenient duplicate featureHosts deduped, first wins"
+    set: {"featureHosts": ["./*", "dev/*", "dev/*"], "featureNamespaces": [{"name": "feature11"}]}
+    asserts:
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*"]
+        template: templates/sidecar-feature.yaml
+
+  - it: "[F02-9] strict with default hosts and empty featureNamespaces still renders 0 objects (N-18 intact)"
+    set: {"strict": true, "dev": {"enabled": true}}
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-dev.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml

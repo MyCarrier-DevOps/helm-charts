@@ -1,0 +1,7 @@
+featureNamespaces:
+  - name: feature05
+    sidecar: false
+  - name: feature05
+    sidecar: true
+dev:
+  enabled: true

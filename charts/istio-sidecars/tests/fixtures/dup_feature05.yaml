@@ -1,0 +1,6 @@
+featureNamespaces:
+  - name: feature05
+  - name: feature05
+  - name: feature06
+dev:
+  enabled: true
