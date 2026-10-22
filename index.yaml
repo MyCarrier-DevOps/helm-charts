@@ -596,6 +596,18 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/hdx-oss-v2-0.1.1/hdx-oss-v2-0.1.1.tgz
     version: 0.1.1
+  istio-sidecars:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-10-22T06:58:37.268280137Z"
+    description: Namespace-scoped Istio Sidecar resources for the dev cluster (one
+      per feature namespace plus the dev namespace)
+    digest: 669b2a48afc622cfdebd8bb76d535653fa7b2fc4a101a87bda840f7c22a553c5
+    name: istio-sidecars
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/istio-sidecars-0.1.1/istio-sidecars-0.1.1.tgz
+    version: 0.1.1
   kubedock-dns:
   - apiVersion: v2
     appVersion: 0.8.0
@@ -4739,4 +4751,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-10-20T18:50:12.46169499Z"
+generated: "2026-10-22T06:58:37.268477154Z"
