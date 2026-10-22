@@ -599,6 +599,17 @@ entries:
   istio-sidecars:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-10-22T20:06:07.046277438Z"
+    description: Namespace-scoped Istio Sidecar resources for the dev cluster (one
+      per feature namespace plus the dev namespace)
+    digest: 03a257f479b187fc0068d1f00d8574fa41242250edabfecf8e9610d1cc64fe5c
+    name: istio-sidecars
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/istio-sidecars-0.1.2/istio-sidecars-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2026-10-22T06:58:37.268280137Z"
     description: Namespace-scoped Istio Sidecar resources for the dev cluster (one
       per feature namespace plus the dev namespace)
@@ -4751,4 +4762,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-10-22T06:58:37.268477154Z"
+generated: "2026-10-22T20:06:07.046948024Z"
