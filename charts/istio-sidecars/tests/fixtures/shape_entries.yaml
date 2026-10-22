@@ -1,0 +1,6 @@
+featureNamespaces:
+  - feature64
+  - null
+  - name: feature65
+dev:
+  enabled: true

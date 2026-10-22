@@ -1,0 +1,4 @@
+featureNamespaces:
+  a: b
+dev:
+  enabled: true

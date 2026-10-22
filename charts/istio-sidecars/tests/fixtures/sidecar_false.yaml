@@ -1,0 +1,3 @@
+featureNamespaces:
+  - name: feature08
+    sidecar: false

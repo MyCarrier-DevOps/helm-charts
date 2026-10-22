@@ -1,0 +1,6 @@
+featureNamespaces:
+  - name: feature15
+    extraHosts: ["", "*/*", "feature*/*", "dev/*"]
+  - name: feature16
+dev:
+  enabled: true

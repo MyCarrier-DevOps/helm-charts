@@ -1,0 +1,4 @@
+featureNamespaces:
+  - name: feature20
+dev:
+  enabled: "yes"

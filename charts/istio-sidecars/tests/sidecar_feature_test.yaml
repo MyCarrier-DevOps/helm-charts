@@ -1,0 +1,216 @@
+suite: feature sidecars
+templates:
+  - templates/sidecar-feature.yaml
+tests:
+  - it: "[P-2] one entry feature03 renders one fully specified Sidecar"
+    values:
+      - fixtures/feature03.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: apiVersion
+          value: "networking.istio.io/v1"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: "Sidecar"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature03"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Prune=false"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - notExists:
+          path: spec.workloadSelector
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - notExists:
+          path: spec.outboundTrafficPolicy
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[P-3] feature99 with dev.enabled renders its feature Sidecar"
+    values:
+      - fixtures/feature99_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: apiVersion
+          value: "networking.istio.io/v1"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: "Sidecar"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "feature99"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: "SkipDryRunOnMissingResource=true,Prune=false"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].hosts
+          value: ["./*", "dev/*", "istio-system/*", "default/*", "kube-system/*", "monitoring/*"]
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[P-7] feature Sidecar namespace is explicit under --namespace foo"
+    values:
+      - fixtures/feature03.yaml
+    release:
+      namespace: foo
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature03"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[P-7] feature Sidecar namespace is explicit under --namespace bar"
+    values:
+      - fixtures/feature03.yaml
+    release:
+      namespace: bar
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature03"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: "default"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[N-2] sidecar false entry renders no feature Sidecar"
+    values:
+      - fixtures/sidecar_false_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-7] entry without sidecar key renders a Sidecar (default true)"
+    values:
+      - fixtures/no_sidecar_key.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature08"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[E-7] entry with sidecar false renders none"
+    values:
+      - fixtures/sidecar_false.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-4] lenient duplicate, false first: first wins, no Sidecar"
+    values:
+      - fixtures/dup_false_true.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-4] lenient duplicate, true first: first wins, one Sidecar"
+    values:
+      - fixtures/dup_true_false.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature05"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+
+  - it: "[E-8] only dev.enabled set: zero feature Sidecars (lenient)"
+    values:
+      - fixtures/only_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-8] only dev.enabled set: zero feature Sidecars (strict)"
+    values:
+      - fixtures/only_dev.yaml
+    set: {"strict": true}
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-1] empty featureNamespaces renders zero feature Sidecars"
+    values:
+      - fixtures/empty_list_dev.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/sidecar-feature.yaml
+
+  - it: "[E-9] lenient: plain string skipped, first map wins, feature06 rendered"
+    values:
+      - fixtures/plain_string_first.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/sidecar-feature.yaml
+      - equal:
+          path: metadata.namespace
+          value: "feature06"
+        template: templates/sidecar-feature.yaml
+        documentIndex: 0
+

@@ -1,0 +1,24 @@
+{{- $m := include "istio-sidecars.model" . | fromJson -}}
+{{- if $m.featureHosts -}}
+{{- range $m.entries -}}
+{{- if .sidecar }}
+---
+apiVersion: networking.istio.io/v1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: {{ .name | quote }}
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=false
+spec:
+  egress:
+    - hosts:
+{{- range $m.featureHosts }}
+        - {{ . | quote }}
+{{- end }}
+{{- range .extraHosts }}
+        - {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

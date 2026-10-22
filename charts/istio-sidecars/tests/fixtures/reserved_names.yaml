@@ -1,0 +1,12 @@
+featureNamespaces:
+  - name: dev
+  - name: preprod
+  - name: uat
+  - name: qa
+  - name: istio-system
+  - name: kube-system
+  - name: default
+  - name: monitoring
+  - name: feature11
+dev:
+  enabled: true

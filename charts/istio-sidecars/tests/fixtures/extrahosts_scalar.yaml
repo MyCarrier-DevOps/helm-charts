@@ -1,0 +1,5 @@
+featureNamespaces:
+  - name: feature70
+    extraHosts: feature71/*
+dev:
+  enabled: true
