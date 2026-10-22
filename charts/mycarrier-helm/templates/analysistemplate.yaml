@@ -12,14 +12,15 @@
 {{- $customNames := list }}
 {{- range ($appValues.analysisTemplates | default list) }}{{ $customNames = append $customNames (toString .name) }}{{ end }}
 {{- $cfg := include "helm.canary.config" $appContext | fromJson }}
-{{- /* The chart's own health template (DEVOPS-312) for a Rollout that runs canary steps with analysis on: the -preview
-       Service's health endpoint must meet analysis.health.successCondition (default result == "Healthy"), read at
-       $.status of a JSON body. Argo Rollouts up to v1.10.1 counts a 2xx body that is not JSON as Successful without
-       evaluating the condition; argo-rollouts#4770 (merged, not yet released) evaluates it on the raw body, so an app
-       whose health path serves HTML needs successCondition "true". A non-2xx answer is an error; at the default
-       consecutiveErrorLimit 1, a second error in a row aborts the canary. An applications.<app>.analysisTemplates entry named health replaces it. The URL is resolved only
-       when the check is in use, so a probe the check cannot reuse fails the render only then. */}}
-{{- $wantHealth := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "health" $cfg.analysis.templates) (not (has "health" $customNames)) }}
+{{- /* The chart's own health template (DEVOPS-312) for a Rollout that runs canary steps, unless analysis.health.enabled
+       is false: the -preview Service's health endpoint must meet analysis.health.successCondition (default
+       result == "Healthy"), read at $.status of a JSON body. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
+       JSON as Successful without evaluating the condition; argo-rollouts#4770 (merged, not yet released) evaluates it
+       on the raw body, so an app whose health path serves HTML needs successCondition "true". A non-2xx answer is an
+       error; at the default consecutiveErrorLimit 1, a second error in a row aborts the canary. An
+       applications.<app>.analysisTemplates entry named health replaces it. The URL is resolved only when the check is
+       in use, so a probe the check cannot reuse fails the render only then. */}}
+{{- $wantHealth := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.health.enabled (not (has "health" $customNames)) }}
 {{- $healthUrl := "" }}
 {{- if $wantHealth }}{{ $healthUrl = include "helm.canary.analysis.healthUrl" $appContext }}{{ end }}
 {{- if and $wantHealth $healthUrl }}
@@ -68,9 +69,9 @@ spec:
        vault-backend reads secrets). With analysis.alerts.dryRun (default true) the alerts metric also runs in Argo
        Rollouts dry run: results are recorded in the AnalysisRun's dryRunSummary and never fail the run. An
        applications.<app>.analysisTemplates entry named alerts replaces the template, in every environment, and also
-       runs as background analysis. */}}
+       runs as background analysis. analysis.alerts.enabled: false turns off both. */}}
 {{- $alertsEnvironment := include "helm.canary.alerts.environment" $appContext }}
-{{- $wantAlerts := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (not (has "alerts" $customNames)) $alertsEnvironment }}
+{{- $wantAlerts := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.alerts.enabled (not (has "alerts" $customNames)) $alertsEnvironment }}
 {{- $alertsService := "" }}
 {{- if $wantAlerts }}{{ $alertsService = include "helm.canary.alerts.service" $appContext }}{{ end }}
 {{- if and $wantAlerts $alertsService }}
@@ -208,15 +209,16 @@ spec:
 {{- end }}
 {{- /* count 0 with an interval runs indefinitely, which Argo Rollouts accepts only in background analysis: an analysis
        step that references such a template leaves the Rollout InvalidSpec. Refused only for entries a step references
-       (explicit steps, or the preset's analysis.templates and the dark stage's tests-dark), so a spare template and
-       a replacement alerts entry (background analysis) still render. */}}
+       (explicit steps, or the preset's health, extra analysis.templates and the dark stage's tests-dark), so a spare
+       template and a replacement alerts entry (background analysis) still render. */}}
 {{- if and (eq (include "helm.canary.enabled" $appContext) "true") (hasKey $template "count") (eq (int $template.count) 0) $template.interval }}
 {{- $self := printf "%s-%s-%s" $environment $fullName (toString $template.name) }}
 {{- $stepRefs := list }}
 {{- if $cfg.steps }}
 {{- range $cfg.steps }}{{ range (dig "analysis" "templates" list .) }}{{ $stepRefs = append $stepRefs (toString .templateName) }}{{ end }}{{ end }}
-{{- else if $cfg.analysis.enabled }}
-{{- range $cfg.analysis.templates }}{{ if ne . "alerts" }}{{ $stepRefs = append $stepRefs (printf "%s-%s-%s" $environment $fullName .) }}{{ end }}{{ end }}
+{{- else }}
+{{- if $cfg.analysis.health.enabled }}{{ $stepRefs = append $stepRefs (printf "%s-%s-health" $environment $fullName) }}{{ end }}
+{{- range $cfg.analysis.templates }}{{ $stepRefs = append $stepRefs (printf "%s-%s-%s" $environment $fullName .) }}{{ end }}
 {{- if and $cfg.coordinator.enabled $cfg.dark }}{{ $stepRefs = append $stepRefs (printf "%s-%s-tests-dark" $environment $fullName) }}{{ end }}
 {{- end }}
 {{- if has $self $stepRefs }}

@@ -8,19 +8,21 @@
 {{- if and (eq .application.deploymentType "rollout") (not .application.migratingToRollouts) }}true{{ else }}false{{ end }}
 {{- end -}}
 
-{{- /* global.strategy.canary merged over the defaults, as JSON. */ -}}
+{{- /* global.strategy.canary merged over the defaults, as JSON. Analysis is mandatory for every Rollout (DEVOPS-312):
+       health and alerts are on unless opted out, and templates lists only extra templates. analysis.enabled is
+       deprecated and has no default; rollout.yaml refuses false. dark stays off until DEVOPS-326 renders tests-dark. */ -}}
 {{- define "helm.canary.config" -}}
 {{- $defaults := dict
       "preset" "standard"
       "progressDeadlineSeconds" 600
-      "dark" true
+      "dark" false
       "darkReplicas" 1
-      "analysis" (dict "enabled" false "templates" (list "health" "alerts")
-        "health" (dict "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
-        "alerts" (dict "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
+      "analysis" (dict "templates" (list)
+        "health" (dict "enabled" true "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
+        "alerts" (dict "enabled" true "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
           "image" "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516"))
       "coordinator" (dict
-        "enabled" false
+        "enabled" true
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
 {{- $global := .Values.global | default dict -}}
 {{- $cfg := deepCopy (dig "strategy" "canary" dict $global) -}}
@@ -31,26 +33,31 @@
          standard  10, analysis, pause 5m, 25, analysis, pause 5m, 50, analysis, pause 5m, 100
          fast      25, analysis, 100
          manual    10, analysis, pause (until resumed), 100
-       Analysis steps render only with analysis.enabled (default false); each references
-       <environment>-<fullName>-<template>, and every referenced template must render for the app
+       Each analysis step runs health (unless analysis.health.enabled is false) and the extra analysis.templates; each
+       references <environment>-<fullName>-<template>, and every referenced template must render for the app
        (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
-       when one is missing. alerts is the exception: it runs as background analysis (helm.canary.backgroundAnalysis),
-       not in these steps, and outside prod it is left out.
-       With coordinator.enabled (release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator step plugin) a
-       preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the whole group has
-       been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every Rollout of the
-       release crosses each boundary together; the manual preset's pause stays before its barrier, so a resume of the
-       group fans out and the barrier then holds it. An explicit steps list renders verbatim and carries its own
-       barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec.
-       With the coordinator on and dark (default true, D11), the start barrier is followed by the header-gated dark
-       stage: darkReplicas canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary:
-       <global.correlationId>, the dark-ready barrier, the <environment>-<fullName>-tests-dark analysis on the leader
-       only (with analysis.enabled), the dark-passed barrier, then the route is removed. setCanaryScale
+       when one is missing. alerts is not in these steps: it runs as background analysis
+       (helm.canary.backgroundAnalysis), and outside prod it is left out.
+       Analysis is mandatory: with health and alerts both opted out and no extra templates the render fails, for preset
+       and explicit steps alike, in every environment. The check reads the configured set, not what renders here.
+       With coordinator.enabled (default true; release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator
+       step plugin) a preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the
+       whole group has been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every
+       Rollout of the release crosses each boundary together; the manual preset's pause stays before its barrier, so a
+       resume of the group fans out and the barrier then holds it. An explicit steps list renders verbatim and carries
+       its own barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec.
+       With the coordinator on and dark (default false until DEVOPS-326, D11), the start barrier is followed by the
+       header-gated dark stage: darkReplicas canary pods at weight 0, a canary-header route matched on
+       X-MyCarrier-Canary: <global.correlationId>, the dark-ready barrier, the <environment>-<fullName>-tests-dark
+       analysis on the leader only, the dark-passed barrier, then the route is removed. setCanaryScale
        {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
        step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
        coordinator because followers rely on its barriers to wait for the leader's suite. */ -}}
 {{- define "helm.canary.steps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- if not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $cfg.analysis.templates) -}}
+  {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are both false and analysis.templates lists no extra template. Remove one of the opt-outs, or list an AnalysisTemplate defined under applications.%s.analysisTemplates in analysis.templates." .appName .appName) -}}
+{{- end -}}
 {{- $coordinator := $cfg.coordinator -}}
 {{- if and $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
   {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
@@ -61,24 +68,22 @@
 {{- $steps = $cfg.steps -}}
 {{- else }}
 {{- $analysisStep := dict -}}
-{{- $available := list -}}
-{{- if $cfg.analysis.enabled -}}
-  {{- $available = include "helm.canary.analysis.available" . | fromJsonArray -}}
-  {{- $templates := list -}}
-  {{- range $cfg.analysis.templates -}}
-    {{- /* alerts runs as background analysis (helm.canary.backgroundAnalysis, which also checks its service label),
-           not in these steps. */ -}}
-    {{- if eq . "alerts" }}{{ continue }}{{ end -}}
-    {{- if not (has . $available) -}}
-      {{- if eq . "health" -}}
-        {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.%s.canaryHealthPath or global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet probe under applications.%s.probes (the chart's default probes are HTTP only for global.language csharp), or remove health from global.strategy.canary.analysis.templates." $.appName $.appName $.appName) -}}
-      {{- end -}}
-      {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health and alerts; compare (DEVOPS-322) is not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
+{{- $available := include "helm.canary.analysis.available" . | fromJsonArray -}}
+{{- $templates := list -}}
+{{- /* health, then the extra templates; alerts runs as background analysis (helm.canary.backgroundAnalysis, which also
+       checks its service label), not in these steps. rollout.yaml refuses health or alerts in analysis.templates. */ -}}
+{{- $names := list -}}
+{{- if $cfg.analysis.health.enabled }}{{ $names = list "health" }}{{ end -}}
+{{- range (concat $names $cfg.analysis.templates) -}}
+  {{- if not (has . $available) -}}
+    {{- if eq . "health" -}}
+      {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.%s.canaryHealthPath or global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet liveness probe under applications.%s.probes.livenessProbe (the chart's default liveness probe is HTTP only for global.language csharp), or opt out with global.strategy.canary.analysis.health.enabled: false." $.appName $.appName $.appName) -}}
     {{- end -}}
-    {{- $templates = append $templates (dict "templateName" (printf "%s-%s-%s" $.Values.environment.name $fullName .)) -}}
+    {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health and alerts; compare (DEVOPS-322) is not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
   {{- end -}}
-  {{- if $templates }}{{ $analysisStep = dict "analysis" (dict "templates" $templates) }}{{ end -}}
+  {{- $templates = append $templates (dict "templateName" (printf "%s-%s-%s" $.Values.environment.name $fullName .)) -}}
 {{- end -}}
+{{- if $templates }}{{ $analysisStep = dict "analysis" (dict "templates" $templates) }}{{ end -}}
 {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
 {{- if and $coordinator.enabled $cfg.dark -}}
   {{- if not (include "helm.canary.leader" .) -}}
@@ -88,7 +93,7 @@
   {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
-  {{- if and $cfg.analysis.enabled (eq (include "helm.canary.leader" .) .appName) -}}
+  {{- if eq (include "helm.canary.leader" .) .appName -}}
     {{- if not (has "tests-dark" $available) -}}
       {{- fail (printf "application '%s': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet (DEVOPS-312, DEVOPS-326). Set global.strategy.canary.dark: false, or define tests-dark under applications.%s.analysisTemplates." .appName .appName) -}}
     {{- end -}}
@@ -144,20 +149,20 @@
 {{- end -}}
 
 {{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
-       chart's own health template when the app has none of that name and its health URL is known, and the chart's
-       alerts template when the app has none of that name, the environment is prod and the service label is
-       known. */ -}}
+       chart's own health template when health is on, the app has none of that name and its health URL is known, and
+       the chart's alerts template when alerts is on, the app has none of that name, the environment is prod and the
+       service label is known. */ -}}
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
 {{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
-{{- $templates := (include "helm.canary.config" . | fromJson).analysis.templates -}}
-{{- if and (not (has "health" $names)) (has "health" $templates) (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
-{{- if and (not (has "alerts" $names)) (has "alerts" $templates) (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
+{{- $analysis := (include "helm.canary.config" . | fromJson).analysis -}}
+{{- if and (not (has "health" $names)) $analysis.health.enabled (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
+{{- if and (not (has "alerts" $names)) $analysis.alerts.enabled (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
 {{- toJson $names -}}
 {{- end -}}
 
 {{- /* The Rollout's background analysis, as JSON, or "" when it has none: the alerts template (the chart's, or an
-       applications.<app>.analysisTemplates entry named alerts) while analysis is on and alerts is listed. It starts at
+       applications.<app>.analysisTemplates entry named alerts) unless analysis.alerts.enabled is false. It starts at
        the first step that sends the canary traffic (setWeight above 0, after the dark stage) and runs until the Rollout
        is promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
        standard rules) run out; a step-by-step check would sample only the first minute of each weight. A replacement
@@ -167,10 +172,10 @@
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $customAlerts := false -}}
 {{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "alerts" }}{{ $customAlerts = true }}{{ end }}{{ end -}}
-{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (not $customAlerts) (include "helm.canary.alerts.environment" .) (not (include "helm.canary.alerts.service" .)) -}}
-  {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName, or remove alerts from global.strategy.canary.analysis.templates." .appName) -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.alerts.enabled (not $customAlerts) (include "helm.canary.alerts.environment" .) (not (include "helm.canary.alerts.service" .)) -}}
+  {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName or global.appStack, or opt out with global.strategy.canary.analysis.alerts.enabled: false." .appName) -}}
 {{- end -}}
-{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.enabled (has "alerts" $cfg.analysis.templates) (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.alerts.enabled (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
   {{- $analysis := dict "templates" (list (dict "templateName" (printf "%s-%s-alerts" .Values.environment.name (include "helm.fullname" .)))) -}}
   {{- range $index, $step := (include "helm.canary.steps" . | fromYamlArray) -}}
     {{- if and (not (hasKey $analysis "startingStep")) (gt (int (dig "setWeight" 0 $step)) 0) }}{{ $_ := set $analysis "startingStep" $index }}{{ end -}}
@@ -187,9 +192,13 @@
 {{- end -}}
 
 {{- /* The Grafana service label the alerts check filters on: global.strategy.canary.analysis.alerts.service, else
-       alerts.serviceName lower-cased, the label the chart's own alert rules carry. */ -}}
+       alerts.serviceName lower-cased, the label the chart's own alert rules carry, else global.appStack lower-cased.
+       "app", the values.yaml default, counts as unset: no alert rule carries it, so a stack that never set appStack
+       fails the render in prod instead of being refused by alert-rules at its first canary weight. */ -}}
 {{- define "helm.canary.alerts.service" -}}
-{{- (include "helm.canary.config" . | fromJson).analysis.alerts.service | default (lower (toString (dig "serviceName" "" (.Values.alerts | default dict)))) -}}
+{{- $appStack := lower (toString (dig "appStack" "" (.Values.global | default dict))) -}}
+{{- if eq $appStack "app" }}{{ $appStack = "" }}{{ end -}}
+{{- (include "helm.canary.config" . | fromJson).analysis.alerts.service | default (lower (toString (dig "serviceName" "" (.Values.alerts | default dict)))) | default $appStack -}}
 {{- end -}}
 
 {{- /* An expr condition that is true when the label map at .labels matches alert-gate's matchers (DEVOPS-329): the
@@ -230,10 +239,10 @@
 {{- /* The URL the canary health check calls on the app's -preview Service, or "" when the chart finds no path.
        applications.<app>.canaryHealthPath, else global.strategy.canary.analysis.health.path, when set, is called on
        the app's http (or healthcheck) port.
-       Otherwise the check reuses the probes the pod renders with (_spec_workload.tpl): readiness, then startup, then
-       liveness, each from applications.<app>.probes or else the chart's default for global.language (HTTP only for
-       csharp), skipping a probe turned off by probes.enable*; the first httpGet path wins. The port is the Service
-       port that targets that container port. */ -}}
+       Otherwise the check reuses the liveness probe the pod renders with (_spec_workload.tpl):
+       applications.<app>.probes.livenessProbe, or else the chart's default for global.language (HTTP only for csharp,
+       at /liveness), unless probes.enableLiveness is false; its httpGet path is the one. Readiness and startup probes
+       are not used. The port is the Service port that targets that container port. */ -}}
 {{- define "helm.canary.analysis.healthUrl" -}}
 {{- $probes := .application.probes | default dict -}}
 {{- $ports := .application.ports | default dict -}}
@@ -242,17 +251,15 @@
 {{- with dig "canaryHealthPath" (include "helm.canary.config" . | fromJson).analysis.health.path .application -}}
   {{- $get = dict "path" . "port" (or (index $ports "http") (index $ports "healthcheck")) -}}
 {{- end -}}
-{{- range (list (list "readinessProbe" "enableReadiness" "helm.defaultReadinessProbe") (list "startupProbe" "enableStartup" "helm.defaultStartupProbe") (list "livenessProbe" "enableLiveness" "helm.defaultLivenessProbe")) -}}
-  {{- if and (not $get.path) (dig (index . 1) true $probes) -}}
-    {{- $probe := index $probes (index . 0) | default (get (include (index . 2) $ | fromYaml) (index . 0)) | default dict -}}
-    {{- $get = $probe.httpGet | default dict -}}
-    {{- if $get.path }}{{ $from = index . 0 }}{{ end -}}
-  {{- end -}}
+{{- if and (not $get.path) (dig "enableLiveness" true $probes) -}}
+  {{- $probe := $probes.livenessProbe | default (get (include "helm.defaultLivenessProbe" . | fromYaml) "livenessProbe") | default dict -}}
+  {{- $get = $probe.httpGet | default dict -}}
+  {{- if $get.path }}{{ $from = "livenessProbe" }}{{ end -}}
 {{- end -}}
 {{- /* The check calls plain http with no host or headers; a probe that needs them would make every measurement an
        Error, so it fails the render instead of aborting the canary. */ -}}
 {{- if and $from (or (and $get.scheme (ne (upper (toString $get.scheme)) "HTTP")) $get.host $get.httpHeaders) -}}
-  {{- fail (printf "application '%s': the canary health check would reuse the path of its %s, which sets scheme HTTPS, host or httpHeaders; the check calls plain http with none of these. Set applications.%s.canaryHealthPath to a path served over plain http, or define a health template under applications.%s.analysisTemplates." .appName $from .appName .appName) -}}
+  {{- fail (printf "application '%s': the canary health check would reuse the path of its %s, which sets scheme HTTPS, host or httpHeaders; the check calls plain http with none of these. Set applications.%s.canaryHealthPath to a path served over plain http, define a health template under applications.%s.analysisTemplates, or opt out with global.strategy.canary.analysis.health.enabled: false." .appName $from .appName .appName) -}}
 {{- end -}}
 {{- $servicePort := include "helm.canary.previewPort" (dict "application" .application "port" $get.port) -}}
 {{- if and $get.path $servicePort -}}

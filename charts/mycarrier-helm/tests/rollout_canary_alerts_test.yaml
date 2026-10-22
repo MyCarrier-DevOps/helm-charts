@@ -13,10 +13,7 @@ tests:
       global:
         appStack: mycarrier
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              enabled: true
+        correlationId: corr-1
       environment:
         name: prod
       alerts:
@@ -227,10 +224,10 @@ tests:
       global:
         appStack: mycarrier
         language: csharp
+        correlationId: corr-1
         strategy:
           canary:
             analysis:
-              enabled: true
               alerts:
                 service: mc.order
                 interval: 1m
@@ -255,6 +252,7 @@ tests:
           value: 2
 
   # Background analysis checks through every pause, where the rules' 5m for windows run out; each step runs health.
+  # Both are on with no analysis values (DEVOPS-312); the first weight follows the coordinator's start barrier.
   - it: runs alerts as background analysis from the first weight, and health in each analysis step
     template: rollout.yaml
     set: *prod
@@ -262,15 +260,15 @@ tests:
       - equal:
           path: spec.strategy.canary.analysis
           value:
-            startingStep: 0
+            startingStep: 1
             templates:
               - templateName: prod-mycarrier-api-alerts
       - equal:
-          path: spec.strategy.canary.steps[0]
+          path: spec.strategy.canary.steps[1]
           value:
             setWeight: 10
       - equal:
-          path: spec.strategy.canary.steps[1]
+          path: spec.strategy.canary.steps[2]
           value:
             analysis:
               templates:
@@ -286,10 +284,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            analysis:
-              enabled: true
-            coordinator:
-              enabled: true
+            dark: true
       applications:
         api:
           deploymentType: rollout
@@ -331,10 +326,10 @@ tests:
       global:
         appStack: mycarrier
         language: csharp
+        correlationId: corr-1
         strategy:
           canary:
             analysis:
-              enabled: true
               alerts:
                 dryRun: false
                 image: registry.example.com/mirror/python@sha256:0000000000000000000000000000000000000000000000000000000000000000
@@ -364,7 +359,7 @@ tests:
       - notExists:
           path: spec.strategy.canary.analysis
       - equal:
-          path: spec.strategy.canary.steps[1]
+          path: spec.strategy.canary.steps[2]
           value:
             analysis:
               templates:
@@ -383,34 +378,100 @@ tests:
           path: metadata.name
           value: uat-mycarrier-api-health
 
-  - it: renders no analysis step at all when alerts is the only template outside prod
+  # alerts still counts for the mandatory-analysis check outside prod, where it does not render.
+  - it: renders no analysis step at all with health opted out outside prod
     template: rollout.yaml
     set:
       <<: *prod
       global:
         appStack: mycarrier
         language: csharp
+        correlationId: corr-1
         strategy:
           canary:
             analysis:
-              enabled: true
-              templates: [alerts]
+              health:
+                enabled: false
       environment:
         name: uat
     asserts:
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 7
+          count: 11
+      - notExists:
+          path: spec.strategy.canary.analysis
 
-  - it: fails the render in prod when no service label is known
+  # The service label falls back to global.appStack, lower-cased, as the values set it.
+  - it: takes the service label from global.appStack without analysis.alerts.service or alerts.serviceName
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set:
+      <<: *prod
+      global:
+        appStack: Billing
+        language: csharp
+        correlationId: corr-1
+      alerts:
+        serviceName: ""
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[1]
+          value:
+            name: ALERTS_SERVICE
+            value: billing
+      - matchRegex:
+          path: spec.metrics[1].provider.web.url
+          pattern: filter=service%3D%22billing%22
+
+  - it: fails the render in prod when no service label is known and global.appStack is empty
     template: rollout.yaml
     set:
       <<: *prod
+      global:
+        appStack: ""
+        language: csharp
+        correlationId: corr-1
       alerts:
         serviceName: ""
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it"
+          errorPattern: "application 'api': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. .*set alerts.serviceName or global.appStack, or opt out with global.strategy.canary.analysis.alerts.enabled: false."
+
+  # "app" is the values.yaml default for global.appStack; no alert rule carries it, so it counts as unset.
+  - it: fails the render in prod when global.appStack is the chart default app and no other label is set
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: app
+        language: csharp
+        correlationId: corr-1
+      alerts:
+        serviceName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. .*set alerts.serviceName or global.appStack, or opt out with global.strategy.canary.analysis.alerts.enabled: false."
+
+  - it: renders a prod canary with no service label once alerts is opted out
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: ""
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              alerts:
+                enabled: false
+      alerts:
+        serviceName: ""
+    asserts:
+      - isKind:
+          of: Rollout
+      - notExists:
+          path: spec.strategy.canary.analysis
 
   - it: lets an app's own alerts template replace the chart's
     template: analysistemplate.yaml
@@ -470,11 +531,11 @@ tests:
       - equal:
           path: spec.strategy.canary.analysis
           value:
-            startingStep: 0
+            startingStep: 1
             templates:
               - templateName: prod-mycarrier-api-alerts
       - equal:
-          path: spec.strategy.canary.steps[1]
+          path: spec.strategy.canary.steps[2]
           value:
             analysis:
               templates:
@@ -536,6 +597,7 @@ tests:
       global:
         appStack: mycarrier
         language: csharp
+        correlationId: corr-1
         strategy:
           canary:
             steps:
@@ -597,8 +659,9 @@ tests:
     set:
       <<: *prod
       global:
-        appStack: mycarrier
+        appStack: ""
         language: csharp
+        correlationId: corr-1
         strategy:
           canary:
             steps:
@@ -606,32 +669,54 @@ tests:
               - pause:
                   duration: 5m
               - setWeight: 100
-            analysis:
-              enabled: true
       alerts:
         serviceName: ""
     asserts:
       - failedTemplate:
           errorPattern: "application 'api': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it"
 
-  - it: renders no alerts template when alerts is not listed
+  - it: renders no alerts template or ExternalSecret in prod with alerts opted out
     template: analysistemplate.yaml
     set:
       <<: *prod
       global:
         appStack: mycarrier
         language: csharp
+        correlationId: corr-1
         strategy:
           canary:
             analysis:
-              enabled: true
-              templates: [health]
+              alerts:
+                enabled: false
     asserts:
       - hasDocuments:
           count: 1
       - equal:
           path: metadata.name
           value: prod-mycarrier-api-health
+
+  - it: runs no background analysis in prod with alerts opted out, and health in each analysis step
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              alerts:
+                enabled: false
+    asserts:
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
 
   - it: renders no alerts template for a Rollout that is migrating
     template: analysistemplate.yaml
@@ -657,6 +742,7 @@ tests:
       <<: *prod
       global:
         appStack: mycarrier
+        correlationId: corr-1
         strategy:
           canary:
             analysis:

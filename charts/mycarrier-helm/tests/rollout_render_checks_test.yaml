@@ -8,6 +8,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         dependencies:
           mongodb: true
@@ -16,6 +17,7 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -78,12 +80,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: dev
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               offloadOperatorEnabled: false
@@ -101,12 +105,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -146,12 +152,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: feature20-saia
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               offloadOperatorEnabled: false

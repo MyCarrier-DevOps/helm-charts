@@ -6,12 +6,17 @@ tests:
     set:
       global:
         appStack: "test-stack"
+        correlationId: corr-1
         language: "nodejs"
       environment:
         name: "dev"
       applications:
         minimal-rollout-app:
           deploymentType: rollout
+          # A canary Rollout needs an HTTP path for its mandatory health check: a nodejs liveness probe is TCP.
+          canaryHealthPath: /health
+          ports:
+            http: 8080
           networking:
             istio:
               offloadOperatorEnabled: false

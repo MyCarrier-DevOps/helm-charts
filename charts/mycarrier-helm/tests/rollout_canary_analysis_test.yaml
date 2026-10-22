@@ -4,18 +4,15 @@ templates:
   - rollout.yaml
 tests:
   # R3: the chart's health template calls the -preview Service and needs "Healthy"; a non-2xx answer is an error,
-  # and a second error in a row aborts the canary (consecutiveErrorLimit 1).
-  - it: renders the chart's health template for a csharp canary Rollout with analysis on
+  # and a second error in a row aborts the canary (consecutiveErrorLimit 1). Analysis is mandatory, so it renders with
+  # no analysis values; a csharp app's default liveness probe gives the path.
+  - it: renders the chart's health template for a csharp canary Rollout by default
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -46,23 +43,19 @@ tests:
             successCondition: result == "Healthy"
             provider:
               web:
-                url: http://test-stack-api-preview.preprod.svc.cluster.local:8080/health
+                url: http://test-stack-api-preview.preprod.svc.cluster.local:8080/liveness
                 jsonPath: "{$.status}"
                 timeoutSeconds: 10
 
-  # The check reuses the probes the pod renders with: readiness, then startup, then liveness, each from the app's
-  # probes or the chart's default for global.language.
-  - it: takes the health path and port from the readinessProbe httpGet
+  # The check reuses the liveness probe the pod renders with, from the app's probes or the chart's default for
+  # global.language. Readiness and startup probes are not used.
+  - it: takes the health path and port from the livenessProbe httpGet, not the readinessProbe
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -80,22 +73,22 @@ tests:
               httpGet:
                 path: /ready
                 port: 3001
+            livenessProbe:
+              httpGet:
+                path: /live
+                port: 3001
     asserts:
       - equal:
           path: spec.metrics[0].provider.web.url
-          value: http://test-stack-web-preview.preprod.svc.cluster.local:3001/ready
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3001/live
 
-  - it: falls back to the startupProbe httpGet path and resolves its named port
+  - it: ignores the startupProbe and resolves the livenessProbe's named port
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -112,22 +105,23 @@ tests:
               httpGet:
                 path: /started
                 port: http
+            livenessProbe:
+              httpGet:
+                path: /alive
+                port: http
     asserts:
       - equal:
           path: spec.metrics[0].provider.web.url
-          value: http://test-stack-web-preview.preprod.svc.cluster.local:3000/started
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3000/alive
 
-  - it: falls through a TCP readinessProbe to the csharp default startup probe
+  # A csharp app's default startup probe calls /health; the check now calls its default liveness probe's /liveness.
+  - it: uses the csharp default liveness path, not the default startup probe's /health
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -146,19 +140,46 @@ tests:
     asserts:
       - equal:
           path: spec.metrics[0].provider.web.url
-          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/health
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/liveness
 
-  - it: skips a startup probe turned off and uses the csharp default liveness probe
-    template: analysistemplate.yaml
+  # An HTTP readiness probe no longer gives the path: with a TCP liveness probe the render fails.
+  - it: fails the render with an HTTP readinessProbe and a TCP livenessProbe
+    template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+          probes:
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: http
+            livenessProbe:
+              tcpSocket:
+                port: http
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes"
+
+  - it: fails the render when the liveness probe is turned off and no path is set
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -171,23 +192,18 @@ tests:
           ports:
             http: 8080
           probes:
-            enableStartup: false
+            enableLiveness: false
     asserts:
-      - equal:
-          path: spec.metrics[0].provider.web.url
-          value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/liveness
+      - failedTemplate:
+          errorPattern: "application 'api': the canary health check has no HTTP path on a port its -preview Service exposes"
 
   - it: uses the livenessProbe httpGet of a nodejs app
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -214,12 +230,8 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -239,20 +251,19 @@ tests:
     asserts:
       - equal:
           path: spec.metrics[0].provider.web.url
-          value: http://test-stack-api-preview.preprod.svc.cluster.local:80/health
+          value: http://test-stack-api-preview.preprod.svc.cluster.local:80/liveness
 
-  # analysis.health.path: an app whose probes are all TCP names its health path for the canary check only.
-  - it: calls analysis.health.path on the http port when every probe is TCP
+  # analysis.health.path: an app whose liveness probe is TCP names its health path for the canary check only.
+  - it: calls analysis.health.path on the http port when the liveness probe is TCP
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
             analysis:
-              templates: [health]
-              enabled: true
               health:
                 path: /healthz
       environment:
@@ -275,12 +286,11 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
         strategy:
           canary:
             analysis:
-              templates: [health]
-              enabled: true
               health:
                 path: /ready
       environment:
@@ -303,12 +313,11 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
             analysis:
-              templates: [health]
-              enabled: true
               health:
                 path: /status
       environment:
@@ -336,11 +345,11 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
             analysis:
-              enabled: true
               health:
                 path: healthz
       environment:
@@ -364,12 +373,11 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
             analysis:
-              templates: [health]
-              enabled: true
               health:
                 path: /healthz
       environment:
@@ -404,17 +412,42 @@ tests:
           value: http://test-stack-web-preview.preprod.svc.cluster.local:10000/healthz
         documentIndex: 1
 
-  - it: uses canaryHealthPath over the probe-derived path without a stack path
+  - it: uses canaryHealthPath over the liveness probe's path
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          canaryHealthPath: /status
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+          probes:
+            livenessProbe:
+              httpGet:
+                path: /alive
+                port: http
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://test-stack-web-preview.preprod.svc.cluster.local:3000/status
+
+  - it: uses canaryHealthPath over the csharp default liveness path without a stack path
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -437,11 +470,8 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -463,12 +493,11 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
         strategy:
           canary:
             analysis:
-              templates: [health]
-              enabled: true
               health:
                 count: 5
                 interval: 1m
@@ -495,12 +524,20 @@ tests:
           path: spec.metrics[0].consecutiveErrorLimit
           value: 2
 
-  - it: renders no AnalysisTemplate while analysis is off
+  # Opt-out: analysis.health.enabled false renders no health template and no analysis step. Alerts stays on, which is
+  # enough for the mandatory-analysis check even outside prod, where the chart's alerts template does not render.
+  - it: renders no AnalysisTemplate in preprod with health opted out and alerts on
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -516,16 +553,51 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: renders a preprod canary with no analysis step when health is opted out and alerts is on
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              health:
+                enabled: false
+      environment:
+        name: preprod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
+            - setWeight: 25
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
+            - setWeight: 100
+      - notExists:
+          path: spec.strategy.canary.analysis
+
   - it: renders no health template for a migrating Rollout or a Deployment
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -554,16 +626,14 @@ tests:
       - hasDocuments:
           count: 0
 
+  # A nodejs app's default liveness probe is TCP, so the check has no path until one is set.
   - it: fails the render when the chart can't find an app's health path
     template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -577,18 +647,15 @@ tests:
             http: 3000
     asserts:
       - failedTemplate:
-          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.web.canaryHealthPath"
+          errorPattern: "application 'web': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.web.canaryHealthPath or global.strategy.canary.analysis.health.path .*, give the app an httpGet liveness probe under applications.web.probes.livenessProbe .*, or opt out with global.strategy.canary.analysis.health.enabled: false"
 
-  - it: fails the render when the probe port is not on the -preview Service
+  - it: fails the render when the liveness probe port is not on the -preview Service
     template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -601,9 +668,9 @@ tests:
           ports:
             http: 3000
           probes:
-            readinessProbe:
+            livenessProbe:
               httpGet:
-                path: /ready
+                path: /alive
                 port: 3001
     asserts:
       - failedTemplate:
@@ -615,12 +682,12 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
         strategy:
           canary:
             analysis:
-              enabled: true
-              templates: [health, compare]
+              templates: [compare]
       environment:
         name: preprod
       applications:
@@ -636,18 +703,19 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': global.strategy.canary.analysis.templates lists 'compare', but no AnalysisTemplate of that name renders for it"
 
-  - it: accepts a listed template that the app defines itself
+  # analysis.templates lists extra templates; each analysis step runs them together with health.
+  - it: runs an extra template that the app defines itself together with health
     template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
         strategy:
           canary:
             preset: fast
             analysis:
-              enabled: true
-              templates: [health, smoke]
+              templates: [smoke]
       environment:
         name: preprod
       applications:
@@ -666,13 +734,40 @@ tests:
                   url: http://smoke.example/check
     asserts:
       - equal:
-          path: spec.strategy.canary.steps[1].analysis.templates
+          path: spec.strategy.canary.steps[2].analysis.templates
           value:
             - templateName: preprod-test-stack-api-health
             - templateName: preprod-test-stack-api-smoke
 
-  - it: lets an app's own health template replace the chart's
-    template: analysistemplate.yaml
+  # health and alerts always run unless opted out, so listing them as extra templates fails in every environment.
+  - it: fails the render when analysis.templates lists health
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              templates: [health]
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.analysis.templates lists 'health': health and alerts always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.health.enabled: false."
+
+  - it: fails the render when analysis.templates lists alerts, in a release without Rollouts too
+    template: rollout.yaml
     set:
       global:
         appStack: test-stack
@@ -680,8 +775,256 @@ tests:
         strategy:
           canary:
             analysis:
-              templates: [health]
+              templates: [smoke, alerts]
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.analysis.templates lists 'alerts': health and alerts always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.alerts.enabled: false."
+
+  # analysis.enabled is deprecated: false fails the render in every environment, Rollouts or not; true has no effect.
+  - it: fails the render with analysis.enabled false
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: false
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.analysis.enabled: false is no longer supported: canary analysis is mandatory for every Rollout"
+
+  - it: fails the render with analysis.enabled false in a release without Rollouts
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              enabled: false
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.analysis.enabled: false is no longer supported"
+
+  - it: accepts analysis.enabled true and renders the same steps as without it
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            preset: fast
+            analysis:
               enabled: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
+            - setWeight: 25
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
+            - setWeight: 100
+
+  # Analysis is mandatory: both opt-outs with no extra template fail every canary Rollout, in every environment, for
+  # preset and explicit steps alike.
+  - it: fails the render in prod when health and alerts are both opted out and no extra template is listed
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are both false and analysis.templates lists no extra template"
+
+  - it: fails the render outside prod too when health and alerts are both opted out
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+      environment:
+        name: uat
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none"
+
+  - it: fails the render with explicit steps when health and alerts are both opted out
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            steps:
+              - setWeight: 20
+              - pause:
+                  duration: 5m
+              - setWeight: 100
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none"
+
+  - it: renders an extra template alone when health and alerts are both opted out
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [smoke]
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+      environment:
+        name: prod
+      applications:
+        web:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: web
+            tag: "1.0.0"
+          ports:
+            http: 3000
+          analysisTemplates:
+            - name: smoke
+              provider:
+                web:
+                  url: http://smoke.example/check
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-test-stack-web-smoke
+      - notExists:
+          path: spec.strategy.canary.analysis
+
+  - it: lets an app's own health template replace the chart's
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
       environment:
         name: preprod
       applications:
@@ -710,9 +1053,13 @@ tests:
   # applied) and its default URL has a scheme and the app's port.
   - it: renders the legacy web shorthand with successCondition at metric level
     template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: preprod-test-stack-api-status
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod
@@ -744,6 +1091,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod
@@ -769,7 +1117,8 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': analysisTemplates 'tests' runs a test container through the job provider shorthand, which is no longer supported"
 
-  # The dark stage's tests-dark template is not rendered by the chart yet (DEVOPS-312, DEVOPS-326).
+  # The dark stage's tests-dark template is not rendered by the chart yet (DEVOPS-312, DEVOPS-326); dark is off by
+  # default until it is.
   - it: fails the render when the leader's dark stage needs a tests-dark template that does not render
     template: rollout.yaml
     set:
@@ -779,11 +1128,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            analysis:
-              templates: [health]
-              enabled: true
-            coordinator:
-              enabled: true
+            dark: true
       environment:
         name: preprod
       applications:
@@ -803,15 +1148,20 @@ tests:
   # statusEndpoint applies with or without url.
   - it: maps the web shorthand's default URL through service.ports
     template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: preprod-test-stack-web-status
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         web:
           deploymentType: rollout
+          canaryHealthPath: /health
           image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
           ports:
             http: 4200
@@ -831,9 +1181,13 @@ tests:
 
   - it: applies the web shorthand's statusEndpoint without url
     template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: preprod-test-stack-api-status
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod
@@ -853,18 +1207,15 @@ tests:
           path: spec.metrics[0].provider.web.url
           value: http://test-stack-api-preview.preprod.svc.cluster.local:8080/status
 
-  # The check calls plain http with no host or headers, so a probe that needs them fails the render while the check is
-  # in use, instead of erroring on every measurement.
-  - it: fails the render when the reused probe needs HTTPS
+  # The check calls plain http with no host or headers, so a liveness probe that needs them fails the render while
+  # the check is on, instead of erroring on every measurement.
+  - it: fails the render when the reused liveness probe needs HTTPS
     template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -874,26 +1225,22 @@ tests:
           ports:
             http: 8443
           probes:
-            readinessProbe:
+            livenessProbe:
               httpGet:
-                path: /ready
+                path: /live
                 port: http
                 scheme: HTTPS
     asserts:
       - failedTemplate:
-          errorPattern: "application 'web': the canary health check would reuse the path of its readinessProbe, which sets scheme HTTPS, host or httpHeaders"
+          errorPattern: "application 'web': the canary health check would reuse the path of its livenessProbe, which sets scheme HTTPS, host or httpHeaders.*or opt out with global.strategy.canary.analysis.health.enabled: false"
 
   - it: uses canaryHealthPath instead of a probe the check cannot reuse
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
-        strategy:
-          canary:
-            analysis:
-              templates: [health]
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -904,9 +1251,9 @@ tests:
           ports:
             http: 8080
           probes:
-            readinessProbe:
+            livenessProbe:
               httpGet:
-                path: /ready
+                path: /live
                 port: http
                 httpHeaders:
                   - name: X-Probe
@@ -916,12 +1263,18 @@ tests:
           path: spec.metrics[0].provider.web.url
           value: http://test-stack-web-preview.preprod.svc.cluster.local:8080/status
 
-  - it: leaves a probe the check cannot reuse alone while analysis is off
+  - it: leaves a probe the check cannot reuse alone with health opted out
     template: analysistemplate.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -931,9 +1284,9 @@ tests:
           ports:
             http: 8443
           probes:
-            readinessProbe:
+            livenessProbe:
               httpGet:
-                path: /ready
+                path: /live
                 port: http
                 scheme: HTTPS
     asserts:
@@ -948,12 +1301,11 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
             analysis:
-              templates: [health]
-              enabled: true
               health:
                 successCondition: "true"
       environment:
@@ -964,7 +1316,7 @@ tests:
           image: {registry: registry.example.com, repository: web, tag: "1.0.0"}
           ports: {http: 3000}
           probes:
-            readinessProbe:
+            livenessProbe:
               httpGet: {path: /, port: http}
     asserts:
       - equal:
@@ -977,6 +1329,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod
@@ -1014,9 +1367,13 @@ tests:
 
   - it: passes a raw job provider through with its interval
     template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: preprod-test-stack-api-smoke
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod
@@ -1045,6 +1402,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod

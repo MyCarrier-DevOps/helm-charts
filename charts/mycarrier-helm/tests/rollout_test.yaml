@@ -5,6 +5,7 @@ tests:
   - it: should create rollout when deploymentType is rollout
     set:
       environment.name: "dev"
+      global.correlationId: corr-1
       applications.test-app-api.deploymentType: rollout
       applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
@@ -56,6 +57,7 @@ tests:
   - it: should annotate rollout with the default gateway
     set:
       environment.name: "dev"
+      global.correlationId: corr-1
       applications.test-app-api.deploymentType: rollout
       applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
@@ -80,6 +82,7 @@ tests:
   - it: should annotate rollout with a custom gateway
     set:
       environment.name: "dev"
+      global.correlationId: corr-1
       applications.test-app-api.deploymentType: rollout
       applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
@@ -140,6 +143,7 @@ tests:
   - it: should honor application-level securityContext fsGroup and seccompProfile on the pod spec
     set:
       environment.name: "dev"
+      global.correlationId: corr-1
       applications.app-level-sc-rollout:
         enabled: true
         deploymentType: rollout
@@ -150,6 +154,9 @@ tests:
           registry: "myregistry.example.com"
           repository: "mycarrier/app-level-sc-rollout"
           tag: "1.0.0"
+        # The mandatory canary health check calls the default liveness path on this port.
+        ports:
+          http: 8080
         updateStrategy:
           type: "RollingUpdate"
         securityContext:
@@ -169,6 +176,7 @@ tests:
   - it: should default container-level readOnlyRootFilesystem to true on a rollout without securityContext
     set:
       environment.name: "dev"
+      global.correlationId: corr-1
       applications.test-app-api.deploymentType: rollout
       applications.test-app-api.networking.istio.offloadOperatorEnabled: false
       applications.test-app-api.isFrontend: false
@@ -188,6 +196,7 @@ tests:
   - it: should default initContainer-level readOnlyRootFilesystem to true and mount tmp-dir on a rollout without securityContext
     set:
       environment.name: "dev"
+      global.correlationId: corr-1
       applications.init-container-rofs-rollout:
         enabled: true
         deploymentType: rollout
@@ -198,6 +207,9 @@ tests:
           registry: "myregistry.example.com"
           repository: "mycarrier/init-container-rofs-rollout"
           tag: "1.0.0"
+        # The mandatory canary health check calls the default liveness path on this port.
+        ports:
+          http: 8080
         updateStrategy:
           type: "RollingUpdate"
         initContainers:

@@ -45,33 +45,38 @@ global:
   #     preset: standard          # standard: 10, 25, 50 with a 5m pause after each, then 100
   #                               # fast: 25, then 100; manual: 10, then a pause until resumed, then 100
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
-  #     analysis:
-  #       enabled: false          # an analysis step after each weight, and the chart's AnalysisTemplates for it
-  #       templates: [health, alerts]   # run as <environment>-<fullName>-<template>; the chart renders health and
-  #                               # alerts (compare is not built yet); every listed template must render for each app,
-  #                               # except alerts, which renders in prod only and is left out elsewhere.
-  #                               # Each analysis step runs them, except alerts: background analysis from the first
-  #                               # weight until promotion
-  #       health: {count: 3, interval: 30s, consecutiveErrorLimit: 1, successCondition: 'result == "Healthy"'}   # -preview Service at the path of the pod's
-  #                               # first httpGet probe (readiness, startup, liveness; csharp defaults to /health);
-  #                               # any non-2xx answer aborts the canary
-  #         # path: /health         # call this path on the http port instead; set it when every probe is TCP.
-  #                               # applications.<app>.canaryHealthPath overrides it for one application
-  #       alerts: {dryRun: true, interval: 30s, consecutiveErrorLimit: 4}   # Grafana alerts on alert-gate's label
-  #                               # contract (DEVOPS-329): fails on a firing alert of the service; dryRun covers only
-  #                               # that metric (go-live: false). The alert-rules check is always live: no rule that
-  #                               # can fire or a configuration error (401/403, empty token) fails the canary; a
-  #                               # Grafana outage passes and is logged
-  #         # service: mycarrier    # the rules' service label; default alerts.serviceName lower-cased
+  #     analysis:                 # mandatory for every Rollout (DEVOPS-312); enabled is deprecated: true has no
+  #                               # effect, false fails the render
+  #       templates: []           # extra templates each analysis step runs with health, as
+  #                               # <environment>-<fullName>-<template>; each must render for every app (define it
+  #                               # under applications.<app>.analysisTemplates). Listing health or alerts fails: they
+  #                               # always run unless opted out below. With both opted out, list at least one here.
+  #       health: {enabled: true, count: 3, interval: 30s, consecutiveErrorLimit: 1, successCondition: 'result == "Healthy"'}
+  #                               # each analysis step calls the -preview Service at the httpGet path of the app's
+  #                               # liveness probe (csharp defaults to /liveness; readiness and startup are not used);
+  #                               # any non-2xx answer aborts the canary. No path fails the render: set one, or
+  #                               # enabled: false
+  #         # path: /health         # call this path on the http port instead; set it when the liveness probe is not
+  #                               # HTTP. applications.<app>.canaryHealthPath overrides it for one application
+  #       alerts: {enabled: true, dryRun: true, interval: 30s, consecutiveErrorLimit: 4}   # Grafana alerts on
+  #                               # alert-gate's label contract (DEVOPS-329), background analysis in prod only: fails
+  #                               # on a firing alert of the service; dryRun covers only that metric (go-live: false).
+  #                               # The alert-rules check is always live: no rule that can fire or a configuration
+  #                               # error (401/403, empty token) fails the canary; a Grafana outage passes and is logged
+  #         # service: mycarrier    # the rules' service label; default alerts.serviceName, else global.appStack
+  #                               # (not the default app), lower-cased. In prod none fails the render: set one,
+  #                               # or enabled: false
   #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start. applications.<app>.
   #                               # progressDeadlineSeconds overrides it for one slow-starting app.
-  #     dark: true                # header-gated dark stage before the weights (D11); renders only with the coordinator
+  #     dark: false               # header-gated dark stage before the weights (D11); renders only with the
+  #                               # coordinator. Off until the chart renders tests-dark (DEVOPS-326)
   #     darkReplicas: 1           # canary pods during the dark stage
   #     bakeMinutes: 30           # alert-gate's watch window after promotion (D18); set it longer for a service with
   #                               # a known slow-burn history. Read by the release (DEVOPS-319), not rendered.
   #     coordinator:              # release-wide lockstep (DEVOPS-325's mycarrier/canary-coordinator step plugin, D20);
-  #       enabled: false          # keep off until the plugin is on the cluster: the controller rejects unknown plugins
+  #       enabled: true           # needs global.correlationId (the pipeline sets it); false where the plugin is not
+  #                               # on the cluster: the controller rejects unknown plugins
   #       barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 9m, w25: 9m, w50: 9m}
   #                               # each below progressDeadlineSeconds: Argo counts the wait at a barrier toward the
   #                               # deadline. The leader's dark suite must finish inside dark-passed's timeout.
@@ -79,10 +84,10 @@ global:
   #   w<weight> barrier after each weight; an explicit steps list renders verbatim and carries its own barriers.
   #   With dark on, the start barrier is followed by the dark stage: canary pods at weight 0 behind a canary-header
   #   route matched on X-MyCarrier-Canary: <global.correlationId>, the dark-ready barrier, the leader's tests-dark
-  #   suite (first Rollout app in sort order, with analysis.enabled), the dark-passed barrier, then the route goes.
-  #   Until the coordinator (DEVOPS-325) is on, each Rollout of a release runs its own steps: one can be at 50% while
-  #   another is at 10%, or abort while another promotes. Don't enable canary for a prod release with more than one
-  #   Rollout until then. mycarrier.tech/rolloutGroupSize on each Rollout is the number the coordinator waits for.
+  #   suite (global.strategy.canary.leader, or the only Rollout app), the dark-passed barrier, then the route goes.
+  #   With coordinator.enabled: false each Rollout of a release runs its own steps: one can be at 50% while another
+  #   is at 10%, or abort while another promotes. mycarrier.tech/rolloutGroupSize on each Rollout is the number the
+  #   coordinator waits for.
   #   The manual preset's pause has no time limit (progressDeadlineSeconds doesn't count paused time, and Argo CD has
   #   no sync timeout here): someone must promote or abort it. Prod Rollouts send a Teams message when they pause.
   dependencies:

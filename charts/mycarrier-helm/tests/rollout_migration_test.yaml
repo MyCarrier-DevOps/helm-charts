@@ -74,12 +74,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -95,12 +97,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -113,7 +117,7 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: registry.example.com/api:1.0.0
-      # Release 2 renders the canary contract (default preset standard).
+      # Release 2 renders the canary contract (default preset standard, after the coordinator's start barrier).
       - equal:
           path: spec.strategy.canary.stableService
           value: test-stack-api
@@ -121,7 +125,10 @@ tests:
           path: spec.strategy.canary.canaryService
           value: test-stack-api-preview
       - equal:
-          path: spec.strategy.canary.steps[0]
+          path: spec.strategy.canary.steps[0].plugin.config.name
+          value: start
+      - equal:
+          path: spec.strategy.canary.steps[1]
           value:
             setWeight: 10
 
@@ -269,6 +276,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
@@ -541,12 +549,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: dev
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               offloadOperatorEnabled: false
@@ -567,6 +577,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod
@@ -594,6 +605,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: preprod

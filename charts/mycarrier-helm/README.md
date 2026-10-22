@@ -84,6 +84,27 @@ coordinator on:
 | A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
 | `coordinator.barrierTimeouts` at or above `progressDeadlineSeconds` (the 4.6.0 defaults were 10m, 15m and 30m) | The defaults are now 9m. Keep a custom timeout below `progressDeadlineSeconds`, or raise the deadline: Argo Rollouts counts the wait at a barrier toward it, so a longer barrier timeout never fires. |
 
+Since the release after 4.7.8, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
+
+## Upgrading past 4.7.8 (Rollouts)
+
+The release after 4.7.8 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
+chart's `health` check, and in prod the Rollout runs the chart's `alerts` check as background analysis, unless a stack
+opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
+StatefulSet apps render unchanged, except where the values below fail the whole render.
+
+| 4.7.8 values | Edit |
+|---|---|
+| `global.strategy.canary.analysis.enabled: false` | Remove it: it fails the render in every environment. `true` is accepted and has no effect. To leave out one check, set `analysis.health.enabled: false` or `analysis.alerts.enabled: false`. |
+| `analysis.templates` lists `health` or `alerts` (the 4.7.5 default was `[health, alerts]`) | Remove them: they always run, and listing either fails the render. List only extra templates. |
+| `analysis.health.enabled: false` and `analysis.alerts.enabled: false` with no extra templates | Analysis is mandatory, so every Rollout fails to render. Keep one check on, or list an extra template. |
+| A Rollout app whose liveness probe is not HTTP (any non-csharp app with default probes) | Set `applications.<app>.canaryHealthPath` or `analysis.health.path`, give the app an `httpGet` liveness probe, or set `analysis.health.enabled: false`. Readiness and startup probes are no longer used for the path. |
+| A csharp Rollout app with default probes | Nothing to set: the health check now calls `/liveness` (the default liveness probe) instead of `/health`. |
+| A prod Rollout with no `analysis.alerts.service`, no `alerts.serviceName`, and a `global.appStack` that is empty or the default `app` | Set the label the service's Grafana alert rules carry in `analysis.alerts.service`, or set `analysis.alerts.enabled: false`. `global.appStack`, lower-cased, is now the last fallback. |
+| A Rollout render without `global.correlationId` (deploy-core always sets it) | Set it, or set `coordinator.enabled: false`. |
+| A cluster without the `mycarrier/canary-coordinator` plugin | Set `coordinator.enabled: false`: the controller rejects steps for a plugin it does not have. |
+| Relied on the dark stage (`coordinator.enabled: true` with the old `dark` default) | Set `dark: true`; a `tests-dark` AnalysisTemplate must then render for the leader. |
+
 ## Chart Structure
 
 ```

@@ -1,14 +1,18 @@
 suite: Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)
-# These tests turn the dark stage off to cover the weight barriers; rollout_canary_dark_test.yaml covers the dark stage.
+# The coordinator is on and the dark stage off by default; rollout_canary_dark_test.yaml covers the dark stage. Most of
+# these tests opt out of the health check (alerts stays on, and renders only in prod) so the step lists show the
+# barriers alone; rollout_canary_analysis_test.yaml covers the analysis steps.
 templates:
   - rollout.yaml
 tests:
-  # R-coord: with the coordinator off (the default) no plugin step renders.
-  - it: renders no plugin step while the coordinator is off
+  # R-coord: the coordinator is on by default, so a Rollout with no canary values gets the barriers, after the health
+  # analysis and the pause of each weight.
+  - it: renders the barriers by default
     set:
       global:
         appStack: test-stack
-        language: nodejs
+        language: csharp
+        correlationId: corr-1
       environment:
         name: preprod
       applications:
@@ -23,11 +27,60 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 7
+          count: 14
       - equal:
-          path: spec.strategy.canary.steps[0]
+          path: spec.strategy.canary.steps[0].plugin
           value:
-            setWeight: 10
+            name: mycarrier/canary-coordinator
+            config: {kind: barrier, name: start, timeout: 9m}
+      - equal:
+          path: spec.strategy.canary.steps[4].plugin.config.name
+          value: w10
+      - equal:
+          path: spec.strategy.canary.steps[8].plugin.config.name
+          value: w25
+      - equal:
+          path: spec.strategy.canary.steps[12].plugin.config.name
+          value: w50
+
+  # coordinator.enabled: false stays allowed: no plugin step renders, and global.correlationId is not required.
+  - it: renders no plugin step with coordinator.enabled false
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
+            coordinator:
+              enabled: false
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+            - pause:
+                duration: 5m
+            - setWeight: 25
+            - pause:
+                duration: 5m
+            - setWeight: 50
+            - pause:
+                duration: 5m
+            - setWeight: 100
 
   # Tech Spec chart contract: every preset starts with barrier start, which arms the plugin's Abort hook and
   # confirms the whole group has been applied; every step boundary is a barrier.
@@ -39,9 +92,9 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            dark: false
-            coordinator:
-              enabled: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -89,12 +142,6 @@ tests:
         strategy:
           canary:
             preset: fast
-            analysis:
-              enabled: true
-              templates: [health]
-            dark: false
-            coordinator:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -132,9 +179,9 @@ tests:
         strategy:
           canary:
             preset: manual
-            dark: false
-            coordinator:
-              enabled: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -169,9 +216,10 @@ tests:
         strategy:
           canary:
             preset: fast
-            dark: false
+            analysis:
+              health:
+                enabled: false
             coordinator:
-              enabled: true
               barrierTimeouts:
                 w25: 5m
       environment:
@@ -207,9 +255,6 @@ tests:
               - plugin:
                   name: mycarrier/canary-coordinator
                   config: {kind: barrier, name: w5, timeout: 5m}
-            dark: false
-            coordinator:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -239,9 +284,9 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            dark: false
-            coordinator:
-              enabled: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -289,11 +334,13 @@ tests:
       global:
         appStack: test-stack
         language: nodejs
+        correlationId: corr-1
       environment:
         name: preprod
       applications:
         db-migration:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: migrator
@@ -311,16 +358,13 @@ tests:
       - exists:
           path: spec.strategy.canary.steps
 
-  # The canary-coordinator finds a release's Rollouts by the mycarrier.tech/correlationId label (Tech Spec D20).
-  - it: requires global.correlationId when the coordinator is enabled
+  # The canary-coordinator finds a release's Rollouts by the mycarrier.tech/correlationId label (Tech Spec D20). The
+  # coordinator is on by default, so a canary Rollout without it fails to render (deploy-core always sets it).
+  - it: requires global.correlationId while the coordinator is on by default
     set:
       global:
         appStack: test-stack
         language: nodejs
-        strategy:
-          canary:
-            coordinator:
-              enabled: true
       environment:
         name: preprod
       applications:
@@ -347,9 +391,10 @@ tests:
         strategy:
           canary:
             preset: fast
-            dark: false
+            analysis:
+              health:
+                enabled: false
             coordinator:
-              enabled: true
               barrierTimeouts:
                 w25: 10m
       environment:
@@ -376,10 +421,11 @@ tests:
         strategy:
           canary:
             preset: fast
-            dark: false
             progressDeadlineSeconds: 1900
+            analysis:
+              health:
+                enabled: false
             coordinator:
-              enabled: true
               barrierTimeouts:
                 w25: 30m
       environment:
@@ -407,9 +453,10 @@ tests:
         strategy:
           canary:
             preset: fast
-            dark: false
+            analysis:
+              health:
+                enabled: false
             coordinator:
-              enabled: true
               barrierTimeouts:
                 w25: 15m
       environment:
@@ -445,8 +492,6 @@ tests:
               - plugin:
                   name: mycarrier/canary-coordinator
                   config: {kind: barrier, name: w5, timeout: 20m}
-            coordinator:
-              enabled: true
       environment:
         name: preprod
       applications:
