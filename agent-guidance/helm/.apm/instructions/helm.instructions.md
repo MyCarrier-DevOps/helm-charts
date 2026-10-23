@@ -1296,7 +1296,7 @@ When reviewing or creating helm value changes:
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
 
-### mycarrier-helm, the release after 4.7.8
+### mycarrier-helm 4.7.9
 
 Canary analysis is mandatory for every Rollout, and Rollouts carry the contract the release's rollout-watch reads (DEVOPS-312, DEVOPS-319). Deployment and StatefulSet applications render unchanged, except for the `testtrigger.enableV1` default (last item) and where the first two items below, the `bakeMinutes` cap or the prod test-trigger rules fail the whole render.
 

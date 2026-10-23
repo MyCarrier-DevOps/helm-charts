@@ -84,11 +84,11 @@ coordinator on:
 | A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
 | `coordinator.barrierTimeouts` at or above `progressDeadlineSeconds` (the 4.6.0 defaults were 10m, 15m and 30m) | The defaults are now 9m. Keep a custom timeout below `progressDeadlineSeconds`, or raise the deadline: Argo Rollouts counts the wait at a barrier toward it, so a longer barrier timeout never fires. |
 
-Since the release after 4.7.8, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
+Since 4.7.9, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
 
-## Upgrading past 4.7.8 (Rollouts)
+## Upgrading to 4.7.9 (Rollouts)
 
-The release after 4.7.8 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
+4.7.9 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
 chart's `health` check, and in prod the Rollout runs the chart's `alerts` check as background analysis, unless a stack
 opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
 StatefulSet apps render unchanged, except where the values below fail the whole render.
