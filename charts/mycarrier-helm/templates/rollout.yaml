@@ -90,6 +90,9 @@ metadata:
     mycarrier.tech/rolloutGroupSize: {{ include "helm.canary.groupSize" $ | quote }}
     {{- /* alert-gate's watch window after promotion (D18), read by the release's rollout-watch (DEVOPS-319). */}}
     mycarrier.tech/bakeMinutes: {{ include "helm.canary.bakeMinutes" $appContext | quote }}
+    {{- /* The canary's worst-case length in seconds (D22); rollout-watch times out at the release group's largest value
+           plus 15 minutes (DEVOPS-319). */}}
+    mycarrier.tech/canaryBudgetSeconds: {{ include "helm.canary.budgetSeconds" $appContext | quote }}
     {{- end }}
     {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:

@@ -1,0 +1,643 @@
+suite: Rollout canary budget annotation (mycarrier.tech/canaryBudgetSeconds, Tech Spec D22, DEVOPS-312/319)
+# Every canary Rollout carries the worst-case length of its steps in seconds; the release's rollout-watch times out at
+# the release group's largest value plus 15 minutes. A pause counts its duration (the manual pause: manualTimeout), an
+# analysis step its longest template (count x max(interval, the Job's activeDeadlineSeconds)), a barrier its timeout,
+# every other step 0; background analysis is not counted. An explicit steps list states it in budgetSeconds. Above
+# 5700 s the render fails: rollout-watch's workflow has activeDeadlineSeconds 10800 and spends about 70 minutes before
+# the canary and 15 minutes after the budget.
+# Defaults: barriers 9m (540 s), health 3 x 30s (90 s), standard pauses 5m (300 s), manualTimeout 1h (3600 s).
+templates:
+  - rollout.yaml
+tests:
+  # start 540 + 3 x (health 90 + pause 300 + barrier 540)
+  - it: renders 3330 s for the standard preset by default
+    set:
+      global: &global
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment: &preprod
+        name: preprod
+      applications:
+        api: &rollout
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+
+  # start 540 + health 90 + w25 540
+  - it: renders 1170 s for the fast preset
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1170"
+
+  # start 540 + health 90 + manual pause 3600 (manualTimeout 1h) + w10 540
+  - it: renders 4770 s for the manual preset, counting its pause as manualTimeout 1h
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4770"
+      # The pause itself stays indefinite; manualTimeout only feeds the budget.
+      - equal:
+          path: spec.strategy.canary.steps[3]
+          value:
+            pause: {}
+
+  # 3 x (health 90 + pause 300), no barriers
+  - it: renders 1170 s for the standard preset with the coordinator off
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1170"
+
+  # The alerts check runs as background analysis in prod, alongside the steps, so it adds nothing.
+  - it: renders the same budget in prod, without counting the background alerts analysis
+    set:
+      global: *global
+      environment:
+        name: prod
+      applications:
+        api: *rollout
+    asserts:
+      - exists:
+          path: spec.strategy.canary.analysis
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+
+  # start 540 + health 90 + pause 1800 + w10 540
+  - it: counts manualTimeout 30m for the manual pause
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 30m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "2970"
+
+  - it: fails manualTimeout 0s with the manual preset
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 0s
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.manualTimeout is '0s'; the manual preset needs a duration above zero"
+
+  # The schema's duration pattern refuses an empty or unparseable value; helm.canary.budgetSeconds also refuses it
+  # with the manual preset in a render without schema validation.
+  - it: fails an empty or unparseable manualTimeout
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 1d
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "manualTimeout.*does not match pattern"
+
+  - it: ignores manualTimeout with the standard preset
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            manualTimeout: 2h
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+
+  - it: ignores a zero manualTimeout with the fast preset
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            manualTimeout: 0s
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1170"
+
+  - it: fails an explicit steps list without budgetSeconds
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 20
+              - pause:
+                  duration: 10m
+              - setWeight: 100
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.budgetSeconds is not set; an explicit global.strategy.canary.steps list needs it"
+
+  - it: renders budgetSeconds as the budget of an explicit steps list
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 20
+              - pause:
+                  duration: 10m
+              - setWeight: 100
+            budgetSeconds: 900
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "900"
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 3
+
+  - it: fails budgetSeconds 0 with an explicit steps list
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 100
+            budgetSeconds: 0
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "budgetSeconds.*minimum"
+
+  - it: fails budgetSeconds above 5700
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 100
+            budgetSeconds: 5701
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "budgetSeconds.*maximum"
+
+  - it: ignores budgetSeconds with a preset
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            budgetSeconds: 99
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+
+  # start 540 + health 90 + pause 7200 + w10 540 = 8370
+  - it: fails a computed budget above 5700 s
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 2h
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 8370 s; the maximum is 5700 s. rollout-watch's release workflow has activeDeadlineSeconds 10800"
+
+  # start 540 + health 90 + pause 4530 + w10 540 = 5700
+  - it: accepts a computed budget of exactly 5700 s
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 4530s
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5700"
+
+  - it: fails a computed budget of 5701 s
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 4531s
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "is 5701 s; the maximum is 5700 s"
+
+  # start 540 + 3 x (health 5 x 60 + pause 300 + barrier 540)
+  - it: counts analysis.health count x interval
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              health:
+                count: 5
+                interval: 1m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3960"
+
+  # start 540 + (health 90 + pause 300 + w10 300) + 2 x (health 90 + pause 300 + barrier 540)
+  - it: counts each barrier's own timeout
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            coordinator:
+              barrierTimeouts:
+                w10: 5m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3090"
+
+  # The analysis step runs health (3 x 30s = 90) and smoke (10 x 1m = 600) in parallel: start 540 + 600 + w25 540
+  - it: counts the longest template of an analysis step when an extra template runs longer than health
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [smoke]
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: smoke
+              count: 10
+              interval: 1m
+              provider:
+                web:
+                  url: http://smoke.example/check
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[2].analysis.templates
+          value:
+            - templateName: preprod-test-stack-api-health
+            - templateName: preprod-test-stack-api-smoke
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1680"
+
+  # smoke (count 1 by default, no interval) takes 0 s, so health's 90 s is the longest.
+  - it: keeps health as the longest template when an extra template is shorter
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [smoke]
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: smoke
+              provider:
+                web:
+                  url: http://smoke.example/check
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1170"
+
+  # smoke is a Job: 2 x max(1m, activeDeadlineSeconds 400) = 800; start 540 + 800 + w25 540
+  - it: counts a Job template's activeDeadlineSeconds when it is longer than the interval
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [smoke]
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: smoke
+              count: 2
+              interval: 1m
+              provider:
+                job:
+                  spec:
+                    backoffLimit: 0
+                    activeDeadlineSeconds: 400
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: smoke
+                            image: registry.example.com/smoke:1.0.0
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1880"
+
+  # A Job without activeDeadlineSeconds counts its interval: 2 x 1m = 120; start 540 + 120 + w25 540
+  - it: counts a Job template's interval when it sets no activeDeadlineSeconds
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [smoke]
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: smoke
+              count: 2
+              interval: 1m
+              provider:
+                job:
+                  spec:
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: smoke
+                            image: registry.example.com/smoke:1.0.0
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1200"
+
+  # Argo Rollouts runs count 0 without an interval once: 1 x activeDeadlineSeconds 300; start 540 + 300 + w25 540
+  - it: counts a template with count 0 and no interval as one measurement
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [smoke]
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: smoke
+              count: 0
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 300
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: smoke
+                            image: registry.example.com/smoke:1.0.0
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1380"
+
+  # A health entry under analysisTemplates replaces the chart's: 4 x 1m = 240; start 540 + 240 + w25 540
+  - it: counts a replacement health template's own count and interval
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: health
+              count: 4
+              interval: 1m
+              provider:
+                web:
+                  url: http://health.example/check
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1320"
+
+  # Follower: start 540 + dark-ready 540 + dark-passed 540 + health 90 + w25 540 = 2250. The leader also runs tests-dark,
+  # a Job of 1 x activeDeadlineSeconds 600: 2850. rollout-watch takes the largest value of the release group.
+  - it: gives the leader the tests-dark analysis in its budget and the follower none
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            dark: true
+            leader: api
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 600
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1.0.0
+        worker:
+          <<: *rollout
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "2850"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "2250"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  # A migrating Rollout runs no canary steps, so it is not part of the release group rollout-watch reads.
+  - it: renders no budget on a migrating Rollout
+    set:
+      global: *global
+      environment: *preprod
+      applications:
+        api:
+          <<: *rollout
+          migratingToRollouts: true
+    asserts:
+      - isKind:
+          of: Rollout
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]

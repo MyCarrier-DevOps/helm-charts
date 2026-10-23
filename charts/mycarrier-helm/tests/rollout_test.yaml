@@ -23,6 +23,7 @@ tests:
         - setWeight: 25
         - setWeight: 50
         - setWeight: 100
+      global.strategy.canary.budgetSeconds: 60
     asserts:
       - isKind:
           of: Rollout
@@ -69,6 +70,7 @@ tests:
       applications.test-app-api.updateStrategy.type: "RollingUpdate"
       global.strategy.canary.steps:
         - setWeight: 100
+      global.strategy.canary.budgetSeconds: 60
     asserts:
       - isKind:
           of: Rollout
@@ -94,6 +96,7 @@ tests:
       applications.test-app-api.updateStrategy.type: "RollingUpdate"
       global.strategy.canary.steps:
         - setWeight: 100
+      global.strategy.canary.budgetSeconds: 60
       applications.test-app-api.networking.istio.gateway: istio-system/authenticated
     asserts:
       - isKind:

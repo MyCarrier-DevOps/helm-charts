@@ -98,7 +98,11 @@ trigger without it sends one v1 request with every test definition. `enableV1: f
 Rollout in prod, where it fails the render.
 
 It also renders the contract the release's rollout-watch reads (DEVOPS-319). Every Rollout that runs canary steps
-carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100). In prod, a
+carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100) and
+`mycarrier.tech/canaryBudgetSeconds`, the worst-case length of its steps (Tech Spec D22). rollout-watch times out at the
+largest budget of the release plus 15 minutes. The chart computes the budget for a preset: 3330 s for `standard`, 1170 s
+for `fast` and 4770 s for `manual`, whose pause counts as `manualTimeout` (default `1h`). An explicit `steps` list
+states it in `budgetSeconds`. A budget above 5700 s fails the render. In prod, a
 Rollout's test trigger no longer renders the `<fullName>-trigger` PostSync hook (Tech Spec D7): with
 `testtrigger.enableV1: true` the chart renders the ConfigMap `<fullName>-prod-tests` (key `request.json`, the hook's
 TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-watch posts it after promotion.
@@ -115,6 +119,9 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | A cluster without the `mycarrier/canary-coordinator` plugin | Set `coordinator.enabled: false`: the controller rejects steps for a plugin it does not have. |
 | Relied on the dark stage (`coordinator.enabled: true` with the old `dark` default) | Set `dark: true`; a `tests-dark` AnalysisTemplate must then render for the leader. |
 | `global.strategy.canary.bakeMinutes` above 100 | Set it to 100 or less: alert-gate's run has a 7200 s deadline and spends about 750 s outside its window. Above 100 fails every render. |
+| An explicit `global.strategy.canary.steps` list | Set `global.strategy.canary.budgetSeconds` to the steps' worst-case length in seconds (1 to 5700): the pause durations, each analysis step's longest template (`count` x max(`interval`, a Job's `activeDeadlineSeconds`)) and each barrier timeout. Without it, every Rollout fails to render. |
+| The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h`) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
+| A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (at 45m, the manual preset with the dark stage leaves 750 s for the leader's `tests-dark`), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
 | A prod Rollout app with a `testtrigger` and no `enableV1: true` | Set `enableV1: true`. The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so without it the render fails. |
 | A prod Rollout app with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
 | `global.testengineWebhookUrl` in prod, with a Rollout app whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |

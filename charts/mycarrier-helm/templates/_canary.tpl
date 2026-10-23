@@ -11,7 +11,8 @@
 {{- /* global.strategy.canary merged over the defaults, as JSON. Analysis is mandatory for every Rollout (DEVOPS-312):
        health and alerts are on unless opted out, and templates lists only extra templates. analysis.enabled is
        deprecated and has no default; rollout.yaml refuses false. dark stays off until DEVOPS-326 renders tests-dark.
-       bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). */ -}}
+       bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
+       and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $defaults := dict
       "preset" "standard"
@@ -19,6 +20,7 @@
       "dark" false
       "darkReplicas" 1
       "bakeMinutes" 30
+      "manualTimeout" "1h"
       "analysis" (dict "templates" (list)
         "health" (dict "enabled" true "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
         "alerts" (dict "enabled" true "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
@@ -158,6 +160,79 @@
 {{- int $bake -}}
 {{- end -}}
 
+{{- /* The canary's worst-case length in whole seconds (Tech Spec D22, Q51), rendered on every canary Rollout as
+       mycarrier.tech/canaryBudgetSeconds. The release's rollout-watch (DEVOPS-319) times out at the largest value of
+       the release group plus 15 minutes, so the budget covers the steps helm.canary.steps renders for this Rollout at
+       their longest, and rollout-watch never times out a canary that is still inside its designed steps:
+       - pause: its duration; the manual preset's pause, which has none, counts manualTimeout (default 1h). The pause
+         itself stays indefinite; manualTimeout only feeds the budget.
+       - analysis: the longest of its templates (they run in parallel), each count x max(interval, the Job's
+         activeDeadlineSeconds when the template is a Job provider that sets it). The chart's health template uses
+         analysis.health.count and interval; an applications.<app>.analysisTemplates entry (an extra template, or one
+         that replaces health or supplies tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders
+         it; Argo Rollouts runs count 0 without an interval once) and interval (0 when unset).
+       - a canary-coordinator barrier: its timeout.
+       - every other step (setWeight, setCanaryScale, setHeaderRoute): 0. The background alerts analysis runs alongside
+         the steps and is not counted.
+       The leader runs tests-dark and its followers do not, so their budgets can differ. An explicit steps list states its
+       own budget in budgetSeconds (required there); with a preset the chart computes it and budgetSeconds is ignored.
+       rollout-watch's release workflow has activeDeadlineSeconds 10800, which covers about 70 minutes before the canary
+       starts, the budget and 15 minutes after it, so a budget above 5700 s fails the render. helm.canary.steps runs
+       first, so its own checks report before these. */ -}}
+{{- define "helm.canary.budgetSeconds" -}}
+{{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- $steps := include "helm.canary.steps" . | fromYamlArray -}}
+{{- $budget := 0 -}}
+{{- if $cfg.steps -}}
+  {{- $set := $cfg.budgetSeconds -}}
+  {{- if or (not (kindIs "float64" $set)) (lt $set 1.0) (ne $set (float64 (int $set))) -}}
+    {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
+  {{- end -}}
+  {{- $budget = int $set -}}
+{{- else -}}
+  {{- $manual := 0 -}}
+  {{- if eq $cfg.preset "manual" -}}
+    {{- $manual = include "helm.canary.durationSeconds" $cfg.manualTimeout | int -}}
+    {{- if not $manual -}}
+      {{- fail (printf "global.strategy.canary.manualTimeout is '%v'; the manual preset needs a duration above zero such as 90s, 30m or 1h (default 1h). It is how long the release's rollout-watch allows for the manual pause (Tech Spec D22); the pause itself has no time limit." $cfg.manualTimeout) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- /* Seconds per AnalysisTemplate an analysis step can reference, by the name the step uses. */ -}}
+  {{- $prefix := printf "%s-%s-" (toString .Values.environment.name) (include "helm.fullname" .) -}}
+  {{- $health := $cfg.analysis.health -}}
+  {{- $templates := dict (printf "%shealth" $prefix) (mul (int $health.count) (include "helm.canary.durationSeconds" $health.interval | int)) -}}
+  {{- range (.application.analysisTemplates | default list) -}}
+    {{- $count := 1 -}}
+    {{- if hasKey . "count" }}{{ $count = max 1 (int .count) }}{{ end -}}
+    {{- $interval := include "helm.canary.durationSeconds" (.interval | default "") | int -}}
+    {{- $deadline := int (dig "provider" "job" "spec" "activeDeadlineSeconds" 0 .) -}}
+    {{- $_ := set $templates (printf "%s%s" $prefix (toString .name)) (mul $count (max $interval $deadline)) -}}
+  {{- end -}}
+  {{- range $steps -}}
+    {{- $plugin := dig "plugin" dict . -}}
+    {{- if hasKey . "pause" -}}
+      {{- $duration := dig "pause" "duration" "" . -}}
+      {{- $budget = add $budget (ternary (include "helm.canary.durationSeconds" $duration | int) $manual (not (empty $duration))) -}}
+    {{- else if hasKey . "analysis" -}}
+      {{- $longest := 0 -}}
+      {{- range (dig "analysis" "templates" list .) -}}
+        {{- if not (hasKey $templates (toString .templateName)) -}}
+          {{- fail (printf "helm.canary.budgetSeconds has no length for AnalysisTemplate '%s'; a chart change added a template to the preset steps without adding it here." (toString .templateName)) -}}
+        {{- end -}}
+        {{- $longest = max $longest (index $templates (toString .templateName)) -}}
+      {{- end -}}
+      {{- $budget = add $budget $longest -}}
+    {{- else if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") -}}
+      {{- $budget = add $budget (include "helm.canary.durationSeconds" (dig "config" "timeout" "" $plugin) | int) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if gt (int $budget) 5700 -}}
+  {{- fail (printf "application '%s': the canary budget (mycarrier.tech/canaryBudgetSeconds) is %d s; the maximum is 5700 s. rollout-watch's release workflow has activeDeadlineSeconds 10800, which must cover about 70 minutes before the canary starts, the budget, and 15 minutes after it (DEVOPS-319). Lower global.strategy.canary.manualTimeout, the coordinator.barrierTimeouts, or the analysis templates' count or interval; with explicit steps, shorten their pauses and lower budgetSeconds." .appName (int $budget)) -}}
+{{- end -}}
+{{- int $budget -}}
+{{- end -}}
+
 {{- /* True for an application whose prod_tests the release's rollout-watch starts after promotion (Tech Spec D7,
        DEVOPS-319): a canary Rollout (helm.canary.enabled) in prod, because canaries run only in prod (Q42). For it
        triggertestengine.yaml renders no PostSync hook, which could start prod_tests at the start of a canary sync or
@@ -168,7 +243,8 @@
 {{- if and (eq (include "helm.canary.enabled" .) "true") (eq (toString .Values.environment.name) "prod") }}true{{ else }}false{{ end -}}
 {{- end -}}
 
-{{- /* A barrier timeout such as 90s, 9m or 1h, in seconds; any other form yields 0 and is not checked. */ -}}
+{{- /* A duration such as 90s, 9m or 1h (a barrier timeout, a pause, an analysis interval, manualTimeout), in seconds;
+       any other form yields 0, so a barrier timeout in another form is not checked. */ -}}
 {{- define "helm.canary.durationSeconds" -}}
 {{- $v := toString . -}}
 {{- if regexMatch "^[0-9]+(s|m|h)$" $v -}}

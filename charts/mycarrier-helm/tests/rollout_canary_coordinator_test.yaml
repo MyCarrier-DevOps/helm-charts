@@ -255,6 +255,7 @@ tests:
               - plugin:
                   name: mycarrier/canary-coordinator
                   config: {kind: barrier, name: w5, timeout: 5m}
+            budgetSeconds: 300
       environment:
         name: preprod
       applications:

@@ -450,6 +450,7 @@ tests:
               - pause: {}
               - setHeaderRoute: {name: qa-header}
               - setWeight: 100
+            budgetSeconds: 3600
       environment:
         name: preprod
       applications:

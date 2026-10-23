@@ -606,6 +606,7 @@ tests:
                   templates:
                     - templateName: prod-mycarrier-api-smoke
               - setWeight: 100
+            budgetSeconds: 60
       applications:
         api:
           deploymentType: rollout
@@ -669,6 +670,7 @@ tests:
               - pause:
                   duration: 5m
               - setWeight: 100
+            budgetSeconds: 300
       alerts:
         serviceName: ""
     asserts:

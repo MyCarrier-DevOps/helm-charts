@@ -282,6 +282,7 @@ tests:
           canary:
             steps:
               - setWeight: 10
+            budgetSeconds: 60
       environment:
         name: preprod
       applications:

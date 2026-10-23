@@ -298,6 +298,7 @@ tests:
               - setWeight: 5
               - pause:
                   duration: 2m
+            budgetSeconds: 120
       environment:
         name: preprod
       applications:
