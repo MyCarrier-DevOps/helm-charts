@@ -102,6 +102,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: dev
@@ -115,6 +116,9 @@ tests:
             registry: r.example.com
             repository: web
             tag: 1.0.0
+          # The mandatory canary health check calls the default liveness path on this port.
+          ports:
+            http: 8080
           initContainers:
             - name: migrate
               image: r.example.com/migrate

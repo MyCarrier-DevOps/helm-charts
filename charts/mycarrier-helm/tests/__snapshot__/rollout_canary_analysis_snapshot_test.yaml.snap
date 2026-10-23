@@ -2,7 +2,7 @@ references the default template set from the canary strategy:
   1: |
     abortScaleDownDelaySeconds: 30
     analysis:
-      startingStep: 0
+      startingStep: 1
       templates:
         - templateName: prod-mycarrier-api-alerts
     canaryService: mycarrier-api-preview
@@ -10,24 +10,48 @@ references the default template set from the canary strategy:
     minPodsPerReplicaSet: 1
     stableService: mycarrier-api
     steps:
+      - plugin:
+          config:
+            kind: barrier
+            name: start
+            timeout: 9m
+          name: mycarrier/canary-coordinator
       - setWeight: 10
       - analysis:
           templates:
             - templateName: prod-mycarrier-api-health
       - pause:
           duration: 5m
+      - plugin:
+          config:
+            kind: barrier
+            name: w10
+            timeout: 9m
+          name: mycarrier/canary-coordinator
       - setWeight: 25
       - analysis:
           templates:
             - templateName: prod-mycarrier-api-health
       - pause:
           duration: 5m
+      - plugin:
+          config:
+            kind: barrier
+            name: w25
+            timeout: 9m
+          name: mycarrier/canary-coordinator
       - setWeight: 50
       - analysis:
           templates:
             - templateName: prod-mycarrier-api-health
       - pause:
           duration: 5m
+      - plugin:
+          config:
+            kind: barrier
+            name: w50
+            timeout: 9m
+          name: mycarrier/canary-coordinator
       - setWeight: 100
     trafficRouting:
       istio:
@@ -51,7 +75,7 @@ renders the default analysis template set:
           web:
             jsonPath: '{$.status}'
             timeoutSeconds: 10
-            url: http://mycarrier-api-preview.prod.svc.cluster.local:8080/health
+            url: http://mycarrier-api-preview.prod.svc.cluster.local:8080/liveness
         successCondition: result == "Healthy"
   2: |
     data:

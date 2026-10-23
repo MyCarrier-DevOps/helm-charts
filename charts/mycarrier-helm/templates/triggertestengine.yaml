@@ -6,6 +6,41 @@
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- if .testtrigger }}
+{{- /* A prod canary Rollout gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after
+       the last promote or after an abort, so it could test the wrong version. The release's rollout-watch starts
+       prod_tests after promotion instead (DEVOPS-319): it posts request.json from the <fullName>-prod-tests ConfigMap
+       labelled with this release's correlation id, the same v1 request the hook sends (helm.testtrigger.v1request).
+       It always posts to TestEngine's v1 trigger, so a testtrigger with enableV1: false fails the render: nothing would start
+       prod_tests for the application. It posts with the shared key and the Management-cluster URL, so
+       a per-application key or a TestEngine URL override fails the render instead of being ignored. The ConfigMap
+       never renders where the hook does, so prod_tests never starts twice. */}}
+{{- if eq (include "helm.canary.prodTestsByRolloutWatch" $appContext) "true" }}
+{{- if not (dig "testtrigger" "enableV1" true $appValues) }}
+{{- fail (printf "application '%s': a Rollout in prod needs testtrigger.enableV1: true. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion through TestEngine's v1 trigger (DEVOPS-319), so without enableV1 nothing would run its prod tests. Set applications.%s.testtrigger.enableV1: true." $appName $appName) }}
+{{- end }}
+{{- if dig "testtrigger" "enableV1" true $appValues }}
+{{- $apikey := dig "testtrigger" "apikey" "" $appValues | default "" | toString }}
+{{- if and $apikey (ne $apikey "vault:DevOps/data/testengine/api#encoded_header") }}
+{{- fail (printf "application '%s': testtrigger.apikey must be vault:DevOps/data/testengine/api#encoded_header or unset for a Rollout in prod. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion with that shared key (DEVOPS-319), so a per-application key would not be used. Remove testtrigger.apikey, or set it to vault:DevOps/data/testengine/api#encoded_header." $appName) }}
+{{- end }}
+{{- if (dig "testengineWebhookUrl" "" ($.Values.global | default dict)) }}
+{{- fail (printf "application '%s': global.testengineWebhookUrl cannot be set in prod while a Rollout has a testtrigger with enableV1. The chart renders no PostSync hook for the Rollout: the release's rollout-watch starts prod_tests after promotion through TestEngine's v1 trigger on the Management cluster (DEVOPS-319), so the URL would not be used. Remove global.testengineWebhookUrl from the prod values." $appName) }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-prod-tests
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.version" $appContext | indent 4 | trim }}
+data:
+  request.json: |-
+    {{- include "helm.testtrigger.v1request" $appContext | nindent 4 }}
+{{- end }}
+{{- else }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -23,5 +58,6 @@ metadata:
     {{ include "helm.annotations.vault" . | indent 4 | trim }}
 spec:
   {{ include "helm.specs.testenginehook" $appContext | indent 2 | trim }}
+{{- end }}
 {{- end }}
 {{- end }}

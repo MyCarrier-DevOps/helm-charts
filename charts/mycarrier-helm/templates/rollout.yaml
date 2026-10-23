@@ -8,6 +8,18 @@
 {{- fail (printf "global.strategy.canary.leader '%s' is not an application of this release" (toString .)) }}
 {{- end }}
 {{- end }}
+{{- /* Canary analysis is mandatory (DEVOPS-312), so the removed analysis.enabled: false and the old [health, alerts]
+       list fail in every environment, Rollouts or not: a stack sees them on its first render, not at its first prod
+       canary. analysis.enabled: true is accepted and has no effect. */}}
+{{- $analysisValues := dig "strategy" "canary" "analysis" dict (.Values.global | default dict) }}
+{{- if and (hasKey $analysisValues "enabled") (not $analysisValues.enabled) }}
+{{- fail "global.strategy.canary.analysis.enabled: false is no longer supported: canary analysis is mandatory for every Rollout (analysis.enabled is deprecated; true has no effect). Remove it. To leave out one check, set global.strategy.canary.analysis.health.enabled: false or analysis.alerts.enabled: false." }}
+{{- end }}
+{{- range ($analysisValues.templates | default list) }}
+{{- if has (toString .) (list "health" "alerts") }}
+{{- fail (printf "global.strategy.canary.analysis.templates lists '%s': health and alerts always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.%s.enabled: false." (toString .) (toString .)) }}
+{{- end }}
+{{- end }}
 {{- range $appName, $appValues := .Values.applications }}
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- /* Also rendered for a Deployment app while migratingToRollouts is set: on the way back from a Rollout, the Rollout
@@ -76,6 +88,11 @@ metadata:
     {{- if $canary }}
     {{- /* How many Rollouts of this release run canary steps; the canary-coordinator (DEVOPS-325) waits for them. */}}
     mycarrier.tech/rolloutGroupSize: {{ include "helm.canary.groupSize" $ | quote }}
+    {{- /* alert-gate's watch window after promotion (D18), read by the release's rollout-watch (DEVOPS-319). */}}
+    mycarrier.tech/bakeMinutes: {{ include "helm.canary.bakeMinutes" $appContext | quote }}
+    {{- /* The canary's worst-case length in seconds (D22); rollout-watch times out at the release group's largest value
+           plus 15 minutes (DEVOPS-319). */}}
+    mycarrier.tech/canaryBudgetSeconds: {{ include "helm.canary.budgetSeconds" $appContext | quote }}
     {{- end }}
     {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:

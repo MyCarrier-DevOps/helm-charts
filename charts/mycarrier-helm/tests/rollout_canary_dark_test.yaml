@@ -1,12 +1,15 @@
 suite: Rollout canary dark stage (header-gated, Tech Spec D11 and D20)
+# The dark stage is off by default until the chart renders tests-dark (DEVOPS-326), so these tests set dark: true and,
+# where the leader runs its suite, define tests-dark under the leader's analysisTemplates. Most opt out of the health
+# check so the step lists show the dark stage and the barriers alone.
 templates:
   - rollout.yaml
 tests:
-  # Tech Spec chart contract: every preset starts with the dark stage after barrier start. The header route is removed
-  # after dark-passed. setCanaryScale {matchTrafficWeight: true} then hands the canary's size back to the weights:
-  # Argo Rollouts keeps the last setCanaryScale in force for every later step, so without it the canary would stay
-  # at darkReplicas pods through 10/25/50%.
-  - it: starts every preset with the dark stage when the coordinator is on
+  # Tech Spec chart contract: with dark on, every preset starts with the dark stage after barrier start. The header
+  # route is removed after dark-passed. setCanaryScale {matchTrafficWeight: true} then hands the canary's size back to
+  # the weights: Argo Rollouts keeps the last setCanaryScale in force for every later step, so without it the canary
+  # would stay at darkReplicas pods through 10/25/50%. Analysis is mandatory, so the leader runs tests-dark.
+  - it: starts every preset with the dark stage when dark is on
     set:
       global:
         appStack: test-stack
@@ -15,13 +18,20 @@ tests:
         strategy:
           canary:
             preset: fast
-            coordinator:
-              enabled: true
+            dark: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/run
           image:
             registry: registry.example.com
             repository: api
@@ -46,6 +56,9 @@ tests:
             - plugin:
                 name: mycarrier/canary-coordinator
                 config: {kind: barrier, name: dark-ready, timeout: 9m}
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-tests-dark
             - plugin:
                 name: mycarrier/canary-coordinator
                 config: {kind: barrier, name: dark-passed, timeout: 9m}
@@ -64,8 +77,7 @@ tests:
             - name: canary-header
 
   # D20: the leader (global.strategy.canary.leader, chosen on purpose rather than by name order) alone runs the
-  # dark-stage suite; followers hold at dark-passed. The tests-dark step renders only with analysis.enabled, like the
-  # other analysis steps.
+  # dark-stage suite; followers hold at dark-passed.
   - it: gives the tests-dark analysis step to the leader only
     set:
       global:
@@ -76,11 +88,7 @@ tests:
           canary:
             preset: fast
             leader: worker
-            analysis:
-              enabled: true
-              templates: [health]
-            coordinator:
-              enabled: true
+            dark: true
       environment:
         name: preprod
       applications:
@@ -142,8 +150,10 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            coordinator:
-              enabled: true
+            dark: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -176,8 +186,10 @@ tests:
         strategy:
           canary:
             leader: web
-            coordinator:
-              enabled: true
+            dark: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -201,7 +213,37 @@ tests:
       - failedTemplate:
           errorPattern: "global.strategy.canary.leader 'web' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
 
-  - it: needs no leader while the dark stage is off
+  # dark is off by default (DEVOPS-312, until DEVOPS-326 renders tests-dark): the coordinator's barriers render, and
+  # the dark stage, its managed route and its leader are not needed.
+  - it: renders no dark stage and no managed route by default
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[0].plugin.config.name
+          value: start
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            setWeight: 10
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+
+  - it: needs no leader while the dark stage is off by default
     set:
       global:
         appStack: test-stack
@@ -209,9 +251,9 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            dark: false
-            coordinator:
-              enabled: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -235,32 +277,6 @@ tests:
       - hasDocuments:
           count: 2
 
-  - it: renders no tests-dark step while analysis is off
-    set:
-      global:
-        appStack: test-stack
-        language: nodejs
-        correlationId: corr-1
-        strategy:
-          canary:
-            coordinator:
-              enabled: true
-      environment:
-        name: preprod
-      applications:
-        api:
-          deploymentType: rollout
-          image:
-            registry: registry.example.com
-            repository: api
-            tag: "1.0.0"
-          ports:
-            http: 8080
-    asserts:
-      - equal:
-          path: spec.strategy.canary.steps[4].plugin.config.name
-          value: dark-passed
-
   # With one Rollout that runs canary steps (the rolloutGroupSize set) the leader defaults to it: a migrating app is not
   # one, so no leader setting is needed.
   - it: defaults the leader to the only canary Rollout, skipping a migrating application
@@ -271,11 +287,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            analysis:
-              enabled: true
-              templates: [health]
-            coordinator:
-              enabled: true
+            dark: true
       environment:
         name: preprod
       applications:
@@ -324,14 +336,21 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: true
             darkReplicas: 2
-            coordinator:
-              enabled: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/run
           image:
             registry: registry.example.com
             repository: api
@@ -355,8 +374,9 @@ tests:
         strategy:
           canary:
             dark: false
-            coordinator:
-              enabled: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -377,12 +397,19 @@ tests:
           path: spec.strategy.canary.trafficRouting.managedRoutes
 
   # Followers rely on the dark-ready and dark-passed barriers, so the dark stage waits for the coordinator.
-  - it: renders no dark stage and no managed route while the coordinator is off
+  - it: renders no dark stage and no managed route with dark true while the coordinator is off
     set:
       global:
         appStack: test-stack
         language: nodejs
-        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+            analysis:
+              health:
+                enabled: false
+            coordinator:
+              enabled: false
       environment:
         name: preprod
       applications:
@@ -412,6 +439,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: true
             steps:
               - setCanaryScale: {replicas: 1}
               - setHeaderRoute:
@@ -422,8 +450,7 @@ tests:
               - pause: {}
               - setHeaderRoute: {name: qa-header}
               - setWeight: 100
-            coordinator:
-              enabled: true
+            budgetSeconds: 3600
       environment:
         name: preprod
       applications:
@@ -455,8 +482,10 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
-            coordinator:
-              enabled: true
+            dark: true
+            analysis:
+              health:
+                enabled: false
       environment:
         name: preprod
       applications:
@@ -465,6 +494,11 @@ tests:
           isFrontend: true
           isPrimary: true
           routePrefix: /
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/run
           image:
             registry: registry.example.com
             repository: shell
@@ -486,8 +520,8 @@ tests:
           errorPattern: "application 'shell': the dark stage's header route would also go into the shared test-stack-shell-multifrontend VirtualService"
 
   # The leader must name an application of the release whenever it is set, so a misspelled value fails before the
-  # coordinator is turned on; that it is a canary Rollout is checked only where the dark stage needs it.
-  - it: fails the render for a leader that is not an application of the release even while the coordinator is off
+  # dark stage is turned on; that it is a canary Rollout is checked only where the dark stage needs it.
+  - it: fails the render for a leader that is not an application of the release even while the dark stage is off
     set:
       global:
         appStack: test-stack
@@ -512,7 +546,7 @@ tests:
 
   # A leader set in shared values still renders where that application is a Deployment or migrating, as long as the
   # dark stage does not need it there.
-  - it: renders a release whose leader is still a Deployment while the coordinator is off
+  - it: renders a release whose leader is still a Deployment while the dark stage is off
     set:
       global:
         appStack: test-stack

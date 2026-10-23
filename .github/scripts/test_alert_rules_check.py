@@ -22,10 +22,7 @@ VALUES = """
 global:
   appStack: mycarrier
   language: csharp
-  strategy:
-    canary:
-      analysis:
-        enabled: true
+  correlationId: corr-1
 environment:
   name: prod
 alerts:

@@ -134,12 +134,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: dev
       applications:
         rollout-app:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               offloadOperatorEnabled: false

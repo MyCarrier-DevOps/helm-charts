@@ -6,18 +6,21 @@ templates:
   - service.yaml
   - analysistemplate.yaml
 tests:
-  # R1: with no canary values the Rollout gets the Services, Istio routing and the standard ladder.
+  # R1: with no canary values the Rollout gets the Services, Istio routing and the standard ladder, with the coordinator's
+  # barriers and the mandatory health analysis after each weight (DEVOPS-312).
   - it: renders the stable and canary Services, Istio routing and the standard ladder by default
     template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -41,15 +44,36 @@ tests:
       - equal:
           path: spec.strategy.canary.steps
           value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
             - setWeight: 10
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
             - pause:
                 duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w10, timeout: 9m}
             - setWeight: 25
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
             - pause:
                 duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
             - setWeight: 50
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
             - pause:
                 duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w50, timeout: 9m}
             - setWeight: 100
 
   - it: renders the progress deadline, abort and rollback window defaults
@@ -57,12 +81,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -86,6 +112,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
@@ -95,6 +122,7 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -111,6 +139,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
@@ -120,6 +149,7 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -130,7 +160,16 @@ tests:
       - equal:
           path: spec.strategy.canary.steps
           value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
             - setWeight: 25
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
             - setWeight: 100
 
   - it: renders the manual preset with a pause until resumed
@@ -138,6 +177,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
@@ -147,6 +187,7 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -157,20 +198,27 @@ tests:
       - equal:
           path: spec.strategy.canary.steps
           value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
             - setWeight: 10
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-health
             - pause: {}
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w10, timeout: 9m}
             - setWeight: 100
 
-  - it: adds an analysis step after each weight when analysis is enabled
+  # Analysis is mandatory (DEVOPS-312): health runs after each weight with no analysis values; alerts is prod only.
+  - it: adds a health analysis step after each weight with no analysis values
     template: rollout.yaml
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
-        strategy:
-          canary:
-            analysis:
-              enabled: true
       environment:
         name: preprod
       alerts:
@@ -186,7 +234,7 @@ tests:
             http: 8080
     asserts:
       - equal:
-          path: spec.strategy.canary.steps[1]
+          path: spec.strategy.canary.steps[2]
           value:
             analysis:
               templates:
@@ -194,15 +242,16 @@ tests:
       - notExists:
           path: spec.strategy.canary.analysis
       - equal:
-          path: spec.strategy.canary.steps[2]
+          path: spec.strategy.canary.steps[3]
           value:
             pause:
               duration: 5m
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 10
+          count: 14
 
-  - it: runs only the configured analysis templates
+  # With the coordinator turned off, the preset carries no barriers and still runs the health analysis.
+  - it: runs the health analysis without barriers when the coordinator is turned off
     template: rollout.yaml
     set:
       global:
@@ -211,9 +260,8 @@ tests:
         strategy:
           canary:
             preset: fast
-            analysis:
-              enabled: true
-              templates: [health]
+            coordinator:
+              enabled: false
       environment:
         name: preprod
       applications:
@@ -241,6 +289,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
@@ -249,6 +298,7 @@ tests:
               - setWeight: 5
               - pause:
                   duration: 2m
+            budgetSeconds: 120
       environment:
         name: preprod
       applications:
@@ -305,6 +355,7 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -321,12 +372,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -335,6 +388,7 @@ tests:
             http: 8080
         worker:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: worker
@@ -360,12 +414,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -374,6 +430,7 @@ tests:
             http: 8080
         worker:
           deploymentType: rollout
+          canaryHealthPath: /health
           migratingToRollouts: true
           image:
             registry: registry.example.com
@@ -458,12 +515,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -493,6 +552,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: prod
@@ -522,6 +582,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: csharp
       environment:
         name: prod
@@ -566,12 +627,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: dev
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               offloadOperatorEnabled: false
@@ -593,12 +656,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               routes:
@@ -630,12 +695,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               routes:
@@ -667,12 +734,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               routes:
@@ -697,6 +766,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
@@ -706,6 +776,7 @@ tests:
           isPrimary: true
           routePrefix: /
           deploymentType: rollout
+          canaryHealthPath: /health
           # The multi-frontend template needs the primary's networking.istio block (true on 4.4.0 as well).
           networking:
             istio: {}
@@ -744,6 +815,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
@@ -753,6 +825,7 @@ tests:
           isPrimary: true
           routePrefix: /
           deploymentType: rollout
+          canaryHealthPath: /health
           # The multi-frontend template needs the primary's networking.istio block (true on 4.4.0 as well).
           networking:
             istio: {}
@@ -814,12 +887,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           service:
             type: LoadBalancer
           image:
@@ -842,12 +917,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               routes:
@@ -870,6 +947,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
@@ -896,6 +974,7 @@ tests:
           isFrontend: true
           routePrefix: /admin
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               routes:
@@ -919,6 +998,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
@@ -989,6 +1069,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: feature20-saia
@@ -1012,6 +1093,7 @@ tests:
           isFrontend: true
           routePrefix: /admin
           deploymentType: rollout
+          canaryHealthPath: /health
           networking:
             istio:
               offloadOperatorEnabled: false
@@ -1032,6 +1114,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
@@ -1041,6 +1124,7 @@ tests:
           isPrimary: true
           routePrefix: /
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: shell
@@ -1067,12 +1151,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           progressDeadlineSeconds: 1800
           image:
             registry: registry.example.com
@@ -1092,12 +1178,14 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
       environment:
         name: preprod
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -1121,6 +1209,7 @@ tests:
     set:
       global:
         appStack: test-stack
+        correlationId: corr-1
         language: nodejs
         strategy:
           canary:
@@ -1130,6 +1219,7 @@ tests:
       applications:
         api:
           deploymentType: rollout
+          canaryHealthPath: /health
           image:
             registry: registry.example.com
             repository: api
@@ -1140,6 +1230,6 @@ tests:
       - isKind:
           of: Rollout
       - equal:
-          path: spec.strategy.canary.steps[0]
+          path: spec.strategy.canary.steps[1]
           value:
             setWeight: 10

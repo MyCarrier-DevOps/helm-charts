@@ -84,6 +84,50 @@ coordinator on:
 | A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
 | `coordinator.barrierTimeouts` at or above `progressDeadlineSeconds` (the 4.6.0 defaults were 10m, 15m and 30m) | The defaults are now 9m. Keep a custom timeout below `progressDeadlineSeconds`, or raise the deadline: Argo Rollouts counts the wait at a barrier toward it, so a longer barrier timeout never fires. |
 
+Since the release after 4.7.8, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
+
+## Upgrading past 4.7.8 (Rollouts)
+
+The release after 4.7.8 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
+chart's `health` check, and in prod the Rollout runs the chart's `alerts` check as background analysis, unless a stack
+opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
+StatefulSet apps render unchanged, except where the values below fail the whole render.
+
+`testtrigger.enableV1` now defaults to `true` for every application, because TestEngine's legacy API is retired. A test
+trigger without it sends one v1 request with every test definition. `enableV1: false` keeps the legacy API, except on a
+Rollout in prod, where it fails the render.
+
+It also renders the contract the release's rollout-watch reads (DEVOPS-319). Every Rollout that runs canary steps
+carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100) and
+`mycarrier.tech/canaryBudgetSeconds`, the worst-case length of its steps (Tech Spec D22). rollout-watch times out at the
+largest budget of the release plus 15 minutes. The chart computes the budget for a preset: 3330 s for `standard`, 1170 s
+for `fast` and 4770 s for `manual`, whose pause counts as `manualTimeout` (default `1h`). With the coordinator off,
+each weight step above 0 counts `progressDeadlineSeconds` instead of the barriers: 3570 s, 1290 s and 4890 s. An explicit `steps` list
+states it in `budgetSeconds`. A budget above 5700 s fails the render. In prod, a
+Rollout's test trigger no longer renders the `<fullName>-trigger` PostSync hook (Tech Spec D7): with
+`testtrigger.enableV1: true` the chart renders the ConfigMap `<fullName>-prod-tests` (key `request.json`, the hook's
+TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-watch posts it after promotion.
+
+| 4.7.8 values | Edit |
+|---|---|
+| `global.strategy.canary.analysis.enabled: false` | Remove it: it fails the render in every environment. `true` is accepted and has no effect. To leave out one check, set `analysis.health.enabled: false` or `analysis.alerts.enabled: false`. |
+| `analysis.templates` lists `health` or `alerts` (the 4.7.5 default was `[health, alerts]`) | Remove them: they always run, and listing either fails the render. List only extra templates. |
+| `analysis.health.enabled: false` and `analysis.alerts.enabled: false` with no extra templates | Analysis is mandatory, so every Rollout fails to render. Keep one check on, or list an extra template. |
+| A Rollout app whose liveness probe is not HTTP (any non-csharp app with default probes) | Set `applications.<app>.canaryHealthPath` or `analysis.health.path`, give the app an `httpGet` liveness probe, or set `analysis.health.enabled: false`. Readiness and startup probes are no longer used for the path. |
+| A csharp Rollout app with default probes | Nothing to set: the health check now calls `/liveness` (the default liveness probe) instead of `/health`. |
+| A prod Rollout with no `analysis.alerts.service`, no `alerts.serviceName`, and a `global.appStack` that is empty or the default `app` | Set the label the service's Grafana alert rules carry in `analysis.alerts.service`, or set `analysis.alerts.enabled: false`. `global.appStack`, lower-cased, is now the last fallback. |
+| A Rollout render without `global.correlationId` (deploy-core always sets it) | Set it, or set `coordinator.enabled: false`. |
+| A cluster without the `mycarrier/canary-coordinator` plugin | Set `coordinator.enabled: false`: the controller rejects steps for a plugin it does not have. |
+| Relied on the dark stage (`coordinator.enabled: true` with the old `dark` default) | Set `dark: true`; a `tests-dark` AnalysisTemplate must then render for the leader. |
+| `global.strategy.canary.bakeMinutes` above 100 | Set it to 100 or less: alert-gate's run has a 7200 s deadline and spends about 750 s outside its window. Above 100 fails every render. |
+| An explicit `global.strategy.canary.steps` list | Set `global.strategy.canary.budgetSeconds` to the steps' worst-case length in seconds (1 to 5700): the pause durations, each analysis step's longest template (`count` x max(`interval`, a Job's `activeDeadlineSeconds`)) and each barrier timeout, or without barriers `progressDeadlineSeconds` for each weight step above 0. Without it, every Rollout fails to render. |
+| The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h`) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
+| A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (at 45m, the manual preset with the dark stage leaves 750 s for the leader's `tests-dark`), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
+| A prod Rollout app with `testtrigger.enableV1: false` | Remove it (`true` is the default). The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so `false` fails the render. |
+| A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Set the property to `canary` before the release that removes `migratingToRollouts`. The chart renders no prod PostSync hook for a Rollout, and only the canary release path starts its prod tests. |
+| A prod Rollout app with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
+| `global.testengineWebhookUrl` in prod, with a Rollout app whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
+
 ## Chart Structure
 
 ```

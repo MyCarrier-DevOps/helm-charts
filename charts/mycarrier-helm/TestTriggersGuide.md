@@ -14,6 +14,17 @@ How it works:
 3. These test trigger jobs are then executed
 4. These jobs make curl calls to TestEngineApi that deploys tests to the appropriate k8s cluster and namespace, allowing the tests to run against the internal k8s service
 
+### Rollouts in prod
+
+In prod, an application with `deploymentType: rollout` (without `migratingToRollouts`) gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. The release's rollout-watch (DEVOPS-319) starts the prod tests after the canary is promoted instead:
+
+- rollout-watch runs only on the canary release path, so the repository's `deployment-strategy` property must be `canary` before the release that removes `migratingToRollouts`. The chart cannot see the property; a prod Rollout in a `rolling` or unset repository gets no prod tests.
+- With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger.
+- With `enableV1: false`, the render fails, because nothing would start the application's prod tests.
+- With `enableV1: true`, `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.
+
+Other environments, Deployments, StatefulSets and migrating Rollouts keep the PostSync hook.
+
 ## Configuration Structure
 
 Test triggers are configured at the application level in the values file. Below is the general structure:
@@ -80,7 +91,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false` (default), each test definition sends a separate POST to the legacy `api` endpoint. The webhook URL is set automatically based on this flag; use `global.testengineWebhookUrl` (injected by the CI/CD render step) to override. | No | `false` | `true` |
+| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false`, each test definition sends a separate POST to the legacy `api` endpoint, which is retired; `true` is the default. The webhook URL is set automatically based on this flag; `global.testengineWebhookUrl` overrides it, except for a Rollout in prod, where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
 
 *Default resource values:
 ```yaml

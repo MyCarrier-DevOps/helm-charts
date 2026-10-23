@@ -257,7 +257,8 @@ tests:
           path: spec.template.spec.containers[0].env[1].value
           value: "vault:DevOps/data/testengine/api#url"
 
-  - it: should default to legacy mode when enableV1 is omitted
+  # The legacy API is retired, so enableV1 defaults to true: one bundled POST to api/v1.
+  - it: should default to v1 mode when enableV1 is omitted
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -271,6 +272,50 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=api"
+              - name: "uitests"
+                containerImage: "cypress/included"
+                containerTag: "12.8.1"
+                secretId: "vault:Secret/data/ui#SecretId"
+                filters:
+                  - "TestCategory=ui"
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Tests":\s*\['
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)curl -sS --fail-with-body.*curl -sS --fail-with-body'
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api/v1#url"
+
+  - it: should use legacy mode when enableV1 is false
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -532,6 +577,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -563,6 +609,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -630,6 +677,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -857,6 +905,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -923,6 +972,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -1505,6 +1555,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -1574,6 +1625,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -1628,7 +1680,7 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api/v1#dev_url"
 
-  - it: default (argoEventsInstance unset) -> argo-events behaviour -> api#url
+  - it: default (argoEventsInstance unset, enableV1 unset) -> argo-events behaviour -> api/v1#url
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1659,7 +1711,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#url"
+            value: "vault:DevOps/data/testengine/api/v1#url"
 
   - it: appStack=example + argo-events -> api#url (cluster wins, appStack is not a URL signal)
     set:
@@ -1677,6 +1729,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -1777,6 +1830,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -2087,6 +2141,7 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
+            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
