@@ -73,7 +73,9 @@ global:
   #                               # coordinator. Off until the chart renders tests-dark (DEVOPS-326)
   #     darkReplicas: 1           # canary pods during the dark stage
   #     bakeMinutes: 30           # alert-gate's watch window after promotion (D18); set it longer for a service with
-  #                               # a known slow-burn history. Read by the release (DEVOPS-319), not rendered.
+  #                               # a known slow-burn history. Rendered on every canary Rollout as the
+  #                               # mycarrier.tech/bakeMinutes annotation, which the release's rollout-watch reads
+  #                               # (DEVOPS-319). 1 to 100: alert-gate's run has a 2-hour deadline, so above 100 fails.
   #     coordinator:              # release-wide lockstep (DEVOPS-325's mycarrier/canary-coordinator step plugin, D20);
   #       enabled: true           # needs global.correlationId (the pipeline sets it); false where the plugin is not
   #                               # on the cluster: the controller rejects unknown plugins
@@ -713,7 +715,11 @@ applications: {}
 #   # ----------------------------------------------------------------------------
 #   # Automated Testing Configuration
 #   # ----------------------------------------------------------------------------
-#   # Configure automated test jobs that run against your deployed application
+#   # Configure automated test jobs that run against your deployed application. They run from an Argo CD PostSync
+#   # hook, except for a Rollout in prod (deploymentType rollout, not migratingToRollouts): the chart renders no hook
+#   # for it, and with enableV1 renders the ConfigMap <fullName>-prod-tests, which the release's rollout-watch posts
+#   # to TestEngine after promotion (DEVOPS-319). Without enableV1 the render fails. Its apikey must be
+#   # vault:DevOps/data/testengine/api#encoded_header or unset, and global.testengineWebhookUrl must be unset.
 #   testtrigger:
 #     ttlSecondsAfterFinished: "300"
 #     activeDeadlineSeconds: "600"

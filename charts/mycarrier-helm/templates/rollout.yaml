@@ -88,6 +88,8 @@ metadata:
     {{- if $canary }}
     {{- /* How many Rollouts of this release run canary steps; the canary-coordinator (DEVOPS-325) waits for them. */}}
     mycarrier.tech/rolloutGroupSize: {{ include "helm.canary.groupSize" $ | quote }}
+    {{- /* alert-gate's watch window after promotion (D18), read by the release's rollout-watch (DEVOPS-319). */}}
+    mycarrier.tech/bakeMinutes: {{ include "helm.canary.bakeMinutes" $appContext | quote }}
     {{- end }}
     {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:

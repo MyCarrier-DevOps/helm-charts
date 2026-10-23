@@ -77,48 +77,12 @@ template:
             set -u
             failed=0
           {{- if $enableV1 }}
-          {{- $tests := list }}
-          {{- range dig "testtrigger" "testdefinitions" list .application }}
-          {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
-          {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
-          {{- $tolerations := $defaultTolerations }}
-          {{- if hasKey . "tolerations" }}
-            {{- $tolerations = .tolerations }}
-          {{- end }}
-          {{- $nodeAffinity := .nodeAffinity | default list }}
-          {{- $useDefaultNodeAffinity := "false" }}
-          {{- if hasKey . "useDefaultNodeAffinity" }}
-            {{- $useDefaultNodeAffinity = printf "%v" .useDefaultNodeAffinity }}
-          {{- end }}
-          {{- $legacyMode := "false" }}
-          {{- if hasKey . "legacyMode" }}
-            {{- $legacyMode = printf "%v" .legacyMode }}
-          {{- end }}
-          {{- $spreadAcrossNodes := "true" }}
-          {{- if hasKey . "spreadAcrossNodes" }}
-            {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
-          {{- end }}
-          {{- $hardenedSecurityContext := true }}
-          {{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
-            {{- $hardenedSecurityContext = false }}
-          {{- end }}
-          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
-          {{- $podResources := .podResources | default $defaultPodResources }}
-          {{- include "helm.testtrigger.validateResultsApi" (dict "def" . "fullName" $fullName) }}
-          {{- $resultsApiKey := .resultsApiKey | default "" }}
-          {{- $resultsApiUrl := .resultsApiUrl | default "" }}
-          {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
-          {{- if $resultsApiUrl }}{{- $_ := set $testEnv "ResultsApiUrl" $resultsApiUrl }}{{- end }}
-          {{- if $resultsApiKey }}{{- $_ := set $testEnv "ResultsApiKey" $resultsApiKey }}{{- end }}
-          {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
-          {{- $tests = append $tests $test }}
-          {{- end }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
             --max-time 60 \
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
-            -d '{{ dict "Tests" $tests | toPrettyJson | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
+            -d '{{ include "helm.testtrigger.v1request" . | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
               rc=$?
               echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
               failed=$((failed+1))
@@ -197,6 +161,69 @@ template:
             exit 0
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
+{{- end }}
+
+{{/*
+The TestEngine v1 request for an application, as indented JSON: {"Tests": [...]}, one entry per
+testtrigger.testdefinitions item, with no SlipStep, so TestEngine bookends the environment's tests step
+(prod_tests in prod) for the run. Two templates send it, so they cannot drift apart: the PostSync hook
+(helm.specs.testenginehook, with testtrigger.enableV1) and, for a prod canary Rollout, the <fullName>-prod-tests
+ConfigMap that the release's rollout-watch posts after promotion (DEVOPS-319, Tech Spec D7; triggertestengine.yaml).
+Takes the application context. Every test definition's results API settings are checked here.
+*/}}
+{{- define "helm.testtrigger.v1request" -}}
+{{- $fullName := include "helm.fullname" . }}
+{{- $baseName := include "helm.basename" . }}
+{{- $namespace := include "helm.namespace" . }}
+{{- $httpPort := 8080 }}
+{{- $gitBranch := .Values.global.gitbranch }}
+{{- $stackname := .Values.global.appStack }}
+{{- $correlationId := .Values.global.correlationId }}
+{{- if not (dig "service" "ports" false .application) }}
+{{- range $key, $value := .application.ports }}
+  {{- if eq ($key | lower) "http" }}
+    {{- $httpPort = $value }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- $imageTag := .application.image.tag }}
+{{- $tests := list }}
+{{- range dig "testtrigger" "testdefinitions" list .application }}
+{{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
+{{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
+{{- $tolerations := $defaultTolerations }}
+{{- if hasKey . "tolerations" }}
+  {{- $tolerations = .tolerations }}
+{{- end }}
+{{- $nodeAffinity := .nodeAffinity | default list }}
+{{- $useDefaultNodeAffinity := "false" }}
+{{- if hasKey . "useDefaultNodeAffinity" }}
+  {{- $useDefaultNodeAffinity = printf "%v" .useDefaultNodeAffinity }}
+{{- end }}
+{{- $legacyMode := "false" }}
+{{- if hasKey . "legacyMode" }}
+  {{- $legacyMode = printf "%v" .legacyMode }}
+{{- end }}
+{{- $spreadAcrossNodes := "true" }}
+{{- if hasKey . "spreadAcrossNodes" }}
+  {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
+{{- end }}
+{{- $hardenedSecurityContext := true }}
+{{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
+  {{- $hardenedSecurityContext = false }}
+{{- end }}
+{{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
+{{- $podResources := .podResources | default $defaultPodResources }}
+{{- include "helm.testtrigger.validateResultsApi" (dict "def" . "fullName" $fullName) }}
+{{- $resultsApiKey := .resultsApiKey | default "" }}
+{{- $resultsApiUrl := .resultsApiUrl | default "" }}
+{{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
+{{- if $resultsApiUrl }}{{- $_ := set $testEnv "ResultsApiUrl" $resultsApiUrl }}{{- end }}
+{{- if $resultsApiKey }}{{- $_ := set $testEnv "ResultsApiKey" $resultsApiKey }}{{- end }}
+{{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
+{{- $tests = append $tests $test }}
+{{- end }}
+{{- dict "Tests" $tests | toPrettyJson }}
 {{- end }}
 
 {{/*

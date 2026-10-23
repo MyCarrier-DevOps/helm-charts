@@ -99,8 +99,9 @@
                 "bakeMinutes": {
                   "type": "integer",
                   "minimum": 1,
+                  "maximum": 100,
                   "default": 30,
-                  "description": "alert-gate's watch window after promotion, in minutes (Tech Spec D18), carried through the release into the alert.gate event (DEVOPS-319). Services with a known slow-burn history set a longer window. The chart renders nothing from it."
+                  "description": "alert-gate's watch window after promotion, in minutes (Tech Spec D18). Rendered on every canary Rollout as the mycarrier.tech/bakeMinutes annotation, which the release's rollout-watch puts in the alert.gate event (DEVOPS-319). Services with a known slow-burn history set a longer window. At most 100: alert-gate's run has activeDeadlineSeconds 7200 and spends about 750 s outside its watch window, so a longer window would be killed before it ends; a value above 100 fails the render."
                 },
                 "coordinator": {
                   "type": "object",
@@ -361,7 +362,7 @@
           },
           "testtrigger": {
             "type": "object",
-            "description": "Configuration for automated test jobs",
+            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7): with enableV1 the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request) and the release's rollout-watch posts it after promotion (DEVOPS-319); without enableV1 the render fails, because nothing would start its prod tests.",
             "properties": {
               "ttlSecondsAfterFinished": {
                 "type": "string",
@@ -380,7 +381,7 @@
               },
               "apikey": {
                 "type": "string",
-                "description": "API key for the test engine, can be a direct value or a vault reference"
+                "description": "API key for the test engine, can be a direct value or a vault reference. For a Rollout in prod with enableV1 it must be vault:DevOps/data/testengine/api#encoded_header or unset, or the render fails: rollout-watch posts with that shared key."
               },
               "resources": {
                 "type": "object",
@@ -416,7 +417,7 @@
               },
               "enableV1": {
                 "type": "boolean",
-                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false (default), each test definition generates a separate curl call to the legacy endpoint.",
+                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false (default), each test definition generates a separate curl call to the legacy endpoint. A Rollout in prod needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it.",
                 "default": false
               },
               "testdefinitions": {

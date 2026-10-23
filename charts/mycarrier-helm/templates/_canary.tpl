@@ -10,13 +10,15 @@
 
 {{- /* global.strategy.canary merged over the defaults, as JSON. Analysis is mandatory for every Rollout (DEVOPS-312):
        health and alerts are on unless opted out, and templates lists only extra templates. analysis.enabled is
-       deprecated and has no default; rollout.yaml refuses false. dark stays off until DEVOPS-326 renders tests-dark. */ -}}
+       deprecated and has no default; rollout.yaml refuses false. dark stays off until DEVOPS-326 renders tests-dark.
+       bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $defaults := dict
       "preset" "standard"
       "progressDeadlineSeconds" 600
       "dark" false
       "darkReplicas" 1
+      "bakeMinutes" 30
       "analysis" (dict "templates" (list)
         "health" (dict "enabled" true "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
         "alerts" (dict "enabled" true "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
@@ -137,6 +139,33 @@
   {{- end -}}
 {{- end -}}
 {{- toYaml $steps }}
+{{- end -}}
+
+{{- /* alert-gate's watch window after promotion, in minutes (Tech Spec D18): global.strategy.canary.bakeMinutes, default
+       30, rendered on every canary Rollout as mycarrier.tech/bakeMinutes. The release's rollout-watch reads the
+       smallest value across the release's Rollouts and puts it in the alert.gate event (DEVOPS-319); it takes any value
+       outside 1-100 as 30. alert-gate's own run has activeDeadlineSeconds 7200 and spends about 750 s outside its
+       watch window, so a window above 100 minutes would be killed before it ends: the render fails. values.schema.json
+       has the same bounds; this check also covers a render without schema validation. */ -}}
+{{- define "helm.canary.bakeMinutes" -}}
+{{- $bake := (include "helm.canary.config" . | fromJson).bakeMinutes -}}
+{{- if or (not (kindIs "float64" $bake)) (lt $bake 1.0) (ne $bake (float64 (int $bake))) -}}
+  {{- fail (printf "global.strategy.canary.bakeMinutes must be a whole number of minutes from 1 to 100, not %v" $bake) -}}
+{{- end -}}
+{{- if gt $bake 100.0 -}}
+  {{- fail (printf "global.strategy.canary.bakeMinutes is %v; the maximum is 100. alert-gate watches the service for bakeMinutes after promotion inside one run whose activeDeadlineSeconds is 7200 (2 hours), and a run spends about 750 s outside its watch window, so a window above 100 minutes would be killed before it ends. Set bakeMinutes to 100 or less." $bake) -}}
+{{- end -}}
+{{- int $bake -}}
+{{- end -}}
+
+{{- /* True for an application whose prod_tests the release's rollout-watch starts after promotion (Tech Spec D7,
+       DEVOPS-319): a canary Rollout (helm.canary.enabled) in prod, because canaries run only in prod (Q42). For it
+       triggertestengine.yaml renders no PostSync hook, which could start prod_tests at the start of a canary sync or
+       after an abort, and renders the <fullName>-prod-tests ConfigMap instead. The chart cannot see the repository's
+       deployment-strategy property: it uses the input that turns on the canary steps, deploymentType rollout. Every
+       other application (other environments, Deployments, StatefulSets, migratingToRollouts) keeps the hook. */ -}}
+{{- define "helm.canary.prodTestsByRolloutWatch" -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") (eq (toString .Values.environment.name) "prod") }}true{{ else }}false{{ end -}}
 {{- end -}}
 
 {{- /* A barrier timeout such as 90s, 9m or 1h, in seconds; any other form yields 0 and is not checked. */ -}}

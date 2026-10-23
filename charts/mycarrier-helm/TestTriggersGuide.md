@@ -14,6 +14,16 @@ How it works:
 3. These test trigger jobs are then executed
 4. These jobs make curl calls to TestEngineApi that deploys tests to the appropriate k8s cluster and namespace, allowing the tests to run against the internal k8s service
 
+### Rollouts in prod
+
+In prod, an application with `deploymentType: rollout` (without `migratingToRollouts`) gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. The release's rollout-watch (DEVOPS-319) starts the prod tests after the canary is promoted instead:
+
+- With `enableV1: true`, the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger.
+- Without `enableV1`, the render fails, because nothing would start the application's prod tests.
+- With `enableV1: true`, `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.
+
+Other environments, Deployments, StatefulSets and migrating Rollouts keep the PostSync hook.
+
 ## Configuration Structure
 
 Test triggers are configured at the application level in the values file. Below is the general structure:

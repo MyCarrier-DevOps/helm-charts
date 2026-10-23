@@ -640,7 +640,7 @@ global:
           #                             # default alerts.serviceName, else global.appStack (not the default app), lower-cased
           # dryRun: true                # the alerts metric records and never fails the canary; false at go-live
       progressDeadlineSeconds: 600      # a canary that makes no progress for this long aborts
-      bakeMinutes: 30                   # alert-gate's watch window after promotion; read by the release
+      bakeMinutes: 30                   # alert-gate's watch window after promotion, 1 to 100 minutes
       coordinator:
         enabled: true                   # release-wide lockstep; needs global.correlationId (the pipeline sets it)
       dark: false                       # header-gated dark stage; off until the chart renders tests-dark
@@ -653,6 +653,13 @@ global:
 | `manual` | 10%, then a pause with no time limit until someone promotes or aborts it, then 100% |
 
 `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
+
+**What the release reads.** Every Rollout that runs canary steps (`deploymentType: rollout` without `migratingToRollouts`), in every environment, carries two annotations that the release's rollout-watch reads:
+
+- `mycarrier.tech/rolloutGroupSize`: the number of such Rollouts in the release.
+- `mycarrier.tech/bakeMinutes`: `bakeMinutes` (default `30`), alert-gate's watch window after promotion. rollout-watch puts the smallest value of the release's Rollouts in the `alert.gate` event. Set a longer window for a service with a known slow-burn history. The maximum is `100`: alert-gate's run has a 2-hour deadline (`activeDeadlineSeconds` 7200) and spends about 750 s outside its window, so a longer window would be killed before it ends. A value above `100` or below `1` fails the render, with or without Rollouts.
+
+In prod, a Rollout's test trigger does not run as a PostSync hook. rollout-watch starts its prod tests after promotion (see [Test Triggers](#test-triggers)).
 
 **Analysis.** Canary analysis is mandatory for every Rollout. An analysis step follows each weight. It runs the chart's `health` check and the extra AnalysisTemplates listed in `analysis.templates` (default `[]`), each named `<environment>-<fullName>-<template>`. In prod, the Rollout also runs the chart's `alerts` check as background analysis, from its first weight until promotion. Every listed template must render for each Rollout application, or the render fails: Argo Rollouts resolves them up front and would leave the Rollout InvalidSpec.
 
@@ -937,6 +944,15 @@ applications:
 
 The trigger Job's pod carries the application's labels, except `app.kubernetes.io/name` and `app`, which are `<fullName>-trigger`. This keeps the pod from matching the application's Service and PDB selectors, and from being counted by its HPA.
 
+### Test triggers of Rollouts in prod
+
+A PostSync hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. In prod, the chart therefore renders no hook Job for an application with `deploymentType: rollout` (without `migratingToRollouts`). The release's rollout-watch starts the prod tests after the canary is promoted:
+
+- With `testtrigger.enableV1: true`, the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted.
+- Without `enableV1`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Set `enableV1: true` on every prod Rollout that has test definitions.
+- rollout-watch posts with the shared key and its own TestEngine URL. `testtrigger.apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, or the render fails. `global.testengineWebhookUrl` must not be set in prod, or the render fails. Both rules apply only where the ConfigMap renders.
+- Other environments, Deployments, StatefulSets and applications with `migratingToRollouts` keep the PostSync hook, unchanged.
+
 ### Test Trigger Parameters
 
 | Parameter | Description | Default |
@@ -1179,7 +1195,7 @@ applications:
 The chart uses ArgoCD sync waves and options for GitOps workflows:
 - Sync waves order creation: VirtualServices `0`, Services `5`, workloads (Deployment, StatefulSet, Rollout) `10`, autoscalers (HPA, ScaledObject) `11`; mounted-secret `ExternalSecret`s run as `PreSync` hooks
 - `SkipDryRunOnMissingResource=true` handles CRDs
-- Test triggers run as `PostSync` hooks
+- Test triggers run as `PostSync` hooks, except for Rollouts in prod, whose prod tests the release starts after promotion (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod))
 - Offloads use `ApplicationSet` generators for feature environments
 - mc-environment's generated Applications sync with server-side apply and without `Replace=true` (since mc-environment 0.3.0), and ignore the Service and VirtualService fields Argo Rollouts manages
 
@@ -1228,7 +1244,7 @@ The chart uses ArgoCD sync waves and options for GitOps workflows:
 1. Changes are committed to the repository
 2. CI/CD renders the merged values into the GitOps repository: the manifests for mycarrier-helm; an ApplicationSet per environment entry, plus the stack's alert resources, for mc-environment
 3. ArgoCD deploys the rendered manifests to the target Kubernetes cluster (for mc-environment, each generated Application renders mycarrier-helm itself)
-4. ArgoCD PostSync hooks run test triggers (if configured)
+4. ArgoCD PostSync hooks run test triggers (if configured); for a Rollout in prod, the release starts them after the canary is promoted
 
 ---
 
@@ -1263,6 +1279,7 @@ When reviewing or creating helm value changes:
 14. **Alerts** — `alerts.enabled: true` in exactly one environment's values file (prod), the shared settings in `helm/values.yaml`
 15. **`allowAllEndpoints`** — Only in dev values (dev and feature environments); anywhere else the render fails
 16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases
+17. **Prod Rollout test triggers** — `enableV1: true`, `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
 
 ---
 
@@ -1272,7 +1289,7 @@ Newest first. Each entry names the chart version, what broke, and what a stack's
 
 ### mycarrier-helm, the release after 4.7.8
 
-Canary analysis is mandatory for every Rollout (DEVOPS-312). Deployment and StatefulSet applications render unchanged, except where the first two items below fail the whole render.
+Canary analysis is mandatory for every Rollout, and Rollouts carry the contract the release's rollout-watch reads (DEVOPS-312, DEVOPS-319). Deployment and StatefulSet applications render unchanged, except where the first two items below, the `bakeMinutes` cap or the prod test-trigger rules fail the whole render.
 
 - `global.strategy.canary.analysis.enabled` is deprecated. `false` fails the render in every environment, with or without Rollouts. `true` has no effect. Remove it. To leave out one check, set `analysis.health.enabled: false` or `analysis.alerts.enabled: false`.
 - `analysis.templates` now lists only extra templates, and defaults to `[]` (4.7.5 to 4.7.8 defaulted to `[health, alerts]`). Listing `health` or `alerts` fails the render in every environment. Remove them: both run unless opted out.
@@ -1282,6 +1299,9 @@ Canary analysis is mandatory for every Rollout (DEVOPS-312). Deployment and Stat
 - In prod, every Rollout runs the chart's `alerts` check as background analysis. Its service label is `analysis.alerts.service`, else `alerts.serviceName` lower-cased, else `global.appStack` lower-cased (new; the default `app` counts as unset). With none of them set, the render fails in prod: set one, or set `analysis.alerts.enabled: false`. `dryRun` stays `true`, but `alert-rules` is always live: the first prod canary aborts when no alert rule that can fire carries the label. Check the label against the service's Grafana alert rules before the first prod release, and see Rollouts, Analysis, Before the first prod canary.
 - `coordinator.enabled` defaults to `true` (was `false`). Every preset now starts with a `start` barrier and gets a barrier after each weight. `global.correlationId` is now required for every Rollout; the pipeline sets it. Set `coordinator.enabled: false` to render without it, or where the canary-coordinator plugin is not on the cluster.
 - `dark` defaults to `false` (was `true`) until the chart renders `tests-dark` (DEVOPS-326). To keep the dark stage, set `dark: true`. The leader's `tests-dark` step now renders whenever the dark stage does (before, it needed `analysis.enabled`), so a `tests-dark` AnalysisTemplate must render for the leader.
+- Every Rollout that runs canary steps carries `mycarrier.tech/bakeMinutes` from `bakeMinutes` (default `30`), in every environment. `bakeMinutes` above `100` now fails every render, with or without Rollouts. Set it to `100` or less.
+- In prod, a Rollout (without `migratingToRollouts`) no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. Without `enableV1`, the render fails: set `enableV1: true`.
+- In prod, a Rollout whose test trigger has `enableV1: true` fails to render when `testtrigger.apikey` is set to a key other than `vault:DevOps/data/testengine/api#encoded_header`, or when `global.testengineWebhookUrl` is set. Remove the key or set the shared one, and remove `global.testengineWebhookUrl`.
 
 ### mycarrier-helm 4.7.7
 

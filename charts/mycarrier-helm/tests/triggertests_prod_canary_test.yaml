@@ -1,0 +1,451 @@
+suite: Test triggers for prod canary Rollouts (prod-tests ConfigMap in place of the PostSync hook, D7, DEVOPS-312/319)
+# A canary Rollout in prod gets no PostSync hook: the release's rollout-watch starts prod_tests after promotion from the
+# <fullName>-prod-tests ConfigMap, which carries the hook's TestEngine v1 request (helm.testtrigger.v1request). Every
+# other application keeps the hook, byte for byte. The ConfigMap test and the Deployment hook test below assert the same
+# request body for the same application values.
+templates:
+  - triggertestengine.yaml
+tests:
+  - it: renders the prod-tests ConfigMap and no hook for a canary Rollout in prod
+    set:
+      global: &global
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        gitbranch: main
+      environment: &prod
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: &image
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports: &ports
+            http: 8080
+          testtrigger: &testtrigger
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: apiVersion
+          value: v1
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-prod-tests
+      - equal:
+          path: metadata.namespace
+          value: prod
+      - equal:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+          value: corr-1
+      - notExists:
+          path: metadata.annotations
+      - equal:
+          path: data["request.json"]
+          value: |-
+            {
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "corr-1",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+                    "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080"
+                  },
+                  "TestFilters": [
+                    "TestCategory=CoreAPI"
+                  ],
+                  "TestName": "apitests",
+                  "Tolerations": [
+                    {
+                      "effect": "NoSchedule",
+                      "key": "kubernetes.azure.com/scalesetpriority",
+                      "operator": "Equal",
+                      "value": "spot"
+                    }
+                  ],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }
+      - notMatchRegex:
+          path: data["request.json"]
+          pattern: SlipStep
+
+  # The same application as a Deployment keeps its hook, and the hook posts the request the ConfigMap above carries.
+  - it: keeps the hook for a Deployment in prod, with the same request body as the ConfigMap
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: deployment
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-trigger
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: PostSync
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: |
+            set -u
+            failed=0
+            curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
+            --max-time 60 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $TESTENGINE_APIKEY" \
+            -d '{
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "corr-1",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+                    "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080"
+                  },
+                  "TestFilters": [
+                    "TestCategory=CoreAPI"
+                  ],
+                  "TestName": "apitests",
+                  "Tolerations": [
+                    {
+                      "effect": "NoSchedule",
+                      "key": "kubernetes.azure.com/scalesetpriority",
+                      "operator": "Equal",
+                      "value": "spot"
+                    }
+                  ],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }' "$TESTENGINEHOOK_URL" || {
+              rc=$?
+              echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
+              failed=$((failed+1))
+            }
+            if [ "$failed" -gt 0 ]; then
+              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+            fi
+            exit 0
+
+  - it: keeps the hook for a canary Rollout outside prod (preprod)
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-trigger
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: PostSync
+
+  # A migrating Rollout runs no canary steps and rollout-watch does not watch it, so the hook stays.
+  - it: keeps the hook for a migrating Rollout in prod
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-trigger
+
+  - it: keeps the hook for a Deployment and renders the ConfigMap for a Rollout of the same prod release
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+        worker:
+          deploymentType: deployment
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ConfigMap
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-prod-tests
+        documentIndex: 0
+      - isKind:
+          of: Job
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: mycarrier-worker-trigger
+        documentIndex: 1
+
+  # rollout-watch posts only to TestEngine's v1 trigger, and the hook stays off (D7), so without enableV1 nothing would
+  # start prod_tests for the application: the render fails.
+  - it: fails the render for a canary Rollout in prod with a testtrigger but no enableV1
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a Rollout in prod needs testtrigger.enableV1: true."
+
+  - it: renders the ConfigMap with no testtrigger.apikey
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["request.json"]
+          pattern: '"TestName": "apitests"'
+
+  - it: renders an empty Tests list when the testtrigger has no test definitions, as the hook does
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            enableV1: true
+    asserts:
+      - equal:
+          path: data["request.json"]
+          value: |-
+            {
+              "Tests": []
+            }
+
+  # rollout-watch posts with the shared key, so another key would silently not be used.
+  - it: fails for a per-application testtrigger.apikey on a canary Rollout in prod
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            apikey: vault:Secrets/data/myteam/testengine#apikey
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': testtrigger.apikey must be vault:DevOps/data/testengine/api#encoded_header or unset for a Rollout in prod"
+
+  # The error names the field, never the value, so a literal key does not reach the render log.
+  - it: does not print the apikey in the refusal
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            apikey: literal-secret-key-value
+            enableV1: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "application 'api': testtrigger.apikey must be vault:DevOps/data/testengine/api#encoded_header or unset for a Rollout in prod. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion with that shared key (DEVOPS-319), so a per-application key would not be used. Remove testtrigger.apikey, or set it to vault:DevOps/data/testengine/api#encoded_header."
+
+  - it: fails for global.testengineWebhookUrl with a canary Rollout's testtrigger in prod
+    set:
+      global:
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        testengineWebhookUrl: vault:DevOps/data/testengine/api#legacy_override
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': global.testengineWebhookUrl cannot be set in prod while a Rollout has a testtrigger with enableV1"
+
+  - it: keeps both overrides on the hook of a canary Rollout outside prod
+    set:
+      global:
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        testengineWebhookUrl: vault:DevOps/data/testengine/api#legacy_override
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            apikey: vault:Secrets/data/myteam/testengine#apikey
+            enableV1: true
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: vault:Secrets/data/myteam/testengine#apikey
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: vault:DevOps/data/testengine/api#legacy_override
+
+  # The ConfigMap's request goes through the same results API check as the hook.
+  - it: fails a literal resultsApiKey in the ConfigMap's request too
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: not-a-vault-reference
+    asserts:
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' of 'mycarrier-api': resultsApiKey must be a vault reference"

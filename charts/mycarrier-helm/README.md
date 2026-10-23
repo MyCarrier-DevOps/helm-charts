@@ -93,6 +93,12 @@ chart's `health` check, and in prod the Rollout runs the chart's `alerts` check 
 opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
 StatefulSet apps render unchanged, except where the values below fail the whole render.
 
+It also renders the contract the release's rollout-watch reads (DEVOPS-319). Every Rollout that runs canary steps
+carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100). In prod, a
+Rollout's test trigger no longer renders the `<fullName>-trigger` PostSync hook (Tech Spec D7): with
+`testtrigger.enableV1: true` the chart renders the ConfigMap `<fullName>-prod-tests` (key `request.json`, the hook's
+TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-watch posts it after promotion.
+
 | 4.7.8 values | Edit |
 |---|---|
 | `global.strategy.canary.analysis.enabled: false` | Remove it: it fails the render in every environment. `true` is accepted and has no effect. To leave out one check, set `analysis.health.enabled: false` or `analysis.alerts.enabled: false`. |
@@ -104,6 +110,10 @@ StatefulSet apps render unchanged, except where the values below fail the whole 
 | A Rollout render without `global.correlationId` (deploy-core always sets it) | Set it, or set `coordinator.enabled: false`. |
 | A cluster without the `mycarrier/canary-coordinator` plugin | Set `coordinator.enabled: false`: the controller rejects steps for a plugin it does not have. |
 | Relied on the dark stage (`coordinator.enabled: true` with the old `dark` default) | Set `dark: true`; a `tests-dark` AnalysisTemplate must then render for the leader. |
+| `global.strategy.canary.bakeMinutes` above 100 | Set it to 100 or less: alert-gate's run has a 7200 s deadline and spends about 750 s outside its window. Above 100 fails every render. |
+| A prod Rollout app with a `testtrigger` and no `enableV1: true` | Set `enableV1: true`. The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so without it the render fails. |
+| A prod Rollout app with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
+| `global.testengineWebhookUrl` in prod, with a Rollout app whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
 
 ## Chart Structure
 

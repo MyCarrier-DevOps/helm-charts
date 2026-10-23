@@ -1,0 +1,186 @@
+suite: Rollout canary bakeMinutes annotation (alert-gate's window after promotion, D18, DEVOPS-312/319)
+# Every canary Rollout carries mycarrier.tech/bakeMinutes from global.strategy.canary.bakeMinutes (default 30); the
+# release's rollout-watch reads it into the alert.gate event. alert-gate's run has a 7200 s deadline, so the window is
+# capped at 100 minutes.
+templates:
+  - rollout.yaml
+tests:
+  - it: renders bakeMinutes 30 by default on a canary Rollout
+    set:
+      global: &global
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment: &preprod
+        name: preprod
+      applications:
+        api: &rollout
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "30"
+
+  - it: renders the configured bakeMinutes on every canary Rollout of the release
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            bakeMinutes: 60
+            leader: api
+      environment: *preprod
+      applications:
+        api: *rollout
+        web: *rollout
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "60"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "60"
+        documentIndex: 1
+
+  - it: renders bakeMinutes in prod
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            bakeMinutes: 45
+      environment:
+        name: prod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "45"
+
+  - it: renders bakeMinutes with the coordinator off
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "30"
+
+  - it: accepts bakeMinutes 100
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            bakeMinutes: 100
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "100"
+
+  # alert-gate's activeDeadlineSeconds is 7200 and a run spends about 750 s outside its window: 101 minutes is refused
+  # by the schema (maximum 100) and, without schema validation, by helm.canary.bakeMinutes.
+  - it: fails bakeMinutes above 100
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            bakeMinutes: 101
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "bakeMinutes.*maximum"
+
+  - it: fails bakeMinutes 0
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            bakeMinutes: 0
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "bakeMinutes.*minimum"
+
+  # A migrating Rollout runs no canary steps, so it is not part of the release group rollout-watch reads.
+  - it: renders no bakeMinutes on a migrating Rollout
+    set:
+      global: *global
+      environment: *preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - isKind:
+          of: Rollout
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+
+  - it: renders no Rollout, so no bakeMinutes, for a Deployment
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            bakeMinutes: 60
+      environment: *preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
