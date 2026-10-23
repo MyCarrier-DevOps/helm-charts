@@ -75,8 +75,9 @@ tests:
           value:
             pause: {}
 
-  # 3 x (health 90 + pause 300), no barriers
-  - it: renders 1170 s for the standard preset with the coordinator off
+  # No barriers, so each setWeight above 0 (10, 25, 50, 100) counts progressDeadlineSeconds (600) for its pods to
+  # become available: 3 x (health 90 + pause 300) + 4 x 600.
+  - it: renders 3570 s for the standard preset with the coordinator off
     set:
       global:
         appStack: test-stack
@@ -91,7 +92,64 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "1170"
+          value: "3570"
+
+  # fast: health 90 + 2 x 600 (25 and 100).
+  - it: renders 1290 s for the fast preset with the coordinator off
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            preset: fast
+            coordinator:
+              enabled: false
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1290"
+
+  # manual: manualTimeout 3600 + health 90 + 2 x 600 (10 and 100).
+  - it: renders 4890 s for the manual preset with the coordinator off
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            preset: manual
+            coordinator:
+              enabled: false
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4890"
+
+  # A lower progressDeadlineSeconds lowers the wait per weight step: 3 x 390 + 4 x 300.
+  - it: counts progressDeadlineSeconds per weight step with the coordinator off
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            progressDeadlineSeconds: 300
+            coordinator:
+              enabled: false
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "2370"
 
   # The alerts check runs as background analysis in prod, alongside the steps, so it adds nothing.
   - it: renders the same budget in prod, without counting the background alerts analysis

@@ -620,7 +620,7 @@ applications:
 
 ## Rollouts
 
-`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's.
+`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's. A stack moves to Rollouts as a whole, and its repository's `deployment-strategy` property must be `canary` before the release that removes `migratingToRollouts`: only the canary release path starts a prod Rollout's tests (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod)).
 
 ```yaml
 global:
@@ -650,9 +650,9 @@ global:
 
 | Preset | Steps | Budget with the defaults |
 |--------|-------|--------------------------|
-| `standard` (default) | 10%, 25% and 50%, each followed by a 5-minute pause, then 100% | 3330 s (1170 s with the coordinator off) |
-| `fast` | 25%, then 100% | 1170 s |
-| `manual` | 10%, then a pause with no time limit until someone promotes or aborts it, then 100% | 4770 s, with the pause counted as `manualTimeout` (`1h`) |
+| `standard` (default) | 10%, 25% and 50%, each followed by a 5-minute pause, then 100% | 3330 s (3570 s with the coordinator off) |
+| `fast` | 25%, then 100% | 1170 s (1290 s with the coordinator off) |
+| `manual` | 10%, then a pause with no time limit until someone promotes or aborts it, then 100% | 4770 s, with the pause counted as `manualTimeout` (`1h`) (4890 s with the coordinator off) |
 
 The budget is `mycarrier.tech/canaryBudgetSeconds` (see What the release reads). The defaults are the coordinator on, `dark: false`, `analysis.health` at 3 x 30s and barrier timeouts of 9m.
 
@@ -663,7 +663,7 @@ The budget is `mycarrier.tech/canaryBudgetSeconds` (see What the release reads).
 - `mycarrier.tech/rolloutGroupSize`: the number of such Rollouts in the release.
 - `mycarrier.tech/bakeMinutes`: `bakeMinutes` (default `30`), alert-gate's watch window after promotion. rollout-watch puts the smallest value of the release's Rollouts in the `alert.gate` event. Set a longer window for a service with a known slow-burn history. The maximum is `100`: alert-gate's run has a 2-hour deadline (`activeDeadlineSeconds` 7200) and spends about 750 s outside its window, so a longer window would be killed before it ends. A value above `100` or below `1` fails the render, with or without Rollouts.
 - `mycarrier.tech/canaryBudgetSeconds`: the worst-case length of the Rollout's canary steps, in whole seconds (Tech Spec D22). rollout-watch times out at the largest value of the release's Rollouts plus 15 minutes, so it never times out a canary that is still inside its steps. The leader runs `tests-dark` and its followers do not, so their values can differ.
-  - **Preset.** The chart adds up the steps it renders for the Rollout. A pause counts its duration. The `manual` preset's pause counts `manualTimeout` (default `1h`); the pause itself still has no time limit. An analysis step counts its longest template, because its templates run in parallel. A template counts `count` x max(`interval`, `activeDeadlineSeconds`); `activeDeadlineSeconds` counts only for a `job` provider that sets it in `job.spec`. The chart's `health` uses `analysis.health.count` and `interval`. An `analysisTemplates` entry (an extra template, a replacement `health`, or `tests-dark`) uses its own `count` (default 1; `count: 0` without an `interval` runs once) and `interval` (0 when unset). A barrier counts its timeout. Every other step counts 0. The background `alerts` analysis runs next to the steps and does not count. `budgetSeconds` is ignored with a preset.
+  - **Preset.** The chart adds up the steps it renders for the Rollout. A pause counts its duration. The `manual` preset's pause counts `manualTimeout` (default `1h`); the pause itself still has no time limit. An analysis step counts its longest template, because its templates run in parallel. A template counts `count` x max(`interval`, `activeDeadlineSeconds`); `activeDeadlineSeconds` counts only for a `job` provider that sets it in `job.spec`. The chart's `health` uses `analysis.health.count` and `interval`. An `analysisTemplates` entry (an extra template, a replacement `health`, or `tests-dark`) uses its own `count` (default 1; `count: 0` without an `interval` runs once) and `interval` (0 when unset). A barrier counts its timeout. A weight step above 0 waits until the canary's pods are available, for up to `progressDeadlineSeconds`: with the coordinator on, the barrier timeouts cover that wait; with `coordinator.enabled: false`, each such weight step (100 included) counts `progressDeadlineSeconds`. Every other step counts 0. The background `alerts` analysis runs next to the steps and does not count. `budgetSeconds` is ignored with a preset.
   - **Explicit steps.** The chart does not add up an explicit `steps` list. Set `budgetSeconds` to its worst-case length by the same rules, from `1` to `5700`. Without it, the render fails. Count an indefinite pause (`pause: {}`) as the time a person needs to promote it.
   - **Limits.** A budget above `5700` fails the render. rollout-watch's release workflow has `activeDeadlineSeconds` 10800, which covers about 70 minutes before the canary starts, the budget and 15 minutes after it (DEVOPS-319). The `manual` preset with `dark: true` adds up to 5850 s with the defaults, before the leader's `tests-dark`, and fails. Lower `manualTimeout` until the leader's budget fits: at `45m`, `tests-dark` can take up to 750 s. To lower a budget, lower `manualTimeout`, the barrier timeouts, or the templates' `count` or `interval`; with explicit steps, shorten their pauses and lower `budgetSeconds`. With the `manual` preset, a `manualTimeout` of zero fails the render, and the schema refuses one that is not a duration such as `90s`, `30m` or `1h`. The other presets and explicit steps ignore `manualTimeout`.
 
@@ -715,7 +715,7 @@ Never change `deploymentType` in one release: Argo CD prunes the old workload be
 
 | Direction | Release 1 | Release 2 |
 |-----------|-----------|-----------|
-| Deployment → Rollout | `deploymentType: rollout` and `migratingToRollouts: true` | Remove `migratingToRollouts`: the Rollout gets its own pod template and the canary from `global.strategy.canary`; Argo CD prunes the Deployment |
+| Deployment → Rollout | `deploymentType: rollout` and `migratingToRollouts: true` | Set the repository's `deployment-strategy` to `canary` first, then remove `migratingToRollouts`: the Rollout gets its own pod template and the canary from `global.strategy.canary`; Argo CD prunes the Deployment |
 | Rollout → Deployment | `deploymentType: deployment` and `migratingToRollouts: true` | Remove `migratingToRollouts`: Argo CD prunes the Rollout |
 
 In release 1 the chart renders both workloads: the Rollout borrows the Deployment's pod template (`workloadRef` with `scaleDown: never`) and a bare canary, both sets of pods serve behind the existing Services, and the HPA/KEDA autoscaler targets the workload `deploymentType` names.
@@ -959,6 +959,7 @@ A PostSync hook can fire at the start of a canary sync, after the last promote o
 - With `testtrigger.enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted.
 - With `enableV1: false`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Leave `enableV1` unset or `true` on every prod Rollout that has test definitions.
 - rollout-watch posts with the shared key and its own TestEngine URL. `testtrigger.apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, or the render fails. `global.testengineWebhookUrl` must not be set in prod, or the render fails. Both rules apply only where the ConfigMap renders.
+- The chart cannot see the repository's `deployment-strategy` property. Only the canary release path (`deployment-strategy: canary`) runs rollout-watch. A prod Rollout in a repository that is `rolling` or unset gets no prod tests, and its release's prod-steady-state fails. Set the property to `canary` before the release that removes `migratingToRollouts`.
 - Other environments, Deployments, StatefulSets and applications with `migratingToRollouts` keep the PostSync hook, unchanged.
 
 ### Test Trigger Parameters
@@ -1286,7 +1287,7 @@ When reviewing or creating helm value changes:
 13. **Layout B entries** — Each `helm/deployment/values.{env}.yaml` carries the environment's complete entry; nothing is merged from another file's entries
 14. **Alerts** — `alerts.enabled: true` in exactly one environment's values file (prod), the shared settings in `helm/values.yaml`
 15. **`allowAllEndpoints`** — Only in dev values (dev and feature environments); anywhere else the render fails
-16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases
+16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases. Before release 2 of a switch to Rollouts, the repository's `deployment-strategy` must be `canary`
 17. **Prod Rollout test triggers** — `enableV1: true`, `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
 
 ---
@@ -1311,7 +1312,7 @@ Canary analysis is mandatory for every Rollout, and Rollouts carry the contract 
 - Every Rollout that runs canary steps carries `mycarrier.tech/canaryBudgetSeconds`, the worst-case length of its steps, in every environment. An explicit `steps` list now needs `budgetSeconds`, or the Rollout fails to render. Set it to the steps' worst-case length in seconds, from `1` to `5700`. With a preset, the chart computes the budget and ignores `budgetSeconds`.
 - A canary budget above 5700 s now fails the render. The `manual` preset with `dark: true` adds up to at least 5850 s with the defaults, and the `standard` preset fails with barrier timeouts of 19m each. Lower `manualTimeout`, the barrier timeouts, or the analysis templates' `count` or `interval`.
 - The `manual` preset's pause now counts as `manualTimeout` (new, default `1h`) in the budget; the pause itself still has no time limit. With the `manual` preset, a zero `manualTimeout` fails the render, and the schema refuses a value that is not a duration such as `90s`, `30m` or `1h`. Set it to the time a person needs to promote or abort the canary.
-- In prod, a Rollout (without `migratingToRollouts`) no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. With `enableV1: false`, the render fails: remove it.
+- In prod, a Rollout (without `migratingToRollouts`) no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. With `enableV1: false`, the render fails: remove it. rollout-watch runs only on the canary release path, so the repository's `deployment-strategy` must be `canary` before the release that removes `migratingToRollouts`; otherwise the Rollout's prod tests never start.
 - In prod, a Rollout whose test trigger has `enableV1: true` fails to render when `testtrigger.apikey` is set to a key other than `vault:DevOps/data/testengine/api#encoded_header`, or when `global.testengineWebhookUrl` is set. Remove the key or set the shared one, and remove `global.testengineWebhookUrl`.
 - `testtrigger.enableV1` now defaults to `true`, because TestEngine's legacy API is retired. A test trigger that did not set it now sends one request with every test definition to TestEngine's v1 API, instead of one request per definition to the legacy API. No values change is needed; `enableV1: false` keeps the legacy API, but a Rollout in prod fails to render with it.
 

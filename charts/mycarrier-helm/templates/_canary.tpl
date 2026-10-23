@@ -172,7 +172,10 @@
          that replaces health or supplies tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders
          it; Argo Rollouts runs count 0 without an interval once) and interval (0 when unset).
        - a canary-coordinator barrier: its timeout.
-       - every other step (setWeight, setCanaryScale, setHeaderRoute): 0. The background alerts analysis runs alongside
+       - a setWeight step above 0 waits until the canary's pods are available, for up to progressDeadlineSeconds. With
+         the coordinator on, the barrier timeouts cover that wait; with coordinator.enabled false, each such setWeight
+         step (100 included) counts progressDeadlineSeconds.
+       - every other step (setWeight 0, setCanaryScale, setHeaderRoute): 0. The background alerts analysis runs alongside
          the steps and is not counted.
        The leader runs tests-dark and its followers do not, so their budgets can differ. An explicit steps list states its
        own budget in budgetSeconds (required there); with a preset the chart computes it and budgetSeconds is ignored.
@@ -224,6 +227,8 @@
       {{- $budget = add $budget $longest -}}
     {{- else if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") -}}
       {{- $budget = add $budget (include "helm.canary.durationSeconds" (dig "config" "timeout" "" $plugin) | int) -}}
+    {{- else if and (not $cfg.coordinator.enabled) (gt (int (dig "setWeight" 0 .)) 0) -}}
+      {{- $budget = add $budget (int $cfg.progressDeadlineSeconds) -}}
     {{- end -}}
   {{- end -}}
 {{- end -}}
@@ -237,7 +242,9 @@
        DEVOPS-319): a canary Rollout (helm.canary.enabled) in prod, because canaries run only in prod (Q42). For it
        triggertestengine.yaml renders no PostSync hook, which could start prod_tests at the start of a canary sync or
        after an abort, and renders the <fullName>-prod-tests ConfigMap instead. The chart cannot see the repository's
-       deployment-strategy property: it uses the input that turns on the canary steps, deploymentType rollout. Every
+       deployment-strategy property: it uses the input that turns on the canary steps, deploymentType rollout, because a
+       stack moves to Rollouts as a whole. Only the canary path (deployment-strategy canary) runs rollout-watch, so the
+       guidance requires the property to be canary before the release that removes migratingToRollouts. Every
        other application (other environments, Deployments, StatefulSets, migratingToRollouts) keeps the hook. */ -}}
 {{- define "helm.canary.prodTestsByRolloutWatch" -}}
 {{- if and (eq (include "helm.canary.enabled" .) "true") (eq (toString .Values.environment.name) "prod") }}true{{ else }}false{{ end -}}
