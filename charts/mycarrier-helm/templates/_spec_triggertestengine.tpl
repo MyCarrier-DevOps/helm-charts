@@ -23,7 +23,7 @@
 {{- end }}
 {{- end }}
 {{- $imageTag :=  .application.image.tag }}
-{{- $enableV1 := dig "testtrigger" "enableV1" false .application }}
+{{- $enableV1 := dig "testtrigger" "enableV1" true .application }}
 {{- $argoInst := $.Values.global.argoEventsInstance | default "argo-events" }}
 {{- $urlKey := ternary "dev_url" "url" (eq $argoInst "argo-events-test") }}
 {{- $apiPath := ternary "testengine/api/v1" "testengine/api" $enableV1 }}

@@ -279,7 +279,7 @@ tests:
 
   # rollout-watch posts only to TestEngine's v1 trigger, and the hook stays off (D7), so without enableV1 nothing would
   # start prod_tests for the application: the render fails.
-  - it: fails the render for a canary Rollout in prod with a testtrigger but no enableV1
+  - it: fails the render for a canary Rollout in prod with testtrigger.enableV1 false
     set:
       global: *global
       environment: *prod
@@ -289,6 +289,7 @@ tests:
           image: *image
           ports: *ports
           testtrigger:
+            enableV1: false
             apikey: vault:DevOps/data/testengine/api#encoded_header
             testdefinitions:
               - name: apitests
@@ -299,6 +300,31 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': a Rollout in prod needs testtrigger.enableV1: true."
 
+
+  # enableV1 defaults to true (the legacy API is retired), so a testtrigger without it renders the ConfigMap.
+  - it: renders the ConfigMap for a canary Rollout in prod when enableV1 is omitted
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-prod-tests
   - it: renders the ConfigMap with no testtrigger.apikey
     set:
       global: *global

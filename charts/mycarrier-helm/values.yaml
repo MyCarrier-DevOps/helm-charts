@@ -717,16 +717,16 @@ applications: {}
 #   # ----------------------------------------------------------------------------
 #   # Configure automated test jobs that run against your deployed application. They run from an Argo CD PostSync
 #   # hook, except for a Rollout in prod (deploymentType rollout, not migratingToRollouts): the chart renders no hook
-#   # for it, and with enableV1 renders the ConfigMap <fullName>-prod-tests, which the release's rollout-watch posts
-#   # to TestEngine after promotion (DEVOPS-319). Without enableV1 the render fails. Its apikey must be
+#   # for it, and with enableV1 (the default) renders the ConfigMap <fullName>-prod-tests, which the release's rollout-watch posts
+#   # to TestEngine after promotion (DEVOPS-319). With enableV1: false the render fails. Its apikey must be
 #   # vault:DevOps/data/testengine/api#encoded_header or unset, and global.testengineWebhookUrl must be unset.
 #   testtrigger:
 #     ttlSecondsAfterFinished: "300"
 #     activeDeadlineSeconds: "600"
 #     backoffLimit: 0
 #     apikey: "vault:Secrets/data/testengine#apikey"
-#     enableV1: true                             # true: single bundled POST {"Tests":[...]} to api/v1 endpoint
-#                                                # false (default): one POST per testdefinition to legacy endpoint
+#     enableV1: true                             # true (default): single bundled POST {"Tests":[...]} to api/v1 endpoint
+#                                                # false: one POST per testdefinition to the retired legacy endpoint
 #     resources:
 #       requests:
 #         cpu: "50m"

@@ -948,8 +948,8 @@ The trigger Job's pod carries the application's labels, except `app.kubernetes.i
 
 A PostSync hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. In prod, the chart therefore renders no hook Job for an application with `deploymentType: rollout` (without `migratingToRollouts`). The release's rollout-watch starts the prod tests after the canary is promoted:
 
-- With `testtrigger.enableV1: true`, the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted.
-- Without `enableV1`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Set `enableV1: true` on every prod Rollout that has test definitions.
+- With `testtrigger.enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted.
+- With `enableV1: false`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Leave `enableV1` unset or `true` on every prod Rollout that has test definitions.
 - rollout-watch posts with the shared key and its own TestEngine URL. `testtrigger.apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, or the render fails. `global.testengineWebhookUrl` must not be set in prod, or the render fails. Both rules apply only where the ConfigMap renders.
 - Other environments, Deployments, StatefulSets and applications with `migratingToRollouts` keep the PostSync hook, unchanged.
 
@@ -960,7 +960,7 @@ A PostSync hook can fire at the start of a canary sync, after the last promote o
 | `activeDeadlineSeconds` | Max trigger job runtime in seconds | `"300"` |
 | `ttlSecondsAfterFinished` | Job cleanup delay in seconds | `"3600"` |
 | `apikey` | TestEngine API key (vault ref) | Required |
-| `enableV1` | `true`: one request with every test definition to TestEngine's v1 API; `false`: one request per test definition to the legacy API | `false` |
+| `enableV1` | `true`: one request with every test definition to TestEngine's v1 API; `false`: one request per test definition to the legacy API, which is retired | `true` |
 | `backoffLimit` | Retry count on failure | `0` |
 | `resources` | Resource requests/limits for the trigger job pod | `100m`/`128Mi` requests, `500m`/`256Mi` limits |
 | `testdefinitions[].containerImage` | Test container image | Required |
@@ -1289,7 +1289,7 @@ Newest first. Each entry names the chart version, what broke, and what a stack's
 
 ### mycarrier-helm, the release after 4.7.8
 
-Canary analysis is mandatory for every Rollout, and Rollouts carry the contract the release's rollout-watch reads (DEVOPS-312, DEVOPS-319). Deployment and StatefulSet applications render unchanged, except where the first two items below, the `bakeMinutes` cap or the prod test-trigger rules fail the whole render.
+Canary analysis is mandatory for every Rollout, and Rollouts carry the contract the release's rollout-watch reads (DEVOPS-312, DEVOPS-319). Deployment and StatefulSet applications render unchanged, except for the `testtrigger.enableV1` default (last item) and where the first two items below, the `bakeMinutes` cap or the prod test-trigger rules fail the whole render.
 
 - `global.strategy.canary.analysis.enabled` is deprecated. `false` fails the render in every environment, with or without Rollouts. `true` has no effect. Remove it. To leave out one check, set `analysis.health.enabled: false` or `analysis.alerts.enabled: false`.
 - `analysis.templates` now lists only extra templates, and defaults to `[]` (4.7.5 to 4.7.8 defaulted to `[health, alerts]`). Listing `health` or `alerts` fails the render in every environment. Remove them: both run unless opted out.
@@ -1300,8 +1300,9 @@ Canary analysis is mandatory for every Rollout, and Rollouts carry the contract 
 - `coordinator.enabled` defaults to `true` (was `false`). Every preset now starts with a `start` barrier and gets a barrier after each weight. `global.correlationId` is now required for every Rollout; the pipeline sets it. Set `coordinator.enabled: false` to render without it, or where the canary-coordinator plugin is not on the cluster.
 - `dark` defaults to `false` (was `true`) until the chart renders `tests-dark` (DEVOPS-326). To keep the dark stage, set `dark: true`. The leader's `tests-dark` step now renders whenever the dark stage does (before, it needed `analysis.enabled`), so a `tests-dark` AnalysisTemplate must render for the leader.
 - Every Rollout that runs canary steps carries `mycarrier.tech/bakeMinutes` from `bakeMinutes` (default `30`), in every environment. `bakeMinutes` above `100` now fails every render, with or without Rollouts. Set it to `100` or less.
-- In prod, a Rollout (without `migratingToRollouts`) no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. Without `enableV1`, the render fails: set `enableV1: true`.
+- In prod, a Rollout (without `migratingToRollouts`) no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. With `enableV1: false`, the render fails: remove it.
 - In prod, a Rollout whose test trigger has `enableV1: true` fails to render when `testtrigger.apikey` is set to a key other than `vault:DevOps/data/testengine/api#encoded_header`, or when `global.testengineWebhookUrl` is set. Remove the key or set the shared one, and remove `global.testengineWebhookUrl`.
+- `testtrigger.enableV1` now defaults to `true`, because TestEngine's legacy API is retired. A test trigger that did not set it now sends one request with every test definition to TestEngine's v1 API, instead of one request per definition to the legacy API. No values change is needed; `enableV1: false` keeps the legacy API, but a Rollout in prod fails to render with it.
 
 ### mycarrier-helm 4.7.7
 

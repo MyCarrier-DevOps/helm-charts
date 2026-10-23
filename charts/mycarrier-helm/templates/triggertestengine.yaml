@@ -10,15 +10,15 @@
        the last promote or after an abort, so it could test the wrong version. The release's rollout-watch starts
        prod_tests after promotion instead (DEVOPS-319): it posts request.json from the <fullName>-prod-tests ConfigMap
        labelled with this release's correlation id, the same v1 request the hook sends (helm.testtrigger.v1request).
-       It always posts to TestEngine's v1 trigger, so a testtrigger without enableV1 fails the render: nothing would start
+       It always posts to TestEngine's v1 trigger, so a testtrigger with enableV1: false fails the render: nothing would start
        prod_tests for the application. It posts with the shared key and the Management-cluster URL, so
        a per-application key or a TestEngine URL override fails the render instead of being ignored. The ConfigMap
        never renders where the hook does, so prod_tests never starts twice. */}}
 {{- if eq (include "helm.canary.prodTestsByRolloutWatch" $appContext) "true" }}
-{{- if not (dig "testtrigger" "enableV1" false $appValues) }}
+{{- if not (dig "testtrigger" "enableV1" true $appValues) }}
 {{- fail (printf "application '%s': a Rollout in prod needs testtrigger.enableV1: true. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion through TestEngine's v1 trigger (DEVOPS-319), so without enableV1 nothing would run its prod tests. Set applications.%s.testtrigger.enableV1: true." $appName $appName) }}
 {{- end }}
-{{- if dig "testtrigger" "enableV1" false $appValues }}
+{{- if dig "testtrigger" "enableV1" true $appValues }}
 {{- $apikey := dig "testtrigger" "apikey" "" $appValues | default "" | toString }}
 {{- if and $apikey (ne $apikey "vault:DevOps/data/testengine/api#encoded_header") }}
 {{- fail (printf "application '%s': testtrigger.apikey must be vault:DevOps/data/testengine/api#encoded_header or unset for a Rollout in prod. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion with that shared key (DEVOPS-319), so a per-application key would not be used. Remove testtrigger.apikey, or set it to vault:DevOps/data/testengine/api#encoded_header." $appName) }}

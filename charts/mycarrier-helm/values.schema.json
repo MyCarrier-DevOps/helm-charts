@@ -362,7 +362,7 @@
           },
           "testtrigger": {
             "type": "object",
-            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7): with enableV1 the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request) and the release's rollout-watch posts it after promotion (DEVOPS-319); without enableV1 the render fails, because nothing would start its prod tests.",
+            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7): with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
             "properties": {
               "ttlSecondsAfterFinished": {
                 "type": "string",
@@ -417,8 +417,8 @@
               },
               "enableV1": {
                 "type": "boolean",
-                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false (default), each test definition generates a separate curl call to the legacy endpoint. A Rollout in prod needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it.",
-                "default": false
+                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it.",
+                "default": true
               },
               "testdefinitions": {
                 "type": "array",

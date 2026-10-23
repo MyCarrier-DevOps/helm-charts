@@ -93,6 +93,10 @@ chart's `health` check, and in prod the Rollout runs the chart's `alerts` check 
 opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
 StatefulSet apps render unchanged, except where the values below fail the whole render.
 
+`testtrigger.enableV1` now defaults to `true` for every application, because TestEngine's legacy API is retired. A test
+trigger without it sends one v1 request with every test definition. `enableV1: false` keeps the legacy API, except on a
+Rollout in prod, where it fails the render.
+
 It also renders the contract the release's rollout-watch reads (DEVOPS-319). Every Rollout that runs canary steps
 carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100). In prod, a
 Rollout's test trigger no longer renders the `<fullName>-trigger` PostSync hook (Tech Spec D7): with
