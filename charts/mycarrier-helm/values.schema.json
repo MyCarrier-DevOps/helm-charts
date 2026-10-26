@@ -398,7 +398,7 @@
               },
               "apikey": {
                 "type": "string",
-                "description": "API key for the test engine, can be a direct value or a vault reference. For a Rollout in prod with enableV1 it must be vault:DevOps/data/testengine/api#encoded_header or unset, or the render fails: rollout-watch posts with that shared key."
+                "description": "API key for the test engine, can be a direct value or a vault reference. For a Rollout in prod whose repository's deployment-strategy property (global.deploymentStrategy) is canary, with enableV1, it must be vault:DevOps/data/testengine/api#encoded_header or unset, or the render fails: rollout-watch posts with that shared key."
               },
               "resources": {
                 "type": "object",
@@ -434,7 +434,7 @@
               },
               "enableV1": {
                 "type": "boolean",
-                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it.",
+                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod whose repository's deployment-strategy property (global.deploymentStrategy) is canary needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it; the render fails with false.",
                 "default": true
               },
               "testdefinitions": {

@@ -128,7 +128,7 @@ tests:
             deploymentStrategy: rolling
     asserts:
       - failedTemplate:
-          errorPattern: "global.deploymentStrategy: remove it"
+          errorPattern: "environments\\[prod\\]\\.global\\.deploymentStrategy: remove it"
   - it: configures template with chart source and sync policies
     values:
       - fixtures/basic-environments.yaml
