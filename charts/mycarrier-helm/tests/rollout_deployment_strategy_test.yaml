@@ -2,6 +2,9 @@ suite: Rollout canary steps follow global.deploymentStrategy (the repository's d
 # chart-renderer passes the property as global.deploymentStrategy. Only the exact string canary turns the canary steps on;
 # absent, empty, rolling or any other spelling renders a Rollout with no steps that keeps the canary render's Services,
 # VirtualService and trafficRouting, so flipping the property moves no traffic.
+# The property and the prod-only steps (DEVOPS-516) are two gates: a canary Rollout renders its steps in prod, or with
+# global.strategy.canary.stepsOutsideProd, and steps: [] elsewhere; a rolling Rollout renders no steps in every
+# environment, and stepsOutsideProd does not change that.
 templates:
   - rollout.yaml
   - service.yaml
@@ -119,6 +122,94 @@ tests:
         equal:
           path: metadata.annotations["argocd.argoproj.io/hook"]
           value: PostSync
+
+  # stepsOutsideProd turns on the steps of a canary Rollout only: a rolling Rollout in a drill environment renders the
+  # same as in prod, with no steps key, no AnalysisTemplate, no canary annotations and its PostSync hook, and without
+  # correlationId or a health path.
+  - it: renders no steps for a rolling Rollout outside prod with stepsOutsideProd
+    set:
+      global:
+        <<: *rollingGlobal
+        deploymentStrategy: rolling
+        strategy:
+          canary:
+            stepsOutsideProd: true
+      environment:
+        name: preprod
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  - it: renders no steps for a Rollout without the property outside prod with stepsOutsideProd and the dark stage
+    set:
+      global:
+        <<: *rollingGlobal
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: true
+      environment:
+        name: uat
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  # A canary Rollout outside prod without stepsOutsideProd renders steps: [] (DEVOPS-516), not the rolling render.
+  - it: renders steps [] for a canary Rollout in dev without stepsOutsideProd
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        deploymentStrategy: canary
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.maxUnavailable
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "30"
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "1"
+
+  # The render checks of a canary Rollout run outside prod too (DEVOPS-516), so a canary Rollout without a health path
+  # fails in uat, where the same values with the property rolling render (the drill test above).
+  - it: fails a canary Rollout without a health path in uat
+    template: rollout.yaml
+    set:
+      global:
+        <<: *rollingGlobal
+        correlationId: corr-1
+        deploymentStrategy: canary
+      environment:
+        name: uat
+      applications: *rollingApps
+    asserts:
+      - failedTemplate:
+          errorPattern: "the canary health check has no HTTP path"
 
   - it: rolling and Canary render no steps (rolling)
     set:
