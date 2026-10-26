@@ -735,7 +735,8 @@ applications: {}
 #   # Automated Testing Configuration
 #   # ----------------------------------------------------------------------------
 #   # Configure automated test jobs that run against your deployed application. They run from an Argo CD PostSync
-#   # hook, except for a Rollout in prod (deploymentType rollout, not migratingToRollouts): the chart renders no hook
+#   # hook, except for a Rollout in prod (deploymentType rollout, not migratingToRollouts) whose repository's
+#   # deployment-strategy property (global.deploymentStrategy) is canary: the chart renders no hook
 #   # for it, and with enableV1 (the default) renders the ConfigMap <fullName>-prod-tests, which the release's rollout-watch posts
 #   # to TestEngine after promotion (DEVOPS-319). With enableV1: false the render fails. Its apikey must be
 #   # vault:DevOps/data/testengine/api#encoded_header or unset, and global.testengineWebhookUrl must be unset.

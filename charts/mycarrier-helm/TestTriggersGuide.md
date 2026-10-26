@@ -18,7 +18,7 @@ How it works:
 
 In prod, an application with `deploymentType: rollout` (without `migratingToRollouts`) whose repository's `deployment-strategy` property is `canary` (chart-renderer passes it as `global.deploymentStrategy`) gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. The release's rollout-watch (DEVOPS-319) starts the prod tests after the canary is promoted instead:
 
-- rollout-watch runs only on the canary release path, so the repository's `deployment-strategy` property must be `canary` before the release that removes `migratingToRollouts`. The chart follows the same property: a prod Rollout in a `rolling` or unset repository runs no canary steps and keeps its PostSync hook.
+- rollout-watch runs only on the canary release path, and the chart follows the same property: a prod Rollout in a `rolling` or unset repository runs no canary steps and keeps its PostSync hook.
 - With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger.
 - With `enableV1: false`, the render fails, because nothing would start the application's prod tests.
 - With `enableV1: true`, `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.

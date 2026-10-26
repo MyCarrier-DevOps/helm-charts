@@ -124,7 +124,7 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h`) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
 | A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (at 45m, the manual preset with the dark stage leaves 750 s for the leader's `tests-dark`), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
 | A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: false` | Remove it (`true` is the default). The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so `false` fails the render. |
-| A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Set the property to `canary` before the release that removes `migratingToRollouts`. Since the release after 4.7.9 the chart reads the property (`global.deploymentStrategy`): a Rollout renders canary steps, and drops its prod PostSync hook, only when it is `canary`. |
+| A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Nothing is required. Since the release after 4.7.9 the chart reads the property (`global.deploymentStrategy`): a Rollout renders canary steps, and drops its prod PostSync hook, only when it is `canary`. Otherwise it renders without steps and keeps its hook. |
 | A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
 | `global.testengineWebhookUrl` in prod, with a canary Rollout app (property `canary`) whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
 
@@ -159,7 +159,6 @@ steps until they do. A migrating Rollout (`migratingToRollouts`) renders the bar
 | Before | Edit |
 |---|---|
 | A Rollout rendered canary steps whenever `deploymentType: rollout` was set without `migratingToRollouts` | Set the repository's `deployment-strategy` property to `canary`; chart-renderer passes it. Without it the Rollout renders no steps. |
-| A stack moving from Deployment to Rollout | Set the property to `canary` before the release that removes `migratingToRollouts`. Only the canary release path runs rollout-watch, which starts a prod canary Rollout's tests after promotion. |
 
 ## Chart Structure
 
