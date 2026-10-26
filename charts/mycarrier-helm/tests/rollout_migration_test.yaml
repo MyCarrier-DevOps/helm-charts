@@ -10,6 +10,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -39,6 +40,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -73,6 +75,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -96,6 +99,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -137,6 +141,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -164,6 +169,7 @@ tests:
     template: autoscaler.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -197,6 +203,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -221,6 +228,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -247,6 +255,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         strategy:
@@ -275,6 +284,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -309,6 +319,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -340,6 +351,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -373,6 +385,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -415,6 +428,7 @@ tests:
     template: deployment.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -450,6 +464,7 @@ tests:
     template: autoscaler.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -480,6 +495,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -504,6 +520,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -526,6 +543,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -549,6 +567,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -577,6 +596,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -605,6 +625,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -642,6 +663,7 @@ tests:
     template: keda-scaledobject.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -674,6 +696,7 @@ tests:
     template: keda-scaledobject.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:

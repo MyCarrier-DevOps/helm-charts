@@ -103,6 +103,21 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.global.commitDeployed
           value: ""
+  # chart-renderer sets the repository's deployment-strategy property as global.deploymentStrategy; mycarrier-helm
+  # turns on the canary steps of Rollouts only when it reaches that chart as canary.
+  - it: forwards deploymentStrategy
+    set:
+      global.appStack: carriers
+      global.deploymentStrategy: canary
+      environments:
+        - name: prod
+    documentSelector:
+      path: metadata.name
+      value: carriers-prod
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.global.deploymentStrategy
+          value: canary
   - it: configures template with chart source and sync policies
     values:
       - fixtures/basic-environments.yaml

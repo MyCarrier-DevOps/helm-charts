@@ -23,6 +23,7 @@ global:
   appStack: mycarrier
   language: csharp
   correlationId: corr-1
+  deploymentStrategy: canary
 environment:
   name: prod
 alerts:

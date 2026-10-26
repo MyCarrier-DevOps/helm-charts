@@ -11,6 +11,7 @@ tests:
     template: analysistemplate.yaml
     set: &prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1

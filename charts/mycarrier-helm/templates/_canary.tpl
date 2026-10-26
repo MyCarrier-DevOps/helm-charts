@@ -2,15 +2,28 @@
        Rollout of a release runs the same steps; per-application updateStrategy.canary blocks are refused in
        rollout.yaml. */ -}}
 
-{{- /* True for a Rollout that runs canary steps: deploymentType rollout and not mid-migration (a migrating Rollout
-       renders a bare canary and takes over no Service; see helm.specs.rollout). */ -}}
-{{- define "helm.canary.enabled" -}}
+{{- /* True for a Rollout that takes over the app's Services and VirtualService (stableService, canaryService and
+       trafficRouting): deploymentType rollout and not mid-migration (a migrating Rollout renders a bare canary and takes
+       over no Service; see helm.specs.rollout). It holds whether or not the Rollout runs canary steps, so turning the
+       steps on or off (global.deploymentStrategy) moves no traffic. */ -}}
+{{- define "helm.canary.routed" -}}
 {{- if and (eq .application.deploymentType "rollout") (not .application.migratingToRollouts) }}true{{ else }}false{{ end }}
 {{- end -}}
 
-{{- /* global.strategy.canary merged over the defaults, as JSON. Analysis is mandatory for every Rollout (DEVOPS-312):
-       health and alerts are on unless opted out, and templates lists only extra templates. analysis.enabled is
-       deprecated and has no default; rollout.yaml refuses false. dark stays off until DEVOPS-326 renders tests-dark.
+{{- /* True for a Rollout that runs canary steps: a routed Rollout (helm.canary.routed) whose repository's
+       deployment-strategy property is canary. chart-renderer passes the property as global.deploymentStrategy; only the
+       exact string canary turns the steps on. Anything else (unset, empty, rolling, Canary), and every render path that
+       does not pass it (offloads), renders the Rollout with no steps: the same Services, VirtualService and
+       trafficRouting, without the steps, analysis, managedRoutes or canary annotations (helm.specs.rollout). */ -}}
+{{- define "helm.canary.enabled" -}}
+{{- if and (eq (include "helm.canary.routed" .) "true") (eq (toString (dig "deploymentStrategy" "" (.Values.global | default dict))) "canary") }}true{{ else }}false{{ end }}
+{{- end -}}
+
+{{- /* global.strategy.canary merged over the defaults, as JSON. It configures the steps of a canary Rollout
+       (helm.canary.enabled); a routed Rollout without steps reads only progressDeadlineSeconds from it. Analysis is
+       mandatory for every Rollout that runs steps (DEVOPS-312): health and alerts are on unless opted out, and templates
+       lists only extra templates. analysis.enabled is deprecated and has no default; rollout.yaml refuses false. dark
+       stays off until DEVOPS-326 renders tests-dark.
        bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
        and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds). */ -}}
 {{- define "helm.canary.config" -}}
@@ -241,11 +254,11 @@
 {{- /* True for an application whose prod_tests the release's rollout-watch starts after promotion (Tech Spec D7,
        DEVOPS-319): a canary Rollout (helm.canary.enabled) in prod, because canaries run only in prod (Q42). For it
        triggertestengine.yaml renders no PostSync hook, which could start prod_tests at the start of a canary sync or
-       after an abort, and renders the <fullName>-prod-tests ConfigMap instead. The chart cannot see the repository's
-       deployment-strategy property: it uses the input that turns on the canary steps, deploymentType rollout, because a
-       stack moves to Rollouts as a whole. Only the canary path (deployment-strategy canary) runs rollout-watch, so the
-       guidance requires the property to be canary before the release that removes migratingToRollouts. Every
-       other application (other environments, Deployments, StatefulSets, migratingToRollouts) keeps the hook. */ -}}
+       after an abort, and renders the <fullName>-prod-tests ConfigMap instead. helm.canary.enabled follows the
+       repository's deployment-strategy property (global.deploymentStrategy), the same property that sends the release
+       down the canary path that runs rollout-watch, so the ConfigMap renders exactly when rollout-watch will read it.
+       Every other application (other environments, Deployments, StatefulSets, migratingToRollouts, and Rollouts whose
+       property is not canary) keeps the hook. */ -}}
 {{- define "helm.canary.prodTestsByRolloutWatch" -}}
 {{- if and (eq (include "helm.canary.enabled" .) "true") (eq (toString .Values.environment.name) "prod") }}true{{ else }}false{{ end -}}
 {{- end -}}
@@ -454,7 +467,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
     {{- /* Argo Rollouts adds a managed route (the dark stage's canary-header) to every VirtualService the Rollout lists,
            ahead of their other routes, and it matches only the header. In this shared VirtualService it would send
            every path to this app's canary, and two frontend Rollouts would overwrite each other's route. */ -}}
-    {{- if include "helm.canary.managedRoutes" . | fromJsonArray -}}
+    {{- if and (eq (include "helm.canary.enabled" .) "true") (include "helm.canary.managedRoutes" . | fromJsonArray) -}}
       {{- fail (printf "application '%s': the dark stage's header route would also go into the shared %s-multifrontend VirtualService, where it matches every path. Set global.strategy.canary.dark: false for a multi-frontend release." .appName $primaryFullName) -}}
     {{- end -}}
     {{- $result = append $result (dict "name" (printf "%s-multifrontend" $primaryFullName) "routes" $mfRoutes) -}}
@@ -467,7 +480,9 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toYaml $result -}}
 {{- end -}}
 
-{{- /* The Rollouts that run canary steps (the helm.canary.groupSize set), in name order, as JSON. */ -}}
+{{- /* The Rollouts that run canary steps (the helm.canary.groupSize set), in name order, as JSON: every application with
+       deploymentType rollout and without migratingToRollouts. global.deploymentStrategy is release-wide, so it is not
+       checked here; the callers (the dark stage and the rolloutGroupSize annotation) render only when it is canary. */ -}}
 {{- define "helm.canary.rollouts" -}}
 {{- $names := list -}}
 {{- range $name, $values := .Values.applications -}}
@@ -505,7 +520,8 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* Number of Rollouts in the release that run canary steps (mycarrier.tech/rolloutGroupSize). */ -}}
+{{- /* Number of Rollouts in the release that run canary steps (mycarrier.tech/rolloutGroupSize), counted as in
+       helm.canary.rollouts. */ -}}
 {{- define "helm.canary.groupSize" -}}
 {{- $count := 0 -}}
 {{- range $name, $values := .Values.applications -}}

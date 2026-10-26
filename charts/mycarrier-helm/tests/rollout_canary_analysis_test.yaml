@@ -10,6 +10,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -53,6 +54,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -86,6 +88,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -119,6 +122,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -147,6 +151,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -177,6 +182,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -201,6 +207,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -229,6 +236,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -258,6 +266,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -285,6 +294,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -312,6 +322,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -344,6 +355,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -372,6 +384,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -416,6 +429,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -445,6 +459,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -469,6 +484,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -492,6 +508,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -530,6 +547,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -557,6 +575,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -596,6 +615,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
       environment:
@@ -631,6 +651,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -653,6 +674,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -681,6 +703,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -708,6 +731,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -744,6 +768,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -770,6 +795,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -796,6 +822,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -822,6 +849,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -847,6 +875,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -888,6 +917,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -917,6 +947,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -946,6 +977,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -980,6 +1012,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -1022,6 +1055,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -1058,6 +1092,7 @@ tests:
       value: preprod-test-stack-api-status
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -1090,6 +1125,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -1123,6 +1159,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -1153,6 +1190,7 @@ tests:
       value: preprod-test-stack-web-status
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -1186,6 +1224,7 @@ tests:
       value: preprod-test-stack-api-status
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -1213,6 +1252,7 @@ tests:
     template: rollout.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -1238,6 +1278,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -1267,6 +1308,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -1300,6 +1342,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
@@ -1328,6 +1371,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -1372,6 +1416,7 @@ tests:
       value: preprod-test-stack-api-smoke
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp
@@ -1401,6 +1446,7 @@ tests:
     template: analysistemplate.yaml
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         correlationId: corr-1
         language: csharp

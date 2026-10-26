@@ -12,6 +12,7 @@ tests:
   - it: starts every preset with the dark stage when dark is on
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: 0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
@@ -81,6 +82,7 @@ tests:
   - it: gives the tests-dark analysis step to the leader only
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -145,6 +147,7 @@ tests:
   - it: fails the render when the dark stage has several canary Rollouts and no leader
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -180,6 +183,7 @@ tests:
   - it: fails the render when the leader is not a canary Rollout
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -218,6 +222,7 @@ tests:
   - it: renders no dark stage and no managed route by default
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -246,6 +251,7 @@ tests:
   - it: needs no leader while the dark stage is off by default
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -282,6 +288,7 @@ tests:
   - it: defaults the leader to the only canary Rollout, skipping a migrating application
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -331,6 +338,7 @@ tests:
   - it: sizes the dark canary from darkReplicas
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -368,6 +376,7 @@ tests:
   - it: renders no dark stage and no managed route with dark false
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -400,6 +409,7 @@ tests:
   - it: renders no dark stage and no managed route with dark true while the coordinator is off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         strategy:
@@ -434,6 +444,7 @@ tests:
   - it: lists the routes an explicit steps list names in managedRoutes and adds no dark stage
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -477,6 +488,7 @@ tests:
   - it: refuses the dark stage for a frontend Rollout that shares the multi-frontend VirtualService
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -524,6 +536,7 @@ tests:
   - it: fails the render for a leader that is not an application of the release even while the dark stage is off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         strategy:
@@ -549,6 +562,7 @@ tests:
   - it: renders a release whose leader is still a Deployment while the dark stage is off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         strategy:
