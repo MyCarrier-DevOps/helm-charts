@@ -18,6 +18,7 @@ spec:
             - Values:
                 isEnvironmentDeploy: true
                 global:
+                  {{- if hasKey ($env.global | default dict) "deploymentStrategy" }}{{ fail (printf "environments[%s].global.deploymentStrategy: remove it. The repository's deployment-strategy property sets global.deploymentStrategy for every environment." $env.name) }}{{ end }}
                   {{- $g := mustMergeOverwrite (deepCopy $.Values.global) ($env.global | default dict) }}
                   {{- $_ := set $g "appStack" (lower ($g.appStack | default "")) }}
                   {{- $g | toYaml | nindent 18 }}

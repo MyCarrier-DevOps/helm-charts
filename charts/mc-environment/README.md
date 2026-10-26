@@ -9,6 +9,7 @@
 3. For every entry in `environments` it builds a final values document by layering:
    - global defaults from `values.yaml` → `.Values.global`
    - optional per-environment overrides under `environments[].global`
+     (`environments[].global` cannot set `deploymentStrategy`; the render fails if it does, because the repository's `deployment-strategy` property sets it for every environment)
    - optional extra values supplied alongside the environment (for example `applications`, `jobs`, `infrastructure`).
 4. The merged values are serialized into the Argo CD `Application.spec.source.helm.values` field by the ApplicationSet template, so Argo CD deploys `mycarrier-helm` with those settings.
 

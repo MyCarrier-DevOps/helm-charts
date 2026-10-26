@@ -118,6 +118,17 @@ tests:
       - equal:
           path: spec.generators[0].list.elements[0].Values.global.deploymentStrategy
           value: canary
+  - it: refuses deploymentStrategy in an environment's global
+    set:
+      global.appStack: carriers
+      global.deploymentStrategy: canary
+      environments:
+        - name: prod
+          global:
+            deploymentStrategy: rolling
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.deploymentStrategy: remove it"
   - it: configures template with chart source and sync policies
     values:
       - fixtures/basic-environments.yaml
