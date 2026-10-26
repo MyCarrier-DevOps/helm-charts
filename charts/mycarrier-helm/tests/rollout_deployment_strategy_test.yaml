@@ -82,6 +82,19 @@ tests:
           path: spec.strategy.canary.maxUnavailable
           value: 0
       - template: rollout.yaml
+        equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+      - template: rollout.yaml
+        equal:
+          path: spec.progressDeadlineAbort
+          value: true
+      - template: rollout.yaml
+        equal:
+          path: spec.rollbackWindow
+          value:
+            revisions: 2
+      - template: rollout.yaml
         notExists:
           path: spec.strategy.canary.analysis
       - template: rollout.yaml
@@ -418,3 +431,26 @@ tests:
               maxUnavailable: 0
       - notExists:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # csharp's default liveness probe is HTTP, so the health check's URL resolves: only the gate keeps the chart's
+  # health AnalysisTemplate out of a rolling render.
+  - it: renders none of the chart's AnalysisTemplates for a rolling Rollout whose health URL resolves
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        deploymentStrategy: rolling
+      environment: *preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
