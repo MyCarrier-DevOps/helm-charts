@@ -29,7 +29,7 @@
                 "stepsOutsideProd": {
                   "type": "boolean",
                   "default": false,
-                  "description": "Render the canary steps (preset or explicit steps, with their barriers, analysis steps, pauses and dark stage) and mycarrier.tech/canaryBudgetSeconds outside prod, as in prod, for a test drill (DEVOPS-516). The chart's own alerts check stays prod only; in a drill only a replacement alerts entry (applications.<app>.analysisTemplates) runs as background analysis. false: only environment.name prod renders them; elsewhere a Rollout renders steps: [] and promotes at once. The render-time checks run in every environment either way, the leader rule, the leader's tests-dark, budgetSeconds for explicit steps and the budget limit included; only global.correlationId for the coordinator is required just where the steps render. New after 4.7.9: the 4.7.9 schema refuses it."
+                  "description": "Render the canary steps (preset or explicit steps, with their barriers, analysis steps, pauses and dark stage) and mycarrier.tech/canaryBudgetSeconds outside prod, as in prod, for a test drill (DEVOPS-516). The chart's own alerts check stays prod only; in a drill only a replacement alerts entry (applications.<app>.analysisTemplates) runs as background analysis. It applies only to a Rollout whose repository's deployment-strategy property (global.deploymentStrategy) is canary; any other Rollout renders no steps in every environment, with or without it. false: only environment.name prod renders them; elsewhere a canary Rollout renders steps: [] and promotes at once. The render-time checks of a canary Rollout run in every environment either way, the leader rule, the leader's tests-dark, budgetSeconds for explicit steps and the budget limit included; only global.correlationId for the coordinator is required just where the steps render. New after 4.7.9: the 4.7.9 schema refuses it."
                 },
                 "manualTimeout": {
                   "type": "string",
@@ -40,7 +40,7 @@
                 "steps": {
                   "type": "array",
                   "items": { "type": "object" },
-                  "description": "Argo Rollouts canary steps that replace the preset verbatim. Like the preset, they render only in prod or with stepsOutsideProd; elsewhere the Rollout renders steps: []. A steps list needs budgetSeconds in every environment, or the render fails."
+                  "description": "Argo Rollouts canary steps that replace the preset verbatim. Like the preset, they render only for a Rollout whose deployment-strategy property is canary, and only in prod or with stepsOutsideProd; elsewhere such a Rollout renders steps: []. A steps list needs budgetSeconds in every environment, or the render fails."
                 },
                 "budgetSeconds": {
                   "type": "integer",
@@ -174,6 +174,11 @@
           "description": "Argo Events namespace the render pipeline runs in. Selects which TestEngine deployment (prod vs dev) receives test trigger payloads.",
           "enum": ["argo-events", "argo-events-test"],
           "default": "argo-events"
+        },
+        "deploymentStrategy": {
+          "type": "string",
+          "description": "The repository's deployment-strategy property, passed in by chart-renderer. Only the exact string canary gives Rollouts (deploymentType rollout without migratingToRollouts) their canary steps; any other value, or none, renders them without steps and with the same Services, VirtualService and trafficRouting.",
+          "default": ""
         }
       }
     },
@@ -379,7 +384,7 @@
           },
           "testtrigger": {
             "type": "object",
-            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7): with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
+            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
             "properties": {
               "ttlSecondsAfterFinished": {
                 "type": "string",
@@ -398,7 +403,7 @@
               },
               "apikey": {
                 "type": "string",
-                "description": "API key for the test engine, can be a direct value or a vault reference. For a Rollout in prod with enableV1 it must be vault:DevOps/data/testengine/api#encoded_header or unset, or the render fails: rollout-watch posts with that shared key."
+                "description": "API key for the test engine, can be a direct value or a vault reference. For a Rollout in prod whose repository's deployment-strategy property (global.deploymentStrategy) is canary, with enableV1, it must be vault:DevOps/data/testengine/api#encoded_header or unset, or the render fails: rollout-watch posts with that shared key."
               },
               "resources": {
                 "type": "object",
@@ -434,7 +439,7 @@
               },
               "enableV1": {
                 "type": "boolean",
-                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it.",
+                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod whose repository's deployment-strategy property (global.deploymentStrategy) is canary needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it; the render fails with false.",
                 "default": true
               },
               "testdefinitions": {

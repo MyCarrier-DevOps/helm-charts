@@ -12,6 +12,7 @@ tests:
   - it: renders the barriers by default
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -52,6 +53,7 @@ tests:
   - it: renders no plugin step with coordinator.enabled false
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         strategy:
@@ -93,6 +95,7 @@ tests:
   - it: starts with the start barrier and puts a barrier at every step boundary of the standard preset
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -143,6 +146,7 @@ tests:
   - it: puts the barrier after the analysis and the pause of each weight
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -181,6 +185,7 @@ tests:
   - it: keeps the manual pause before the w10 barrier
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -219,6 +224,7 @@ tests:
   - it: takes barrier timeouts from coordinator.barrierTimeouts and keeps the other defaults
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -255,6 +261,7 @@ tests:
   - it: renders an explicit steps list verbatim, with no barrier added
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -291,6 +298,7 @@ tests:
   - it: gives two Rollouts of a release the same barriers and a group size of 2
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -345,6 +353,7 @@ tests:
   - it: renders a long-running migrator application as a canary Rollout
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -378,6 +387,7 @@ tests:
   - it: requires global.correlationId in prod while the coordinator is on by default
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
       environment:
@@ -398,6 +408,7 @@ tests:
   - it: requires global.correlationId in a drill outside prod (stepsOutsideProd)
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         strategy:
@@ -423,6 +434,7 @@ tests:
   - it: fails when a barrier timeout reaches progressDeadlineSeconds
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -453,6 +465,7 @@ tests:
   - it: accepts a longer barrier timeout when the release raises progressDeadlineSeconds
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -486,6 +499,7 @@ tests:
   - it: checks against the application's own progressDeadlineSeconds
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
@@ -522,6 +536,7 @@ tests:
   - it: checks the barriers of an explicit steps list too
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
         correlationId: corr-1

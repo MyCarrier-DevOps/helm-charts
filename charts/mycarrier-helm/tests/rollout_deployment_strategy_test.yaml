@@ -1,0 +1,547 @@
+suite: Rollout canary steps follow global.deploymentStrategy (the repository's deployment-strategy property, DEVOPS-310)
+# chart-renderer passes the property as global.deploymentStrategy. Only the exact string canary turns the canary steps on;
+# absent, empty, rolling or any other spelling renders a Rollout with no steps that keeps the canary render's Services,
+# VirtualService and trafficRouting, so flipping the property moves no traffic.
+# The property and the prod-only steps (DEVOPS-516) are two gates: a canary Rollout renders its steps in prod, or with
+# global.strategy.canary.stepsOutsideProd, and steps: [] elsewhere; a rolling Rollout renders no steps in every
+# environment, and stepsOutsideProd does not change that.
+templates:
+  - rollout.yaml
+  - service.yaml
+  - virtualService.yaml
+  - analysistemplate.yaml
+  - triggertestengine.yaml
+tests:
+  - it: canary renders the preset steps
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        deploymentStrategy: canary
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - exists:
+          path: spec.strategy.canary.steps
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            plugin:
+              name: mycarrier/canary-coordinator
+              config: {kind: barrier, name: start, timeout: 9m}
+      - exists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # No correlationId and no health path: the checks that only the steps need must not run for a rolling Rollout.
+  - it: absent renders no steps
+    set:
+      global: &rollingGlobal
+        appStack: mycarrier
+        language: nodejs
+        gitbranch: main
+      environment: &prod
+        name: prod
+      applications: &rollingApps
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+    asserts: &rollingAsserts
+      - template: rollout.yaml
+        isKind:
+          of: Rollout
+      - template: rollout.yaml
+        notExists:
+          path: spec.strategy.canary.steps
+      - template: rollout.yaml
+        equal:
+          path: spec.strategy.canary.maxUnavailable
+          value: 0
+      - template: rollout.yaml
+        equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+      - template: rollout.yaml
+        equal:
+          path: spec.progressDeadlineAbort
+          value: true
+      - template: rollout.yaml
+        equal:
+          path: spec.rollbackWindow
+          value:
+            revisions: 2
+      - template: rollout.yaml
+        notExists:
+          path: spec.strategy.canary.analysis
+      - template: rollout.yaml
+        notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - template: rollout.yaml
+        notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+      - template: rollout.yaml
+        notExists:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+      - template: rollout.yaml
+        notExists:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+      - template: analysistemplate.yaml
+        hasDocuments:
+          count: 0
+      - template: triggertestengine.yaml
+        isKind:
+          of: Job
+      - template: triggertestengine.yaml
+        equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: PostSync
+
+  # stepsOutsideProd turns on the steps of a canary Rollout only: a rolling Rollout in a drill environment renders the
+  # same as in prod, with no steps key, no AnalysisTemplate, no canary annotations and its PostSync hook, and without
+  # correlationId or a health path.
+  - it: renders no steps for a rolling Rollout outside prod with stepsOutsideProd
+    set:
+      global:
+        <<: *rollingGlobal
+        deploymentStrategy: rolling
+        strategy:
+          canary:
+            stepsOutsideProd: true
+      environment:
+        name: preprod
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  - it: renders no steps for a Rollout without the property outside prod with stepsOutsideProd and the dark stage
+    set:
+      global:
+        <<: *rollingGlobal
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: true
+      environment:
+        name: uat
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  # A canary Rollout outside prod without stepsOutsideProd renders steps: [] (DEVOPS-516), not the rolling render.
+  - it: renders steps [] for a canary Rollout in dev without stepsOutsideProd
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        deploymentStrategy: canary
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.maxUnavailable
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "30"
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "1"
+
+  # The render checks of a canary Rollout run outside prod too (DEVOPS-516), so a canary Rollout without a health path
+  # fails in uat, where the same values with the property rolling render (the drill test above).
+  - it: fails a canary Rollout without a health path in uat
+    template: rollout.yaml
+    set:
+      global:
+        <<: *rollingGlobal
+        correlationId: corr-1
+        deploymentStrategy: canary
+      environment:
+        name: uat
+      applications: *rollingApps
+    asserts:
+      - failedTemplate:
+          errorPattern: "the canary health check has no HTTP path"
+
+  - it: rolling and Canary render no steps (rolling)
+    set:
+      global:
+        <<: *rollingGlobal
+        deploymentStrategy: rolling
+      environment: *prod
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  - it: rolling and Canary render no steps (empty)
+    set:
+      global:
+        <<: *rollingGlobal
+        deploymentStrategy: ""
+      environment: *prod
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  - it: rolling and Canary render no steps (Canary, which is not the exact string canary)
+    set:
+      global:
+        <<: *rollingGlobal
+        deploymentStrategy: Canary
+      environment: *prod
+      applications: *rollingApps
+    asserts: *rollingAsserts
+
+  - it: prod tests ConfigMap only on canary (canary)
+    template: triggertestengine.yaml
+    set:
+      global:
+        appStack: mycarrier
+        language: nodejs
+        gitbranch: main
+        correlationId: corr-1
+        deploymentStrategy: canary
+      environment: *prod
+      applications: &prodTestApps
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-prod-tests
+
+  - it: prod tests ConfigMap only on canary (rolling)
+    template: triggertestengine.yaml
+    set:
+      global:
+        appStack: mycarrier
+        language: nodejs
+        gitbranch: main
+        correlationId: corr-1
+        deploymentStrategy: rolling
+      environment: *prod
+      applications: *prodTestApps
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-trigger
+
+  # The same values with the property flipped: the Services, the VirtualService and trafficRouting are identical.
+  - it: flip keeps the traffic topology (canary)
+    set:
+      global: &topologyGlobal
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        deploymentStrategy: canary
+      environment: &preprod
+        name: preprod
+      applications: &topologyApps
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts: &topologyAsserts
+      - template: rollout.yaml
+        equal:
+          path: spec.strategy.canary.trafficRouting
+          value:
+            istio:
+              virtualServices:
+                - name: test-stack-api
+                  routes:
+                    - test-stack-api
+                    - canary
+      - template: rollout.yaml
+        isSubset:
+          path: spec.strategy.canary
+          content:
+            stableService: test-stack-api
+            canaryService: test-stack-api-preview
+            dynamicStableScale: false
+            abortScaleDownDelaySeconds: 30
+            minPodsPerReplicaSet: 1
+      - template: service.yaml
+        hasDocuments:
+          count: 2
+      - template: service.yaml
+        documentIndex: 0
+        equal:
+          path: metadata.name
+          value: test-stack-api
+      - template: service.yaml
+        documentIndex: 1
+        equal:
+          path: metadata.name
+          value: test-stack-api-preview
+      - template: service.yaml
+        documentIndex: 0
+        equal:
+          path: spec
+          value: &serviceSpec
+            type: ClusterIP
+            ports:
+              - name: http
+                port: 8080
+                protocol: TCP
+            selector:
+              app.kubernetes.io/name: test-stack-api
+              app.kubernetes.io/instance: test-stack-api-preprod
+            sessionAffinity: ClientIP
+            sessionAffinityConfig:
+              clientIP:
+                timeoutSeconds: 600
+      - template: service.yaml
+        documentIndex: 1
+        equal:
+          path: spec
+          value: *serviceSpec
+      - template: virtualService.yaml
+        hasDocuments:
+          count: 1
+      - template: virtualService.yaml
+        equal:
+          path: spec.hosts
+          value:
+            - test-stack-api
+            - test-stack-api.preprod.internal
+            - test-stack-api.preprod.mycarrier.dev
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[0].name
+          value: test-stack-api
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[1].name
+          value: canary
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[0].route
+          value: &stableAndPreview
+            - destination:
+                host: test-stack-api.preprod.svc.cluster.local
+                port:
+                  number: 8080
+              weight: 100
+            - destination:
+                host: test-stack-api-preview.preprod.svc.cluster.local
+                port:
+                  number: 8080
+              weight: 0
+      - template: virtualService.yaml
+        equal:
+          path: spec.http[1].route
+          value: *stableAndPreview
+
+  - it: flip keeps the traffic topology (rolling)
+    set:
+      global:
+        <<: *topologyGlobal
+        deploymentStrategy: rolling
+      environment: *preprod
+      applications: *topologyApps
+    asserts: *topologyAsserts
+
+  # The multi-frontend VirtualService check reads the managed routes, which come from the steps; a rolling frontend
+  # Rollout has neither, so it renders without the steps' inputs (correlationId, a health path).
+  - it: lists both VirtualServices for a rolling frontend Rollout in a multi-frontend release
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        deploymentStrategy: rolling
+      environment: *preprod
+      applications:
+        shell:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: rollout
+          networking:
+            istio: {}
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - notExists:
+          path: spec.strategy.canary.steps
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-shell
+              routes:
+                - test-stack-shell
+                - canary
+            - name: test-stack-shell-multifrontend
+              routes:
+                - test-stack-shell-env-match
+                - test-stack-shell-catchall
+                - canary
+
+  # A rolling Rollout keeps the VirtualService topology, so the checks that protect it still apply.
+  - it: still requires the chart's Istio VirtualService for a rolling Rollout
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+        deploymentStrategy: rolling
+      environment: *preprod
+      applications:
+        api:
+          deploymentType: rollout
+          networking:
+            istio:
+              enabled: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs the chart's Istio VirtualService"
+
+  # A migrating Rollout renders the bare canary whatever the property says.
+  - it: keeps the bare canary for a migrating Rollout when the property is canary
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+        deploymentStrategy: canary
+      environment: *preprod
+      applications:
+        api:
+          deploymentType: rollout
+          migratingToRollouts: true
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            canary:
+              maxUnavailable: 0
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # csharp's default liveness probe is HTTP, so the health check's URL resolves: only the gate keeps the chart's
+  # health AnalysisTemplate out of a rolling render.
+  - it: renders none of the chart's AnalysisTemplates for a rolling Rollout whose health URL resolves
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: csharp
+        deploymentStrategy: rolling
+      environment: *preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0

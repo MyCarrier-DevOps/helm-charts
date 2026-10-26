@@ -9,6 +9,7 @@ tests:
   - it: renders the prod-tests ConfigMap and no hook for a canary Rollout in prod
     set:
       global: &global
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -411,6 +412,7 @@ tests:
   - it: fails for global.testengineWebhookUrl with a canary Rollout's testtrigger in prod
     set:
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -429,6 +431,7 @@ tests:
   - it: keeps both overrides on the hook of a canary Rollout outside prod
     set:
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1

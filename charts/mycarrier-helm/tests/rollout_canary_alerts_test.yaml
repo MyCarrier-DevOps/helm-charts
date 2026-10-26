@@ -11,6 +11,7 @@ tests:
       value: ExternalSecret
     set: &prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -212,6 +213,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -239,6 +241,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -296,6 +299,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -341,6 +345,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -385,6 +390,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -422,6 +428,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -447,6 +454,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: Billing
         language: csharp
         correlationId: corr-1
@@ -467,6 +475,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: ""
         language: csharp
         correlationId: corr-1
@@ -482,6 +491,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: app
         language: csharp
         correlationId: corr-1
@@ -496,6 +506,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: ""
         language: csharp
         correlationId: corr-1
@@ -597,6 +608,7 @@ tests:
     set:
       <<: *replacement
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -655,6 +667,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -720,6 +733,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: ""
         language: csharp
         correlationId: corr-1
@@ -742,6 +756,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -762,6 +777,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         language: csharp
         correlationId: corr-1
@@ -803,6 +819,7 @@ tests:
     set:
       <<: *prod
       global:
+        deploymentStrategy: canary
         appStack: mycarrier
         correlationId: corr-1
         strategy:

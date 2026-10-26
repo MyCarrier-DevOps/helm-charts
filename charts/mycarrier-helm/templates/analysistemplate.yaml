@@ -12,10 +12,11 @@
 {{- $customNames := list }}
 {{- range ($appValues.analysisTemplates | default list) }}{{ $customNames = append $customNames (toString .name) }}{{ end }}
 {{- $cfg := include "helm.canary.config" $appContext | fromJson }}
-{{- /* The chart's own health template (DEVOPS-312) for a Rollout with the canary contract, unless
-       analysis.health.enabled is false. It renders in every environment, also where the Rollout renders no steps
-       (outside prod without stepsOutsideProd, DEVOPS-516) and nothing references it, so stepsOutsideProd changes only
-       the Rollout; the health-path check runs in helm.canary.configuredSteps either way. The -preview Service's health
+{{- /* The chart's own health template (DEVOPS-312) for a canary Rollout (helm.canary.enabled: the repository's
+       deployment-strategy property is canary), unless analysis.health.enabled is false. It renders in every
+       environment, also where the canary Rollout renders no steps (outside prod without stepsOutsideProd, DEVOPS-516)
+       and nothing references it, so stepsOutsideProd changes only the Rollout; the health-path check runs in
+       helm.canary.configuredSteps either way. A Rollout whose property is not canary gets none. The -preview Service's health
        endpoint must meet analysis.health.successCondition (default result == "Healthy"), read at $.status of a JSON
        body. Argo Rollouts up to v1.10.1 counts a 2xx body that is not JSON as Successful without evaluating the
        condition; argo-rollouts#4770 (merged, not yet released) evaluates it on the raw body, so an app whose health

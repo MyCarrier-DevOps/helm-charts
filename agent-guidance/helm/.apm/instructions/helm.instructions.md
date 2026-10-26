@@ -125,7 +125,7 @@ By convention there are no `helm/values.{env}.yaml` files at root level — all 
 ### Values Merge Logic
 
 For each `environments[]` entry, mc-environment builds the values of the generated Application:
-1. Root-level `global` from `helm/values.yaml`, with `environments[].global` merged over it
+1. Root-level `global` from `helm/values.yaml`, with `environments[].global` merged over it. `environments[].global` cannot set `deploymentStrategy`: the render fails, because the repository's `deployment-strategy` property sets it for every environment
 2. `environments[].environment`, with `name` set to the entry's `name`
 3. `environments[].applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `extraObjects` and the platform flags (see [mc-environment Specific Properties](#mc-environment-specific-properties)), unchanged
 4. The root-level `alerts`, unchanged and the same for every entry
@@ -620,7 +620,9 @@ applications:
 
 ## Rollouts
 
-`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's. A stack moves to Rollouts as a whole, and its repository's `deployment-strategy` property must be `canary` before the release that removes `migratingToRollouts`: only the canary release path starts a prod Rollout's tests (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod)).
+`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's. A stack moves to Rollouts as a whole. In prod, a Rollout whose repository's `deployment-strategy` property is `canary` gets its prod tests from the release's rollout-watch instead of a PostSync hook (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod)).
+
+**The deployment-strategy property turns the steps on.** chart-renderer passes the repository's `deployment-strategy` property on every render as `global.deploymentStrategy`, on either chart: mycarrier-helm reads it directly, and mc-environment forwards its whole `global` map to each environment. Do not set it in a stack's values files. A Rollout (`deploymentType: rollout` without `migratingToRollouts`) runs canary steps only when the value is exactly `canary`. With any other value (`rolling`, empty, unset, or another spelling such as `Canary`) it renders with no steps, no analysis, no barriers or dark stage, no `managedRoutes`, none of the annotations under What the release reads, none of the chart's AnalysisTemplates and, in prod, no `<environment>-<fullName>-alerts` ExternalSecret; in prod it keeps its PostSync test hook. It keeps the `<fullName>` and `<fullName>-preview` Services, the VirtualService and `trafficRouting`, so switching the property moves no traffic: Argo Rollouts scales the new ReplicaSet to full size behind the `-preview` Service at weight 0, then points the stable Service at it. Such a Rollout still needs what the table below lists for every environment, `dev` and `feature<N>`, but not `global.correlationId`, a health path or an alerts service label. Render paths that do not pass the property, such as offloads, render Rollouts without steps until they do. Setting the property back to `rolling` turns the steps off for the next release.
 
 ```yaml
 global:
@@ -651,11 +653,11 @@ global:
       dark: false                       # header-gated dark stage; off until the chart renders tests-dark
 ```
 
-**Steps in prod only.** A canary Rollout renders its steps only where `environment.name` is `prod` (Q52, DEVOPS-516). In every other environment (`dev`, `uat`, `qa`, `preprod`, `feature<N>` and any other name), it renders `steps: []`, and Argo Rollouts promotes the new version at once. The preset or explicit `steps`, the barriers, the analysis steps, the pauses, the dark stage, the background `alerts` analysis and `mycarrier.tech/canaryBudgetSeconds` go together. The Rollout keeps the stable and `-preview` Services, the Istio traffic routing, `progressDeadlineSeconds`, `rollbackWindow`, `mycarrier.tech/rolloutGroupSize` and `mycarrier.tech/bakeMinutes`, and the chart's `health` AnalysisTemplate still renders, with no step that references it.
+**Steps in prod only.** A canary Rollout (property `canary`) renders its steps only where `environment.name` is `prod` (Q52, DEVOPS-516). In every other environment (`dev`, `uat`, `qa`, `preprod`, `feature<N>` and any other name), it renders `steps: []`, and Argo Rollouts promotes the new version at once. The preset or explicit `steps`, the barriers, the analysis steps, the pauses, the dark stage, the background `alerts` analysis and `mycarrier.tech/canaryBudgetSeconds` go together. The Rollout keeps the stable and `-preview` Services, the Istio traffic routing, `progressDeadlineSeconds`, `rollbackWindow`, `mycarrier.tech/rolloutGroupSize` and `mycarrier.tech/bakeMinutes`, and the chart's `health` AnalysisTemplate still renders, with no step that references it.
 
-- `stepsOutsideProd: true` (default `false`) renders the prod steps in any environment, for a test drill. Set it only for the drill's environment: Layout A in `helm/values.{env}.yaml`, Layout B in the `global` of that environment's `environments[]` entry. Do not set it in the shared `helm/values.yaml`. With it, the Rollout renders the same steps as in prod, with the environment's template names, and the same budget. The chart's `alerts` check stays prod only; in a drill only a replacement `alerts` entry runs as background analysis.
-- The 4.7.9 schema refuses `stepsOutsideProd` ("additional properties not allowed"). A stack can set it only once the deploy-core pin has moved past 4.7.9 to the release after 4.7.9.
-- The render-time checks run in every environment, with or without `stepsOutsideProd`, as on 4.7.9: a missing health path, both analysis opt-outs, an extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, the leader rule with the leader's `tests-dark`, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s (the leader's `tests-dark` included), a zero `manualTimeout` with the `manual` preset, and the multi-frontend dark stage fail the render outside prod too. A stack moves to canary as a whole, so the same Rollouts exist in every environment, and the stack sees these failures on its first render, not at its first prod canary.
+- `stepsOutsideProd: true` (default `false`) renders the prod steps in any environment, for a test drill. Set it only for the drill's environment: Layout A in `helm/values.{env}.yaml`, Layout B in the `global` of that environment's `environments[]` entry. Do not set it in the shared `helm/values.yaml`. With it, a canary Rollout renders the same steps as in prod, with the environment's template names, and the same budget. It gives no steps to a Rollout whose property is not `canary`: that Rollout renders the same in every environment, with or without it. The chart's `alerts` check stays prod only; in a drill only a replacement `alerts` entry runs as background analysis.
+- The 4.7.9 schema refuses `stepsOutsideProd` ("additional properties not allowed"). A stack can set it only once the deploy-core pin has moved past 4.7.9 to 4.7.10 or later.
+- For a canary Rollout, the render-time checks run in every environment, with or without `stepsOutsideProd`, as on 4.7.9: a missing health path, both analysis opt-outs, an extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, the leader rule with the leader's `tests-dark`, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s (the leader's `tests-dark` included), a zero `manualTimeout` with the `manual` preset, and the multi-frontend dark stage fail the render outside prod too. A stack moves to canary as a whole, so the same Rollouts exist in every environment, and the stack sees these failures on its first render, not at its first prod canary.
 - Only `global.correlationId` for the coordinator is required just where the steps render. Outside prod without `stepsOutsideProd`, a render without it succeeds.
 
 | Preset | Steps | Budget with the defaults |
@@ -668,7 +670,7 @@ The budget is `mycarrier.tech/canaryBudgetSeconds` (see What the release reads).
 
 `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
 
-**What the release reads.** A canary Rollout (`deploymentType: rollout` without `migratingToRollouts`) carries three annotations that the release's rollout-watch reads. The first two render in every environment; `mycarrier.tech/canaryBudgetSeconds` renders only where the steps render (prod, or `stepsOutsideProd`):
+**What the release reads.** A canary Rollout (`deploymentType: rollout` without `migratingToRollouts`, with `global.deploymentStrategy: canary`) carries three annotations that the release's rollout-watch reads. The first two render in every environment; `mycarrier.tech/canaryBudgetSeconds` renders only where the steps render (prod, or `stepsOutsideProd`). A Rollout whose property is not `canary` carries none of them, in any environment:
 
 - `mycarrier.tech/rolloutGroupSize`: the number of such Rollouts in the release.
 - `mycarrier.tech/bakeMinutes`: `bakeMinutes` (default `30`), alert-gate's watch window after promotion. rollout-watch puts the smallest value of the release's Rollouts in the `alert.gate` event. Set a longer window for a service with a known slow-burn history. The maximum is `100`: alert-gate's run has a 2-hour deadline (`activeDeadlineSeconds` 7200) and spends about 750 s outside its window, so a longer window would be killed before it ends. A value above `100` or below `1` fails the render, with or without Rollouts.
@@ -677,9 +679,9 @@ The budget is `mycarrier.tech/canaryBudgetSeconds` (see What the release reads).
   - **Explicit steps.** The chart does not add up an explicit `steps` list. Set `budgetSeconds` to its worst-case length by the same rules, from `1` to `5700`. Without it, the render fails, in every environment, also where the steps do not render. Count an indefinite pause (`pause: {}`) as the time a person needs to promote it.
   - **Limits.** A budget above `5700` fails the render, in every environment. rollout-watch's release workflow has `activeDeadlineSeconds` 10800, which covers about 70 minutes before the canary starts, the budget and 15 minutes after it (DEVOPS-319). The `manual` preset with `dark: true` adds up to 5850 s with the defaults, before the leader's `tests-dark`, and fails. Lower `manualTimeout` until the leader's budget fits: at `45m`, `tests-dark` can take up to 750 s. To lower a budget, lower `manualTimeout`, the barrier timeouts, or the templates' `count` or `interval`; with explicit steps, shorten their pauses and lower `budgetSeconds`. With the `manual` preset, a `manualTimeout` of zero fails the render, and the schema refuses one that is not a duration such as `90s`, `30m` or `1h`. The other presets and explicit steps ignore `manualTimeout`.
 
-In prod, a Rollout's test trigger does not run as a PostSync hook. rollout-watch starts its prod tests after promotion (see [Test Triggers](#test-triggers)).
+In prod, a Rollout that runs canary steps does not run its test trigger as a PostSync hook. rollout-watch starts its prod tests after promotion (see [Test Triggers](#test-triggers)).
 
-**Analysis.** Canary analysis is mandatory for every Rollout. Where the steps render, an analysis step follows each weight. It runs the chart's `health` check and the extra AnalysisTemplates listed in `analysis.templates` (default `[]`), each named `<environment>-<fullName>-<template>`. In prod, the Rollout also runs the chart's `alerts` check as background analysis, from its first weight until promotion. Every listed template must render for each Rollout application, or the render fails: Argo Rollouts resolves them up front and would leave the Rollout InvalidSpec.
+**Analysis.** Canary analysis is mandatory for every canary Rollout (property `canary`); a Rollout whose property is not `canary` renders none of it and runs none of its checks. Where the steps render, an analysis step follows each weight. It runs the chart's `health` check and the extra AnalysisTemplates listed in `analysis.templates` (default `[]`), each named `<environment>-<fullName>-<template>`. In prod, the Rollout also runs the chart's `alerts` check as background analysis, from its first weight until promotion. Every listed template must render for each Rollout application, or the render fails: Argo Rollouts resolves them up front and would leave the Rollout InvalidSpec.
 
 - A stack can opt out of one check: `analysis.health.enabled: false` or `analysis.alerts.enabled: false`. With both opted out, `analysis.templates` must list at least one extra template, or every Rollout fails to render, in every environment.
 - The opt-out check reads the values, not what renders in the environment. With `health` opted out and `alerts` on, a test drill outside prod (`stepsOutsideProd`) renders with no analysis step, because `alerts` renders in prod only.
@@ -725,7 +727,7 @@ Never change `deploymentType` in one release: Argo CD prunes the old workload be
 
 | Direction | Release 1 | Release 2 |
 |-----------|-----------|-----------|
-| Deployment → Rollout | `deploymentType: rollout` and `migratingToRollouts: true` | Set the repository's `deployment-strategy` to `canary` first, then remove `migratingToRollouts`: the Rollout gets its own pod template and the canary from `global.strategy.canary` (its steps in prod only; elsewhere it promotes at once); Argo CD prunes the Deployment |
+| Deployment → Rollout | `deploymentType: rollout` and `migratingToRollouts: true` | Remove `migratingToRollouts`: the Rollout gets its own pod template, and, when the repository's `deployment-strategy` property is `canary`, the canary from `global.strategy.canary` (its steps in prod only; elsewhere it promotes at once); Argo CD prunes the Deployment |
 | Rollout → Deployment | `deploymentType: deployment` and `migratingToRollouts: true` | Remove `migratingToRollouts`: Argo CD prunes the Rollout |
 
 In release 1 the chart renders both workloads: the Rollout borrows the Deployment's pod template (`workloadRef` with `scaleDown: never`) and a bare canary, both sets of pods serve behind the existing Services, and the HPA/KEDA autoscaler targets the workload `deploymentType` names.
@@ -964,13 +966,13 @@ The trigger Job's pod carries the application's labels, except `app.kubernetes.i
 
 ### Test triggers of Rollouts in prod
 
-A PostSync hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. In prod, the chart therefore renders no hook Job for an application with `deploymentType: rollout` (without `migratingToRollouts`). The release's rollout-watch starts the prod tests after the canary is promoted:
+A PostSync hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. In prod, the chart therefore renders no hook Job for an application with `deploymentType: rollout` (without `migratingToRollouts`) while `global.deploymentStrategy` is `canary`. The release's rollout-watch starts the prod tests after the canary is promoted:
 
 - With `testtrigger.enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted.
-- With `enableV1: false`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Leave `enableV1` unset or `true` on every prod Rollout that has test definitions.
+- With `enableV1: false`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Leave `enableV1` unset or `true` on every prod canary Rollout that has test definitions.
 - rollout-watch posts with the shared key and its own TestEngine URL. `testtrigger.apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, or the render fails. `global.testengineWebhookUrl` must not be set in prod, or the render fails. Both rules apply only where the ConfigMap renders.
-- The chart cannot see the repository's `deployment-strategy` property. Only the canary release path (`deployment-strategy: canary`) runs rollout-watch. A prod Rollout in a repository that is `rolling` or unset gets no prod tests, and its release's prod-steady-state fails. Set the property to `canary` before the release that removes `migratingToRollouts`.
-- Other environments, Deployments, StatefulSets and applications with `migratingToRollouts` keep the PostSync hook, unchanged.
+- The ConfigMap follows the repository's `deployment-strategy` property, which chart-renderer passes as `global.deploymentStrategy`. Only the canary release path (`deployment-strategy: canary`) runs rollout-watch, and only then does the chart render the ConfigMap in place of the hook.
+- Other environments, Deployments, StatefulSets, applications with `migratingToRollouts` and Rollouts whose property is not `canary` keep the PostSync hook, unchanged.
 
 ### Test Trigger Parameters
 
@@ -1214,7 +1216,7 @@ applications:
 The chart uses ArgoCD sync waves and options for GitOps workflows:
 - Sync waves order creation: VirtualServices `0`, Services `5`, workloads (Deployment, StatefulSet, Rollout) `10`, autoscalers (HPA, ScaledObject) `11`; mounted-secret `ExternalSecret`s run as `PreSync` hooks
 - `SkipDryRunOnMissingResource=true` handles CRDs
-- Test triggers run as `PostSync` hooks, except for Rollouts in prod, whose prod tests the release starts after promotion (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod))
+- Test triggers run as `PostSync` hooks, except for Rollouts in prod that run canary steps, whose prod tests the release starts after promotion (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod))
 - Offloads use `ApplicationSet` generators for feature environments
 - mc-environment's generated Applications sync with server-side apply and without `Replace=true` (since mc-environment 0.3.0), and ignore the Service and VirtualService fields Argo Rollouts manages
 
@@ -1263,7 +1265,7 @@ The chart uses ArgoCD sync waves and options for GitOps workflows:
 1. Changes are committed to the repository
 2. CI/CD renders the merged values into the GitOps repository: the manifests for mycarrier-helm; an ApplicationSet per environment entry, plus the stack's alert resources, for mc-environment
 3. ArgoCD deploys the rendered manifests to the target Kubernetes cluster (for mc-environment, each generated Application renders mycarrier-helm itself)
-4. ArgoCD PostSync hooks run test triggers (if configured); for a Rollout in prod, the release starts them after the canary is promoted
+4. ArgoCD PostSync hooks run test triggers (if configured); for a canary Rollout in prod (property `canary`), the release starts them after the canary is promoted
 
 ---
 
@@ -1297,9 +1299,9 @@ When reviewing or creating helm value changes:
 13. **Layout B entries** — Each `helm/deployment/values.{env}.yaml` carries the environment's complete entry; nothing is merged from another file's entries
 14. **Alerts** — `alerts.enabled: true` in exactly one environment's values file (prod), the shared settings in `helm/values.yaml`
 15. **`allowAllEndpoints`** — Only in dev values (dev and feature environments); anywhere else the render fails
-16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases. Before release 2 of a switch to Rollouts, the repository's `deployment-strategy` must be `canary`
-17. **Prod Rollout test triggers** — `enableV1: true`, `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
-18. **Canary steps outside prod** — Rollouts run canary steps in prod only; `global.strategy.canary.stepsOutsideProd: true` only in the values of a test drill's environment, never in the shared `helm/values.yaml`
+16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases
+17. **Prod canary Rollout test triggers** — For a prod Rollout whose repository's `deployment-strategy` property is `canary`: `enableV1: true`, `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
+18. **Canary steps outside prod** — Canary Rollouts (property `canary`) run their steps in prod only; `global.strategy.canary.stepsOutsideProd: true` only in the values of a test drill's environment, never in the shared `helm/values.yaml`
 
 ---
 
@@ -1307,11 +1309,17 @@ When reviewing or creating helm value changes:
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
 
-### mycarrier-helm, the release after 4.7.9
+### mycarrier-helm, the release after 4.7.10
+
+A Rollout runs canary steps only when the repository's `deployment-strategy` property is `canary` (DEVOPS-310). chart-renderer passes the property as `global.deploymentStrategy`; mc-environment forwards it. Deployment and StatefulSet applications, and migrating Rollouts, render unchanged.
+
+- A Rollout (`deploymentType: rollout` without `migratingToRollouts`) in a repository whose property is `rolling` or unset, or rendered by a path that does not pass it (offloads), now renders without canary steps, in every environment: no steps (not even `steps: []`), analysis, barriers, dark stage, `managedRoutes`, chart AnalysisTemplates, prod `<environment>-<fullName>-alerts` ExternalSecret or `mycarrier.tech/rolloutGroupSize`, `bakeMinutes` and `canaryBudgetSeconds` annotations, and `stepsOutsideProd` does not change that. It keeps the same Services, VirtualService and `trafficRouting`, and in prod its PostSync test hook instead of the `<fullName>-prod-tests` ConfigMap. To keep the canary, set the repository's `deployment-strategy` property to `canary`; its steps then render as on 4.7.10 (in prod, or with `stepsOutsideProd`). No values change.
+
+### mycarrier-helm 4.7.10
 
 Canary steps render only in prod (Q52, DEVOPS-516). Prod renders unchanged, and Deployment and StatefulSet applications render unchanged.
 
-- Outside prod, a canary Rollout (`deploymentType: rollout` without `migratingToRollouts`) renders `steps: []`, and Argo Rollouts promotes the new version at once. It renders no barriers, analysis steps, pauses, dark stage, background analysis or `mycarrier.tech/canaryBudgetSeconds`, with a preset or with explicit `steps`. The Services, the Istio traffic routing, `rollbackWindow`, `mycarrier.tech/rolloutGroupSize`, `mycarrier.tech/bakeMinutes` and the chart's `health` AnalysisTemplate stay. To run the steps outside prod for a test drill, set `global.strategy.canary.stepsOutsideProd: true` (new, default `false`) in that environment's values only. The 4.7.9 schema refuses the key ("additional properties not allowed"), so set it only once the deploy-core pin has moved past 4.7.9 to the release after 4.7.9.
+- Outside prod, a canary Rollout (`deploymentType: rollout` without `migratingToRollouts`; since the release after 4.7.10, also with the property `canary`) renders `steps: []`, and Argo Rollouts promotes the new version at once. It renders no barriers, analysis steps, pauses, dark stage, background analysis or `mycarrier.tech/canaryBudgetSeconds`, with a preset or with explicit `steps`. The Services, the Istio traffic routing, `rollbackWindow`, `mycarrier.tech/rolloutGroupSize`, `mycarrier.tech/bakeMinutes` and the chart's `health` AnalysisTemplate stay. To run the steps outside prod for a test drill, set `global.strategy.canary.stepsOutsideProd: true` (new, default `false`) in that environment's values only. The 4.7.9 schema refuses the key ("additional properties not allowed"), so set it only once the deploy-core pin has moved past 4.7.9 to 4.7.10 or later.
 - A replacement `alerts` entry under `applications.<app>.analysisTemplates` no longer runs as background analysis outside prod. Set `stepsOutsideProd: true` where it must run. The chart's own `alerts` check stays prod only.
 - Outside prod without `stepsOutsideProd`, `global.correlationId` for the coordinator is no longer required. Nothing to change. Every other render check still fails the render in every environment, as on 4.7.9: the health path, the analysis opt-outs, extra templates, barrier timeouts, the leader rule with the leader's `tests-dark`, `budgetSeconds` for explicit `steps`, the budget limit and `manualTimeout`.
 
@@ -1331,9 +1339,9 @@ Canary analysis is mandatory for every Rollout, and Rollouts carry the contract 
 - Every Rollout that runs canary steps carries `mycarrier.tech/canaryBudgetSeconds`, the worst-case length of its steps, in every environment. An explicit `steps` list now needs `budgetSeconds`, or the Rollout fails to render. Set it to the steps' worst-case length in seconds, from `1` to `5700`. With a preset, the chart computes the budget and ignores `budgetSeconds`.
 - A canary budget above 5700 s now fails the render. The `manual` preset with `dark: true` adds up to at least 5850 s with the defaults, and the `standard` preset fails with barrier timeouts of 19m each. Lower `manualTimeout`, the barrier timeouts, or the analysis templates' `count` or `interval`.
 - The `manual` preset's pause now counts as `manualTimeout` (new, default `1h`) in the budget; the pause itself still has no time limit. With the `manual` preset, a zero `manualTimeout` fails the render, and the schema refuses a value that is not a duration such as `90s`, `30m` or `1h`. Set it to the time a person needs to promote or abort the canary.
-- In prod, a Rollout (without `migratingToRollouts`) no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. With `enableV1: false`, the render fails: remove it. rollout-watch runs only on the canary release path, so the repository's `deployment-strategy` must be `canary` before the release that removes `migratingToRollouts`; otherwise the Rollout's prod tests never start.
+- In prod, a Rollout (without `migratingToRollouts`) whose repository's `deployment-strategy` property is `canary` no longer renders its `<fullName>-trigger` PostSync hook Job. With `testtrigger.enableV1: true`, it renders the ConfigMap `<fullName>-prod-tests` instead, and the release's rollout-watch starts its prod tests after promotion. With `enableV1: false`, the render fails: remove it. A prod Rollout whose property is not `canary` keeps its PostSync hook.
 - In prod, a Rollout whose test trigger has `enableV1: true` fails to render when `testtrigger.apikey` is set to a key other than `vault:DevOps/data/testengine/api#encoded_header`, or when `global.testengineWebhookUrl` is set. Remove the key or set the shared one, and remove `global.testengineWebhookUrl`.
-- `testtrigger.enableV1` now defaults to `true`, because TestEngine's legacy API is retired. A test trigger that did not set it now sends one request with every test definition to TestEngine's v1 API, instead of one request per definition to the legacy API. No values change is needed; `enableV1: false` keeps the legacy API, but a Rollout in prod fails to render with it.
+- `testtrigger.enableV1` now defaults to `true`, because TestEngine's legacy API is retired. A test trigger that did not set it now sends one request with every test definition to TestEngine's v1 API, instead of one request per definition to the legacy API. No values change is needed; `enableV1: false` keeps the legacy API, but a Rollout in prod whose repository's `deployment-strategy` property is `canary` fails to render with it.
 
 ### mycarrier-helm 4.7.7
 

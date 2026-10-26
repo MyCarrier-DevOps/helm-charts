@@ -13,6 +13,7 @@
 ## @param global.v2migration Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)
 ## @param global.commitDeployed Label for the deployed commit (used for tracking deployments)
 ## @param global.correlationId Correlation ID for tracking deployments across systems
+## @param global.deploymentStrategy The repository's deployment-strategy property, passed in by chart-renderer; only canary turns on the canary steps of Rollouts
 ## @param global.argoEventsInstance Argo Events namespace the render pipeline runs in (argo-events|argo-events-test); selects TestEngine deployment
 ## @param global.env [object] Global environment variables shared across all applications
 ## @extra global.dependencies Dependency flags to control infrastructure resources
@@ -35,22 +36,31 @@ global:
   v2migration: false # Set to true to enable ArgoCD sync options for v2 migration (e.g., skip schema validation, ignore certain fields)
   commitDeployed: "" # Optional: Git commit hash or identifier for the deployed code (used for tracking deployments)
   correlationId: "" # Optional: Correlation ID for tracking deployments across systems
+  # The repository's deployment-strategy property (canary | rolling), set by chart-renderer on every render. Only the
+  # exact string canary gives an application with deploymentType rollout (without migratingToRollouts) its canary steps,
+  # analysis and rollout-watch annotations. Any other value, or none (offloads and other render paths that do not pass
+  # it), renders the Rollout without steps: the same Services, VirtualService and trafficRouting, so switching the
+  # property moves no traffic. Do not set it in a stack's values files.
+  deploymentStrategy: ""
   argoEventsInstance: "argo-events" # Argo Events namespace the render pipeline runs in (argo-events|argo-events-test). Selects which TestEngine deployment receives test trigger payloads. Set by render-deploy-core.yaml from K8S_NAMESPACE.
   env: {}
   # Canary settings for every application with deploymentType rollout (release-wide, so every Rollout of a release
-  # runs the same steps). The chart injects the stable and -preview Services, Istio weights on every VirtualService
-  # route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and rollbackWindow (2 revisions).
+  # runs the same steps). The steps render only when global.deploymentStrategy is canary, and then in prod only unless
+  # stepsOutsideProd is true (outside prod: steps: []). The chart injects the stable and -preview Services, Istio
+  # weights on every VirtualService route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and
+  # rollbackWindow (2 revisions), with or without the steps.
   # strategy:
   #   canary:
   #     preset: standard          # standard: 10, 25, 50 with a 5m pause after each, then 100
   #                               # fast: 25, then 100; manual: 10, then a pause until resumed, then 100
   #     stepsOutsideProd: false   # the steps (preset or explicit, with their barriers, analysis, pauses, dark stage,
   #                               # background analysis and canaryBudgetSeconds) render in prod only (DEVOPS-516);
-  #                               # elsewhere a Rollout renders steps: [] and promotes at once. true renders the prod
-  #                               # steps in any environment, for a test drill; the chart's alerts check stays prod
-  #                               # only. The render checks (leader, tests-dark, budgetSeconds, the budget limit
-  #                               # included) run in every environment; only global.correlationId is required just
-  #                               # where the steps render.
+  #                               # elsewhere a canary Rollout (global.deploymentStrategy canary) renders steps: []
+  #                               # and promotes at once. true renders the prod steps in any environment, for a test
+  #                               # drill; the chart's alerts check stays prod only. It gives no steps to a Rollout
+  #                               # whose property is not canary. The render checks of a canary Rollout (leader,
+  #                               # tests-dark, budgetSeconds, the budget limit included) run in every environment;
+  #                               # only global.correlationId is required just where the steps render.
   #     manualTimeout: 1h         # how long the release's rollout-watch allows for the manual pause (D22); it counts
   #                               # in the canary budget, and the pause itself has no time limit. With the manual
   #                               # preset, zero fails the render. The other presets and explicit steps ignore it.
@@ -736,7 +746,8 @@ applications: {}
 #   # Automated Testing Configuration
 #   # ----------------------------------------------------------------------------
 #   # Configure automated test jobs that run against your deployed application. They run from an Argo CD PostSync
-#   # hook, except for a Rollout in prod (deploymentType rollout, not migratingToRollouts): the chart renders no hook
+#   # hook, except for a Rollout in prod (deploymentType rollout, not migratingToRollouts) whose repository's
+#   # deployment-strategy property (global.deploymentStrategy) is canary: the chart renders no hook
 #   # for it, and with enableV1 (the default) renders the ConfigMap <fullName>-prod-tests, which the release's rollout-watch posts
 #   # to TestEngine after promotion (DEVOPS-319). With enableV1: false the render fails. Its apikey must be
 #   # vault:DevOps/data/testengine/api#encoded_header or unset, and global.testengineWebhookUrl must be unset.

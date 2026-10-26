@@ -8,6 +8,7 @@ tests:
   - it: renders bakeMinutes 30 by default on a canary Rollout
     set:
       global: &global
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -32,6 +33,7 @@ tests:
   - it: renders the configured bakeMinutes on every canary Rollout of the release
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -58,6 +60,7 @@ tests:
   - it: renders bakeMinutes in prod
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -76,6 +79,7 @@ tests:
   - it: renders bakeMinutes with the coordinator off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -93,6 +97,7 @@ tests:
   - it: accepts bakeMinutes 100
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -112,6 +117,7 @@ tests:
   - it: fails bakeMinutes above 100
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -128,6 +134,7 @@ tests:
   - it: fails bakeMinutes 0
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -165,6 +172,7 @@ tests:
   - it: renders no Rollout, so no bakeMinutes, for a Deployment
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1

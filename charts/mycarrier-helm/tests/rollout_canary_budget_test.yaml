@@ -15,6 +15,7 @@ tests:
   - it: renders 3330 s for the standard preset by default
     set:
       global: &global
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -43,6 +44,7 @@ tests:
   - it: renders 1170 s for the fast preset
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -62,6 +64,7 @@ tests:
   - it: renders 4770 s for the manual preset, counting its pause as manualTimeout 1h
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -87,6 +90,7 @@ tests:
   - it: renders 3570 s for the standard preset with the coordinator off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -106,6 +110,7 @@ tests:
   - it: renders 1290 s for the fast preset with the coordinator off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -126,6 +131,7 @@ tests:
   - it: renders 4890 s for the manual preset with the coordinator off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -146,6 +152,7 @@ tests:
   - it: counts progressDeadlineSeconds per weight step with the coordinator off
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         strategy:
@@ -166,6 +173,7 @@ tests:
   - it: renders the same budget in prod, without counting the background alerts analysis
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -184,6 +192,7 @@ tests:
   - it: counts manualTimeout 30m for the manual pause
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -203,6 +212,7 @@ tests:
   - it: fails manualTimeout 0s with the manual preset
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -222,6 +232,7 @@ tests:
   - it: fails an empty or unparseable manualTimeout
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -239,6 +250,7 @@ tests:
   - it: ignores manualTimeout with the standard preset
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -257,6 +269,7 @@ tests:
   - it: ignores a zero manualTimeout with the fast preset
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -276,6 +289,7 @@ tests:
   - it: fails an explicit steps list without budgetSeconds
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -297,6 +311,7 @@ tests:
   - it: renders budgetSeconds as the budget of an explicit steps list
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -323,6 +338,7 @@ tests:
   - it: fails budgetSeconds 0 with an explicit steps list
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -341,6 +357,7 @@ tests:
   - it: fails budgetSeconds above 5700
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -359,6 +376,7 @@ tests:
   - it: ignores budgetSeconds with a preset
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -378,6 +396,7 @@ tests:
   - it: fails a computed budget above 5700 s
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -396,6 +415,7 @@ tests:
   - it: accepts a computed budget of exactly 5700 s
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -415,6 +435,7 @@ tests:
   - it: fails a computed budget of 5701 s
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -433,6 +454,7 @@ tests:
   - it: counts analysis.health count x interval
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -455,6 +477,7 @@ tests:
   - it: counts each barrier's own timeout
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -476,6 +499,7 @@ tests:
   - it: counts the longest template of an analysis step when an extra template runs longer than health
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -510,6 +534,7 @@ tests:
   - it: keeps health as the longest template when an extra template is shorter
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -537,6 +562,7 @@ tests:
   - it: counts a Job template's activeDeadlineSeconds when it is longer than the interval
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -574,6 +600,7 @@ tests:
   - it: counts a Job template's interval when it sets no activeDeadlineSeconds
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -609,6 +636,7 @@ tests:
   - it: counts a template with count 0 and no interval as one measurement
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -644,6 +672,7 @@ tests:
   - it: counts a replacement health template's own count and interval
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
@@ -672,6 +701,7 @@ tests:
   - it: gives the leader the tests-dark analysis in its budget and the follower none
     set:
       global:
+        deploymentStrategy: canary
         appStack: test-stack
         language: csharp
         correlationId: corr-1
