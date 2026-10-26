@@ -18,7 +18,7 @@ tests:
         language: nodejs
         deploymentStrategy: canary
       environment:
-        name: preprod
+        name: prod
       applications:
         api:
           deploymentType: rollout

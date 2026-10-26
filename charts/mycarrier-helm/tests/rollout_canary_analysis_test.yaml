@@ -571,7 +571,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders a preprod canary with no analysis step when health is opted out and alerts is on
+  - it: renders a preprod drill (stepsOutsideProd) with no analysis step when health is opted out and alerts is on
     template: rollout.yaml
     set:
       global:
@@ -581,6 +581,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               health:
@@ -737,6 +738,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               templates: [smoke]
@@ -881,6 +883,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               enabled: true
@@ -1165,6 +1168,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: true
       environment:
         name: preprod

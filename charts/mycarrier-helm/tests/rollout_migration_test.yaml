@@ -103,6 +103,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
       applications:
@@ -290,6 +293,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             steps:
               - setWeight: 10
             budgetSeconds: 60

@@ -1,7 +1,9 @@
 suite: Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)
 # The coordinator is on and the dark stage off by default; rollout_canary_dark_test.yaml covers the dark stage. Most of
 # these tests opt out of the health check (alerts stays on, and renders only in prod) so the step lists show the
-# barriers alone; rollout_canary_analysis_test.yaml covers the analysis steps.
+# barriers alone; rollout_canary_analysis_test.yaml covers the analysis steps. The steps render only in prod unless
+# stepsOutsideProd is set (DEVOPS-516), so the tests that check them render a preprod drill;
+# rollout_canary_prod_only_test.yaml covers the other environments.
 templates:
   - rollout.yaml
 tests:
@@ -14,6 +16,9 @@ tests:
         appStack: test-stack
         language: csharp
         correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
       applications:
@@ -53,6 +58,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             analysis:
               health:
                 enabled: false
@@ -95,6 +101,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             analysis:
               health:
                 enabled: false
@@ -145,6 +152,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
       environment:
         name: preprod
@@ -183,6 +191,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
             analysis:
               health:
@@ -221,6 +230,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               health:
@@ -257,6 +267,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             steps:
               - setWeight: 5
               - plugin:
@@ -293,6 +304,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             analysis:
               health:
                 enabled: false
@@ -369,13 +381,39 @@ tests:
           path: spec.strategy.canary.steps
 
   # The canary-coordinator finds a release's Rollouts by the mycarrier.tech/correlationId label (Tech Spec D20). The
-  # coordinator is on by default, so a canary Rollout without it fails to render (deploy-core always sets it).
-  - it: requires global.correlationId while the coordinator is on by default
+  # coordinator is on by default, so a canary Rollout without it fails to render where its steps render (deploy-core
+  # always sets it): in prod, or with stepsOutsideProd. rollout_canary_prod_only_test.yaml covers the other
+  # environments, where it is not required.
+  - it: requires global.correlationId in prod while the coordinator is on by default
     set:
       global:
         deploymentStrategy: canary
         appStack: test-stack
         language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.correlationId is required when the coordinator is enabled"
+
+  - it: requires global.correlationId in a drill outside prod (stepsOutsideProd)
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
       applications:
@@ -433,6 +471,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             progressDeadlineSeconds: 1900
             analysis:
@@ -466,6 +505,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               health:

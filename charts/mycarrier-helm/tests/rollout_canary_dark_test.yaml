@@ -1,7 +1,8 @@
 suite: Rollout canary dark stage (header-gated, Tech Spec D11 and D20)
 # The dark stage is off by default until the chart renders tests-dark (DEVOPS-326), so these tests set dark: true and,
 # where the leader runs its suite, define tests-dark under the leader's analysisTemplates. Most opt out of the health
-# check so the step lists show the dark stage and the barriers alone.
+# check so the step lists show the dark stage and the barriers alone. The dark stage renders only where the steps do, in
+# prod unless stepsOutsideProd is set (DEVOPS-516), so the tests that check it render a preprod drill.
 templates:
   - rollout.yaml
 tests:
@@ -18,6 +19,7 @@ tests:
         correlationId: 0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             dark: true
             analysis:
@@ -88,6 +90,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             leader: worker
             dark: true
@@ -153,6 +156,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: true
             analysis:
               health:
@@ -189,6 +193,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             leader: web
             dark: true
             analysis:
@@ -226,6 +231,9 @@ tests:
         appStack: test-stack
         language: csharp
         correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
       applications:
@@ -294,6 +302,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: true
       environment:
         name: preprod
@@ -344,6 +353,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: true
             darkReplicas: 2
             analysis:
@@ -382,6 +392,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: false
             analysis:
               health:
@@ -414,6 +425,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: true
             analysis:
               health:
@@ -450,6 +462,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             dark: true
             steps:
               - setCanaryScale: {replicas: 1}

@@ -43,12 +43,15 @@ strategy:
        full capacity, 30 s before an aborted canary scales down, at least one pod per ReplicaSet), Istio weights on
        every route that reaches the app (helm.canary.virtualServices), the routes the steps manage (the dark stage's
        canary-header, helm.canary.managedRoutes), the release-wide steps (helm.canary.steps), and the background analysis
-       that runs the alerts check from the first weight until promotion (helm.canary.backgroundAnalysis).
+       that runs the alerts check from the first weight until promotion (helm.canary.backgroundAnalysis). Outside prod
+       without stepsOutsideProd (helm.canary.stepsRendered, DEVOPS-516) a canary Rollout's steps are [] and there are no
+       managed routes or background analysis: the Rollout promotes at once, through the same Services and traffic
+       routing.
        When the deployment-strategy property is not canary (helm.canary.enabled false) the Rollout keeps the same
-       Services and trafficRouting and drops managedRoutes, the steps and the background analysis, so flipping the
-       property moves no traffic. With no steps Argo Rollouts scales the new ReplicaSet to full size behind the
-       -preview Service (weight 0) and then points the stable Service at it; maxUnavailable is not used with
-       trafficRouting and is set to 0 as on the bare canary below. */}}
+       Services and trafficRouting and drops managedRoutes, the steps and the background analysis, in every
+       environment, so flipping the property moves no traffic. With no steps Argo Rollouts scales the new ReplicaSet to
+       full size behind the -preview Service (weight 0) and then points the stable Service at it; maxUnavailable is not
+       used with trafficRouting and is set to 0 as on the bare canary below. */}}
   canary:
     stableService: {{ $fullName }}
     canaryService: {{ $fullName }}-preview
@@ -57,7 +60,7 @@ strategy:
     minPodsPerReplicaSet: 1
     trafficRouting:
       {{- if $canary }}
-      {{- with include "helm.canary.managedRoutes" . | fromJsonArray }}
+      {{- with and (eq (include "helm.canary.stepsRendered" .) "true") (include "helm.canary.managedRoutes" . | fromJsonArray) }}
       managedRoutes:
         {{- range . }}
         - name: {{ . }}
@@ -68,8 +71,13 @@ strategy:
         virtualServices:
           {{- include "helm.canary.virtualServices" . | nindent 10 }}
     {{- if $canary }}
+    {{- $steps := include "helm.canary.steps" . }}
+    {{- if eq $steps "[]" }}
+    steps: []
+    {{- else }}
     steps:
-      {{- include "helm.canary.steps" . | nindent 6 }}
+      {{- $steps | nindent 6 }}
+    {{- end }}
     {{- with include "helm.canary.backgroundAnalysis" . }}
     analysis:
       {{- fromJson . | toYaml | nindent 6 }}

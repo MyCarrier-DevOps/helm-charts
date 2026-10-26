@@ -1,0 +1,826 @@
+suite: Rollout canary steps in prod only (Q52, DEVOPS-516)
+# A canary Rollout renders its steps (and with them the barriers, the analysis steps, the pauses, the dark stage and the
+# background analysis) and mycarrier.tech/canaryBudgetSeconds only where environment.name is prod. Elsewhere it renders
+# steps: [] and Argo Rollouts promotes the new version at once, through the same Services and traffic routing.
+# global.strategy.canary.stepsOutsideProd renders the prod steps in any environment, for test drills. The render-time
+# checks still run in every environment, the same as on 4.7.9: a stack moves to canary as a whole, so the same Rollouts
+# exist in every environment, and a stack sees these failures on its first render, not at its first prod canary. Only
+# global.correlationId for the coordinator is required just where the steps render. Other suites cover more checks
+# that still fail outside prod: the barrier timeouts (rollout_canary_coordinator_test.yaml), the budget limits and
+# manualTimeout (rollout_canary_budget_test.yaml) and the multi-frontend dark stage (rollout_canary_dark_test.yaml)
+# all render in preprod without stepsOutsideProd.
+templates:
+  - rollout.yaml
+  - analysistemplate.yaml
+tests:
+  # R1: no steps outside prod by default; the rest of the canary contract stays.
+  - it: renders steps [] in preprod by default, and keeps the Services, the traffic routing and the rollbackWindow
+    template: rollout.yaml
+    set: &preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment:
+        name: preprod
+      applications:
+        api: &rollout
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - equal:
+          path: spec.strategy.canary.stableService
+          value: test-stack-api
+      - equal:
+          path: spec.strategy.canary.canaryService
+          value: test-stack-api-preview
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-api
+              routes:
+                - test-stack-api
+                - test-stack-api-allowed-liveness
+                - test-stack-api-allowed-health
+                - test-stack-api-allowed-api
+                - test-stack-api-forbidden
+      - equal:
+          path: spec.rollbackWindow
+          value:
+            revisions: 2
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+      - equal:
+          path: spec.progressDeadlineAbort
+          value: true
+      # R5: no budget outside prod; bakeMinutes and the group size stay on every canary Rollout.
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+      - equal:
+          path: metadata.annotations["mycarrier.tech/bakeMinutes"]
+          value: "30"
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "1"
+
+  - it: renders steps [] in dev by default
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment:
+        name: dev
+      applications:
+        api:
+          <<: *rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: renders steps [] in uat by default
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      environment:
+        name: uat
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: renders steps [] in qa by default
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      environment:
+        name: qa
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: renders steps [] in a feature environment by default
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment:
+        name: feature14
+      applications:
+        api:
+          <<: *rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: renders steps [] outside prod for the manual preset with the coordinator off
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        strategy:
+          canary:
+            preset: manual
+            coordinator:
+              enabled: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # Explicit steps are suppressed too, and still need budgetSeconds in every environment.
+  - it: renders an explicit steps list as [] outside prod, with no budget annotation
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setCanaryScale: {replicas: 1}
+              - setHeaderRoute:
+                  name: qa-header
+                  match:
+                    - headerName: X-QA
+                      headerValue: {exact: "1"}
+              - pause: {}
+              - setHeaderRoute: {name: qa-header}
+              - setWeight: 100
+            budgetSeconds: 3600
+      environment:
+        name: uat
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: fails an explicit steps list without budgetSeconds outside prod
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.budgetSeconds is not set; an explicit global.strategy.canary.steps list needs it"
+
+  # Only the coordinator's correlationId requirement applies just where the barriers render.
+  - it: needs no global.correlationId outside prod while the coordinator is on
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+
+  # The leader rule and the leader's tests-dark check run in every environment, as on 4.7.9.
+  - it: fails outside prod when the dark stage has two canary Rollouts and no leader
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+      environment:
+        name: preprod
+      applications:
+        api: *rollout
+        worker: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "the dark stage runs its test suite on one leader, and this release has 2 canary Rollouts; set global.strategy.canary.leader to one of: api, worker"
+
+  - it: fails outside prod when the dark stage's leader is still a Deployment
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+            leader: web
+      environment:
+        name: preprod
+      applications:
+        api: *rollout
+        web:
+          <<: *rollout
+          deploymentType: deployment
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.leader 'web' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
+
+  - it: fails outside prod when the leader's tests-dark template does not render
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet"
+
+  - it: renders steps [] outside prod with the dark stage on, a leader and its tests-dark
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+            leader: api
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/dark
+        worker: *rollout
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - equal:
+          path: metadata.annotations["mycarrier.tech/rolloutGroupSize"]
+          value: "2"
+
+  # The budget, with the leader's tests-dark, is the same in and outside prod, so its limit fails both. Manual preset
+  # with the dark stage and manualTimeout 45m: start 540 + dark-ready 540 + tests-dark 900 (the Job's
+  # activeDeadlineSeconds) + dark-passed 540 + health 90 + pause 2700 + w10 540 = 5850 s (4950 s without tests-dark).
+  - it: fails the leader's budget above 5700 s outside prod
+    template: rollout.yaml
+    set: &leaderBudget
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            manualTimeout: 45m
+            dark: true
+            leader: api
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                job:
+                  spec:
+                    backoffLimit: 0
+                    activeDeadlineSeconds: 900
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1.0.0
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5850 s; the maximum is 5700 s"
+
+  - it: fails the leader's budget above 5700 s in prod too
+    template: rollout.yaml
+    set:
+      <<: *leaderBudget
+      environment:
+        name: prod
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5850 s; the maximum is 5700 s"
+
+  - it: renders steps [] in a demo environment by default
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      environment:
+        name: demo
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # R2: stepsOutsideProd renders the prod steps in any environment. With health opted out the steps name no
+  # environment, so the lists are equal; alerts stays on (background analysis, prod only).
+  - it: renders the standard ladder with its barriers in prod
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
+      environment:
+        name: prod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: &standard
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
+            - setWeight: 10
+            - pause:
+                duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w10, timeout: 9m}
+            - setWeight: 25
+            - pause:
+                duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
+            - setWeight: 50
+            - pause:
+                duration: 5m
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w50, timeout: 9m}
+            - setWeight: 100
+      - exists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: renders the same steps in preprod with stepsOutsideProd
+    template: rollout.yaml
+    set:
+      global: &drill
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            analysis:
+              health:
+                enabled: false
+      environment:
+        name: preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: *standard
+      # R5: the budget renders with the steps (start 540 + 3 x (pause 300 + barrier 540)).
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3060"
+
+  - it: renders the same steps in dev with stepsOutsideProd
+    template: rollout.yaml
+    set:
+      global: *drill
+      environment:
+        name: dev
+      applications:
+        api:
+          <<: *rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: *standard
+
+  - it: renders the same steps in a feature environment with stepsOutsideProd
+    template: rollout.yaml
+    set:
+      global: *drill
+      environment:
+        name: feature14
+      applications:
+        api:
+          <<: *rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: *standard
+
+  - it: renders the analysis steps, the dark stage and its managed route in a drill outside prod
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            preset: fast
+            dark: true
+      environment:
+        name: uat
+      applications:
+        api:
+          <<: *rollout
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/dark
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
+            - setCanaryScale:
+                replicas: 1
+            - setHeaderRoute:
+                name: canary-header
+                match:
+                  - headerName: X-MyCarrier-Canary
+                    headerValue:
+                      exact: corr-1
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-ready, timeout: 9m}
+            - analysis:
+                templates:
+                  - templateName: uat-test-stack-api-tests-dark
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-passed, timeout: 9m}
+            - setHeaderRoute:
+                name: canary-header
+            - setCanaryScale:
+                matchTrafficWeight: true
+            - setWeight: 25
+            - analysis:
+                templates:
+                  - templateName: uat-test-stack-api-health
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
+            - setWeight: 100
+      - equal:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: canary-header
+
+  - it: renders an explicit steps list verbatim in a drill outside prod
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            steps:
+              - setWeight: 5
+              - pause:
+                  duration: 2m
+            budgetSeconds: 120
+      environment:
+        name: qa
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 5
+            - pause:
+                duration: 2m
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "120"
+
+  - it: requires budgetSeconds for an explicit steps list in a drill outside prod
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            steps:
+              - setWeight: 5
+      environment:
+        name: qa
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.budgetSeconds is not set; an explicit global.strategy.canary.steps list needs it"
+
+  # R3: prod renders the steps and the budget with stepsOutsideProd unset or false (the committed snapshot in
+  # rollout_canary_analysis_snapshot_test.yaml covers the prod default in full).
+  - it: renders the steps and the budget in prod with stepsOutsideProd false
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: false
+      environment:
+        name: prod
+      applications:
+        api: *rollout
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 14
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-test-stack-api-health
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+      - equal:
+          path: spec.strategy.canary.analysis.templates
+          value:
+            - templateName: prod-test-stack-api-alerts
+
+  - it: renders the same steps and budget in prod with stepsOutsideProd true
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+      environment:
+        name: prod
+      applications:
+        api: *rollout
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 14
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-test-stack-api-health
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+      - equal:
+          path: spec.strategy.canary.analysis.templates
+          value:
+            - templateName: prod-test-stack-api-alerts
+
+  # R4: the configuration checks still fail a render outside prod.
+  - it: fails a preprod render when the application has no health path
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary health check has no HTTP path on a port its -preview Service exposes"
+
+  - it: fails a feature-environment render when the application has no health path
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+      environment:
+        name: feature14
+      applications:
+        api:
+          <<: *rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary health check has no HTTP path on a port its -preview Service exposes"
+
+  - it: fails a dev render when both analysis checks are opted out
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+      environment:
+        name: dev
+      applications:
+        api:
+          <<: *rollout
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none"
+
+  - it: fails a uat render when both analysis checks are opted out, with explicit steps too
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            steps:
+              - setWeight: 100
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+      environment:
+        name: uat
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none"
+
+  - it: fails a preprod render when analysis.templates lists a template that does not render
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              templates: [smoke]
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.analysis.templates lists 'smoke', but no AnalysisTemplate of that name renders"
+
+  # The chart's health AnalysisTemplate keeps rendering outside prod, where no step references it, so
+  # stepsOutsideProd changes only the Rollout.
+  - it: renders the chart's health AnalysisTemplate outside prod
+    template: analysistemplate.yaml
+    set: *preprod
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: preprod-test-stack-api-health
+
+  - it: refuses a stepsOutsideProd that is not a boolean
+    template: rollout.yaml
+    set:
+      <<: *preprod
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: "yes"
+    asserts:
+      - failedTemplate:
+          errorPattern: "stepsOutsideProd"

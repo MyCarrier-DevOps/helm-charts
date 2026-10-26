@@ -1,8 +1,9 @@
 {{/* PERFORMANCE OPTIMIZATION: Precompute global context once instead of in every helper */}}
 {{- $globalCtx := include "helm.context" $ | fromJson -}}
 {{- /* global.strategy.canary.leader must name an application of the release whenever it is set, so a misspelled leader
-       fails now. That it is a canary Rollout is checked where the dark stage needs it (helm.canary.steps), so a leader
-       set in shared values does not fail environments where that application is still a Deployment or migrating. */}}
+       fails now. That it is a canary Rollout is checked where the dark stage needs it (helm.canary.configuredSteps, in
+       every environment, also where the steps do not render), so a leader set in shared values does not fail
+       environments where that application is still a Deployment or migrating. */}}
 {{- with dig "strategy" "canary" "leader" "" (.Values.global | default dict) }}
 {{- if not (hasKey ($.Values.applications | default dict) (toString .)) }}
 {{- fail (printf "global.strategy.canary.leader '%s' is not an application of this release" (toString .)) }}
@@ -94,8 +95,12 @@ metadata:
     {{- /* alert-gate's watch window after promotion (D18), read by the release's rollout-watch (DEVOPS-319). */}}
     mycarrier.tech/bakeMinutes: {{ include "helm.canary.bakeMinutes" $appContext | quote }}
     {{- /* The canary's worst-case length in seconds (D22); rollout-watch times out at the release group's largest value
-           plus 15 minutes (DEVOPS-319). */}}
-    mycarrier.tech/canaryBudgetSeconds: {{ include "helm.canary.budgetSeconds" $appContext | quote }}
+           plus 15 minutes (DEVOPS-319). Computed, with its checks, in every environment, and rendered only where the
+           steps render (prod, or stepsOutsideProd; DEVOPS-516). */}}
+    {{- $budget := include "helm.canary.budgetSeconds" $appContext }}
+    {{- if eq (include "helm.canary.stepsRendered" $appContext) "true" }}
+    mycarrier.tech/canaryBudgetSeconds: {{ $budget | quote }}
+    {{- end }}
     {{- end }}
     {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
 spec:

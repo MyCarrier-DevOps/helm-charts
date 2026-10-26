@@ -207,15 +207,33 @@ tests:
           path: metadata.name
           value: preprod-mycarrier-api-health
 
-  - it: leaves alerts out of the canary in preprod
+  # A drill renders the steps outside prod (stepsOutsideProd, DEVOPS-516), and the alerts check still stays out.
+  - it: leaves alerts out of the canary in a preprod drill (stepsOutsideProd)
     template: rollout.yaml
     set:
       <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
     asserts:
       - notExists:
           path: spec.strategy.canary.analysis
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 14
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-mycarrier-api-health
 
   - it: takes analysis.alerts.service over alerts.serviceName, and applies the alerts settings
     template: analysistemplate.yaml
@@ -352,11 +370,33 @@ tests:
           value: canary-analysis
         documentIndex: 1
 
-  # Canaries run only in prod (Q42), so the chart renders no alerts template elsewhere.
-  - it: renders no alerts template and leaves alerts out of the steps in uat
+  # Canaries run only in prod (Q42), so the chart renders no alerts template elsewhere. Outside prod the Rollout renders
+  # no steps (Q52, DEVOPS-516); a test drill with stepsOutsideProd renders them, still without alerts.
+  - it: renders no steps and no background analysis in uat
     template: rollout.yaml
     set:
       <<: *prod
+      environment:
+        name: uat
+    asserts:
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+
+  - it: renders no alerts template and leaves alerts out of the steps in a uat drill (stepsOutsideProd)
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: uat
     asserts:
@@ -383,7 +423,7 @@ tests:
           value: uat-mycarrier-api-health
 
   # alerts still counts for the mandatory-analysis check outside prod, where it does not render.
-  - it: renders no analysis step at all with health opted out outside prod
+  - it: renders no analysis step at all with health opted out in a drill outside prod (stepsOutsideProd)
     template: rollout.yaml
     set:
       <<: *prod
@@ -394,6 +434,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             analysis:
               health:
                 enabled: false
@@ -562,9 +603,18 @@ tests:
           path: spec.metrics[0].interval
           value: 1m
 
-  - it: runs a replacement alerts entry as background analysis outside prod too
+  # The background analysis belongs to the steps (Q52, DEVOPS-516): outside prod a replacement runs only in a drill.
+  - it: runs a replacement alerts entry as background analysis in a drill outside prod (stepsOutsideProd)
     set:
       <<: *replacement
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: uat
     template: rollout.yaml
@@ -573,6 +623,19 @@ tests:
           path: spec.strategy.canary.analysis.templates
           value:
             - templateName: uat-mycarrier-api-alerts
+
+  - it: renders no background analysis for a replacement alerts entry outside prod by default
+    set:
+      <<: *replacement
+      environment:
+        name: uat
+    template: rollout.yaml
+    asserts:
+      - notExists:
+          path: spec.strategy.canary.analysis
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
 
   # count 0 with an interval runs indefinitely: Argo Rollouts accepts it only in background analysis.
   - it: refuses count 0 on an entry that an analysis step references
