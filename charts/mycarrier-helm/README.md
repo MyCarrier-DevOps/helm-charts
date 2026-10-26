@@ -128,6 +128,29 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | A prod Rollout app with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
 | `global.testengineWebhookUrl` in prod, with a Rollout app whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
 
+## Upgrading past 4.7.9 (Rollouts outside prod)
+
+The release after 4.7.9 renders the canary steps only in prod (Q52, DEVOPS-516). Outside prod (dev, uat, qa, preprod,
+feature environments and any other environment name), a canary Rollout renders `steps: []`, and Argo Rollouts promotes
+the new version at once. The barriers, the analysis steps, the pauses, the dark stage, the background analysis and
+`mycarrier.tech/canaryBudgetSeconds` go with the steps. The Services, the Istio traffic routing,
+`progressDeadlineSeconds`, `rollbackWindow`, `mycarrier.tech/rolloutGroupSize`, `mycarrier.tech/bakeMinutes` and the
+chart's `health` AnalysisTemplate stay. Prod renders unchanged.
+
+`global.strategy.canary.stepsOutsideProd: true` (new, default `false`) renders the prod steps in any environment, for a
+test drill. The render-time checks still run in every environment: a missing health path, both analysis opt-outs, an
+extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, a budget above 5700 s and
+a zero `manualTimeout` with the manual preset fail the render outside prod too. `global.correlationId` for the
+coordinator, the leader rule with the leader's `tests-dark`, and `budgetSeconds` for an explicit `steps` list apply only
+where the steps render.
+
+| 4.7.9 values | Edit |
+|---|---|
+| A canary test drill or rehearsal outside prod, which needs the steps or `mycarrier.tech/canaryBudgetSeconds` | Set `global.strategy.canary.stepsOutsideProd: true` in that environment's values file. Without it, the Rollout promotes at once. |
+| An explicit `global.strategy.canary.steps` list | Nothing to set. It renders only in prod, or with `stepsOutsideProd`, and only there needs `budgetSeconds`. |
+| A replacement `alerts` entry under `applications.<app>.analysisTemplates` that ran as background analysis outside prod | Set `stepsOutsideProd: true` where it must run. Outside prod it no longer runs without it. |
+| A non-prod render without `global.correlationId`, or with the dark stage and no `leader` | Nothing to set: it now renders outside prod. These still fail in prod and with `stepsOutsideProd`. |
+
 ## Chart Structure
 
 ```

@@ -44,12 +44,19 @@ global:
   #   canary:
   #     preset: standard          # standard: 10, 25, 50 with a 5m pause after each, then 100
   #                               # fast: 25, then 100; manual: 10, then a pause until resumed, then 100
+  #     stepsOutsideProd: false   # the steps (preset or explicit, with their barriers, analysis, pauses, dark stage,
+  #                               # background analysis and canaryBudgetSeconds) render in prod only (DEVOPS-516);
+  #                               # elsewhere a Rollout renders steps: [] and promotes at once. true renders the prod
+  #                               # steps in any environment, for a test drill. The render checks run everywhere,
+  #                               # except correlationId, the leader rule and budgetSeconds, which apply where the
+  #                               # steps render.
   #     manualTimeout: 1h         # how long the release's rollout-watch allows for the manual pause (D22); it counts
   #                               # in the canary budget, and the pause itself has no time limit. With the manual
   #                               # preset, zero fails the render. The other presets and explicit steps ignore it.
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
-  #     # budgetSeconds: 1800     # required with steps: their worst-case length in seconds (pauses, each analysis
-  #                               # step's longest template, barrier timeouts), 1 to 5700. Ignored with a preset.
+  #     # budgetSeconds: 1800     # required with steps where they render: their worst-case length in seconds
+  #                               # (pauses, each analysis step's longest template, barrier timeouts), 1 to 5700.
+  #                               # Ignored with a preset.
   #     analysis:                 # mandatory for every Rollout (DEVOPS-312); enabled is deprecated: true has no
   #                               # effect, false fails the render
   #       templates: []           # extra templates each analysis step runs with health, as
@@ -82,8 +89,8 @@ global:
   #                               # mycarrier.tech/bakeMinutes annotation, which the release's rollout-watch reads
   #                               # (DEVOPS-319). 1 to 100: alert-gate's run has a 2-hour deadline, so above 100 fails.
   #     coordinator:              # release-wide lockstep (DEVOPS-325's mycarrier/canary-coordinator step plugin, D20);
-  #       enabled: true           # needs global.correlationId (the pipeline sets it); false where the plugin is not
-  #                               # on the cluster: the controller rejects unknown plugins
+  #       enabled: true           # needs global.correlationId where the steps render (the pipeline sets it); false
+  #                               # where the plugin is not on the cluster: the controller rejects unknown plugins
   #       barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 9m, w25: 9m, w50: 9m}
   #                               # each below progressDeadlineSeconds: Argo counts the wait at a barrier toward the
   #                               # deadline. The leader's dark suite must finish inside dark-passed's timeout.
@@ -97,12 +104,13 @@ global:
   #   coordinator waits for.
   #   The manual preset's pause has no time limit (progressDeadlineSeconds doesn't count paused time, and Argo CD has
   #   no sync timeout here): someone must promote or abort it. Prod Rollouts send a Teams message when they pause.
-  #   Every canary Rollout carries mycarrier.tech/canaryBudgetSeconds, the worst-case length of its steps (D22): each
-  #   pause's duration (the manual pause: manualTimeout), each analysis step's longest template (count x max(interval,
-  #   a Job's activeDeadlineSeconds)) and each barrier's timeout; with the coordinator off, progressDeadlineSeconds for
-  #   each setWeight above 0 instead of the barriers; with explicit steps, budgetSeconds. The release's
-  #   rollout-watch times out at the largest value of the release plus 15 minutes. Above 5700 s the render fails:
-  #   rollout-watch's workflow has a 10800 s deadline and spends about 70 minutes before the canary starts.
+  #   Every canary Rollout whose steps render (prod, or stepsOutsideProd) carries mycarrier.tech/canaryBudgetSeconds,
+  #   the worst-case length of its steps (D22): each pause's duration (the manual pause: manualTimeout), each analysis
+  #   step's longest template (count x max(interval, a Job's activeDeadlineSeconds)) and each barrier's timeout; with
+  #   the coordinator off, progressDeadlineSeconds for each setWeight above 0 instead of the barriers; with explicit
+  #   steps, budgetSeconds. The release's rollout-watch times out at the largest value of the release plus 15 minutes.
+  #   Above 5700 s the render fails, in every environment: rollout-watch's workflow has a 10800 s deadline and spends
+  #   about 70 minutes before the canary starts.
   dependencies:
     mongodb: false
     elasticsearch: false

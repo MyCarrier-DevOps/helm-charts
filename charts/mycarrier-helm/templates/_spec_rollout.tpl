@@ -42,7 +42,11 @@ strategy:
        full capacity, 30 s before an aborted canary scales down, at least one pod per ReplicaSet), Istio weights on
        every route that reaches the app (helm.canary.virtualServices), the routes the steps manage (the dark stage's
        canary-header, helm.canary.managedRoutes), the release-wide steps (helm.canary.steps), and the background analysis
-       that runs the alerts check from the first weight until promotion (helm.canary.backgroundAnalysis). */}}
+       that runs the alerts check from the first weight until promotion (helm.canary.backgroundAnalysis). Outside prod
+       without stepsOutsideProd (helm.canary.stepsRendered, DEVOPS-516) the steps are [] and there are no managed routes
+       or background analysis: the Rollout promotes at once, through the same Services and traffic routing. */}}
+{{- $stepsRendered := eq (include "helm.canary.stepsRendered" .) "true" }}
+{{- $steps := include "helm.canary.steps" . }}
   canary:
     stableService: {{ $fullName }}
     canaryService: {{ $fullName }}-preview
@@ -50,7 +54,7 @@ strategy:
     abortScaleDownDelaySeconds: 30
     minPodsPerReplicaSet: 1
     trafficRouting:
-      {{- with include "helm.canary.managedRoutes" . | fromJsonArray }}
+      {{- with and $stepsRendered (include "helm.canary.managedRoutes" . | fromJsonArray) }}
       managedRoutes:
         {{- range . }}
         - name: {{ . }}
@@ -59,8 +63,12 @@ strategy:
       istio:
         virtualServices:
           {{- include "helm.canary.virtualServices" . | nindent 10 }}
+    {{- if eq $steps "[]" }}
+    steps: []
+    {{- else }}
     steps:
-      {{- include "helm.canary.steps" . | nindent 6 }}
+      {{- $steps | nindent 6 }}
+    {{- end }}
     {{- with include "helm.canary.backgroundAnalysis" . }}
     analysis:
       {{- fromJson . | toYaml | nindent 6 }}

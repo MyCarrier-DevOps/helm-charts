@@ -6,6 +6,8 @@ suite: Rollout canary budget annotation (mycarrier.tech/canaryBudgetSeconds, Tec
 # 5700 s the render fails: rollout-watch's workflow has activeDeadlineSeconds 10800 and spends about 70 minutes before
 # the canary and 15 minutes after the budget.
 # Defaults: barriers 9m (540 s), health 3 x 30s (90 s), standard pauses 5m (300 s), manualTimeout 1h (3600 s).
+# The budget renders only where the steps render: in prod, or with stepsOutsideProd (DEVOPS-516), so most tests render
+# a preprod drill. rollout_canary_prod_only_test.yaml covers its absence outside prod.
 templates:
   - rollout.yaml
 tests:
@@ -16,6 +18,9 @@ tests:
         appStack: test-stack
         language: csharp
         correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment: &preprod
         name: preprod
       applications:
@@ -43,6 +48,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
       environment: *preprod
       applications:
@@ -61,6 +67,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
       environment: *preprod
       applications:
@@ -84,6 +91,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             coordinator:
               enabled: false
       environment: *preprod
@@ -102,6 +110,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             coordinator:
               enabled: false
@@ -121,6 +130,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
             coordinator:
               enabled: false
@@ -140,6 +150,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             progressDeadlineSeconds: 300
             coordinator:
               enabled: false
@@ -154,7 +165,10 @@ tests:
   # The alerts check runs as background analysis in prod, alongside the steps, so it adds nothing.
   - it: renders the same budget in prod, without counting the background alerts analysis
     set:
-      global: *global
+      global:
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
       environment:
         name: prod
       applications:
@@ -175,6 +189,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
             manualTimeout: 30m
       environment: *preprod
@@ -229,6 +244,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             manualTimeout: 2h
       environment: *preprod
       applications:
@@ -246,6 +262,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             manualTimeout: 0s
       environment: *preprod
@@ -264,6 +281,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             steps:
               - setWeight: 20
               - pause:
@@ -284,6 +302,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             steps:
               - setWeight: 20
               - pause:
@@ -345,6 +364,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             budgetSeconds: 99
       environment: *preprod
       applications:
@@ -381,6 +401,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
             manualTimeout: 4530s
       environment: *preprod
@@ -417,6 +438,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             analysis:
               health:
                 count: 5
@@ -438,6 +460,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             coordinator:
               barrierTimeouts:
                 w10: 5m
@@ -458,6 +481,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               templates: [smoke]
@@ -491,6 +515,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               templates: [smoke]
@@ -517,6 +542,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               templates: [smoke]
@@ -553,6 +579,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               templates: [smoke]
@@ -587,6 +614,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             analysis:
               templates: [smoke]
@@ -621,6 +649,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
       environment: *preprod
       applications:
@@ -648,6 +677,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             dark: true
             leader: api
