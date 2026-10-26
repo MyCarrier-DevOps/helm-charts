@@ -480,13 +480,14 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toYaml $result -}}
 {{- end -}}
 
-{{- /* The Rollouts that run canary steps (the helm.canary.groupSize set), in name order, as JSON: every application with
-       deploymentType rollout and without migratingToRollouts. global.deploymentStrategy is release-wide, so it is not
-       checked here; the callers (the dark stage and the rolloutGroupSize annotation) render only when it is canary. */ -}}
+{{- /* The Rollouts that run canary steps (the helm.canary.groupSize set), in name order, as JSON: every routed Rollout
+       (helm.canary.routed: deploymentType rollout without migratingToRollouts). global.deploymentStrategy is
+       release-wide, so it is not checked here; the callers (the dark stage and the rolloutGroupSize annotation) render
+       only when it is canary. */ -}}
 {{- define "helm.canary.rollouts" -}}
 {{- $names := list -}}
 {{- range $name, $values := .Values.applications -}}
-  {{- if and (eq $values.deploymentType "rollout") (not $values.migratingToRollouts) }}{{ $names = append $names $name }}{{ end -}}
+  {{- if eq (include "helm.canary.routed" (dict "application" $values)) "true" }}{{ $names = append $names $name }}{{ end -}}
 {{- end -}}
 {{- toJson $names -}}
 {{- end -}}
@@ -525,7 +526,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- define "helm.canary.groupSize" -}}
 {{- $count := 0 -}}
 {{- range $name, $values := .Values.applications -}}
-  {{- if and (eq $values.deploymentType "rollout") (not $values.migratingToRollouts) }}{{ $count = add1 $count }}{{ end -}}
+  {{- if eq (include "helm.canary.routed" (dict "application" $values)) "true" }}{{ $count = add1 $count }}{{ end -}}
 {{- end -}}
 {{- $count -}}
 {{- end -}}

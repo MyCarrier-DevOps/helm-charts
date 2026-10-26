@@ -91,7 +91,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false`, each test definition sends a separate POST to the legacy `api` endpoint, which is retired; `true` is the default. The webhook URL is set automatically based on this flag; `global.testengineWebhookUrl` overrides it, except for a Rollout in prod, where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
+| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false`, each test definition sends a separate POST to the legacy `api` endpoint, which is retired; `true` is the default. The webhook URL is set automatically based on this flag; `global.testengineWebhookUrl` overrides it, except for a canary Rollout in prod (property `canary`), where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
 
 *Default resource values:
 ```yaml

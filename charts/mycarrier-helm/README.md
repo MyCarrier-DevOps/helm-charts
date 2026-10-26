@@ -95,7 +95,7 @@ StatefulSet apps render unchanged, except where the values below fail the whole 
 
 `testtrigger.enableV1` now defaults to `true` for every application, because TestEngine's legacy API is retired. A test
 trigger without it sends one v1 request with every test definition. `enableV1: false` keeps the legacy API, except on a
-Rollout in prod, where it fails the render.
+canary Rollout in prod (property `canary`), where it fails the render.
 
 It also renders the contract the release's rollout-watch reads (DEVOPS-319). Every Rollout that runs canary steps
 carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100) and
@@ -115,7 +115,7 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | `analysis.health.enabled: false` and `analysis.alerts.enabled: false` with no extra templates | Analysis is mandatory, so every Rollout fails to render. Keep one check on, or list an extra template. |
 | A Rollout app whose liveness probe is not HTTP (any non-csharp app with default probes) | Set `applications.<app>.canaryHealthPath` or `analysis.health.path`, give the app an `httpGet` liveness probe, or set `analysis.health.enabled: false`. Readiness and startup probes are no longer used for the path. |
 | A csharp Rollout app with default probes | Nothing to set: the health check now calls `/liveness` (the default liveness probe) instead of `/health`. |
-| A prod Rollout with no `analysis.alerts.service`, no `alerts.serviceName`, and a `global.appStack` that is empty or the default `app` | Set the label the service's Grafana alert rules carry in `analysis.alerts.service`, or set `analysis.alerts.enabled: false`. `global.appStack`, lower-cased, is now the last fallback. |
+| A prod canary Rollout (property `canary`) with no `analysis.alerts.service`, no `alerts.serviceName`, and a `global.appStack` that is empty or the default `app` | Set the label the service's Grafana alert rules carry in `analysis.alerts.service`, or set `analysis.alerts.enabled: false`. `global.appStack`, lower-cased, is now the last fallback. |
 | A Rollout render without `global.correlationId` (deploy-core always sets it) | Set it, or set `coordinator.enabled: false`. |
 | A cluster without the `mycarrier/canary-coordinator` plugin | Set `coordinator.enabled: false`: the controller rejects steps for a plugin it does not have. |
 | Relied on the dark stage (`coordinator.enabled: true` with the old `dark` default) | Set `dark: true`; a `tests-dark` AnalysisTemplate must then render for the leader. |
@@ -123,10 +123,10 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | An explicit `global.strategy.canary.steps` list | Set `global.strategy.canary.budgetSeconds` to the steps' worst-case length in seconds (1 to 5700): the pause durations, each analysis step's longest template (`count` x max(`interval`, a Job's `activeDeadlineSeconds`)) and each barrier timeout, or without barriers `progressDeadlineSeconds` for each weight step above 0. Without it, every Rollout fails to render. |
 | The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h`) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
 | A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (at 45m, the manual preset with the dark stage leaves 750 s for the leader's `tests-dark`), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
-| A prod Rollout app with `testtrigger.enableV1: false` | Remove it (`true` is the default). The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so `false` fails the render. |
+| A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: false` | Remove it (`true` is the default). The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so `false` fails the render. |
 | A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Set the property to `canary` before the release that removes `migratingToRollouts`. Since the release after 4.7.9 the chart reads the property (`global.deploymentStrategy`): a Rollout renders canary steps, and drops its prod PostSync hook, only when it is `canary`. |
-| A prod Rollout app with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
-| `global.testengineWebhookUrl` in prod, with a Rollout app whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
+| A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
+| `global.testengineWebhookUrl` in prod, with a canary Rollout app (property `canary`) whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
 
 ## Upgrading past 4.7.9 (Rollouts): canary steps follow the deployment-strategy property
 
@@ -139,14 +139,15 @@ values files.
 `migratingToRollouts`, when `global.deploymentStrategy` is exactly `canary`. Such a Rollout renders as before: the
 canary steps, the analysis steps and background analysis, the coordinator's barriers, the dark stage and its
 `managedRoutes`, the `mycarrier.tech/rolloutGroupSize`, `mycarrier.tech/bakeMinutes` and
-`mycarrier.tech/canaryBudgetSeconds` annotations, the chart's AnalysisTemplates and, in prod, the
-`<fullName>-prod-tests` ConfigMap in place of the PostSync test hook.
+`mycarrier.tech/canaryBudgetSeconds` annotations, the chart's AnalysisTemplates, in prod the
+`<environment>-<fullName>-alerts` ExternalSecret, and in prod the `<fullName>-prod-tests` ConfigMap in place of the
+PostSync test hook.
 
 With any other value (`rolling`, empty, unset, or another spelling such as `Canary`) the same Rollout renders with no
 steps (`templates/_spec_rollout.tpl`). It keeps the `<fullName>` and `<fullName>-preview` Services, the VirtualService,
 `trafficRouting`, `progressDeadlineSeconds`, `progressDeadlineAbort` and `rollbackWindow`, so switching the property
-moves no traffic. It renders no AnalysisTemplate of the chart's, none of the three annotations, and in prod it keeps the
-`<fullName>-trigger` PostSync hook. Argo Rollouts then scales the new ReplicaSet to full size behind the `-preview`
+moves no traffic. It renders no AnalysisTemplate of the chart's, no `<environment>-<fullName>-alerts` ExternalSecret
+(prod), none of the three annotations, and in prod it keeps the `<fullName>-trigger` PostSync hook. Argo Rollouts then scales the new ReplicaSet to full size behind the `-preview`
 Service at weight 0 and points the stable Service at it once it is available. The checks that protect the VirtualService
 still apply: Istio left on, `networking.istio.offloadOperatorEnabled: false` in dev, and
 `networking.istio.offloadVSEnabled: false` in a feature environment. The checks that only
