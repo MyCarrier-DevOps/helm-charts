@@ -15,6 +15,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
       applications:
@@ -143,6 +146,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
       environment:
         name: preprod
@@ -181,6 +185,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
       environment:
         name: preprod
@@ -219,6 +224,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: csharp
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
       alerts:
@@ -259,6 +267,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: fast
             coordinator:
               enabled: false
@@ -293,6 +302,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             preset: manual
             steps:
               - setWeight: 5
@@ -1213,6 +1223,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            stepsOutsideProd: true
             bakeMinutes: 60
       environment:
         name: preprod

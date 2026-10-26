@@ -12,12 +12,15 @@
 {{- $customNames := list }}
 {{- range ($appValues.analysisTemplates | default list) }}{{ $customNames = append $customNames (toString .name) }}{{ end }}
 {{- $cfg := include "helm.canary.config" $appContext | fromJson }}
-{{- /* The chart's own health template (DEVOPS-312) for a Rollout that runs canary steps, unless analysis.health.enabled
-       is false: the -preview Service's health endpoint must meet analysis.health.successCondition (default
-       result == "Healthy"), read at $.status of a JSON body. Argo Rollouts up to v1.10.1 counts a 2xx body that is not
-       JSON as Successful without evaluating the condition; argo-rollouts#4770 (merged, not yet released) evaluates it
-       on the raw body, so an app whose health path serves HTML needs successCondition "true". A non-2xx answer is an
-       error; at the default consecutiveErrorLimit 1, a second error in a row aborts the canary. An
+{{- /* The chart's own health template (DEVOPS-312) for a Rollout with the canary contract, unless
+       analysis.health.enabled is false. It renders in every environment, also where the Rollout renders no steps
+       (outside prod without stepsOutsideProd, DEVOPS-516) and nothing references it, so stepsOutsideProd changes only
+       the Rollout; the health-path check runs in helm.canary.configuredSteps either way. The -preview Service's health
+       endpoint must meet analysis.health.successCondition (default result == "Healthy"), read at $.status of a JSON
+       body. Argo Rollouts up to v1.10.1 counts a 2xx body that is not JSON as Successful without evaluating the
+       condition; argo-rollouts#4770 (merged, not yet released) evaluates it on the raw body, so an app whose health
+       path serves HTML needs successCondition "true". A non-2xx answer is an error; at the default
+       consecutiveErrorLimit 1, a second error in a row aborts the canary. An
        applications.<app>.analysisTemplates entry named health replaces it. The URL is resolved only when the check is
        in use, so a probe the check cannot reuse fails the render only then. */}}
 {{- $wantHealth := and (eq (include "helm.canary.enabled" $appContext) "true") $cfg.analysis.health.enabled (not (has "health" $customNames)) }}
@@ -229,8 +232,8 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  {{- /* <environment>-<fullName>-<name>: the name the canary analysis steps reference (helm.canary.steps), unique per
-         app in a shared namespace. */}}
+  {{- /* <environment>-<fullName>-<name>: the name the canary analysis steps reference (helm.canary.configuredSteps),
+         unique per app in a shared namespace. */}}
   name: {{ $environment }}-{{ $fullName }}-{{ $template.name }}
   namespace: {{ $namespace }}
   labels:

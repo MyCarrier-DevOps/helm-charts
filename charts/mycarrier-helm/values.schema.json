@@ -26,6 +26,11 @@
                   "default": "standard",
                   "description": "Step ladder. standard: 10, 25 and 50 with a 5m pause after each, then 100. fast: 25, then 100. manual: 10, then a pause until resumed, then 100. An analysis step follows each weight and runs health (unless analysis.health.enabled is false) and the extra analysis.templates."
                 },
+                "stepsOutsideProd": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Render the canary steps (preset or explicit steps, with their barriers, analysis steps, pauses and dark stage) and mycarrier.tech/canaryBudgetSeconds outside prod, as in prod, for a test drill (DEVOPS-516). The chart's own alerts check stays prod only; in a drill only a replacement alerts entry (applications.<app>.analysisTemplates) runs as background analysis. false: only environment.name prod renders them; elsewhere a Rollout renders steps: [] and promotes at once. The render-time checks run in every environment either way, the leader rule, the leader's tests-dark, budgetSeconds for explicit steps and the budget limit included; only global.correlationId for the coordinator is required just where the steps render. New after 4.7.9: the 4.7.9 schema refuses it."
+                },
                 "manualTimeout": {
                   "type": "string",
                   "pattern": "^[0-9]+(s|m|h)$",
@@ -35,13 +40,13 @@
                 "steps": {
                   "type": "array",
                   "items": { "type": "object" },
-                  "description": "Argo Rollouts canary steps that replace the preset verbatim. A steps list needs budgetSeconds, or the render fails."
+                  "description": "Argo Rollouts canary steps that replace the preset verbatim. Like the preset, they render only in prod or with stepsOutsideProd; elsewhere the Rollout renders steps: []. A steps list needs budgetSeconds in every environment, or the render fails."
                 },
                 "budgetSeconds": {
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 5700,
-                  "description": "The worst-case length of an explicit steps list, in seconds (Tech Spec D22): its pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout, added up. Rendered on every canary Rollout as mycarrier.tech/canaryBudgetSeconds; the release's rollout-watch times out at the largest value of the release plus 15 minutes. Required with steps, and the render fails without it. Ignored with a preset: the chart computes the budget from the steps it renders. At most 5700: rollout-watch's release workflow has activeDeadlineSeconds 10800, which also covers about 70 minutes before the canary starts and 15 minutes after the budget; a computed budget above 5700 fails the render too."
+                  "description": "The worst-case length of an explicit steps list, in seconds (Tech Spec D22): its pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout, added up. Rendered as mycarrier.tech/canaryBudgetSeconds on every canary Rollout whose steps render (prod, or stepsOutsideProd); the release's rollout-watch times out at the largest value of the release plus 15 minutes. Required with steps in every environment, also where they do not render, and the render fails without it. Ignored with a preset: the chart computes the budget from the steps it renders. At most 5700: rollout-watch's release workflow has activeDeadlineSeconds 10800, which also covers about 70 minutes before the canary starts and 15 minutes after the budget; a computed budget above 5700 fails the render too."
                 },
                 "analysis": {
                   "type": "object",
@@ -100,7 +105,7 @@
                 "leader": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "The application whose Rollout runs the dark-stage test suite (<environment>-<fullName>-tests-dark). When set, it must name an application of the release; where the dark stage runs (coordinator on, dark true) it must be an application with deploymentType rollout and without migratingToRollouts. Required there when the release has more than one such application; a release with one defaults to it."
+                  "description": "The application whose Rollout runs the dark-stage test suite (<environment>-<fullName>-tests-dark). When set, it must name an application of the release; where the dark stage runs (coordinator on, dark true), in every environment, also where the steps do not render, it must be an application with deploymentType rollout and without migratingToRollouts. Required there when the release has more than one such application; a release with one defaults to it."
                 },
                 "darkReplicas": {
                   "type": "integer",
@@ -123,7 +128,7 @@
                     "enabled": {
                       "type": "boolean",
                       "default": true,
-                      "description": "Give a preset a start barrier before the ladder (it arms the plugin's Abort hook) and a w<weight> barrier after each weight. An explicit steps list renders verbatim and carries its own barriers. On by default; it needs global.correlationId (the pipeline sets it), or every Rollout fails to render. false turns lockstep off, and each Rollout of the release then runs its own steps."
+                      "description": "Give a preset a start barrier before the ladder (it arms the plugin's Abort hook) and a w<weight> barrier after each weight. An explicit steps list renders verbatim and carries its own barriers. On by default; where the steps render (prod, or stepsOutsideProd) it needs global.correlationId (the pipeline sets it), or every Rollout fails to render. false turns lockstep off, and each Rollout of the release then runs its own steps."
                     },
                     "barrierTimeouts": {
                       "type": "object",

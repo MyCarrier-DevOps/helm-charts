@@ -2,20 +2,37 @@
        Rollout of a release runs the same steps; per-application updateStrategy.canary blocks are refused in
        rollout.yaml. */ -}}
 
-{{- /* True for a Rollout that runs canary steps: deploymentType rollout and not mid-migration (a migrating Rollout
-       renders a bare canary and takes over no Service; see helm.specs.rollout). */ -}}
+{{- /* True for a Rollout that gets the canary contract (the stable and -preview Services, Istio traffic routing and the
+       canary steps): deploymentType rollout and not mid-migration (a migrating Rollout renders a bare canary and takes
+       over no Service; see helm.specs.rollout). Its steps render only where helm.canary.stepsRendered is true. */ -}}
 {{- define "helm.canary.enabled" -}}
 {{- if and (eq .application.deploymentType "rollout") (not .application.migratingToRollouts) }}true{{ else }}false{{ end }}
+{{- end -}}
+
+{{- /* True where a canary Rollout renders its steps (Q52, DEVOPS-516): environment.name prod, or any environment with
+       global.strategy.canary.stepsOutsideProd true (default false), which is for test drills. The opt-in is compared
+       as the string "true", so "false" given past the schema (--skip-schema-validation) does not count. Elsewhere the
+       Rollout renders steps: [] and Argo Rollouts promotes the new version at once: no barriers, analysis steps,
+       pauses, dark stage, background analysis or mycarrier.tech/canaryBudgetSeconds. The render-time checks of
+       helm.canary.configuredSteps and helm.canary.budgetSeconds still run in every environment (the health path, both
+       analysis opt-outs, extra templates, barrier timeouts, the leader rule with the leader's tests-dark, budgetSeconds
+       for explicit steps and the budget limit): a stack moves to canary as a whole, so the same Rollouts exist in every
+       environment, and a stack sees these failures on its first render, not at its first prod canary. Only the
+       coordinator's global.correlationId requirement applies just where the steps render. */ -}}
+{{- define "helm.canary.stepsRendered" -}}
+{{- if or (eq (toString .Values.environment.name) "prod") (eq (toString (include "helm.canary.config" . | fromJson).stepsOutsideProd) "true") }}true{{ else }}false{{ end -}}
 {{- end -}}
 
 {{- /* global.strategy.canary merged over the defaults, as JSON. Analysis is mandatory for every Rollout (DEVOPS-312):
        health and alerts are on unless opted out, and templates lists only extra templates. analysis.enabled is
        deprecated and has no default; rollout.yaml refuses false. dark stays off until DEVOPS-326 renders tests-dark.
        bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
-       and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds). */ -}}
+       and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds).
+       stepsOutsideProd renders the steps outside prod (helm.canary.stepsRendered). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $defaults := dict
       "preset" "standard"
+      "stepsOutsideProd" false
       "progressDeadlineSeconds" 600
       "dark" false
       "darkReplicas" 1
@@ -56,14 +73,19 @@
        analysis on the leader only, the dark-passed barrier, then the route is removed. setCanaryScale
        {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
        step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
-       coordinator because followers rely on its barriers to wait for the leader's suite. */ -}}
-{{- define "helm.canary.steps" -}}
+       coordinator because followers rely on its barriers to wait for the leader's suite.
+       These are the steps the configuration describes. They are built in every environment, with the real leader, so
+       their checks (the leader rule and the leader's tests-dark included) run in every environment and the budget is
+       the same in and outside prod; they render only where helm.canary.stepsRendered is true (helm.canary.steps). Only
+       the coordinator's global.correlationId requirement applies just where the steps render. */ -}}
+{{- define "helm.canary.configuredSteps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- $rendered := eq (include "helm.canary.stepsRendered" .) "true" -}}
 {{- if not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $cfg.analysis.templates) -}}
   {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are both false and analysis.templates lists no extra template. Remove one of the opt-outs, or list an AnalysisTemplate defined under applications.%s.analysisTemplates in analysis.templates." .appName .appName) -}}
 {{- end -}}
 {{- $coordinator := $cfg.coordinator -}}
-{{- if and $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
+{{- if and $rendered $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
   {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
 {{- end -}}
 {{- $fullName := include "helm.fullname" . -}}
@@ -143,6 +165,14 @@
 {{- toYaml $steps }}
 {{- end -}}
 
+{{- /* The canary steps the Rollout renders: helm.canary.configuredSteps where helm.canary.stepsRendered is true
+       (prod, or stepsOutsideProd), otherwise [] after the same checks, so the Rollout promotes at once (Q52,
+       DEVOPS-516). */ -}}
+{{- define "helm.canary.steps" -}}
+{{- $steps := include "helm.canary.configuredSteps" . -}}
+{{- if eq (include "helm.canary.stepsRendered" .) "true" }}{{ $steps }}{{ else }}[]{{ end -}}
+{{- end -}}
+
 {{- /* alert-gate's watch window after promotion, in minutes (Tech Spec D18): global.strategy.canary.bakeMinutes, default
        30, rendered on every canary Rollout as mycarrier.tech/bakeMinutes. The release's rollout-watch reads the
        smallest value across the release's Rollouts and puts it in the alert.gate event (DEVOPS-319); it takes any value
@@ -160,10 +190,11 @@
 {{- int $bake -}}
 {{- end -}}
 
-{{- /* The canary's worst-case length in whole seconds (Tech Spec D22, Q51), rendered on every canary Rollout as
-       mycarrier.tech/canaryBudgetSeconds. The release's rollout-watch (DEVOPS-319) times out at the largest value of
-       the release group plus 15 minutes, so the budget covers the steps helm.canary.steps renders for this Rollout at
-       their longest, and rollout-watch never times out a canary that is still inside its designed steps:
+{{- /* The canary's worst-case length in whole seconds (Tech Spec D22, Q51), rendered as
+       mycarrier.tech/canaryBudgetSeconds on every canary Rollout whose steps render (helm.canary.stepsRendered). The
+       release's rollout-watch (DEVOPS-319) times out at the largest value of the release group plus 15 minutes, so
+       the budget covers the steps helm.canary.configuredSteps describes for this Rollout at their longest, and
+       rollout-watch never times out a canary that is still inside its designed steps:
        - pause: its duration; the manual preset's pause, which has none, counts manualTimeout (default 1h). The pause
          itself stays indefinite; manualTimeout only feeds the budget.
        - analysis: the longest of its templates (they run in parallel), each count x max(interval, the Job's
@@ -180,11 +211,13 @@
        The leader runs tests-dark and its followers do not, so their budgets can differ. An explicit steps list states its
        own budget in budgetSeconds (required there); with a preset the chart computes it and budgetSeconds is ignored.
        rollout-watch's release workflow has activeDeadlineSeconds 10800, which covers about 70 minutes before the canary
-       starts, the budget and 15 minutes after it, so a budget above 5700 s fails the render. helm.canary.steps runs
-       first, so its own checks report before these. */ -}}
+       starts, the budget and 15 minutes after it, so a budget above 5700 s fails the render.
+       helm.canary.configuredSteps runs first, so its own checks report before these.
+       The budget is computed, and its checks run, in every environment (budgetSeconds for an explicit steps list
+       included), and it is the same in and outside prod; rollout.yaml renders it only where the steps render. */ -}}
 {{- define "helm.canary.budgetSeconds" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
-{{- $steps := include "helm.canary.steps" . | fromYamlArray -}}
+{{- $steps := include "helm.canary.configuredSteps" . | fromYamlArray -}}
 {{- $budget := 0 -}}
 {{- if $cfg.steps -}}
   {{- $set := $cfg.budgetSeconds -}}
@@ -279,7 +312,9 @@
        is promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
        standard rules) run out; a step-by-step check would sample only the first minute of each weight. A replacement
        entry runs that long only with count 0 and an interval. The service-label check sits here, outside the steps,
-       so explicit global.strategy.canary.steps reach it too. */ -}}
+       so explicit global.strategy.canary.steps reach it too. The background analysis belongs to the steps, so it
+       renders only where they do (helm.canary.stepsRendered): a replacement alerts entry outside prod runs only with
+       stepsOutsideProd. */ -}}
 {{- define "helm.canary.backgroundAnalysis" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $customAlerts := false -}}
@@ -287,7 +322,7 @@
 {{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.alerts.enabled (not $customAlerts) (include "helm.canary.alerts.environment" .) (not (include "helm.canary.alerts.service" .)) -}}
   {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName or global.appStack, or opt out with global.strategy.canary.analysis.alerts.enabled: false." .appName) -}}
 {{- end -}}
-{{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.alerts.enabled (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") (eq (include "helm.canary.stepsRendered" .) "true") $cfg.analysis.alerts.enabled (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
   {{- $analysis := dict "templates" (list (dict "templateName" (printf "%s-%s-alerts" .Values.environment.name (include "helm.fullname" .)))) -}}
   {{- range $index, $step := (include "helm.canary.steps" . | fromYamlArray) -}}
     {{- if and (not (hasKey $analysis "startingStep")) (gt (int (dig "setWeight" 0 $step)) 0) }}{{ $_ := set $analysis "startingStep" $index }}{{ end -}}
@@ -477,9 +512,10 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- end -}}
 
 {{- /* The leader of the release, which alone runs the dark-stage suite (D20): global.strategy.canary.leader, which must
-       name one of the canary Rollouts, or the only canary Rollout when there is one; "" otherwise (helm.canary.steps
-       fails when the dark stage needs a leader and there is none). Chosen on purpose, not by name order, so adding or
-       renaming a Rollout (a migrator Rollout, for example) cannot move the suite. */ -}}
+       name one of the canary Rollouts, or the only canary Rollout when there is one; "" otherwise
+       (helm.canary.configuredSteps fails, in every environment, when the dark stage needs a leader and there is none).
+       Chosen on purpose, not by name order, so adding or renaming a Rollout (a migrator Rollout, for example) cannot
+       move the suite. */ -}}
 {{- define "helm.canary.leader" -}}
 {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
 {{- $set := toString (dig "strategy" "canary" "leader" "" (.Values.global | default dict)) -}}
@@ -495,10 +531,12 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 
 {{- /* trafficRouting.managedRoutes: every route a setHeaderRoute or setMirrorRoute step names, as JSON. Argo Rollouts
        rejects those steps for a route that is not listed, and it puts the listed routes ahead of the VirtualService's
-       own routes while they exist. */ -}}
+       own routes while they exist. Read from helm.canary.configuredSteps, so the multi-frontend check in
+       helm.canary.virtualServices runs in every environment; helm.specs.rollout renders the list only where the
+       steps render. */ -}}
 {{- define "helm.canary.managedRoutes" -}}
 {{- $names := list -}}
-{{- range (include "helm.canary.steps" . | fromYamlArray) -}}
+{{- range (include "helm.canary.configuredSteps" . | fromYamlArray) -}}
   {{- $name := dig "setHeaderRoute" "name" (dig "setMirrorRoute" "name" "" .) . -}}
   {{- if and $name (not (has $name $names)) }}{{ $names = append $names $name }}{{ end -}}
 {{- end -}}

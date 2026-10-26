@@ -84,11 +84,11 @@ coordinator on:
 | A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
 | `coordinator.barrierTimeouts` at or above `progressDeadlineSeconds` (the 4.6.0 defaults were 10m, 15m and 30m) | The defaults are now 9m. Keep a custom timeout below `progressDeadlineSeconds`, or raise the deadline: Argo Rollouts counts the wait at a barrier toward it, so a longer barrier timeout never fires. |
 
-Since the release after 4.7.8, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
+Since 4.7.9, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
 
-## Upgrading past 4.7.8 (Rollouts)
+## Upgrading to 4.7.9 (Rollouts)
 
-The release after 4.7.8 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
+4.7.9 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
 chart's `health` check, and in prod the Rollout runs the chart's `alerts` check as background analysis, unless a stack
 opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
 StatefulSet apps render unchanged, except where the values below fail the whole render.
@@ -127,6 +127,33 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Set the property to `canary` before the release that removes `migratingToRollouts`. The chart renders no prod PostSync hook for a Rollout, and only the canary release path starts its prod tests. |
 | A prod Rollout app with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
 | `global.testengineWebhookUrl` in prod, with a Rollout app whose `testtrigger.enableV1` is true | Remove it: rollout-watch posts to its own TestEngine URL, and the value fails the render. |
+
+## Upgrading past 4.7.9 (Rollouts outside prod)
+
+The release after 4.7.9 renders the canary steps only in prod (Q52, DEVOPS-516). Outside prod (dev, uat, qa, preprod,
+feature environments and any other environment name), a canary Rollout renders `steps: []`, and Argo Rollouts promotes
+the new version at once. The barriers, the analysis steps, the pauses, the dark stage, the background analysis and
+`mycarrier.tech/canaryBudgetSeconds` go with the steps. The Services, the Istio traffic routing,
+`progressDeadlineSeconds`, `rollbackWindow`, `mycarrier.tech/rolloutGroupSize`, `mycarrier.tech/bakeMinutes` and the
+chart's `health` AnalysisTemplate stay. Prod renders unchanged.
+
+`global.strategy.canary.stepsOutsideProd: true` (new, default `false`) renders the prod steps in any environment, for a
+test drill; the chart's `alerts` check stays prod only. The 4.7.9 schema refuses the key ("additional properties not
+allowed"), so a stack can set it only once the deploy-core pin has moved past 4.7.9 to the release after 4.7.9.
+
+The render-time checks still run in every environment, as on 4.7.9: a missing health path, both analysis opt-outs, an
+extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, the leader rule with the
+leader's `tests-dark`, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s and a zero `manualTimeout`
+with the manual preset fail the render outside prod too. A stack moves to canary as a whole, so the same Rollouts exist
+in every environment, and it sees these failures on its first render, not at its first prod canary. Only
+`global.correlationId` for the coordinator is required just where the steps render.
+
+| 4.7.9 values | Edit |
+|---|---|
+| A canary test drill or rehearsal outside prod, which needs the steps or `mycarrier.tech/canaryBudgetSeconds` | Set `global.strategy.canary.stepsOutsideProd: true` in that environment's values file. Without it, the Rollout promotes at once. |
+| An explicit `global.strategy.canary.steps` list | Nothing to set. It renders only in prod, or with `stepsOutsideProd`, and it still needs `budgetSeconds` in every environment. |
+| A replacement `alerts` entry under `applications.<app>.analysisTemplates` that ran as background analysis outside prod | Set `stepsOutsideProd: true` where it must run. Outside prod it no longer runs without it. |
+| A non-prod render without `global.correlationId` | Nothing to set: it now renders outside prod. It still fails in prod and with `stepsOutsideProd`. |
 
 ## Chart Structure
 
