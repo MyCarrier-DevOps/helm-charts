@@ -10,14 +10,17 @@
 {{- end -}}
 
 {{- /* True where a canary Rollout renders its steps (Q52, DEVOPS-516): environment.name prod, or any environment with
-       global.strategy.canary.stepsOutsideProd (default false), which is for test drills. Elsewhere the Rollout renders
-       steps: [] and Argo Rollouts promotes the new version at once: no barriers, analysis steps, pauses, dark stage,
-       background analysis or mycarrier.tech/canaryBudgetSeconds. The render-time checks of helm.canary.configuredSteps
-       and helm.canary.budgetSeconds still run in every environment, except the ones that only concern rendered steps:
-       global.correlationId for the coordinator, the leader rule with the leader's tests-dark, and budgetSeconds for an
-       explicit steps list. */ -}}
+       global.strategy.canary.stepsOutsideProd true (default false), which is for test drills. The opt-in is compared
+       as the string "true", so "false" given past the schema (--skip-schema-validation) does not count. Elsewhere the
+       Rollout renders steps: [] and Argo Rollouts promotes the new version at once: no barriers, analysis steps,
+       pauses, dark stage, background analysis or mycarrier.tech/canaryBudgetSeconds. The render-time checks of
+       helm.canary.configuredSteps and helm.canary.budgetSeconds still run in every environment (the health path, both
+       analysis opt-outs, extra templates, barrier timeouts, the leader rule with the leader's tests-dark, budgetSeconds
+       for explicit steps and the budget limit): a stack moves to canary as a whole, so the same Rollouts exist in every
+       environment, and a stack sees these failures on its first render, not at its first prod canary. Only the
+       coordinator's global.correlationId requirement applies just where the steps render. */ -}}
 {{- define "helm.canary.stepsRendered" -}}
-{{- if or (eq (toString .Values.environment.name) "prod") (include "helm.canary.config" . | fromJson).stepsOutsideProd }}true{{ else }}false{{ end -}}
+{{- if or (eq (toString .Values.environment.name) "prod") (eq (toString (include "helm.canary.config" . | fromJson).stepsOutsideProd) "true") }}true{{ else }}false{{ end -}}
 {{- end -}}
 
 {{- /* global.strategy.canary merged over the defaults, as JSON. Analysis is mandatory for every Rollout (DEVOPS-312):
@@ -71,10 +74,10 @@
        {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
        step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
        coordinator because followers rely on its barriers to wait for the leader's suite.
-       These are the steps the configuration describes. They are built in every environment, so their checks run in
-       every environment, but they render only where helm.canary.stepsRendered is true (helm.canary.steps). The checks
-       that only concern rendered steps run only there: global.correlationId for the coordinator, and the leader rule
-       with the leader's tests-dark step (elsewhere the dark stage is built without a leader). */ -}}
+       These are the steps the configuration describes. They are built in every environment, with the real leader, so
+       their checks (the leader rule and the leader's tests-dark included) run in every environment and the budget is
+       the same in and outside prod; they render only where helm.canary.stepsRendered is true (helm.canary.steps). Only
+       the coordinator's global.correlationId requirement applies just where the steps render. */ -}}
 {{- define "helm.canary.configuredSteps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $rendered := eq (include "helm.canary.stepsRendered" .) "true" -}}
@@ -109,18 +112,14 @@
 {{- if $templates }}{{ $analysisStep = dict "analysis" (dict "templates" $templates) }}{{ end -}}
 {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" "start" "coordinator" $coordinator) | fromJson) }}{{ end -}}
 {{- if and $coordinator.enabled $cfg.dark -}}
-  {{- $leader := "" -}}
-  {{- if $rendered -}}
-    {{- if not (include "helm.canary.leader" .) -}}
-      {{- fail (printf "the dark stage runs its test suite on one leader, and this release has %d canary Rollouts; set global.strategy.canary.leader to one of: %s." (len (include "helm.canary.rollouts" . | fromJsonArray)) (join ", " (include "helm.canary.rollouts" . | fromJsonArray))) -}}
-    {{- end -}}
-    {{- $leader = include "helm.canary.leader" . -}}
+  {{- if not (include "helm.canary.leader" .) -}}
+    {{- fail (printf "the dark stage runs its test suite on one leader, and this release has %d canary Rollouts; set global.strategy.canary.leader to one of: %s." (len (include "helm.canary.rollouts" . | fromJsonArray)) (join ", " (include "helm.canary.rollouts" . | fromJsonArray))) -}}
   {{- end -}}
   {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
   {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
-  {{- if eq $leader .appName -}}
+  {{- if eq (include "helm.canary.leader" .) .appName -}}
     {{- if not (has "tests-dark" $available) -}}
       {{- fail (printf "application '%s': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet (DEVOPS-312, DEVOPS-326). Set global.strategy.canary.dark: false, or define tests-dark under applications.%s.analysisTemplates." .appName .appName) -}}
     {{- end -}}
@@ -214,20 +213,18 @@
        rollout-watch's release workflow has activeDeadlineSeconds 10800, which covers about 70 minutes before the canary
        starts, the budget and 15 minutes after it, so a budget above 5700 s fails the render.
        helm.canary.configuredSteps runs first, so its own checks report before these.
-       The budget is computed, and its checks run, in every environment; rollout.yaml renders it only where the steps
-       render. Where they do not, an explicit steps list needs no budgetSeconds, and its budget counts as 0. */ -}}
+       The budget is computed, and its checks run, in every environment (budgetSeconds for an explicit steps list
+       included), and it is the same in and outside prod; rollout.yaml renders it only where the steps render. */ -}}
 {{- define "helm.canary.budgetSeconds" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $steps := include "helm.canary.configuredSteps" . | fromYamlArray -}}
 {{- $budget := 0 -}}
 {{- if $cfg.steps -}}
-  {{- if eq (include "helm.canary.stepsRendered" .) "true" -}}
-    {{- $set := $cfg.budgetSeconds -}}
-    {{- if or (not (kindIs "float64" $set)) (lt $set 1.0) (ne $set (float64 (int $set))) -}}
-      {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
-    {{- end -}}
-    {{- $budget = int $set -}}
+  {{- $set := $cfg.budgetSeconds -}}
+  {{- if or (not (kindIs "float64" $set)) (lt $set 1.0) (ne $set (float64 (int $set))) -}}
+    {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
   {{- end -}}
+  {{- $budget = int $set -}}
 {{- else -}}
   {{- $manual := 0 -}}
   {{- if eq $cfg.preset "manual" -}}
@@ -516,8 +513,9 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 
 {{- /* The leader of the release, which alone runs the dark-stage suite (D20): global.strategy.canary.leader, which must
        name one of the canary Rollouts, or the only canary Rollout when there is one; "" otherwise
-       (helm.canary.configuredSteps fails when the dark stage renders and has no leader). Chosen on purpose, not by name
-       order, so adding or renaming a Rollout (a migrator Rollout, for example) cannot move the suite. */ -}}
+       (helm.canary.configuredSteps fails, in every environment, when the dark stage needs a leader and there is none).
+       Chosen on purpose, not by name order, so adding or renaming a Rollout (a migrator Rollout, for example) cannot
+       move the suite. */ -}}
 {{- define "helm.canary.leader" -}}
 {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
 {{- $set := toString (dig "strategy" "canary" "leader" "" (.Values.global | default dict)) -}}

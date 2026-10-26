@@ -138,18 +138,22 @@ the new version at once. The barriers, the analysis steps, the pauses, the dark 
 chart's `health` AnalysisTemplate stay. Prod renders unchanged.
 
 `global.strategy.canary.stepsOutsideProd: true` (new, default `false`) renders the prod steps in any environment, for a
-test drill. The render-time checks still run in every environment: a missing health path, both analysis opt-outs, an
-extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, a budget above 5700 s and
-a zero `manualTimeout` with the manual preset fail the render outside prod too. `global.correlationId` for the
-coordinator, the leader rule with the leader's `tests-dark`, and `budgetSeconds` for an explicit `steps` list apply only
-where the steps render.
+test drill; the chart's `alerts` check stays prod only. The 4.7.9 schema refuses the key ("additional properties not
+allowed"), so a stack can set it only once the deploy-core pin has moved past 4.7.9 to the release after 4.7.9.
+
+The render-time checks still run in every environment, as on 4.7.9: a missing health path, both analysis opt-outs, an
+extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, the leader rule with the
+leader's `tests-dark`, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s and a zero `manualTimeout`
+with the manual preset fail the render outside prod too. A stack moves to canary as a whole, so the same Rollouts exist
+in every environment, and it sees these failures on its first render, not at its first prod canary. Only
+`global.correlationId` for the coordinator is required just where the steps render.
 
 | 4.7.9 values | Edit |
 |---|---|
 | A canary test drill or rehearsal outside prod, which needs the steps or `mycarrier.tech/canaryBudgetSeconds` | Set `global.strategy.canary.stepsOutsideProd: true` in that environment's values file. Without it, the Rollout promotes at once. |
-| An explicit `global.strategy.canary.steps` list | Nothing to set. It renders only in prod, or with `stepsOutsideProd`, and only there needs `budgetSeconds`. |
+| An explicit `global.strategy.canary.steps` list | Nothing to set. It renders only in prod, or with `stepsOutsideProd`, and it still needs `budgetSeconds` in every environment. |
 | A replacement `alerts` entry under `applications.<app>.analysisTemplates` that ran as background analysis outside prod | Set `stepsOutsideProd: true` where it must run. Outside prod it no longer runs without it. |
-| A non-prod render without `global.correlationId`, or with the dark stage and no `leader` | Nothing to set: it now renders outside prod. These still fail in prod and with `stepsOutsideProd`. |
+| A non-prod render without `global.correlationId` | Nothing to set: it now renders outside prod. It still fails in prod and with `stepsOutsideProd`. |
 
 ## Chart Structure
 

@@ -47,14 +47,15 @@ global:
   #     stepsOutsideProd: false   # the steps (preset or explicit, with their barriers, analysis, pauses, dark stage,
   #                               # background analysis and canaryBudgetSeconds) render in prod only (DEVOPS-516);
   #                               # elsewhere a Rollout renders steps: [] and promotes at once. true renders the prod
-  #                               # steps in any environment, for a test drill. The render checks run everywhere,
-  #                               # except correlationId, the leader rule and budgetSeconds, which apply where the
-  #                               # steps render.
+  #                               # steps in any environment, for a test drill; the chart's alerts check stays prod
+  #                               # only. The render checks (leader, tests-dark, budgetSeconds, the budget limit
+  #                               # included) run in every environment; only global.correlationId is required just
+  #                               # where the steps render.
   #     manualTimeout: 1h         # how long the release's rollout-watch allows for the manual pause (D22); it counts
   #                               # in the canary budget, and the pause itself has no time limit. With the manual
   #                               # preset, zero fails the render. The other presets and explicit steps ignore it.
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
-  #     # budgetSeconds: 1800     # required with steps where they render: their worst-case length in seconds
+  #     # budgetSeconds: 1800     # required with steps, in every environment: their worst-case length in seconds
   #                               # (pauses, each analysis step's longest template, barrier timeouts), 1 to 5700.
   #                               # Ignored with a preset.
   #     analysis:                 # mandatory for every Rollout (DEVOPS-312); enabled is deprecated: true has no

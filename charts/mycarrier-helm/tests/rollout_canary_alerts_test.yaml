@@ -206,15 +206,32 @@ tests:
           path: metadata.name
           value: preprod-mycarrier-api-health
 
-  - it: leaves alerts out of the canary in preprod
+  # A drill renders the steps outside prod (stepsOutsideProd, DEVOPS-516), and the alerts check still stays out.
+  - it: leaves alerts out of the canary in a preprod drill (stepsOutsideProd)
     template: rollout.yaml
     set:
       <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
       environment:
         name: preprod
     asserts:
       - notExists:
           path: spec.strategy.canary.analysis
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 14
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-mycarrier-api-health
 
   - it: takes analysis.alerts.service over alerts.serviceName, and applies the alerts settings
     template: analysistemplate.yaml
