@@ -1,9 +1,9 @@
 suite: Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)
 # The coordinator and the dark stage are on by default; rollout_canary_dark_test.yaml covers the dark stage, and these
-# tests turn it off (dark: false) except the default render. Most of these tests opt out of the health check (alerts stays on, and renders only in prod) so the step lists show the
-# barriers alone; rollout_canary_analysis_test.yaml covers the analysis steps. The steps render only in prod unless
-# stepsOutsideProd is set (DEVOPS-516), so the tests that check them render a preprod drill;
-# rollout_canary_prod_only_test.yaml covers the other environments.
+# tests turn it off (dark: false) except the default render. Most of these tests opt out of the health check (alerts
+# stays on, and renders only in prod) so the step lists show the barriers alone; rollout_canary_analysis_test.yaml
+# covers the analysis steps. The steps render only in prod unless stepsOutsideProd is set (DEVOPS-516), so the tests
+# that check them render a preprod drill; rollout_canary_prod_only_test.yaml covers the other environments.
 templates:
   - rollout.yaml
 tests:

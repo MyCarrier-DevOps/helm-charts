@@ -162,7 +162,7 @@ tests:
         strategy:
           canary:
             dark: false
-            progressDeadlineSeconds: 1200
+            progressDeadlineSeconds: 1500
       environment:
         name: preprod
       applications:
@@ -178,7 +178,7 @@ tests:
     asserts:
       - equal:
           path: spec.progressDeadlineSeconds
-          value: 1200
+          value: 1500
 
   - it: renders the fast preset
     template: rollout.yaml
@@ -1508,7 +1508,32 @@ tests:
           replicas: 1
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(replicas\\)"
+          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(replicas\\)\\..* Set applications\\.api\\.replicas to 2 or more\\.$"
+
+  # The legacy top-level scaling value drops the Rollout's replicas when no HPA or KEDA scales it
+  # (helm.specs.rollout), and Argo Rollouts then runs 1 replica.
+  - it: minimum below 2 fails where steps render (top-level scaling)
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+      environment:
+        name: preprod
+      scaling: true
+      applications:
+        api:
+          <<: *floorApp
+          replicas: 3
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(top-level scaling: the Rollout renders no replicas, and Argo Rollouts runs 1\\)\\..* Remove the top-level scaling value, or scale the application with an HPA or KEDA whose minimum is 2 or more\\.$"
 
   - it: renders a KEDA-scaled canary Rollout whose minimum is the KEDA default 2
     template: rollout.yaml

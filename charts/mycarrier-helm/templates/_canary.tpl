@@ -132,7 +132,7 @@
 {{- if $rendered -}}
   {{- $minimum := include "helm.canary.minReplicas" . | fromJson -}}
   {{- if lt (int $minimum.replicas) 2 -}}
-    {{- fail (printf "application '%s': a canary Rollout needs at least 2 pods, and its minimum is %d (%s). Argo Rollouts keeps the canary at minPodsPerReplicaSet (2) pods at every weight, but never above the Rollout's replicas, so the canary would run fewer than 2 pods. Set applications.%s.%s to 2 or more." .appName (int $minimum.replicas) $minimum.source .appName $minimum.source) -}}
+    {{- fail (printf "application '%s': a canary Rollout needs at least 2 pods, and its minimum is %d (%s). Argo Rollouts keeps the canary at minPodsPerReplicaSet (2) pods at every weight, but never above the Rollout's replicas, so the canary would run fewer than 2 pods. %s" .appName (int $minimum.replicas) $minimum.source $minimum.fix) -}}
   {{- end -}}
 {{- end -}}
 {{- $fullName := include "helm.fullname" . -}}
@@ -794,16 +794,20 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* The fewest pods a canary Rollout runs, as JSON {replicas, source}: keda.minReplicaCount with KEDA,
-       autoscaling.minReplicas with the HPA (helm.kedaCondition, helm.hpaCondition, as helm.specs.rollout decides), else
-       the Rollout's replicas (helm.specs.replicas). */ -}}
+{{- /* The fewest pods a canary Rollout runs, as JSON {replicas, source, fix}: keda.minReplicaCount with KEDA,
+       autoscaling.minReplicas with the HPA (helm.kedaCondition, helm.hpaCondition, as helm.specs.rollout decides), 1
+       with the top-level scaling value (helm.specs.rollout then renders no replicas and Argo Rollouts runs 1), else the
+       Rollout's replicas (helm.specs.replicas). fix is the remedy the canary-floor check prints. */ -}}
 {{- define "helm.canary.minReplicas" -}}
+{{- $set := printf "Set applications.%s.%%s to 2 or more." .appName -}}
 {{- if eq "true" (include "helm.kedaCondition" . | trim) -}}
-  {{- toJson (dict "replicas" (include "helm.keda.minReplicaCount" . | int) "source" "keda.minReplicaCount") -}}
+  {{- toJson (dict "replicas" (include "helm.keda.minReplicaCount" . | int) "source" "keda.minReplicaCount" "fix" (printf $set "keda.minReplicaCount")) -}}
 {{- else if eq "true" (include "helm.hpaCondition" . | trim) -}}
-  {{- toJson (dict "replicas" (include "helm.hpa.minReplicas" . | int) "source" "autoscaling.minReplicas") -}}
+  {{- toJson (dict "replicas" (include "helm.hpa.minReplicas" . | int) "source" "autoscaling.minReplicas" "fix" (printf $set "autoscaling.minReplicas")) -}}
+{{- else if .Values.scaling -}}
+  {{- toJson (dict "replicas" 1 "source" "top-level scaling: the Rollout renders no replicas, and Argo Rollouts runs 1" "fix" "Remove the top-level scaling value, or scale the application with an HPA or KEDA whose minimum is 2 or more.") -}}
 {{- else -}}
-  {{- toJson (dict "replicas" ((include "helm.specs.replicas" . | fromYaml).replicas | int) "source" "replicas") -}}
+  {{- toJson (dict "replicas" ((include "helm.specs.replicas" . | fromYaml).replicas | int) "source" "replicas" "fix" (printf $set "replicas")) -}}
 {{- end -}}
 {{- end -}}
 

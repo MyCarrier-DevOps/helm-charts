@@ -5,8 +5,8 @@ templates:
 # The default template set for a canary Rollout in prod with no canary values (analysis is mandatory, DEVOPS-312): the
 # chart's health template, the alerts template with its ExternalSecret, the chart's tests-dark template for the dark
 # stage's leader (on by default, DEVOPS-326; it runs the app's testtrigger.testdefinitions), and the Rollout's canary
-# strategy that references them, with the coordinator's barriers, the dark stage and the canary floor. The snapshots cover the specs only, so a chart version bump does
-# not change them; any change to what the canary runs does.
+# strategy that references them, with the coordinator's barriers, the dark stage and the canary floor. The snapshots
+# cover the specs only, so a chart version bump does not change them; any change to what the canary runs does.
 tests:
   - it: renders the default analysis template set
     template: analysistemplate.yaml
