@@ -609,3 +609,68 @@ tests:
                   port:
                     number: 8080
                 weight: 0
+
+  # R8: a match entry whose gateways leave out mesh never matches an in-mesh caller, so a stable caller falls through
+  # it. Its twin must not match in the mesh either, so an ingress-only custom route gets no twin.
+  - it: ingress-only custom route gets no twin
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                external:
+                  match: [{uri: {prefix: /external}, gateways: [istio-system/ingress]}]
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[2].name", value: external}
+      - notContains:
+          path: spec.http
+          content:
+            name: external-canary-source
+          any: true
+
+  # Entries without gateways, or with mesh among them, keep their twin entry; an entry bound to the mesh and a gateway
+  # keeps only mesh in its twin, as the caller conditions require.
+  - it: twin keeps only the match entries that can match in the mesh
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                mixed:
+                  match:
+                    - {uri: {prefix: /external}, gateways: [istio-system/ingress]}
+                    - {uri: {prefix: /both}, gateways: [mesh, istio-system/ingress]}
+                    - {uri: {prefix: /any}}
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[2].name", value: mixed-canary-source}
+      - equal:
+          path: spec.http[2].match
+          value:
+            - uri:
+                prefix: /both
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+              gateways: [mesh]
+            - uri:
+                prefix: /any
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+              gateways: [mesh]
+      - equal: {path: "spec.http[3].name", value: mixed}
+      - lengthEqual:
+          path: spec.http[3].match
+          count: 3

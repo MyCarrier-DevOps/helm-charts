@@ -260,7 +260,8 @@ Every canary Rollout renders `minPodsPerReplicaSet: 2`: the canary has at least 
 follows the weight. Where the steps render and the coordinator is on, canary pods are labelled
 `mycarrier.tech/rollout-role: canary` (`canaryMetadata`; stable pods `stable`), and each application's VirtualService
 gets a `<route>-canary-source` route before each route with the `-preview` destination and no `fault` or `redirect`.
-It matches in-mesh callers (`gateways: [mesh]`) whose pods carry that label and the release's
+It matches in-mesh callers (`gateways: [mesh]`; a match of the original whose own `gateways` leave out `mesh` is left
+out, and a route with no match left gets no source route) whose pods carry that label and the release's
 `mycarrier.tech/correlationId` (as the pod renders it), and sends them to the `-preview` destination, so a release's
 canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
 host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, so a public
@@ -275,7 +276,7 @@ one Rollout of the release aborts, the others' canary pods get 503 from it until
 | `tests` in `analysis.templates` | Set `dark: false` with it until Q54 is resolved, or remove `tests`: the dark stage runs the suite once at weight 0. |
 | A frontend Rollout in a multi-frontend release | Set `dark: false`: the header route would also go into the shared `-multifrontend` VirtualService. |
 | `darkReplicas: 1` | Remove it, or set 2 or more. |
-| `progressDeadlineSeconds` (global or per application) at or below 900 | Remove it (default 1200 with the coordinator on; 600 with the coordinator off and on other Rollouts) or raise it above every barrier timeout, `dark-passed`'s 15m included. |
+| `progressDeadlineSeconds` (global or per application) at or below 900 | Remove it (default 1200 with the dark stage; 600 with `dark: false`, explicit `steps`, the coordinator off and on other Rollouts) or raise it above every barrier timeout, `dark-passed`'s 15m included. |
 | `coordinator.barrierTimeouts.dark-passed` (default 15m, was 9m) at or below the leader's `tests-dark` (573 s with the defaults), with two or more canary Rollouts | Raise it, or lower `analysis.tests.timeout`. |
 | A canary Rollout whose minimum replicas (`autoscaling.minReplicas`, `keda.minReplicaCount`, else `replicas`; 1 with the top-level `scaling` value and no autoscaler) is below 2 where the steps render | Set it to 2 or more. `dev` and `feature<N>` default to 1 replica, so a drill there with `stepsOutsideProd` sets `replicas: 2`. |
 | A budget near 5700 s | The budgets with the defaults are, leader / follower: `standard` 5343 s / 4770 s, `fast` 3183 s / 2610 s, `manual` 5583 s / 5010 s (`manualTimeout` now defaults to 40m, was 1h). Lower raised barrier timeouts, `tests.timeout` or `manualTimeout`, or set `dark: false`. |

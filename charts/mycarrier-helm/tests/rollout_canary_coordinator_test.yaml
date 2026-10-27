@@ -483,7 +483,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'w25' has timeout 20m, which is not below progressDeadlineSeconds \\(1200 s\\)"
+          errorPattern: "barrier 'w25' has timeout 20m, which is not below progressDeadlineSeconds \\(600 s\\)"
 
   - it: accepts a longer barrier timeout when the release raises progressDeadlineSeconds
     set:
@@ -620,3 +620,70 @@ tests:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "3570"
+
+  # 1200 serves only dark-passed's 15m; without the dark stage every barrier timeout defaults to 9m, below 600.
+  - it: keeps the 600 s default deadline with the dark stage off
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
+            stepsOutsideProd: true
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+
+  # An explicit steps list renders no dark stage (dark true has no effect there), so the deadline stays 600.
+  - it: keeps the 600 s default deadline with an explicit steps list
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: nodejs
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            budgetSeconds: 900
+            steps:
+              - setWeight: 5
+              - plugin:
+                  name: mycarrier/canary-coordinator
+                  config: {kind: barrier, name: w5, timeout: 9m}
+              - setWeight: 100
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 600

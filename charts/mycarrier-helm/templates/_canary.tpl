@@ -47,12 +47,15 @@
        only for a Rollout that runs it (helm.canary.tests.wanted).
        The dark-stage timing (DEVOPS-326, decision 7) lives here: dark-passed's 15m timeout fits the leader's tests-dark
        Job (573 s with the defaults) in the followers' wait, and progressDeadlineSeconds 1200 keeps every barrier
-       timeout below the deadline. The 1200 default applies to a canary Rollout (helm.canary.enabled) with
-       coordinator.enabled, in every environment (also where its steps do not render). Otherwise it stays 600: on a
-       routed Rollout whose property is not canary (its render does not change), and on a canary Rollout with the
-       coordinator off, which has no barriers and whose budget counts the deadline for each setWeight step (4 x 1200
-       would put the standard preset at 5970 s, above the 5700 s limit). manualTimeout 40m is the largest whole 5 minutes that keeps the manual preset's leader
-       budget at or below 5700 s (helm.canary.budgetSeconds: 5583 s). */ -}}
+       timeout below the deadline. The 1200 default applies where the dark stage renders: a canary Rollout
+       (helm.canary.enabled) with coordinator.enabled, dark true and a preset (no explicit steps), in every environment
+       (also where its steps do not render). Otherwise it stays 600: on a routed Rollout whose property is not canary
+       (its render does not change); on a canary Rollout with dark false or an explicit steps list, whose default
+       barrier timeouts (9m) sit below 600; and on a canary Rollout with the coordinator off, which has no barriers and
+       whose budget counts the deadline for each setWeight step (4 x 1200 would put the standard preset at 5970 s,
+       above the 5700 s limit). With the coordinator on the budget does not count the deadline, so it does not change
+       the budget. manualTimeout 40m is the largest whole 5 minutes that keeps the manual preset's leader budget at or
+       below 5700 s (helm.canary.budgetSeconds: 5583 s). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $python := "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516" -}}
 {{- $canary := and (kindIs "map" .application) (eq (include "helm.canary.enabled" .) "true") -}}
@@ -75,7 +78,7 @@
 {{- $global := .Values.global | default dict -}}
 {{- $cfg := deepCopy (dig "strategy" "canary" dict $global) -}}
 {{- $merged := mustMergeOverwrite (deepCopy $defaults) $cfg -}}
-{{- if and $canary $merged.coordinator.enabled (not (hasKey $cfg "progressDeadlineSeconds")) }}{{ $_ := set $merged "progressDeadlineSeconds" 1200 }}{{ end -}}
+{{- if and $canary $merged.coordinator.enabled $merged.dark (not $merged.steps) (not (hasKey $cfg "progressDeadlineSeconds")) }}{{ $_ := set $merged "progressDeadlineSeconds" 1200 }}{{ end -}}
 {{- toJson $merged -}}
 {{- end -}}
 
@@ -711,13 +714,16 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
        -preview destination and no fault or redirect, as JSON (DEVOPS-326 spec A3). Takes http (the parsed routes) and
        context (the app context) and ctx (its helm.context); helm.specs.virtualservice calls it where
        helm.canary.sourceRoutesRendered is true.
-       A source route, <name>-canary-source, takes every match of its original with two more conditions in each (a
-       route without a match gets one match of just these): the caller is in the mesh (gateways: [mesh]) and its pod is
-       a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by the Rollout's canaryMetadata and
-       carrying this release's mycarrier.tech/correlationId as the pod label renders it (helm.labels.correlationId;
-       Istio compares sourceLabels exactly). It sends the request to the original's first -preview destination and
-       keeps every other field of the original (headers, timeout, retries, rewrite, CORS), so a canary caller gets the
-       answer a stable caller gets, served by the canary. A route with a fault (-forbidden) answers the same whatever
+       A source route, <name>-canary-source, takes every match of its original that can match in the mesh with two
+       more conditions in each (a route without a match gets one match of just these). A match whose own gateways leave
+       out mesh (an ingress-only custom route under networking.istio.routes) never matches an in-mesh caller, so it is
+       dropped, and a route left with no match gets no source route: a canary caller falls through it as a stable
+       caller does. The two conditions: the caller is in the mesh (gateways: [mesh], in place of a match's own
+       gateways) and its pod is a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by the
+       Rollout's canaryMetadata and carrying this release's mycarrier.tech/correlationId as the pod label renders it
+       (helm.labels.correlationId; Istio compares sourceLabels exactly). It sends the request to the original's first
+       -preview destination and keeps every other field of the original (headers, timeout, retries, rewrite, CORS), so
+       a canary caller gets the answer a stable caller gets, served by the canary. A route with a fault (-forbidden) answers the same whatever
        its destination, and a redirect has none, so they get no source route: a canary caller falls through to them as
        a stable caller does. Argo Rollouts puts its managed routes (canary-header) above all others and leaves the rest
        in this order. */ -}}
@@ -732,9 +738,13 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- range (.route | default list) -}}
     {{- if and (not $preview) (include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $fullName "namespace" $namespace)) }}{{ $preview = .destination }}{{ end -}}
   {{- end -}}
+  {{- $matches := list -}}
   {{- if and $preview (not .fault) (not .redirect) -}}
-    {{- $matches := list -}}
-    {{- range (.match | default (list dict)) }}{{ $matches = append $matches (merge (deepCopy $caller) .) }}{{ end -}}
+    {{- range (.match | default (list dict)) -}}
+      {{- if or (not (hasKey . "gateways")) (has "mesh" .gateways) }}{{ $matches = append $matches (merge (deepCopy $caller) .) }}{{ end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if $matches -}}
     {{- $twin := omit . "name" "match" "route" -}}
     {{- $_ := set $twin "name" (printf "%s-canary-source" .name) -}}
     {{- $_ := set $twin "match" $matches -}}
