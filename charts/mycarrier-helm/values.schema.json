@@ -104,7 +104,7 @@
                 "progressDeadlineSeconds": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true). Every barrier timeout must stay below it. The default depends on the Rollout: 1200 on a canary Rollout that renders the dark stage (coordinator on, dark true and a preset; DEVOPS-326: above dark-passed's 15m); 600 on a canary Rollout with dark false or an explicit steps list (its default barrier timeouts, 9m, sit below 600), on one with coordinator.enabled false, which renders no barriers and counts it for each setWeight step in its budget, and on a Rollout whose deployment-strategy property is not canary."
+                  "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true). Every barrier timeout must stay below it. The default depends on the Rollout: 1200 on a canary Rollout that renders the dark stage (coordinator on, dark true and a preset; DEVOPS-326: above dark-passed's 15m); 600 on a canary Rollout with dark false (its default barrier timeouts, 9m, sit below 600) or an explicit steps list (its own barrier timeouts are checked against 600), on one with coordinator.enabled false, which renders no barriers and counts it for each setWeight step in its budget, and on a Rollout whose deployment-strategy property is not canary."
                 },
                 "dark": {
                   "type": "boolean",

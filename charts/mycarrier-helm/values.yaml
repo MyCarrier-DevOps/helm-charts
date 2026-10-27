@@ -123,8 +123,9 @@ global:
   #                               # canary aborts; size it above the slowest pod start and above every barrier
   #                               # timeout. applications.<app>.progressDeadlineSeconds overrides it for one
   #                               # slow-starting app. 1200 where the dark stage renders (coordinator on, dark
-  #                               # true and a preset; DEVOPS-326); 600 with dark: false or explicit steps (9m
-  #                               # barriers), with coordinator.enabled false (no barriers; the budget counts it per
+  #                               # true and a preset; DEVOPS-326); 600 with dark: false (9m barriers) or
+  #                               # explicit steps (their own barriers, checked against it), with
+  #                               # coordinator.enabled false (no barriers; the budget counts it per
   #                               # setWeight) and on Rollouts whose property is not canary.
   #     dark: true                # header-gated dark stage before the weights (D11, on since DEVOPS-326); renders
   #                               # only with the coordinator and a preset. The leader needs

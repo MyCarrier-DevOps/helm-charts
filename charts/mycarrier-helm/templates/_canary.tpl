@@ -50,12 +50,13 @@
        timeout below the deadline. The 1200 default applies where the dark stage renders: a canary Rollout
        (helm.canary.enabled) with coordinator.enabled, dark true and a preset (no explicit steps), in every environment
        (also where its steps do not render). Otherwise it stays 600: on a routed Rollout whose property is not canary
-       (its render does not change); on a canary Rollout with dark false or an explicit steps list, whose default
-       barrier timeouts (9m) sit below 600; and on a canary Rollout with the coordinator off, which has no barriers and
-       whose budget counts the deadline for each setWeight step (4 x 1200 would put the standard preset at 5970 s,
-       above the 5700 s limit). With the coordinator on the budget does not count the deadline, so it does not change
-       the budget. manualTimeout 40m is the largest whole 5 minutes that keeps the manual preset's leader budget at or
-       below 5700 s (helm.canary.budgetSeconds: 5583 s). */ -}}
+       (its render does not change); on a canary Rollout with dark false, whose default barrier timeouts (9m) sit
+       below 600, or with an explicit steps list, whose own barrier timeouts are checked against 600; and on a canary
+       Rollout with the coordinator off, which has no barriers and whose budget counts the deadline for each
+       setWeight step (4 x 1200 would put the standard preset at 5970 s, above the 5700 s limit). With the coordinator
+       on the budget does not count the deadline, so it does not change the budget. manualTimeout 40m is the largest
+       whole 5 minutes that keeps the manual preset's leader budget at or below 5700 s (helm.canary.budgetSeconds:
+       5583 s). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $python := "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516" -}}
 {{- $canary := and (kindIs "map" .application) (eq (include "helm.canary.enabled" .) "true") -}}
