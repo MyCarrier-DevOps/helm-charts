@@ -171,7 +171,7 @@ tests:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2]
           value:
             name: TESTS_BUDGET_SECONDS
-            value: "480"
+            value: "420"
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].name
           value: TESTS_REQUEST
@@ -795,9 +795,9 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "4920"
 
-  # tests.timeout 9m: activeDeadlineSeconds 600. The coordinator is off, so no barrier window applies:
-  # 4 x progressDeadlineSeconds 600 + 3 x (600 + 300).
-  - it: counts tests.timeout + 60 s for each analysis step
+  # The Job's activeDeadlineSeconds is tests.timeout + startupSeconds (7m + 120 = 540 by default). 9m: 660. The
+  # coordinator is off, so no barrier window applies: 4 x progressDeadlineSeconds 600 + 3 x (660 + 300).
+  - it: counts tests.timeout + startupSeconds for each analysis step
     template: rollout.yaml
     set:
       <<: *prod
@@ -814,9 +814,9 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5100"
+          value: "5280"
 
-  - it: sets the Job's poll budget and activeDeadlineSeconds from tests.timeout
+  - it: sets the Job's poll budget and activeDeadlineSeconds from tests.timeout and startupSeconds
     template: analysistemplate.yaml
     documentSelector: *testsTemplate
     set:
@@ -831,11 +831,12 @@ tests:
               templates: [tests]
               tests:
                 timeout: 9m
+                startupSeconds: 180
                 image: mirror.example.com/python:3.13
     asserts:
       - equal:
           path: spec.metrics[0].provider.job.spec.activeDeadlineSeconds
-          value: 600
+          value: 720
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2].value
           value: "540"
@@ -843,23 +844,42 @@ tests:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
           value: mirror.example.com/python:3.13
 
-  # The barrier window: one Rollout's analysis step can end after its health check, (count - 1) x interval = 60 s
-  # (Argo takes the first measurement at once), while another's tests Job runs to its activeDeadlineSeconds and Argo
-  # sees its end up to ceil(sqrt(2 x activeDeadlineSeconds)) s later. The first waits at the next barrier for the
-  # difference, which must stay below the barrier's timeout.
-  # Default 8m: 540 + 33 - 60 = 513 < w10's 540.
-  - it: renders the default tests.timeout inside the barrier window
-    template: rollout.yaml
-    set: *prod
+  - it: refuses a startupSeconds outside 30 to 600
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                startupSeconds: 20
     asserts:
-      - isKind:
-          of: Rollout
+      - failedTemplate:
+          errorPattern: "startupSeconds.*(minimum|must be >= 30|30)"
 
-  # 9m: 600 + 35 - 60 = 575 >= 540.
+  # The barrier window is pairwise over the release's canary Rollouts: Rollout j waits at the barrier after an analysis
+  # step for Rollout i's longest run of it minus j's shortest. Each Rollout's lengths come from its own templates:
+  # health 3 x 30s is 90 s longest and (3 - 1) x 30 = 60 s shortest; the tests Job (540 s) is 540 + ceil(sqrt(1080)) =
+  # 573 s longest and 0 s shortest. Two Rollouts with the defaults: 573 - 60 = 513 < w10's 540.
+  - it: renders the defaults with two canary Rollouts
+    template: rollout.yaml
+    set: &pair
+      <<: *prod
+      applications:
+        api: *api
+        worker: *api
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # 8m: activeDeadlineSeconds 600, 600 + 35 - 60 = 575 >= 540.
   - it: fails when a Rollout can wait at the next barrier for its timeout or more
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -867,16 +887,16 @@ tests:
             analysis:
               templates: [tests]
               tests:
-                timeout: 9m
+                timeout: 8m
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': barrier 'w10' has timeout 9m \\(540 s\\), and a Rollout of the release can wait there 575 s for another: the tests Job of the analysis step before it may run 600 s \\(analysis.tests.timeout 9m \\+ 60 s\\), Argo Rollouts can take 35 s more to see the Job end, and the shortest such step of another Rollout is 60 s"
+          errorPattern: "application 'api': barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis step before it, 'worker' may run 635 s \\(its longest template, with up to ceil\\(sqrt\\(2 x activeDeadlineSeconds\\)\\) s for Argo Rollouts to see a Job end\\) and 'api' can end after 60 s"
 
-  # The edge: 505s gives 565 + 34 - 60 = 539 < 540; 506s gives 566 + 34 - 60 = 540, which reaches 540.
-  - it: renders a tests.timeout whose window ends 1 s before the barrier's timeout
+  # The edge: 445s gives 565 + 34 - 60 = 539 < 540; 446s gives 566 + 34 - 60 = 540, which reaches 540.
+  - it: renders a tests.timeout whose wait ends 1 s before the barrier's timeout
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -884,15 +904,15 @@ tests:
             analysis:
               templates: [tests]
               tests:
-                timeout: 505s
+                timeout: 445s
     asserts:
-      - isKind:
-          of: Rollout
+      - hasDocuments:
+          count: 2
 
-  - it: fails a tests.timeout whose window reaches the barrier's timeout exactly
+  - it: fails a tests.timeout whose wait reaches the barrier's timeout exactly
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -900,16 +920,16 @@ tests:
             analysis:
               templates: [tests]
               tests:
-                timeout: 506s
+                timeout: 446s
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and a Rollout of the release can wait there 540 s"
+          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 540 s for Rollout 'worker'"
 
-  # Without health the shortest step is 0 s: 540 + 33 = 573 >= 540.
-  - it: fails the default timeout when health is off, because the shortest step is then 0 s
+  # Without health a Rollout's step can end at once: 573 - 0 = 573 >= 540; 6m gives 480 + 31 = 511 < 540.
+  - it: fails the default timeout with health off and two canary Rollouts
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -920,13 +940,12 @@ tests:
                 enabled: false
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and a Rollout of the release can wait there 573 s for another: the tests Job of the analysis step before it may run 540 s \\(analysis.tests.timeout 8m \\+ 60 s\\), Argo Rollouts can take 33 s more to see the Job end, and the shortest such step of another Rollout is 0 s"
+          errorPattern: "and Rollout 'api' can wait there 573 s for Rollout 'worker': .* 'worker' may run 573 s .* and 'api' can end after 0 s"
 
-  # 7m with health off: 480 + 31 = 511 < 540.
-  - it: renders tests.timeout 7m with health off
+  - it: renders a shorter tests.timeout with health off and two canary Rollouts
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -936,14 +955,101 @@ tests:
               health:
                 enabled: false
               tests:
-                timeout: 7m
+                timeout: 6m
     asserts:
+      # start 540 + 3 x (tests 480 + pause 300 + barrier 540)
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "4500"
+        documentIndex: 0
 
-  # health count 1: no wait after the first measurement, so the shortest step is 0 s.
-  - it: counts health as (count - 1) x interval
+  # Pavlo's case 1: this app replaces health with count 1, so its step can end at once: it waits 573 s for the sibling.
+  - it: counts an app's own health replacement as its shortest step
+    template: rollout.yaml
+    set:
+      <<: *pair
+      applications:
+        api:
+          <<: *api
+          analysisTemplates:
+            - name: health
+              provider:
+                web:
+                  statusEndpoint: /health
+        worker: *api
+    asserts:
+      - failedTemplate:
+          errorPattern: "and Rollout 'api' can wait there 573 s for Rollout 'worker': .* 'api' can end after 0 s"
+
+  # Pavlo's case 2: a sibling replaces health with 25 x 30s, so its step lasts 750 s: this app waits 750 - 60 = 690 s.
+  - it: counts a sibling's own health replacement as its longest step
+    template: rollout.yaml
+    set:
+      <<: *pair
+      applications:
+        api: *api
+        worker:
+          <<: *api
+          analysisTemplates:
+            - name: health
+              count: 25
+              interval: 30s
+              provider:
+                web:
+                  statusEndpoint: /health
+    asserts:
+      - failedTemplate:
+          errorPattern: "and Rollout 'api' can wait there 690 s for Rollout 'worker': in the analysis step before it, 'worker' may run 750 s"
+
+  # Pavlo's case 3: a sibling replaces tests with its own Job (activeDeadlineSeconds 600): 600 + 35 - 60 = 575 s.
+  - it: counts a sibling's own tests replacement
+    template: rollout.yaml
+    set:
+      <<: *pair
+      applications:
+        api: *api
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: tests
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 600
+                    backoffLimit: 0
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1
+    asserts:
+      - failedTemplate:
+          errorPattern: "and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis step before it, 'worker' may run 635 s"
+
+  # canary-coordinator passes a barrier at once for a group of one, so one canary Rollout has no wait to check:
+  # 12m (activeDeadlineSeconds 840) renders; budget 540 + 3 x (840 + 300 + 540).
+  - it: renders a long tests.timeout with one canary Rollout
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 12m
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5580"
+
+  - it: renders health off with the default timeout and one canary Rollout
     template: rollout.yaml
     set:
       <<: *prod
@@ -954,15 +1060,15 @@ tests:
             analysis:
               templates: [tests]
               health:
-                count: 1
+                enabled: false
     asserts:
-      - failedTemplate:
-          errorPattern: "can wait there 573 s for another: .* and the shortest such step of another Rollout is 0 s"
+      - isKind:
+          of: Rollout
 
   - it: checks the fast preset's w25 barrier
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -974,13 +1080,13 @@ tests:
               barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 9m, w25: 7m, w50: 9m}
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'w25' has timeout 7m \\(420 s\\), and a Rollout of the release can wait there 513 s"
+          errorPattern: "barrier 'w25' has timeout 7m \\(420 s\\), and Rollout 'api' can wait there 513 s"
 
-  # 10m: 660 + 37 - 60 = 637 < 11m (660).
+  # 9m: 660 + 37 - 60 = 637 < 11m (660).
   - it: renders a longer tests.timeout once the weight barriers are raised
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -989,7 +1095,7 @@ tests:
             analysis:
               templates: [tests]
               tests:
-                timeout: 10m
+                timeout: 9m
             coordinator:
               barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 11m, w25: 11m, w50: 11m}
     asserts:
@@ -997,6 +1103,7 @@ tests:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "5400"
+        documentIndex: 0
 
   # No barriers, so no window to check (one canary Rollout, so lockstep is not needed).
   - it: does not check the barrier window with the coordinator off and one canary Rollout
@@ -1014,16 +1121,16 @@ tests:
               tests:
                 timeout: 10m
     asserts:
-      # 4 x 600 + 3 x (660 + 300)
+      # 4 x 600 + 3 x (720 + 300)
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5280"
+          value: "5460"
 
-  # Explicit steps: the first barrier after an analysis step that runs tests is checked, against that step's health.
+  # Explicit steps name the same templates for every Rollout: 573 - 60 = 513 against the first barrier after the step.
   - it: checks the first barrier after an explicit analysis step that runs tests
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -1040,14 +1147,14 @@ tests:
               - setWeight: 100
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'w20' has timeout 7m \\(420 s\\), and a Rollout of the release can wait there 513 s"
+          errorPattern: "barrier 'w20' has timeout 7m \\(420 s\\), and Rollout 'api' can wait there 513 s"
 
   # The start barrier (2m) comes before the tests step, so only w20 (9m) is checked: 513 < 540.
   - it: renders the tests template for explicit steps that reference it, and checks only barriers after it
     template: analysistemplate.yaml
     documentSelector: *testsTemplate
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -1074,7 +1181,7 @@ tests:
   - it: skips an explicit barrier without a timeout or with a timeout it cannot read
     template: rollout.yaml
     set:
-      <<: *prod
+      <<: *pair
       global:
         <<: *global
         strategy:
@@ -1095,13 +1202,14 @@ tests:
               - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: later, timeout: 1m}}
               - setWeight: 100
     asserts:
-      - isKind:
-          of: Rollout
+      - hasDocuments:
+          count: 2
       - equal:
           path: spec.strategy.canary.steps[2].plugin.config
           value:
             kind: barrier
             name: w20
+        documentIndex: 0
 
   # M3: TestEngine's DeployVerifier checks every Rollout of the correlation group, so tests needs lockstep.
   - it: fails tests with the coordinator off and more than one canary Rollout

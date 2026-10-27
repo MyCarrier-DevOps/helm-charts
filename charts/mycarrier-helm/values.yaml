@@ -75,21 +75,25 @@ global:
   #                               # renders tests, below; define others under applications.<app>.analysisTemplates).
   #                               # Listing health or alerts fails: they always run unless opted out below. With both
   #                               # opted out, list at least one here. Rollback of tests: remove it from this list.
-  #       tests: {timeout: 8m}    # the chart's tests template (DEVOPS-515), rendered in every environment for each
-  #                               # canary Rollout app (global.deploymentStrategy canary; other Rollouts ignore it)
-  #                               # when templates lists tests: a Job sends the app's testtrigger.testdefinitions to
-  #                               # TestEngine (the hook's request, with ServiceAddress the -preview Service, RunKind
-  #                               # canary, SlipStep none, Tolerations []) and passes only when the run passes;
-  #                               # no_results or infra_failed is sent once more. Each analysis step runs the
-  #                               # full suite. An app without testdefinitions fails the render. TestEngine must run
-  #                               # with RUN_KINDS_ENABLED=true (prod: from the DEVOPS-321 pilot), or every run fails.
-  #                               # timeout is the poll budget; the Job's activeDeadlineSeconds is timeout + 60 s, which
-  #                               # the canary budget counts per analysis step (standard 4680 s, fast 1620 s, manual
-  #                               # 5220 s with the defaults). With the coordinator on, activeDeadlineSeconds + ceil(
-  #                               # sqrt(2 x activeDeadlineSeconds)) minus the step's health time ((count - 1) x
-  #                               # interval, 60 s) must stay below the next barrier's timeout, or the render fails
-  #                               # (8m renders, 9m fails). Also failing: a serviceAddress off the app's own Service
-  #                               # or with another port than the http Service port, a literal testtrigger.apikey,
+  #       tests: {timeout: 7m, startupSeconds: 120}   # the chart's tests template (DEVOPS-515), rendered in every
+  #                               # environment for each canary Rollout app (global.deploymentStrategy canary; other
+  #                               # Rollouts ignore it) when templates lists tests: a Job sends the app's
+  #                               # testtrigger.testdefinitions to TestEngine (the hook's request, with ServiceAddress
+  #                               # the -preview Service, RunKind canary, SlipStep none, Tolerations []) and passes only
+  #                               # when the run passes; no_results or infra_failed is sent once more. Each analysis
+  #                               # step runs the full suite. An app without testdefinitions fails the render.
+  #                               # TestEngine must run with RUN_KINDS_ENABLED=true (prod: from the DEVOPS-321 pilot),
+  #                               # or every run fails.
+  #                               # timeout is the poll budget; startupSeconds (30 to 600) is the pod's start slack
+  #                               # (Kubernetes counts activeDeadlineSeconds from the Job's creation; a pod Pending
+  #                               # past it ends DeadlineExceeded with no FAIL line). activeDeadlineSeconds is timeout
+  #                               # + startupSeconds (540 s), which the canary budget counts per analysis step
+  #                               # (standard 4680 s, fast 1620 s, manual 5220 s with the defaults). With the
+  #                               # coordinator on and two or more canary Rollouts, one Rollout's longest run of a step
+  #                               # (a Job adds ceil(sqrt(2 x activeDeadlineSeconds))) minus another's shortest
+  #                               # ((count - 1) x interval) must stay below the next barrier's timeout, or the render
+  #                               # fails (513 s with the defaults). Also failing: a serviceAddress off the app's own
+  #                               # Service or with another port than the http Service port, a literal apikey,
   #                               # managed routes (dark: true with the coordinator on), the coordinator off with
   #                               # more than one Rollout, no correlationId where the steps render, and in prod a
   #                               # filter whose first TestCategory starts with preprod.

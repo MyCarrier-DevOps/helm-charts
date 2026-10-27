@@ -203,13 +203,18 @@ listed. Each analysis step then runs a Job that sends the application's
 `testtrigger.testdefinitions` to TestEngine's v1 API, with `ServiceAddress` the `-preview` Service, `RunKind: canary`,
 `SlipStep: none` and `Tolerations: []`, polls the run, and passes only when the run passes. A run that ends `no_results`
 or `infra_failed` is sent once more. A failed suite, a second `no_results`, TestEngine with `RUN_KINDS_ENABLED` off, a 5xx
-or the end of `analysis.tests.timeout` (default `8m`) fails the AnalysisRun and aborts the canary. A Job image that
-cannot be pulled leaves the measurement Inconclusive, and the Rollout pauses.
+or the end of `analysis.tests.timeout` (default `7m`) fails the AnalysisRun and aborts the canary. A Job image (or
+Vault init image) that cannot be pulled leaves the measurement Inconclusive: the Rollout pauses at its canary weight,
+serving production traffic, until the siblings' barrier times out and the coordinator aborts it (about 9 minutes), or,
+with one canary Rollout, until rollout-watch times out (`canaryBudgetSeconds` + 15 minutes, about 93 minutes on
+`standard`) and gitops-rollback reverts the release. Mirror the image to ACR and set `analysis.tests.image` to the
+mirror.
 
 | Values | Effect |
 |---|---|
 | `analysis.templates: [tests]` | Every canary Rollout application needs `testtrigger.testdefinitions` in that environment, or the render fails. The template renders in every environment where it is listed, like `health`. To roll back, remove `tests` from the list. |
-| `analysis.tests.timeout` (default `8m`) | The poll budget. The Job's `activeDeadlineSeconds` is the timeout + 60 s, and the canary budget counts it for each analysis step: 4680 s for `standard`, 1620 s for `fast` and 5220 s for `manual` with the defaults. With the coordinator on, `activeDeadlineSeconds` + ceil(sqrt(2 x `activeDeadlineSeconds`)) (Argo's Job-end detection) minus the step's `health` time ((count - 1) x interval, 60 s) must stay below the next barrier's timeout (9m), or the render fails: `8m` renders (513 s), `9m` fails (575 s); with `health` off, lower it to `7m` or raise the weight barriers. |
+| `analysis.tests.timeout` (default `7m`) | The poll budget. The Job's `activeDeadlineSeconds` is the timeout + `startupSeconds` (540 s by default), and the canary budget counts it for each analysis step: 4680 s for `standard`, 1620 s for `fast` and 5220 s for `manual` with the defaults. With the coordinator on and more than one canary Rollout, one Rollout's longest run of an analysis step (its longest template; a Job adds ceil(sqrt(2 x `activeDeadlineSeconds`)) for Argo to see it end) minus another's shortest ((count - 1) x interval of its templates) must stay below the next barrier's timeout (9m), or the render fails: two Rollouts with the defaults wait 513 s. Each Rollout's own `analysisTemplates` replacements count. A release with one canary Rollout has no barrier wait. |
+| `analysis.tests.startupSeconds` (default `120`, 30 to 600) | Slack for the Job's pod to start (scheduling, an on-demand node, the image pull, Vault injection): Kubernetes counts `activeDeadlineSeconds` from the Job's creation. A pod still Pending past it ends `DeadlineExceeded`, with no `FAIL:` line, and a TestEngine run already started is left running. |
 | `analysis.tests.image` | The Job's Python image; the default is the pinned image of the alerts check. |
 | A prod filter whose first `TestCategory` starts with `preprod` | Fails the render: TestEngine refuses it in a prod canary. |
 | A test definition's `serviceAddress` | Must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port; the canary run keeps its path on the `-preview` Service. Another host or port fails the render, and so does a `-preview` Service with no `http` port. |

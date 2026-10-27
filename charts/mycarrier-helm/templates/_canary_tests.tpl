@@ -16,14 +16,11 @@
        that read the steps (the dark stage, lockstep, global.correlationId, the barrier window) are in
        helm.canary.configuredSteps. */ -}}
 {{- define "helm.canary.tests.wanted" -}}
-{{- if eq (include "helm.canary.enabled" .) "true" -}}
-  {{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- if eq (include "helm.canary.tests.listed" .) "true" -}}
+  {{- $self := printf "%s-%s-tests" (toString .Values.environment.name) (include "helm.fullname" .) -}}
   {{- $replaced := false -}}
   {{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "tests" }}{{ $replaced = true }}{{ end }}{{ end -}}
-  {{- $self := printf "%s-%s-tests" (toString .Values.environment.name) (include "helm.fullname" .) -}}
-  {{- $listed := has "tests" ($cfg.analysis.templates | default list) -}}
-  {{- range ($cfg.steps | default list) }}{{ range (dig "analysis" "templates" list .) }}{{ if eq (toString .templateName) $self }}{{ $listed = true }}{{ end }}{{ end }}{{ end -}}
-  {{- if and $listed (not $replaced) -}}
+  {{- if not $replaced -}}
     {{- $trigger := .application.testtrigger | default dict -}}
     {{- if not (and (kindIs "map" $trigger) (get $trigger "testdefinitions")) -}}
       {{- fail (printf "application '%s': its canary analysis runs the chart's tests AnalysisTemplate (global.strategy.canary.analysis.templates lists tests, or the explicit steps reference %s), which runs the application's testtrigger.testdefinitions through TestEngine, and it has none. Every template the analysis steps run must render for each canary Rollout application. Add applications.%s.testtrigger.testdefinitions, define a tests entry under applications.%s.analysisTemplates, or remove tests from global.strategy.canary.analysis.templates." .appName $self .appName .appName) -}}
@@ -33,22 +30,45 @@ true
 {{- end -}}
 {{- end -}}
 
-{{- /* The poll budget of the tests Job in seconds: global.strategy.canary.analysis.tests.timeout (default 8m). It covers
+{{- /* "true" for a canary Rollout (helm.canary.enabled) whose analysis runs tests: global.strategy.canary.analysis.templates
+       lists tests, or its explicit steps reference <environment>-<fullName>-tests. Also true when the app replaces the
+       chart's tests with an applications.<app>.analysisTemplates entry, so the barrier window of
+       helm.canary.configuredSteps runs whenever tests is listed. */ -}}
+{{- define "helm.canary.tests.listed" -}}
+{{- if eq (include "helm.canary.enabled" .) "true" -}}
+  {{- $cfg := include "helm.canary.config" . | fromJson -}}
+  {{- $self := printf "%s-%s-tests" (toString .Values.environment.name) (include "helm.fullname" .) -}}
+  {{- $listed := has "tests" ($cfg.analysis.templates | default list) -}}
+  {{- range ($cfg.steps | default list) }}{{ range (dig "analysis" "templates" list .) }}{{ if eq (toString .templateName) $self }}{{ $listed = true }}{{ end }}{{ end }}{{ end -}}
+  {{- if $listed }}true{{ end -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* The poll budget of the tests Job in seconds: global.strategy.canary.analysis.tests.timeout (default 7m). It covers
        the whole script, the one resubmit included. Zero, or a value that is not a duration, fails the render. */ -}}
 {{- define "helm.canary.tests.budgetSeconds" -}}
 {{- $timeout := (include "helm.canary.config" . | fromJson).analysis.tests.timeout -}}
 {{- $seconds := include "helm.canary.durationSeconds" $timeout | int -}}
 {{- if not $seconds -}}
-  {{- fail (printf "global.strategy.canary.analysis.tests.timeout is '%v'; the tests template needs a duration above zero such as 90s, 8m or 1h (default 8m). It is the poll budget of the tests Job: the whole run, the one resubmit included." $timeout) -}}
+  {{- fail (printf "global.strategy.canary.analysis.tests.timeout is '%v'; the tests template needs a duration above zero such as 90s, 7m or 1h (default 7m). It is the poll budget of the tests Job: the whole run, the one resubmit included." $timeout) -}}
 {{- end -}}
 {{- $seconds -}}
 {{- end -}}
 
-{{- /* The tests Job's activeDeadlineSeconds: the poll budget + 60 s, for the pod to start before the script's own
-       budget begins. It is what the tests template counts in the canary budget (helm.canary.budgetSeconds) and in the
-       barrier window (helm.canary.configuredSteps). */ -}}
+{{- /* The tests Job's activeDeadlineSeconds: the poll budget + global.strategy.canary.analysis.tests.startupSeconds
+       (default 120, 30 to 600; 540 s with the defaults). Kubernetes counts activeDeadlineSeconds from the Job's creation,
+       Pending included: scheduling (with tolerations [], maybe an on-demand node scale-up), the image pull and the Vault
+       injection. The script's own budget starts only when its process starts, and the pod cannot read its start time
+       (it is not in the downward API), so startupSeconds is the slack for all of that. A pod still Pending after it ends
+       DeadlineExceeded: the Job condition says so, the script prints no FAIL line, and a TestEngine run already started
+       is left running. It is what the tests template counts in the canary budget (helm.canary.budgetSeconds) and in the
+       barrier window (helm.canary.analysis.templateSeconds). */ -}}
 {{- define "helm.canary.tests.activeDeadlineSeconds" -}}
-{{- add (include "helm.canary.tests.budgetSeconds" . | int) 60 -}}
+{{- $startup := (include "helm.canary.config" . | fromJson).analysis.tests.startupSeconds -}}
+{{- if or (not (kindIs "float64" $startup)) (ne $startup (float64 (int $startup))) (lt $startup 30.0) (gt $startup 600.0) -}}
+  {{- fail (printf "global.strategy.canary.analysis.tests.startupSeconds is %v; it must be a whole number of seconds from 30 to 600 (default 120): the time the tests Job's pod may take to start (scheduling, image pull, Vault injection) before its poll budget begins." $startup) -}}
+{{- end -}}
+{{- add (include "helm.canary.tests.budgetSeconds" . | int) (int $startup) -}}
 {{- end -}}
 
 {{- /* How long after a Job ends Argo Rollouts can take to see it, for a Job metric whose Job may run the given
@@ -455,7 +475,7 @@ def poll(base, key, run_id, posted, deadline):
 
 def run():
     global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR
-    BUDGET = float(os.environ.get("TESTS_BUDGET_SECONDS") or 480)
+    BUDGET = float(os.environ.get("TESTS_BUDGET_SECONDS") or 420)
     INTERVAL = float(os.environ.get("TESTS_POLL_INTERVAL_SECONDS") or 10)
     NOT_FOUND_GRACE = float(os.environ.get("TESTS_NOT_FOUND_GRACE_SECONDS") or 60)
     RESUBMIT_FLOOR = float(os.environ.get("TESTS_RESUBMIT_FLOOR_SECONDS") or 60)

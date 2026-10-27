@@ -36,7 +36,8 @@ and each analysis step runs a Job that sends the same v1 request as the hook, wi
 `Tolerations: []`. `apikey` must be unset (the shared key) or a `vault:` reference. The Job polls TestEngine's `GET /v1/runs/{id}` and exits 0 only when
 the run passes, so a failing suite aborts the canary. The hook and the prod-tests ConfigMap do not change. Every canary
 Rollout application needs `testdefinitions` where `tests` is listed, and TestEngine must run with `RUN_KINDS_ENABLED=true`. See
-the stack-values guidance (Rollouts, Analysis) for the timeout, the canary budget and the barrier window. A Rollout
+the stack-values guidance (Rollouts, Analysis) for the timeout (`analysis.tests.timeout`, default `7m`, plus
+`analysis.tests.startupSeconds`, default `120`), the canary budget and the barrier window. A Rollout
 whose property is not `canary` ignores `tests`: it renders no tests template and runs none of its checks.
 
 ## Configuration Structure
