@@ -197,7 +197,9 @@ true
 
 {{- /* The Job spec of the tests and tests-dark metrics, for an Argo Rollouts job provider: one pod that runs
        helm.canary.tests.script on analysis.tests.image. Takes context (the application context), name (the container
-       and label suffix), and target and requestHeaders (optional, passed to helm.canary.tests.request). The TestEngine URL is the one the PostSync hook uses (helm.specs.testenginehook):
+       and label suffix), and target and requestHeaders (optional, passed to helm.canary.tests.request). TESTS_REMEDY is
+       the way out the script names when TestEngine has RUN_KINDS_ENABLED off: removing tests from
+       analysis.templates, or for tests-dark (target stable) setting dark: false. The TestEngine URL is the one the PostSync hook uses (helm.specs.testenginehook):
        global.testengineWebhookUrl, else the v1 URL in Vault (url, or dev_url for the argo-events-test instance). The
        key is testtrigger.apikey, else the shared vault:DevOps/data/testengine/api#encoded_header (the hook sends
        testtrigger.apikey as it is, empty when unset). The key must be a vault: reference: a literal key would be stored
@@ -252,6 +254,8 @@ template:
       - name: TESTS_REQUEST
         value: |-
           {{- include "helm.canary.tests.request" (dict "context" $ctx "target" .target "requestHeaders" .requestHeaders) | nindent 10 }}
+      - name: TESTS_REMEDY
+        value: {{ ternary "set global.strategy.canary.dark: false" "remove tests from global.strategy.canary.analysis.templates" (eq (toString .target) "stable") | quote }}
       resources:
         requests:
           cpu: 50m
@@ -281,7 +285,9 @@ template:
        TESTS_POLL_INTERVAL_SECONDS (10), TESTS_NOT_FOUND_GRACE_SECONDS (60) and TESTS_RESUBMIT_FLOOR_SECONDS (60) are not
        rendered; the offline test
        (.github/scripts/test_canary_tests_check.py) sets them to run fast. The script logs paths, statuses, error types
-       and TestEngine's error details, never the URL's host, the key or the request. */ -}}
+       and TestEngine's error details, never the URL's host, the key or the request. Both RUN_KINDS_ENABLED failures (0
+       and the 422 in 1) name TESTS_REMEDY, the way out of the template that runs the script, after turning
+       RUN_KINDS_ENABLED on. */ -}}
 {{- define "helm.canary.tests.script" -}}
 import http.client, json, os, re, signal, ssl, sys, time, urllib.parse
 
@@ -291,6 +297,7 @@ USER_AGENT = "mycarrier-helm-canary-tests/1"
 MAX_BODY = 1024 * 1024
 STARTED = time.monotonic()
 BUDGET = INTERVAL = NOT_FOUND_GRACE = RESUBMIT_FLOOR = 0.0
+REMEDY = ""
 WATCHDOG = {"armed": False}
 
 
@@ -427,8 +434,8 @@ def preflight(base, key, kind, deadline):
             raise Fail("GET /v1/capabilities answered HTTP %d: %s" % (status, detail(document, text)))
         if document.get("run_kinds_enabled") is not True:
             raise Fail("TestEngine has RUN_KINDS_ENABLED off (run_kinds_enabled: %s), so it refuses canary runs and no"
-                       " tests were started. Turn RUN_KINDS_ENABLED on in TestEngine, or remove tests from"
-                       " global.strategy.canary.analysis.templates." % json.dumps(document.get("run_kinds_enabled")))
+                       " tests were started. Turn RUN_KINDS_ENABLED on in TestEngine, or %s."
+                       % (json.dumps(document.get("run_kinds_enabled")), REMEDY))
         kinds = document.get("run_kinds")
         if isinstance(kinds, list) and kind not in kinds:
             raise Fail("TestEngine offers the run kinds %s, not %s; no tests were started" % (json.dumps(kinds), kind))
@@ -454,8 +461,8 @@ def submit(base, key, body, kind, step, deadline):
             continue
         if status == 422 and "run kinds disabled" in text.lower():
             raise Fail("POST /v1/trigger answered 422 run kinds disabled: TestEngine has RUN_KINDS_ENABLED off, so the"
-                       " platform paused canary runs; not retried. Turn RUN_KINDS_ENABLED on in TestEngine, or remove"
-                       " tests from global.strategy.canary.analysis.templates.")
+                       " platform paused canary runs; not retried. Turn RUN_KINDS_ENABLED on in TestEngine, or %s."
+                       % REMEDY)
         if status == 401:
             raise Fail("POST /v1/trigger answered 401: TestEngine refused the key in TESTENGINE_APIKEY")
         if not 200 <= status < 300:
@@ -509,9 +516,10 @@ def poll(base, key, run_id, posted, deadline):
 
 
 def run():
-    global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR
+    global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR, REMEDY
     BUDGET = float(os.environ.get("TESTS_BUDGET_SECONDS") or 420)
     INTERVAL = float(os.environ.get("TESTS_POLL_INTERVAL_SECONDS") or 10)
+    REMEDY = os.environ.get("TESTS_REMEDY") or ""
     NOT_FOUND_GRACE = float(os.environ.get("TESTS_NOT_FOUND_GRACE_SECONDS") or 60)
     RESUBMIT_FLOOR = float(os.environ.get("TESTS_RESUBMIT_FLOOR_SECONDS") or 60)
     signal.signal(signal.SIGALRM, on_alarm)

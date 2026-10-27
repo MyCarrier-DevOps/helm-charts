@@ -123,6 +123,15 @@ tests:
           value:
             name: TESTS_BUDGET_SECONDS
             value: "420"
+      # The script's RUN_KINDS_ENABLED failures name this way out; tests names analysis.templates.
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: "set global.strategy.canary.dark: false"
+      - lengthEqual:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
+          count: 5
 
   # Decision 1 (Q44): the suite calls the leader's stable Service; the header route sends it to the canary. A
   # definition's own serviceAddress on the app's stable or -preview Service keeps its path on the stable address.

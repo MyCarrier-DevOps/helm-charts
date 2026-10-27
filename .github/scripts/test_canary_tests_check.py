@@ -1,6 +1,7 @@
 """Caller contract of the tests Job script in mycarrier-helm's tests AnalysisTemplate (DEVOPS-515).
 
-Renders the chart's tests template with helm, takes the script and the TESTS_REQUEST body from the Job, and runs the
+Renders the chart's tests template with helm, takes the script, the TESTS_REQUEST body and TESTS_REMEDY from the Job,
+and runs the
 script against a local stub of TestEngine's v1 API (TestEngine.Api/docs/V1_TRIGGER.md, Caller contract). Exit 0 lets
 the canary go on; exit 1 fails the AnalysisRun and aborts the canary. The poll interval, the 404 grace and the poll
 budget come from the environment, so every case runs in about a second. No case may show the API key or the TestEngine
@@ -51,6 +52,9 @@ applications:
           secretId: vault:QA/data/app_auth#SecretId
           filters: [TestCategory=CoreAPI]
 """
+# The dark stage's leader gets the same Job as tests-dark (DEVOPS-326); tests itself refuses the dark stage.
+DARK_VALUES = VALUES.replace("      analysis:\n        templates: [tests]\n", "      dark: true\n")
+assert DARK_VALUES != VALUES
 KEY = "Bearer dGVzdC1rZXk="
 RUN_A = "a" * 32
 RUN_B = "b" * 32
@@ -70,17 +74,18 @@ def block_after(lines, start, header):
     return "\n".join(body).rstrip("\n")
 
 
-def render():
-    """The tests Job's script and its TESTS_REQUEST value, from the rendered AnalysisTemplate."""
+def render(values=VALUES, template="preprod-mycarrier-api-tests"):
+    """The Job's script, its TESTS_REQUEST value and its TESTS_REMEDY value (None when the Job has none), from the
+    rendered AnalysisTemplate of that name."""
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
-        f.write(VALUES)
+        f.write(values)
     try:
         out = subprocess.run(["helm", "template", "t", CHART, "-f", f.name, "-s", "templates/analysistemplate.yaml"],
                              capture_output=True, text=True, check=True).stdout
     finally:
         os.unlink(f.name)
     lines = out.splitlines()
-    start = next(i for i, line in enumerate(lines) if line.strip() == "name: preprod-mycarrier-api-tests")
+    start = next(i for i, line in enumerate(lines) if line.strip() == "name: " + template)
     c = next(i for i in range(start, len(lines))
              if lines[i].strip() == "- -c" and lines[i + 1].strip() == "- |")
     script = block_after(lines, c, "- |") + "\n"
@@ -88,7 +93,13 @@ def render():
     request = block_after(lines, r, "value: |-")
     assert "def poll(" in script and script.rstrip().endswith("sys.exit(main())"), "script not found"
     assert json.loads(request)["Tests"][0]["TestEnvironmentVariables"]["RunKind"] == "canary", "request not found"
-    return script, request
+    remedy = None
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("---")), len(lines))
+    for i in range(start, end - 1):
+        if lines[i].strip() == "- name: TESTS_REMEDY":
+            value = lines[i + 1].strip()[len("value: "):]
+            remedy = json.loads(value) if value.startswith('"') else value
+    return script, request, remedy
 
 
 def accepted(run_id, run_kind="canary", slip_step="none"):
@@ -213,7 +224,8 @@ class Stub(http.server.BaseHTTPRequestHandler):
 class TestsJobScript(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.script, cls.request = render()
+        cls.script, cls.request, cls.remedy = render()
+        cls.dark_script, cls.dark_request, cls.dark_remedy = render(DARK_VALUES, "preprod-mycarrier-api-tests-dark")
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Stub)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.base = "http://127.0.0.1:%d/api" % cls.server.server_address[1]
@@ -223,16 +235,20 @@ class TestsJobScript(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
 
-    def run_script(self, url=None, key=KEY, budget="5", grace="2", request=None, **extra):
+    def run_script(self, url=None, key=KEY, budget="5", grace="2", request=None, dark=False, **extra):
+        """Runs the tests Job's script with its rendered environment, or the tests-dark Job's with dark."""
         url = url or self.base + "/v1/trigger"
         env = dict(os.environ, TESTENGINE_URL=url, TESTENGINE_APIKEY=key,
-                   TESTS_REQUEST=self.request if request is None else request, TESTS_BUDGET_SECONDS=budget,
-                   TESTS_POLL_INTERVAL_SECONDS="0.02", TESTS_NOT_FOUND_GRACE_SECONDS=grace,
+                   TESTS_REQUEST=(self.dark_request if dark else self.request) if request is None else request,
+                   TESTS_BUDGET_SECONDS=budget, TESTS_POLL_INTERVAL_SECONDS="0.02", TESTS_NOT_FOUND_GRACE_SECONDS=grace,
                    TESTS_RESUBMIT_FLOOR_SECONDS="0.1")
+        remedy = self.dark_remedy if dark else self.remedy
+        if remedy is not None:
+            env["TESTS_REMEDY"] = remedy
         env.update(extra)
         started = time.monotonic()
-        p = subprocess.run([sys.executable, "-I", "-B", "-c", self.script], env=env, capture_output=True, text=True,
-                           timeout=60)
+        p = subprocess.run([sys.executable, "-I", "-B", "-c", self.dark_script if dark else self.script], env=env,
+                           capture_output=True, text=True, timeout=60)
         self.elapsed = time.monotonic() - started
         self.assertEqual(p.stderr, "", "the script wrote to stderr (a traceback?)")
         # N7: the output never shows the key (or its token) or the TestEngine host.
@@ -301,6 +317,22 @@ class TestsJobScript(unittest.TestCase):
                 self.assertEqual(rc, 1, out)
                 self.assertIn("RUN_KINDS_ENABLED", out)
                 self.assertEqual(self.posts(), [])
+
+    # DEVOPS-326: tests-dark runs the same script; both RUN_KINDS_ENABLED failures name the way out its Job passes in
+    # TESTS_REMEDY, so tests keeps its wording and tests-dark names dark: false.
+    def test_run_kinds_disabled_names_each_templates_way_out(self):
+        self.assertEqual(self.dark_script, self.script, "tests-dark must run the tests script, not a copy")
+        off = (200, dict(CAPABILITIES, run_kinds_enabled=False))
+        refused = (422, {"title": "Unprocessable Entity", "status": 422,
+                         "detail": "validation errors: [0] run kinds disabled"})
+        for dark, way_out in ((False, "remove tests from global.strategy.canary.analysis.templates."),
+                              (True, "set global.strategy.canary.dark: false.")):
+            for where, stub in (("capabilities", dict(capabilities=off)), ("trigger", dict(posts=[refused]))):
+                with self.subTest(dark=dark, where=where):
+                    Stub.reset(**stub)
+                    rc, out = self.run_script(dark=dark)
+                    self.assertEqual(rc, 1, out)
+                    self.assertIn("Turn RUN_KINDS_ENABLED on in TestEngine, or " + way_out + "\n", out)
 
     def test_a_404_within_the_grace_is_retried(self):
         not_found = (404, {"title": "Not Found", "status": 404})

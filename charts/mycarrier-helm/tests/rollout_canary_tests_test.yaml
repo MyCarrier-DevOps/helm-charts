@@ -175,9 +175,15 @@ tests:
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].name
           value: TESTS_REQUEST
+      # The way out the script names when TestEngine has RUN_KINDS_ENABLED off.
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: remove tests from global.strategy.canary.analysis.templates
       - lengthEqual:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
-          count: 4
+          count: 5
 
   - it: uses the app's testtrigger.apikey, global.testengineWebhookUrl and the argo-events-test URL like the hook
     template: analysistemplate.yaml
