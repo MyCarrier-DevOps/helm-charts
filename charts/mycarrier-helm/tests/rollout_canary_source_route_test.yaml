@@ -556,9 +556,9 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': its VirtualService spec does not parse as YAML"
 
-  # With traffic routing, an aborted Rollout's -preview Service keeps pointing at its canary ReplicaSet, which scales to
-  # 0; a sibling's canary pods would then get 503 through that Rollout's source routes. The coordinator aborts the
-  # sibling within the cascade window; without it nothing does, so the source routes need the coordinator.
+  # The coordinator moves a release's Rollouts through the same weights in lock-step. Without it a caller can be at 50%
+  # while its callee is at 10%, and the source routes would send the caller canary's whole share to a callee canary
+  # sized for 10%, so the source routes need the coordinator.
   - it: no twins and no rollout-role metadata with the coordinator off
     set:
       global.strategy.canary.coordinator.enabled: false
