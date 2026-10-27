@@ -25,6 +25,20 @@ In prod, an application with `deploymentType: rollout` (without `migratingToRoll
 
 Other environments, Deployments, StatefulSets, migrating Rollouts and Rollouts whose property is not `canary` keep the PostSync hook.
 
+### Test definitions in canary analysis
+
+A canary Rollout stack (repository `deployment-strategy` property `canary`) can also run its test definitions inside the
+canary (DEVOPS-515): list `tests` in `global.strategy.canary.analysis.templates`. The chart then renders the
+AnalysisTemplate `<environment>-<fullName>-tests`,
+and each analysis step runs a Job that sends the same v1 request as the hook, with four changes: `ServiceAddress` is the
+`-preview` Service (a definition's `serviceAddress` must point at the application's own Service, with no port or the
+`http` Service port, and the run keeps its path; another host or port fails the render), `RunKind: canary` and `SlipStep: none` inside `TestEnvironmentVariables`, and
+`Tolerations: []`. `apikey` must be unset (the shared key) or a `vault:` reference. The Job polls TestEngine's `GET /v1/runs/{id}` and exits 0 only when
+the run passes, so a failing suite aborts the canary. The hook and the prod-tests ConfigMap do not change. Every canary
+Rollout application needs `testdefinitions` where `tests` is listed, and TestEngine must run with `RUN_KINDS_ENABLED=true`. See
+the stack-values guidance (Rollouts, Analysis) for the timeout, the canary budget and the barrier window. A Rollout
+whose property is not `canary` ignores `tests`: it renders no tests template and runs none of its checks.
+
 ## Configuration Structure
 
 Test triggers are configured at the application level in the values file. Below is the general structure:

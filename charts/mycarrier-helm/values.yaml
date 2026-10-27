@@ -71,9 +71,29 @@ global:
   #     analysis:                 # mandatory for every Rollout (DEVOPS-312); enabled is deprecated: true has no
   #                               # effect, false fails the render
   #       templates: []           # extra templates each analysis step runs with health, as
-  #                               # <environment>-<fullName>-<template>; each must render for every app (define it
-  #                               # under applications.<app>.analysisTemplates). Listing health or alerts fails: they
-  #                               # always run unless opted out below. With both opted out, list at least one here.
+  #                               # <environment>-<fullName>-<template>; each must render for every app (the chart
+  #                               # renders tests, below; define others under applications.<app>.analysisTemplates).
+  #                               # Listing health or alerts fails: they always run unless opted out below. With both
+  #                               # opted out, list at least one here. Rollback of tests: remove it from this list.
+  #       tests: {timeout: 8m}    # the chart's tests template (DEVOPS-515), rendered in every environment for each
+  #                               # canary Rollout app (global.deploymentStrategy canary; other Rollouts ignore it)
+  #                               # when templates lists tests: a Job sends the app's testtrigger.testdefinitions to
+  #                               # TestEngine (the hook's request, with ServiceAddress the -preview Service, RunKind
+  #                               # canary, SlipStep none, Tolerations []) and passes only when the run passes;
+  #                               # no_results or infra_failed is sent once more. Each analysis step runs the
+  #                               # full suite. An app without testdefinitions fails the render. TestEngine must run
+  #                               # with RUN_KINDS_ENABLED=true (prod: from the DEVOPS-321 pilot), or every run fails.
+  #                               # timeout is the poll budget; the Job's activeDeadlineSeconds is timeout + 60 s, which
+  #                               # the canary budget counts per analysis step (standard 4680 s, fast 1620 s, manual
+  #                               # 5220 s with the defaults). With the coordinator on, activeDeadlineSeconds + ceil(
+  #                               # sqrt(2 x activeDeadlineSeconds)) minus the step's health time ((count - 1) x
+  #                               # interval, 60 s) must stay below the next barrier's timeout, or the render fails
+  #                               # (8m renders, 9m fails). Also failing: a serviceAddress off the app's own Service
+  #                               # or with another port than the http Service port, a literal testtrigger.apikey,
+  #                               # managed routes (dark: true with the coordinator on), the coordinator off with
+  #                               # more than one Rollout, no correlationId where the steps render, and in prod a
+  #                               # filter whose first TestCategory starts with preprod.
+  #         # image: python:3.13.15-alpine3.23@sha256:...   # Python 3; default as alerts.image
   #       health: {enabled: true, count: 3, interval: 30s, consecutiveErrorLimit: 1, successCondition: 'result == "Healthy"'}
   #                               # each analysis step calls the -preview Service at the httpGet path of the app's
   #                               # liveness probe (csharp defaults to /liveness; readiness and startup are not used);

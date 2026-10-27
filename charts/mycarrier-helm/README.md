@@ -191,6 +191,35 @@ steps until they do. A migrating Rollout (`migratingToRollouts`) renders the bar
 |---|---|
 | A Rollout rendered canary steps whenever `deploymentType: rollout` was set without `migratingToRollouts` | Set the repository's `deployment-strategy` property to `canary`; chart-renderer passes it. Without it the Rollout renders no steps. |
 
+## Canary tests in the release after 4.7.11 (canary Rollouts, opt-in)
+
+The release after 4.7.11 adds the chart's `tests` AnalysisTemplate (DEVOPS-515). It applies only to canary Rollouts:
+applications with `deploymentType: rollout`, without `migratingToRollouts`, in a repository whose `deployment-strategy`
+property is `canary` (`global.deploymentStrategy`, passed by chart-renderer; see the section above). It renders only
+for a stack that lists `tests` in `global.strategy.canary.analysis.templates` (or references
+`<environment>-<fullName>-tests` in explicit `steps`), so other renders do not change. Like `health` and `alerts`, a
+Rollout whose property is not `canary` renders no `tests` template and runs none of its checks, with or without `tests`
+listed. Each analysis step then runs a Job that sends the application's
+`testtrigger.testdefinitions` to TestEngine's v1 API, with `ServiceAddress` the `-preview` Service, `RunKind: canary`,
+`SlipStep: none` and `Tolerations: []`, polls the run, and passes only when the run passes. A run that ends `no_results`
+or `infra_failed` is sent once more. A failed suite, a second `no_results`, TestEngine with `RUN_KINDS_ENABLED` off, a 5xx
+or the end of `analysis.tests.timeout` (default `8m`) fails the AnalysisRun and aborts the canary. A Job image that
+cannot be pulled leaves the measurement Inconclusive, and the Rollout pauses.
+
+| Values | Effect |
+|---|---|
+| `analysis.templates: [tests]` | Every canary Rollout application needs `testtrigger.testdefinitions` in that environment, or the render fails. The template renders in every environment where it is listed, like `health`. To roll back, remove `tests` from the list. |
+| `analysis.tests.timeout` (default `8m`) | The poll budget. The Job's `activeDeadlineSeconds` is the timeout + 60 s, and the canary budget counts it for each analysis step: 4680 s for `standard`, 1620 s for `fast` and 5220 s for `manual` with the defaults. With the coordinator on, `activeDeadlineSeconds` + ceil(sqrt(2 x `activeDeadlineSeconds`)) (Argo's Job-end detection) minus the step's `health` time ((count - 1) x interval, 60 s) must stay below the next barrier's timeout (9m), or the render fails: `8m` renders (513 s), `9m` fails (575 s); with `health` off, lower it to `7m` or raise the weight barriers. |
+| `analysis.tests.image` | The Job's Python image; the default is the pinned image of the alerts check. |
+| A prod filter whose first `TestCategory` starts with `preprod` | Fails the render: TestEngine refuses it in a prod canary. |
+| A test definition's `serviceAddress` | Must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port; the canary run keeps its path on the `-preview` Service. Another host or port fails the render, and so does a `-preview` Service with no `http` port. |
+| `testtrigger.apikey` | Unset (the shared `vault:DevOps/data/testengine/api#encoded_header`) or a `vault:` reference; a literal key fails the render. |
+| Managed routes (`dark: true` with the coordinator on, or a `setHeaderRoute` or `setMirrorRoute` step in explicit `steps`), `coordinator.enabled: false` with more than one canary Rollout, or no `global.correlationId` where the steps render | Fails the render: TestEngine's DeployVerifier fails a canary run without the canary header on a Rollout with managed routes, and checks every Rollout of the correlation group; TestEngine refuses a run without a CorrelationId. With the coordinator off, `dark: true` adds no route. |
+
+The prod TestEngine runs with `RUN_KINDS_ENABLED=false` until the DEVOPS-321 pilot; until then, a prod canary with
+`tests` fails at its first analysis step. The 4.7.11 schema refuses `analysis.tests`, and 4.7.11 fails the render of a
+canary Rollout that lists `tests`.
+
 ## Chart Structure
 
 ```

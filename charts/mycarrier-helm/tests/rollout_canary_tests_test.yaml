@@ -1,0 +1,1662 @@
+suite: Rollout canary tests AnalysisTemplate (TestEngine v1 caller contract, DEVOPS-515)
+# A canary Rollout that lists tests in global.strategy.canary.analysis.templates (or whose explicit steps reference
+# <environment>-<fullName>-tests) gets the chart's tests AnalysisTemplate: one Job that sends the app's
+# testtrigger.testdefinitions to TestEngine's v1 API, polls the run and exits 0 only when it passes
+# (.github/scripts/test_canary_tests_check.py tests the script itself). Defaults: tests.timeout 8m (480 s), so the
+# Job's activeDeadlineSeconds is 540; barriers 9m (540 s); health 3 x 30s (90 s); standard pauses 5m (300 s).
+templates:
+  - analysistemplate.yaml
+  - rollout.yaml
+  - triggertestengine.yaml
+tests:
+  # R5: TestEngine's caller contract rule 13 for an Argo Rollouts Job metric.
+  - it: renders the tests metric with count 1, failureLimit 0 and inconclusiveLimit 0
+    template: analysistemplate.yaml
+    documentSelector: &testsTemplate
+      path: metadata.name
+      value: prod-mycarrier-api-tests
+    set: &prod
+      global: &global
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+        correlationId: 62a354da-6833-4bf7-8f6d-689970865996
+        gitbranch: main
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+      environment:
+        name: prod
+      alerts:
+        serviceName: MyCarrier
+      applications:
+        api: &api
+          deploymentType: rollout
+          image: &image
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger: &testtrigger
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: metadata.namespace
+          value: prod
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "9"
+            argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+      - lengthEqual:
+          path: spec.metrics
+          count: 1
+      - equal:
+          path: spec.metrics[0].name
+          value: tests
+      - equal:
+          path: spec.metrics[0].count
+          value: 1
+      - equal:
+          path: spec.metrics[0].failureLimit
+          value: 0
+      - equal:
+          path: spec.metrics[0].inconclusiveLimit
+          value: 0
+      - notExists:
+          path: spec.metrics[0].interval
+      - notExists:
+          path: spec.args
+
+  - it: renders the Job with backoffLimit 0, restartPolicy Never, tolerations [] and activeDeadlineSeconds above the poll budget
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.backoffLimit
+          value: 0
+      # The poll budget (8m) + 60 s for the pod to start.
+      - equal:
+          path: spec.metrics[0].provider.job.spec.activeDeadlineSeconds
+          value: 540
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.restartPolicy
+          value: Never
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.tolerations
+          value: []
+      # Not the app's selector labels, so the pod never becomes an endpoint of the app's Service; no Istio sidecar
+      # that could outlive the script.
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.metadata
+          value:
+            labels:
+              app.kubernetes.io/name: mycarrier-api-tests
+              app.kubernetes.io/component: canary-analysis
+            annotations:
+              sidecar.istio.io/inject: "false"
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].name
+          value: tests
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
+          value: python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].terminationMessagePolicy
+          value: FallbackToLogsOnError
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: runs the caller-contract script with python3 in isolated mode
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set: *prod
+    asserts:
+      - lengthEqual:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command
+          count: 5
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[0]
+          value: python3
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[3]
+          value: -c
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: '(?s)GET.*/v1/capabilities.*/v1/trigger.*/v1/runs/.*sys\.exit\(main\(\)\)\n$'
+
+  # The URL and the key the PostSync hook uses, as vault: environment values, and the poll budget in seconds.
+  - it: passes the hook's TestEngine v1 URL and shared key and the poll budget to the Job
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[0]
+          value:
+            name: TESTENGINE_URL
+            value: vault:DevOps/data/testengine/api/v1#url
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[1]
+          value:
+            name: TESTENGINE_APIKEY
+            value: vault:DevOps/data/testengine/api#encoded_header
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2]
+          value:
+            name: TESTS_BUDGET_SECONDS
+            value: "480"
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].name
+          value: TESTS_REQUEST
+      - lengthEqual:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
+          count: 4
+
+  - it: uses the app's testtrigger.apikey, global.testengineWebhookUrl and the argo-events-test URL like the hook
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: preprod-mycarrier-api-tests
+    set:
+      global:
+        <<: *global
+        argoEventsInstance: argo-events-test
+        testengineWebhookUrl: https://testengine.example/v1/trigger
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            <<: *testtrigger
+            apikey: vault:Secrets/data/testengine#apikey
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[0].value
+          value: https://testengine.example/v1/trigger
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[1].value
+          value: vault:Secrets/data/testengine#apikey
+
+  - it: uses the dev_url Vault property for the argo-events-test instance
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: preprod-mycarrier-api-tests
+    set:
+      global:
+        <<: *global
+        argoEventsInstance: argo-events-test
+      environment:
+        name: preprod
+      applications:
+        api: *api
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[0].value
+          value: vault:DevOps/data/testengine/api/v1#dev_url
+
+  # R6: the request equals the hook's request (helm.testtrigger.v1request; the prod-tests ConfigMap below carries the
+  # same body as the hook) for the same app, except four fields: ServiceAddress (the -preview Service; a definition's
+  # own serviceAddress on the app's stable Service keeps its path), RunKind canary and SlipStep none (inside
+  # TestEnvironmentVariables), and Tolerations [] (V1_TRIGGER caller contract rule 10; the hook's default is the spot
+  # toleration).
+  - it: sends the hook's request with the -preview ServiceAddress, RunKind canary, SlipStep none and Tolerations []
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set: &r6
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+              - name: smoketests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: vault:QA/data/prod/mycarrier#categoryfilters
+                serviceAddress: mycarrier-api.prod.svc.cluster.local:8080/smoke
+                tolerations: [{key: dedicated, operator: Equal, value: tests, effect: NoSchedule}]
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          value: |-
+            {
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "62a354da-6833-4bf7-8f6d-689970865996",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+                    "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+                    "RunKind": "canary",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api-preview.prod.svc.cluster.local:8080",
+                    "SlipStep": "none"
+                  },
+                  "TestFilters": [
+                    "TestCategory=CoreAPI"
+                  ],
+                  "TestName": "apitests",
+                  "Tolerations": [],
+                  "UseDefaultNodeAffinity": "false"
+                },
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "62a354da-6833-4bf7-8f6d-689970865996",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "RunKind": "canary",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api-preview.prod.svc.cluster.local:8080/smoke",
+                    "SlipStep": "none"
+                  },
+                  "TestFilters": "vault:QA/data/prod/mycarrier#categoryfilters",
+                  "TestName": "smoketests",
+                  "Tolerations": [],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }
+
+  # R6, the other side: the hook's request for the same values, as the prod-tests ConfigMap carries it. Every line
+  # equals the test above except ServiceAddress, RunKind, SlipStep and Tolerations.
+  - it: renders the hook's request for the same values with the stable ServiceAddress, the hook's tolerations and no run kind
+    template: triggertestengine.yaml
+    set: *r6
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: data["request.json"]
+          value: |-
+            {
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "62a354da-6833-4bf7-8f6d-689970865996",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+                    "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080"
+                  },
+                  "TestFilters": [
+                    "TestCategory=CoreAPI"
+                  ],
+                  "TestName": "apitests",
+                  "Tolerations": [
+                    {
+                      "effect": "NoSchedule",
+                      "key": "kubernetes.azure.com/scalesetpriority",
+                      "operator": "Equal",
+                      "value": "spot"
+                    }
+                  ],
+                  "UseDefaultNodeAffinity": "false"
+                },
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "62a354da-6833-4bf7-8f6d-689970865996",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "mycarrier-api.prod.svc.cluster.local:8080/smoke"
+                  },
+                  "TestFilters": "vault:QA/data/prod/mycarrier#categoryfilters",
+                  "TestName": "smoketests",
+                  "Tolerations": [
+                    {
+                      "effect": "NoSchedule",
+                      "key": "dedicated",
+                      "operator": "Equal",
+                      "value": "tests"
+                    }
+                  ],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }
+
+  # The -preview Service port that reaches the http container port, as the web shorthand finds it.
+  - it: addresses the -preview Service on the Service port that targets the http container port
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 8080
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:80"'
+
+  # M4, P3: a definition's serviceAddress on the app's own stable Service, or already on its -preview Service, moves to
+  # the canonical -preview address and keeps its path, in each form of the Service name, with or without a scheme, user
+  # info or the http Service port.
+  - it: moves a serviceAddress on the app's stable Service to the -preview Service and keeps its path
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - &definition
+                name: bare
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+                serviceAddress: mycarrier-api
+              - <<: *definition
+                name: namespaced
+                serviceAddress: http://mycarrier-api.prod:8080/api/v1
+              - <<: *definition
+                name: svc
+                serviceAddress: mycarrier-api.prod.svc/health?full=true
+              - <<: *definition
+                name: fqdn
+                serviceAddress: https://Mycarrier-Api.prod.svc.cluster.local.:8080/
+              - <<: *definition
+                name: default
+                serviceAddress: ""
+              - <<: *definition
+                name: preview
+                serviceAddress: mycarrier-api-preview.prod:8080/smoke
+              - <<: *definition
+                name: previewbare
+                serviceAddress: http://mycarrier-api-preview
+              - <<: *definition
+                name: userinfo
+                serviceAddress: http://tester:pw@mycarrier-api.prod.svc/z
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '(?s)"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080",.*"TestName": "bare".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080/api/v1",.*"TestName": "namespaced".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080/health\?full=true",.*"TestName": "svc".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080/",.*"TestName": "fqdn".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080",.*"TestName": "default".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080/smoke",.*"TestName": "preview".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080",.*"TestName": "previewbare".*"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080/z",.*"TestName": "userinfo"'
+      - notMatchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: 'tester:pw'
+
+  - it: fails a serviceAddress on a public host
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                serviceAddress: https://payment-api.dev.mycarrier.dev
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': test definition 'apitests' sets serviceAddress 'payment-api.dev.mycarrier.dev', whose host is not the application's own Service \\(mycarrier-api.prod.svc.cluster.local\\). The canary tests run must test the canary"
+
+  - it: fails a serviceAddress on another Service of the namespace
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                serviceAddress: http://mycarrier-api-gateway.prod.svc.cluster.local:8080/api
+    asserts:
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' sets serviceAddress 'mycarrier-api-gateway.prod.svc.cluster.local:8080/api', whose host is not the application's own Service"
+
+  # P2: a port on the app's own Service other than the http Service port would be replaced silently, so it fails.
+  - it: fails a serviceAddress on the app's own Service with a port other than the http Service port
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: metrics
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                serviceAddress: http://mycarrier-api:9090/metrics
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': test definition 'metrics' sets serviceAddress 'mycarrier-api:9090/metrics', whose port 9090 is not the application's http Service port \\(8080\\). The canary tests run calls the -preview Service on its http port, and the chart cannot tell which -preview port serves port 9090. Remove the port, or use port 8080."
+
+  # The http Service port is the Service port, which service.ports can remap: here 80, not the container port 8080.
+  - it: accepts the http Service port from service.ports and refuses the container port there
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                serviceAddress: http://mycarrier-api:8080/api
+    asserts:
+      - failedTemplate:
+          errorPattern: "whose port 8080 is not the application's http Service port \\(80\\)"
+
+  - it: keeps a serviceAddress that names the http Service port from service.ports
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                serviceAddress: mycarrier-api.prod.svc.cluster.local:80/api
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:80/api"'
+
+  # P4: the refusal shows the address without its scheme or user info, so a password never reaches the render log.
+  - it: never prints the user info of a refused serviceAddress
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                serviceAddress: http://user:s3cret@payment.example.com/x
+    asserts:
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' sets serviceAddress 'payment.example.com/x', whose host is not the application's own Service"
+      - failedTemplate:
+          errorPattern: "s3cret"
+        not: true
+      - failedTemplate:
+          errorPattern: "user:"
+        not: true
+
+  # P7: CorrelationId in the tests request is always a JSON string; the hook's request renders as before.
+  - it: renders a numeric global.correlationId as a string in the tests request
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        correlationId: 12345
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"CorrelationId": "12345",'
+
+  - it: keeps the prod-tests ConfigMap's numeric CorrelationId as before
+    template: triggertestengine.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        correlationId: 12345
+    asserts:
+      - matchRegex:
+          path: data["request.json"]
+          pattern: '"CorrelationId": 12345,'
+
+  # M5: no -preview Service port reaches an http container port, so the run would have no address.
+  - it: fails when the -preview Service exposes no http port
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              health:
+                enabled: false
+              tests:
+                timeout: 7m
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            grpc: 9090
+          testtrigger: *testtrigger
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary tests run calls the -preview Service on the Service port that reaches the application's http container port, and its -preview Service exposes none. Set applications.api.ports.http"
+
+  # N4: a literal key would sit in the AnalysisTemplate and in every AnalysisRun and Job.
+  - it: fails a testtrigger.apikey that is not a vault reference, without printing it
+    template: analysistemplate.yaml
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            <<: *testtrigger
+            apikey: Bearer bGl0ZXJhbC1rZXk=
+    asserts:
+      - failedTemplate:
+          errorPattern: "^.*application 'api': testtrigger.apikey is not a vault: reference. The canary tests Job would carry the key in the AnalysisTemplate and in every AnalysisRun and Job it creates. Remove testtrigger.apikey, so the shared vault:DevOps/data/testengine/api#encoded_header is used, or set it to a vault: reference.$"
+
+  # Each analysis step of the preset runs health and tests.
+  - it: runs tests next to health in each analysis step of the prod Rollout
+    template: rollout.yaml
+    set: *prod
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
+                - templateName: prod-mycarrier-api-tests
+      - equal:
+          path: spec.strategy.canary.steps[6]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
+                - templateName: prod-mycarrier-api-tests
+      - equal:
+          path: spec.strategy.canary.steps[10]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
+                - templateName: prod-mycarrier-api-tests
+
+  # R7: the budget counts the tests Job's activeDeadlineSeconds (540) for each analysis step.
+  # standard: start 540 + 3 x (tests 540 + pause 300 + barrier 540) = 2160 (barriers) + 900 (pauses) + 3 x 540
+  - it: counts the tests template in the standard preset's budget (4680 s)
+    template: rollout.yaml
+    set: *prod
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4680"
+
+  # fast: start 540 + tests 540 + w25 540
+  - it: counts the tests template in the fast preset's budget (1620 s)
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [tests]
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1620"
+
+  # manual: start 540 + tests 540 + manualTimeout 3600 + w10 540
+  - it: counts the tests template in the manual preset's budget (5220 s)
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            preset: manual
+            analysis:
+              templates: [tests]
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5220"
+
+  # coordinator off: 4 x progressDeadlineSeconds 600 + 3 x (tests 540 + pause 300)
+  - it: counts the tests template in the standard preset's budget with the coordinator off (4920 s)
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4920"
+
+  # tests.timeout 9m: activeDeadlineSeconds 600. The coordinator is off, so no barrier window applies:
+  # 4 x progressDeadlineSeconds 600 + 3 x (600 + 300).
+  - it: counts tests.timeout + 60 s for each analysis step
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 9m
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5100"
+
+  - it: sets the Job's poll budget and activeDeadlineSeconds from tests.timeout
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 9m
+                image: mirror.example.com/python:3.13
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.activeDeadlineSeconds
+          value: 600
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2].value
+          value: "540"
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].image
+          value: mirror.example.com/python:3.13
+
+  # The barrier window: one Rollout's analysis step can end after its health check, (count - 1) x interval = 60 s
+  # (Argo takes the first measurement at once), while another's tests Job runs to its activeDeadlineSeconds and Argo
+  # sees its end up to ceil(sqrt(2 x activeDeadlineSeconds)) s later. The first waits at the next barrier for the
+  # difference, which must stay below the barrier's timeout.
+  # Default 8m: 540 + 33 - 60 = 513 < w10's 540.
+  - it: renders the default tests.timeout inside the barrier window
+    template: rollout.yaml
+    set: *prod
+    asserts:
+      - isKind:
+          of: Rollout
+
+  # 9m: 600 + 35 - 60 = 575 >= 540.
+  - it: fails when a Rollout can wait at the next barrier for its timeout or more
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 9m
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': barrier 'w10' has timeout 9m \\(540 s\\), and a Rollout of the release can wait there 575 s for another: the tests Job of the analysis step before it may run 600 s \\(analysis.tests.timeout 9m \\+ 60 s\\), Argo Rollouts can take 35 s more to see the Job end, and the shortest such step of another Rollout is 60 s"
+
+  # The edge: 505s gives 565 + 34 - 60 = 539 < 540; 506s gives 566 + 34 - 60 = 540, which reaches 540.
+  - it: renders a tests.timeout whose window ends 1 s before the barrier's timeout
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 505s
+    asserts:
+      - isKind:
+          of: Rollout
+
+  - it: fails a tests.timeout whose window reaches the barrier's timeout exactly
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 506s
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and a Rollout of the release can wait there 540 s"
+
+  # Without health the shortest step is 0 s: 540 + 33 = 573 >= 540.
+  - it: fails the default timeout when health is off, because the shortest step is then 0 s
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              health:
+                enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and a Rollout of the release can wait there 573 s for another: the tests Job of the analysis step before it may run 540 s \\(analysis.tests.timeout 8m \\+ 60 s\\), Argo Rollouts can take 33 s more to see the Job end, and the shortest such step of another Rollout is 0 s"
+
+  # 7m with health off: 480 + 31 = 511 < 540.
+  - it: renders tests.timeout 7m with health off
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              health:
+                enabled: false
+              tests:
+                timeout: 7m
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4500"
+
+  # health count 1: no wait after the first measurement, so the shortest step is 0 s.
+  - it: counts health as (count - 1) x interval
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              health:
+                count: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "can wait there 573 s for another: .* and the shortest such step of another Rollout is 0 s"
+
+  - it: checks the fast preset's w25 barrier
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              templates: [tests]
+            coordinator:
+              barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 9m, w25: 7m, w50: 9m}
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w25' has timeout 7m \\(420 s\\), and a Rollout of the release can wait there 513 s"
+
+  # 10m: 660 + 37 - 60 = 637 < 11m (660).
+  - it: renders a longer tests.timeout once the weight barriers are raised
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            progressDeadlineSeconds: 900
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 10m
+            coordinator:
+              barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 11m, w25: 11m, w50: 11m}
+    asserts:
+      # start 540 + 3 x (tests 660 + pause 300 + barrier 660)
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5400"
+
+  # No barriers, so no window to check (one canary Rollout, so lockstep is not needed).
+  - it: does not check the barrier window with the coordinator off and one canary Rollout
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 10m
+    asserts:
+      # 4 x 600 + 3 x (660 + 300)
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5280"
+
+  # Explicit steps: the first barrier after an analysis step that runs tests is checked, against that step's health.
+  - it: checks the first barrier after an explicit analysis step that runs tests
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            budgetSeconds: 1500
+            steps:
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: start, timeout: 2m}}
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-health
+                    - templateName: prod-mycarrier-api-tests
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w20, timeout: 7m}}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w20' has timeout 7m \\(420 s\\), and a Rollout of the release can wait there 513 s"
+
+  # The start barrier (2m) comes before the tests step, so only w20 (9m) is checked: 513 < 540.
+  - it: renders the tests template for explicit steps that reference it, and checks only barriers after it
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            budgetSeconds: 1500
+            steps:
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: start, timeout: 2m}}
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-health
+                    - templateName: prod-mycarrier-api-tests
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w20, timeout: 9m}}
+              - setWeight: 100
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: spec.metrics[0].provider.job.spec.activeDeadlineSeconds
+          value: 540
+
+  # A barrier whose timeout is missing or not in the 90s, 9m or 1h form is skipped, as in the progress-deadline check,
+  # so the next barrier is not checked against this step either.
+  - it: skips an explicit barrier without a timeout or with a timeout it cannot read
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            budgetSeconds: 3000
+            steps:
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-tests
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w20}}
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: next, timeout: 1m}}
+              - setWeight: 40
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-tests
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w40, timeout: 1h30m}}
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: later, timeout: 1m}}
+              - setWeight: 100
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: spec.strategy.canary.steps[2].plugin.config
+          value:
+            kind: barrier
+            name: w20
+
+  # M3: TestEngine's DeployVerifier checks every Rollout of the correlation group, so tests needs lockstep.
+  - it: fails tests with the coordinator off and more than one canary Rollout
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+      applications:
+        api: *api
+        worker: *api
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary tests template needs the coordinator when the release has more than one canary Rollout \\(api, worker\\). TestEngine's DeployVerifier checks every Rollout"
+
+  # M1: with the dark stage the Rollout has a managed route, and DeployVerifier fails a run without the canary header.
+  - it: fails tests with the dark stage on
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            dark: true
+            analysis:
+              templates: [tests]
+      applications:
+        api:
+          <<: *api
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/dark
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, .*TestEngine's DeployVerifier fails .* Set global.strategy.canary.dark: false .* until DEVOPS-326"
+
+  # P6: the dark stage renders only with the coordinator, so dark: true with it off adds no managed route.
+  - it: renders tests with dark true and the coordinator off, where no dark stage renders
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            dark: true
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+    asserts:
+      - notExists:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-health
+                - templateName: prod-mycarrier-api-tests
+
+  - it: fails tests with a header route in explicit steps
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            budgetSeconds: 1500
+            steps:
+              - setHeaderRoute: {name: smoke, match: [{headerName: X-Smoke, headerValue: {exact: "1"}}]}
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-tests
+              - setHeaderRoute: {name: smoke}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "the canary tests template cannot run on a Rollout with managed routes \\(smoke,"
+
+  # M7: TestEngine answers 422 without a CorrelationId.
+  - it: fails tests without global.correlationId where the steps render, with the coordinator off
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+        gitbranch: main
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary tests template sends global.correlationId as the TestEngine run's CorrelationId, and it is empty"
+
+  - it: fails tests without global.correlationId where the steps render, with the coordinator on
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+        gitbranch: main
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.correlationId is required"
+
+  - it: renders tests without global.correlationId where the steps do not render
+    template: rollout.yaml
+    set:
+      global:
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+      environment:
+        name: preprod
+      applications:
+        api: *api
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+
+  # An analysis template the steps run must render for every canary Rollout app.
+  # Helm stops at the first failing template, rollout.yaml (helm.canary.configuredSteps); analysistemplate.yaml has
+  # the same check (helm.canary.tests.wanted).
+  - it: fails a Rollout app without testtrigger.testdefinitions and names the fix
+    template: rollout.yaml
+    set:
+      <<: *prod
+      applications:
+        api: *api
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'worker': its canary analysis runs the chart's tests AnalysisTemplate .* and it has none. .* Add applications.worker.testtrigger.testdefinitions, define a tests entry under applications.worker.analysisTemplates, or remove tests from global.strategy.canary.analysis.templates."
+
+  - it: fails the Rollout for an app with an empty testdefinitions list, in every environment
+    template: rollout.yaml
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': its canary analysis runs the chart's tests AnalysisTemplate"
+
+  # An applications.<app>.analysisTemplates entry named tests replaces the chart's, as for health and alerts.
+  - it: renders an app's own tests entry in place of the chart's
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: tests
+              provider:
+                web:
+                  url: http://tests.example/status
+    asserts:
+      - equal:
+          path: spec.metrics[0].name
+          value: prod-tests
+      - equal:
+          path: spec.metrics[0].provider.web.url
+          value: http://tests.example/status
+
+  # Decision 4: like health, the template renders wherever tests is listed, also where the Rollout renders steps: [].
+  - it: renders the tests template outside prod, where the Rollout renders no steps
+    template: analysistemplate.yaml
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api: *api
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: preprod-mycarrier-api-tests
+        documentIndex: 1
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"EnvironmentName": "preprod",'
+        documentIndex: 1
+
+  - it: renders steps [] outside prod with tests listed
+    template: rollout.yaml
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api: *api
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value: []
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # Opt-in: nothing new renders when tests is not listed, even for an app with test definitions.
+  - it: renders no tests template in prod when tests is not listed
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+        correlationId: 62a354da-6833-4bf7-8f6d-689970865996
+        gitbranch: main
+    asserts:
+      # ExternalSecret, health and alerts.
+      - hasDocuments:
+          count: 3
+      - notEqual:
+          path: metadata.name
+          value: prod-mycarrier-api-tests
+
+  - it: renders no tests template outside prod when tests is not listed
+    template: analysistemplate.yaml
+    set:
+      global:
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+      environment:
+        name: preprod
+      applications:
+        api: *api
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: preprod-mycarrier-api-health
+
+  - it: renders no tests template for a Deployment or a migrating Rollout
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          deploymentType: deployment
+        worker:
+          <<: *api
+          migratingToRollouts: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # TestEngine refuses a prod canary whose filter starts with a preprod TestCategory (caller contract rule 7).
+  - it: fails a prod filter whose first TestCategory starts with preprod
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI, TestCategory=PreprodSmoke&TestCategory=CoreAPI]
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': test definition 'apitests' has the filter 'TestCategory=PreprodSmoke&TestCategory=CoreAPI', whose first TestCategory starts with preprod"
+
+  - it: fails a single prod filter string that starts with preprod
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: preprod_smoke
+    asserts:
+      - failedTemplate:
+          errorPattern: "has the filter 'preprod_smoke', whose first TestCategory starts with preprod"
+
+  - it: accepts a preprod category that is not first, a Vault filter in prod, and a preprod filter outside prod
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI&TestCategory=PreprodSmoke]
+              - name: vaulttests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: vault:QA/data/prod/mycarrier#categoryfilters
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: accepts a preprod filter in preprod
+    template: analysistemplate.yaml
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=PreprodSmoke]
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # Values: analysis.tests takes only timeout (a duration) and image (a string).
+  - it: refuses a tests.timeout that is not a duration
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 8 minutes
+    asserts:
+      - failedTemplate:
+          errorPattern: "timeout.*does not match pattern"
+
+  - it: refuses a tests.image that is not a string
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                image: 5
+    asserts:
+      - failedTemplate:
+          errorPattern: "image.*(expected string|got number)"
+
+  - it: refuses an unknown key under analysis.tests
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                pollInterval: 5s
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional properties 'pollInterval' not allowed"
+
+  - it: fails a zero tests.timeout
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 0s
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.analysis.tests.timeout is '0s'; the tests template needs a duration above zero"
+
+  # DEVOPS-310 (#156): only a canary Rollout (global.deploymentStrategy canary) gets the tests template and its checks,
+  # as for the chart's health and alerts templates. A rolling or unset property ignores tests, also with values that
+  # would fail every tests check: no test definitions, a literal key, a preprod filter, a foreign serviceAddress, the
+  # dark stage, the coordinator off with two Rollouts, no correlationId and a timeout past the barrier window.
+  - it: renders no tests template and runs no tests check for a Rollout whose property is not canary
+    template: analysistemplate.yaml
+    set: &notCanary
+      global: &notCanaryGlobal
+        appStack: mycarrier
+        language: csharp
+        gitbranch: main
+        deploymentStrategy: rolling
+        strategy:
+          canary:
+            dark: true
+            coordinator:
+              enabled: false
+            analysis:
+              templates: [tests]
+              tests:
+                timeout: 10m
+      environment:
+        name: prod
+      alerts:
+        serviceName: MyCarrier
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: Bearer bGl0ZXJhbC1rZXk=
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=PreprodSmoke]
+                serviceAddress: https://payment-api.dev.mycarrier.dev
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the Rollouts without steps and the hook for a Rollout whose property is not canary, with tests listed
+    template: rollout.yaml
+    set: *notCanary
+    asserts:
+      - hasDocuments:
+          count: 2
+      - notExists:
+          path: spec.strategy.canary.steps
+      - equal:
+          path: spec.strategy.canary.maxUnavailable
+          value: 0
+      - notExists:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  - it: keeps the PostSync hook in prod for a Rollout whose property is not canary, with tests listed
+    template: triggertestengine.yaml
+    set: *notCanary
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+
+  - it: renders no tests template for a Rollout with no deploymentStrategy, with tests listed
+    template: analysistemplate.yaml
+    set:
+      <<: *notCanary
+      global:
+        appStack: mycarrier
+        language: csharp
+        strategy:
+          canary:
+            analysis:
+              templates: [tests]
+      applications:
+        api: *api
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # The same values with the property canary: the template renders (and here its checks fail), so the property alone
+  # decides.
+  - it: renders the tests template once the property is canary, for the same values
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        deploymentStrategy: canary
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+
+  - it: runs the tests checks once the property is canary
+    template: rollout.yaml
+    set:
+      <<: *notCanary
+      global:
+        <<: *notCanaryGlobal
+        correlationId: 62a354da-6833-4bf7-8f6d-689970865996
+        deploymentStrategy: canary
+      applications:
+        api: *api
+        worker: *api
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the canary tests template needs the coordinator when the release has more than one canary Rollout"

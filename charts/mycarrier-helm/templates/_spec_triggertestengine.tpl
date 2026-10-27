@@ -170,8 +170,14 @@ testtrigger.testdefinitions item, with no SlipStep, so TestEngine bookends the e
 (helm.specs.testenginehook, with testtrigger.enableV1) and, for a prod canary Rollout, the <fullName>-prod-tests
 ConfigMap that the release's rollout-watch posts after promotion (DEVOPS-319, Tech Spec D7; triggertestengine.yaml).
 Takes the application context. Every test definition's results API settings are checked here.
+A third caller, the canary tests template (helm.canary.tests.request, DEVOPS-515), adds .testRun to the context, a
+dict whose keys override the request and are absent for the other two callers: serviceAddresses (ServiceAddress, one
+entry per test definition, in order), tolerations (Tolerations of every definition, also when empty), and runKind,
+slipStep and requestHeaders (RunKind, SlipStep and RequestHeaders inside TestEnvironmentVariables, set only when not
+empty), and correlationId (CorrelationId, a string).
 */}}
 {{- define "helm.testtrigger.v1request" -}}
+{{- $run := .testRun | default dict }}
 {{- $fullName := include "helm.fullname" . }}
 {{- $baseName := include "helm.basename" . }}
 {{- $namespace := include "helm.namespace" . }}
@@ -179,6 +185,7 @@ Takes the application context. Every test definition's results API settings are 
 {{- $gitBranch := .Values.global.gitbranch }}
 {{- $stackname := .Values.global.appStack }}
 {{- $correlationId := .Values.global.correlationId }}
+{{- if hasKey $run "correlationId" }}{{ $correlationId = $run.correlationId }}{{ end }}
 {{- if not (dig "service" "ports" false .application) }}
 {{- range $key, $value := .application.ports }}
   {{- if eq ($key | lower) "http" }}
@@ -188,12 +195,16 @@ Takes the application context. Every test definition's results API settings are 
 {{- end }}
 {{- $imageTag := .application.image.tag }}
 {{- $tests := list }}
-{{- range dig "testtrigger" "testdefinitions" list .application }}
+{{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
 {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
+{{- with $run.serviceAddresses }}{{ $serviceAddress = index . $index }}{{ end }}
 {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
 {{- $tolerations := $defaultTolerations }}
 {{- if hasKey . "tolerations" }}
   {{- $tolerations = .tolerations }}
+{{- end }}
+{{- if hasKey $run "tolerations" }}
+  {{- $tolerations = $run.tolerations }}
 {{- end }}
 {{- $nodeAffinity := .nodeAffinity | default list }}
 {{- $useDefaultNodeAffinity := "false" }}
@@ -220,6 +231,9 @@ Takes the application context. Every test definition's results API settings are 
 {{- $testEnv := dict "EnvironmentName" $namespace "ReleaseId" $imageTag "SecretId" (.secretId | default "") "ServiceAddress" $serviceAddress "ReleaseDefinitionName" (.releaseDefinitionName | default $baseName) "BranchName" $gitBranch "AdditionalEnvVars" (.additionalEnvVars | default "") "CorrelationId" $correlationId "LegacyMode" $legacyMode }}
 {{- if $resultsApiUrl }}{{- $_ := set $testEnv "ResultsApiUrl" $resultsApiUrl }}{{- end }}
 {{- if $resultsApiKey }}{{- $_ := set $testEnv "ResultsApiKey" $resultsApiKey }}{{- end }}
+{{- with $run.runKind }}{{- $_ := set $testEnv "RunKind" . }}{{- end }}
+{{- with $run.slipStep }}{{- $_ := set $testEnv "SlipStep" . }}{{- end }}
+{{- with $run.requestHeaders }}{{- $_ := set $testEnv "RequestHeaders" . }}{{- end }}
 {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
 {{- $tests = append $tests $test }}
 {{- end }}
