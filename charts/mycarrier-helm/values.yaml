@@ -60,7 +60,9 @@ global:
   #                               # drill; the chart's alerts check stays prod only. It gives no steps to a Rollout
   #                               # whose property is not canary. The render checks of a canary Rollout (leader,
   #                               # tests-dark, budgetSeconds, the budget limit included) run in every environment;
-  #                               # only global.correlationId is required just where the steps render.
+  #                               # only global.correlationId and the canary pod floor (minimum replicas 2) are
+  #                               # checked just where the steps render. dev and feature<N> default to 1 replica, so
+  #                               # a drill there sets replicas: 2 on each canary Rollout.
   #     manualTimeout: 40m        # how long the release's rollout-watch allows for the manual pause (D22); it counts
   #                               # in the canary budget, and the pause itself has no time limit. With the manual
   #                               # preset, zero fails the render. The other presets and explicit steps ignore it.
@@ -97,7 +99,8 @@ global:
   #                               # interval) must stay below the barrier's timeout, or the render fails (513 s with
   #                               # the defaults). Also failing: a serviceAddress off the app's own
   #                               # Service or with another port than the http Service port, a literal apikey,
-  #                               # managed routes (dark: true with the coordinator on), the coordinator off with
+  #                               # managed routes (the dark stage, on by default: set dark: false with tests until
+  #                               # Q54, a DeployVerifier check of header-less canary runs), the coordinator off with
   #                               # more than one Rollout, no correlationId where the steps render, and in prod a
   #                               # filter whose first TestCategory starts with preprod.
   #         # image: python:3.13.15-alpine3.23@sha256:...   # Python 3; default as alerts.image
@@ -124,8 +127,11 @@ global:
   #                               # Rollouts whose property is not canary.
   #     dark: true                # header-gated dark stage before the weights (D11, on since DEVOPS-326); renders
   #                               # only with the coordinator and a preset. The leader needs
-  #                               # testtrigger.testdefinitions (the chart's tests-dark) or its own tests-dark, and
-  #                               # prod TestEngine needs RUN_KINDS_ENABLED=true; false turns it off.
+  #                               # testtrigger.testdefinitions (the chart's tests-dark) or its own tests-dark in
+  #                               # every environment, and prod TestEngine needs RUN_KINDS_ENABLED=true; false turns
+  #                               # it off. A multi-frontend release fails to render with it on.
+  #     # leader: api             # the application that runs the dark suite; required when the release has two or
+  #                               # more canary Rollouts, defaults to the only one otherwise
   #     darkReplicas: 2           # canary pods during the dark stage; at least 2, so one pod restart does not drop
   #                               # the canary-header route mid-suite
   #     bakeMinutes: 30           # alert-gate's watch window after promotion (D18); set it longer for a service with
@@ -147,7 +153,13 @@ global:
   #   the leader's tests-dark suite (global.strategy.canary.leader, or the only Rollout app), the dark-passed barrier,
   #   then the route goes. The canary keeps its darkReplicas pods into the first weight and then follows the weight.
   #   A canary Rollout runs at least 2 canary pods at every weight (minPodsPerReplicaSet 2), so where the steps
-  #   render its minimum replicas (autoscaling.minReplicas, keda.minReplicaCount, else replicas) must be 2 or more.
+  #   render its minimum replicas (autoscaling.minReplicas, keda.minReplicaCount, else replicas; 1 with the top-level
+  #   scaling value and no autoscaler) must be 2 or more.
+  #   Where the steps render and the coordinator is on, canary pods are labelled mycarrier.tech/rollout-role: canary
+  #   (stable pods: stable), and each VirtualService route with the -preview destination and no fault or redirect gets
+  #   a <route>-canary-source route before it that sends in-mesh callers from the release's canary pods (that label
+  #   and the pod's mycarrier.tech/correlationId) to the -preview destination: a release's canaries call each other's
+  #   canaries. Calls that leave the mesh reach stable.
   #   With coordinator.enabled: false each Rollout of a release runs its own steps: one can be at 50% while another
   #   is at 10%, or abort while another promotes. mycarrier.tech/rolloutGroupSize on each Rollout is the number the
   #   coordinator waits for.
