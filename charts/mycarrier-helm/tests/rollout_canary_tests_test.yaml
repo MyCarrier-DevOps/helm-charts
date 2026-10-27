@@ -1513,7 +1513,7 @@ tests:
                   url: http://tests.example/dark
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, .*TestEngine's DeployVerifier fails .* Set global.strategy.canary.dark: false .* until DEVOPS-326"
+          errorPattern: "application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, .*TestEngine's DeployVerifier fails .* Set global.strategy.canary.dark: false .* until Q54"
 
   # P6: the dark stage renders only with the coordinator, so dark: true with it off adds no managed route.
   - it: renders tests with dark true and the coordinator off, where no dark stage renders

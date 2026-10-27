@@ -1156,9 +1156,9 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': analysisTemplates 'tests' runs a test container through the job provider shorthand, which is no longer supported"
 
-  # The dark stage's tests-dark template is not rendered by the chart yet (DEVOPS-312, DEVOPS-326); dark is off by
-  # default until it is.
-  - it: fails the render when the leader's dark stage needs a tests-dark template that does not render
+  # The chart renders the leader's tests-dark from its testtrigger.testdefinitions (DEVOPS-326); a leader without them
+  # fails the render.
+  - it: fails the render when the leader's dark stage has no test definitions for tests-dark
     template: rollout.yaml
     set:
       global:
@@ -1183,7 +1183,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet"
+          errorPattern: "application 'api': the dark stage runs the chart's tests-dark AnalysisTemplate \\(preprod-test-stack-api-tests-dark\\) on the leader, .*testtrigger.testdefinitions.* set global.strategy.canary.dark: false"
 
   # The legacy web shorthand: its default URL uses the -preview Service port that reaches the http container port, and
   # statusEndpoint applies with or without url.

@@ -287,7 +287,7 @@ tests:
       - failedTemplate:
           errorPattern: "global.strategy.canary.leader 'web' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
 
-  - it: fails outside prod when the leader's tests-dark template does not render
+  - it: fails outside prod when the leader has no test definitions for tests-dark
     template: rollout.yaml
     set:
       <<: *preprod
@@ -301,7 +301,7 @@ tests:
             dark: true
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet"
+          errorPattern: "application 'api': the dark stage runs the chart's tests-dark AnalysisTemplate \\(preprod-test-stack-api-tests-dark\\) on the leader, .*testtrigger.testdefinitions.* set global.strategy.canary.dark: false"
 
   - it: renders steps [] outside prod with the dark stage on, a leader and its tests-dark
     template: rollout.yaml

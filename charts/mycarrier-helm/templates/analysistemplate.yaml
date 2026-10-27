@@ -218,13 +218,19 @@ spec:
        production traffic, with the suite never run. With more than one canary Rollout, the siblings' next barrier times
        out and canary-coordinator's cascade aborts it (about 9 minutes). With one, nothing aborts it until rollout-watch
        times out at mycarrier.tech/canaryBudgetSeconds + 15 minutes (about 93 minutes on the standard preset), publishes
-       prod.rollback, and gitops-rollback reverts the release. Hence analysis.tests.image should be an ACR mirror. */}}
-{{- if eq (include "helm.canary.tests.wanted" $appContext) "true" }}
+       prod.rollback, and gitops-rollback reverts the release. Hence analysis.tests.image should be an ACR mirror.
+       The dark stage's leader (helm.canary.testsDark.wanted, DEVOPS-326) gets the same template as tests-dark: the
+       same metric and Job, sent to the app's stable Service with X-MyCarrier-Canary: <lower-cased
+       global.correlationId>, which the dark stage's header route sends to the canary at weight 0. */}}
+{{- $chartTests := list }}
+{{- if eq (include "helm.canary.tests.wanted" $appContext) "true" }}{{ $chartTests = append $chartTests (dict "name" "tests") }}{{ end }}
+{{- if eq (include "helm.canary.testsDark.wanted" $appContext) "true" }}{{ $chartTests = append $chartTests (dict "name" "tests-dark" "target" "stable" "requestHeaders" (dict "X-MyCarrier-Canary" (include "helm.canary.correlationId" $appContext))) }}{{ end }}
+{{- range $chartTests }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: {{ $environment }}-{{ $fullName }}-tests
+  name: {{ $environment }}-{{ $fullName }}-{{ .name }}
   namespace: {{ $namespace }}
   labels:
     {{ $standardLabels | nindent 4 | trim }}
@@ -234,14 +240,14 @@ metadata:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
 spec:
   metrics:
-  - name: tests
+  - name: {{ .name }}
     count: 1
     failureLimit: 0
     inconclusiveLimit: 0
     provider:
       job:
         spec:
-          {{- include "helm.canary.tests.jobSpec" (dict "context" $appContext "name" "tests") | nindent 10 }}
+          {{- include "helm.canary.tests.jobSpec" (dict "context" $appContext "name" .name "target" .target "requestHeaders" .requestHeaders) | nindent 10 }}
 {{- end }}
 {{- range $index, $template := $appValues.analysisTemplates }}
 {{- /* The release-era job contract (a test container run directly against -preview, with RELEASE_ID,

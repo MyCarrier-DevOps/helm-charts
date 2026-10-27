@@ -39,8 +39,7 @@
 {{- /* global.strategy.canary merged over the defaults, as JSON. It configures the steps of a canary Rollout
        (helm.canary.enabled); a routed Rollout without steps reads only progressDeadlineSeconds from it. Analysis is
        mandatory for every canary Rollout (DEVOPS-312): health and alerts are on unless opted out, and templates lists
-       only extra templates. analysis.enabled is deprecated and has no default; rollout.yaml refuses false. dark stays
-       off until DEVOPS-326 renders tests-dark.
+       only extra templates. analysis.enabled is deprecated and has no default; rollout.yaml refuses false.
        bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
        and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds).
        stepsOutsideProd renders the steps outside prod (helm.canary.stepsRendered). analysis.tests (timeout, the poll
@@ -89,8 +88,9 @@
        its own barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec.
        With the coordinator on and dark (default false until DEVOPS-326, D11), the start barrier is followed by the
        header-gated dark stage: darkReplicas canary pods at weight 0, a canary-header route matched on
-       X-MyCarrier-Canary: <global.correlationId>, the dark-ready barrier, the <environment>-<fullName>-tests-dark
-       analysis on the leader only, the dark-passed barrier, then the route is removed. setCanaryScale
+       X-MyCarrier-Canary: <global.correlationId, lower-cased> (helm.canary.correlationId), the dark-ready barrier, the
+       <environment>-<fullName>-tests-dark analysis on the leader only (the chart renders it, helm.canary.testsDark.wanted,
+       unless the leader defines its own), the dark-passed barrier, then the route is removed. setCanaryScale
        {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
        step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
        coordinator because followers rely on its barriers to wait for the leader's suite.
@@ -135,14 +135,12 @@
   {{- if not (include "helm.canary.leader" .) -}}
     {{- fail (printf "the dark stage runs its test suite on one leader, and this release has %d canary Rollouts; set global.strategy.canary.leader to one of: %s." (len (include "helm.canary.rollouts" . | fromJsonArray)) (join ", " (include "helm.canary.rollouts" . | fromJsonArray))) -}}
   {{- end -}}
-  {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
   {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
-  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
+  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" (include "helm.canary.correlationId" .)))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
+  {{- /* The leader's tests-dark renders (helm.canary.analysis.available): helm.canary.testsDark.wanted renders the
+         chart's, or fails the render, unless the leader defines its own. */ -}}
   {{- if eq (include "helm.canary.leader" .) .appName -}}
-    {{- if not (has "tests-dark" $available) -}}
-      {{- fail (printf "application '%s': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet (DEVOPS-312, DEVOPS-326). Set global.strategy.canary.dark: false, or define tests-dark under applications.%s.analysisTemplates." .appName .appName) -}}
-    {{- end -}}
     {{- $steps = append $steps (dict "analysis" (dict "templates" (list (dict "templateName" (printf "%s-%s-tests-dark" .Values.environment.name $fullName))))) -}}
   {{- end -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-passed" "coordinator" $coordinator) | fromJson) -}}
@@ -186,7 +184,9 @@
        other checks here.
        - Managed routes (the dark stage's canary-header, or a setHeaderRoute or setMirrorRoute step of explicit steps):
          TestEngine's DeployVerifier fails a canary run of a Rollout with managed routes that sends no X-MyCarrier-Canary
-         header, and the header route exists only during the dark stage, so every tests run would fail.
+         header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run
+         would fail until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved (spec A5).
+         The dark stage's own tests-dark sends the header, so it is not refused.
        - Lockstep: the DeployVerifier checks every Rollout of the correlation group, which must be in flight. With
          coordinator.enabled false and more than one canary Rollout, a sibling that already promoted (or has not
          started) fails the run after part of the release shipped.
@@ -217,7 +217,7 @@
     {{- if and $route (not (has $route $managed)) }}{{ $managed = append $managed $route }}{{ end -}}
   {{- end -}}
   {{- if $managed -}}
-    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true, or from explicit steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the header route exists only during the dark stage, so every tests run would fail. Set global.strategy.canary.dark: false (and remove setHeaderRoute and setMirrorRoute steps), or remove tests from global.strategy.canary.analysis.templates, until DEVOPS-326 settles canary tests with the dark stage." .appName (join ", " $managed)) -}}
+    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true, or from explicit steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run would fail. The dark stage already runs the suite against the canary (tests-dark). Set global.strategy.canary.dark: false (and remove setHeaderRoute and setMirrorRoute steps), or remove tests from global.strategy.canary.analysis.templates, until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved." .appName (join ", " $managed)) -}}
   {{- end -}}
   {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
   {{- if and (not $coordinator.enabled) (gt (len $rollouts) 1) -}}
@@ -345,8 +345,8 @@
          activeDeadlineSeconds when the template is a Job provider that sets it), plus, for a Job, the time Argo
          Rollouts can take to see it end, ceil(sqrt(2 x activeDeadlineSeconds)); a Job with count n >= 2 at least
          n x (activeDeadlineSeconds + that lag) + (n - 1) x interval. The chart's health template uses
-         analysis.health.count and interval; the chart's tests template counts its Job's activeDeadlineSeconds
-         (analysis.tests.timeout + analysis.tests.startupSeconds) + lag (540 + 33 by default); an
+         analysis.health.count and interval; the chart's tests and tests-dark templates count their Job's
+         activeDeadlineSeconds (analysis.tests.timeout + analysis.tests.startupSeconds) + lag (540 + 33 by default); an
          applications.<app>.analysisTemplates entry (an extra template, or one that replaces health or supplies
          tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders it; Argo Rollouts runs count 0
          without an interval once) and interval (0 when unset). The lengths come from
@@ -366,7 +366,8 @@
        included), and it is the same in and outside prod; rollout.yaml renders it only where the steps render. */ -}}
 {{- /* The length of every AnalysisTemplate an analysis step of this canary Rollout can reference, as JSON, by the name
        the step uses (<environment>-<fullName>-<name>): the chart's health (analysis.health count and interval), the
-       chart's tests when the app runs it (helm.canary.tests.wanted), and each applications.<app>.analysisTemplates
+       chart's tests and tests-dark when the app runs them (helm.canary.tests.wanted, helm.canary.testsDark.wanted), and
+       each applications.<app>.analysisTemplates
        entry, which replaces the chart's template of the same name. For each, in seconds:
        - budget: the template at its longest, as Tech Spec D22's budget needs. count x max(interval, the Job's
          activeDeadlineSeconds when it is a Job provider that sets it); count is 1 when unset or 0 (Argo Rollouts runs
@@ -385,10 +386,13 @@
 {{- $health := $cfg.analysis.health -}}
 {{- $healthInterval := include "helm.canary.durationSeconds" $health.interval | int -}}
 {{- $table := dict (printf "%shealth" $prefix) (dict "budget" (mul (int $health.count) $healthInterval) "longest" (mul (int $health.count) $healthInterval) "shortest" (mul (max 0 (sub (int $health.count) 1)) $healthInterval)) -}}
-{{- if eq (include "helm.canary.tests.wanted" .) "true" -}}
+{{- $chartTests := list -}}
+{{- if eq (include "helm.canary.tests.wanted" .) "true" }}{{ $chartTests = append $chartTests "tests" }}{{ end -}}
+{{- if eq (include "helm.canary.testsDark.wanted" .) "true" }}{{ $chartTests = append $chartTests "tests-dark" }}{{ end -}}
+{{- if $chartTests -}}
   {{- $deadline := include "helm.canary.tests.activeDeadlineSeconds" . | int -}}
   {{- $length := add $deadline (include "helm.canary.tests.completionLagSeconds" $deadline | int) -}}
-  {{- $_ := set $table (printf "%stests" $prefix) (dict "budget" $length "longest" $length "shortest" 0) -}}
+  {{- range $chartTests }}{{ $_ := set $table (printf "%s%s" $prefix .) (dict "budget" $length "longest" $length "shortest" 0) }}{{ end -}}
 {{- end -}}
 {{- range (.application.analysisTemplates | default list) -}}
   {{- $count := 1 -}}
@@ -482,8 +486,9 @@
 {{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
        chart's own health template when health is on, the app has none of that name and its health URL is known, the
        chart's alerts template when alerts is on, the app has none of that name, the environment is prod and the
-       service label is known, and the chart's tests template when the app runs it (helm.canary.tests.wanted, which
-       fails the render when the app has no testtrigger.testdefinitions). */ -}}
+       service label is known, the chart's tests template when the app runs it (helm.canary.tests.wanted, which
+       fails the render when the app has no testtrigger.testdefinitions), and the chart's tests-dark template for the
+       dark stage's leader (helm.canary.testsDark.wanted, which fails the same way). */ -}}
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
 {{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
@@ -491,6 +496,7 @@
 {{- if and (not (has "health" $names)) $analysis.health.enabled (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
 {{- if and (not (has "alerts" $names)) $analysis.alerts.enabled (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
 {{- if eq (include "helm.canary.tests.wanted" .) "true" }}{{ $names = append $names "tests" }}{{ end -}}
+{{- if eq (include "helm.canary.testsDark.wanted" .) "true" }}{{ $names = append $names "tests-dark" }}{{ end -}}
 {{- toJson $names -}}
 {{- end -}}
 
@@ -700,6 +706,16 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- if eq (include "helm.canary.routed" (dict "application" $values)) "true" }}{{ $names = append $names $name }}{{ end -}}
 {{- end -}}
 {{- toJson $names -}}
+{{- end -}}
+
+{{- /* global.correlationId as a lower-cased string, the one form every value that routes on it uses (DEVOPS-326): the
+       dark stage's header route and the tests-dark X-MyCarrier-Canary header. TestEngine requires the header lower
+       case; slip ids are minted lower case. A numeric id renders as its digits (12345, not 1.2345e+04), as
+       helm.canary.tests.request renders the request's CorrelationId, which keeps its case. */ -}}
+{{- define "helm.canary.correlationId" -}}
+{{- $id := dig "correlationId" "" (.Values.global | default dict) -}}
+{{- if and (kindIs "float64" $id) (eq $id (float64 (int64 $id))) }}{{ $id = int64 $id }}{{ end -}}
+{{- lower (toString $id) -}}
 {{- end -}}
 
 {{- /* The leader of the release, which alone runs the dark-stage suite (D20): global.strategy.canary.leader, which must

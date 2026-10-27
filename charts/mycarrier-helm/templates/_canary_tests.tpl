@@ -1,8 +1,9 @@
 {{- /* The chart's tests AnalysisTemplate (DEVOPS-515): a Job metric that runs the application's TestEngine suite
        (testtrigger.testdefinitions) against its canary through TestEngine's v1 caller contract
        (MC.TestEngine TestEngine.Api/docs/V1_TRIGGER.md: Caller contract) and passes only when the run passes.
-       analysistemplate.yaml renders it as <environment>-<fullName>-tests; the Job spec and the script do not depend
-       on that name, so DEVOPS-326's tests-dark can reuse them with its RequestHeaders. */ -}}
+       analysistemplate.yaml renders it as <environment>-<fullName>-tests and, for the dark stage's leader (DEVOPS-326),
+       as <environment>-<fullName>-tests-dark: the same Job and script, sent to the stable Service with the
+       X-MyCarrier-Canary header. */ -}}
 
 {{- /* "true" when the chart renders the tests template for an application: a canary Rollout (helm.canary.enabled: a
        routed Rollout whose global.deploymentStrategy is canary) that lists tests in global.strategy.canary.analysis.templates, or whose explicit steps reference
@@ -18,15 +19,39 @@
 {{- define "helm.canary.tests.wanted" -}}
 {{- if eq (include "helm.canary.tests.listed" .) "true" -}}
   {{- $self := printf "%s-%s-tests" (toString .Values.environment.name) (include "helm.fullname" .) -}}
-  {{- $replaced := false -}}
-  {{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "tests" }}{{ $replaced = true }}{{ end }}{{ end -}}
-  {{- if not $replaced -}}
-    {{- $trigger := .application.testtrigger | default dict -}}
-    {{- if not (and (kindIs "map" $trigger) (get $trigger "testdefinitions")) -}}
-      {{- fail (printf "application '%s': its canary analysis runs the chart's tests AnalysisTemplate (global.strategy.canary.analysis.templates lists tests, or the explicit steps reference %s), which runs the application's testtrigger.testdefinitions through TestEngine, and it has none. Every template the analysis steps run must render for each canary Rollout application. Add applications.%s.testtrigger.testdefinitions, define a tests entry under applications.%s.analysisTemplates, or remove tests from global.strategy.canary.analysis.templates." .appName $self .appName .appName) -}}
-    {{- end -}}
-true
+  {{- include "helm.canary.tests.ownTemplate" (dict "context" . "name" "tests" "message" (printf "application '%s': its canary analysis runs the chart's tests AnalysisTemplate (global.strategy.canary.analysis.templates lists tests, or the explicit steps reference %s), which runs the application's testtrigger.testdefinitions through TestEngine, and it has none. Every template the analysis steps run must render for each canary Rollout application. Add applications.%s.testtrigger.testdefinitions, define a tests entry under applications.%s.analysisTemplates, or remove tests from global.strategy.canary.analysis.templates." .appName $self .appName .appName)) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* "true" when the chart renders the tests-dark template for an application (DEVOPS-326, spec A2): the leader
+       (helm.canary.leader) of a canary Rollout release whose preset steps run the dark stage (coordinator.enabled and
+       dark; an explicit steps list renders no dark stage), under the same conditions that make
+       helm.canary.configuredSteps give the leader its tests-dark analysis step, in every environment, like tests. An
+       applications.<app>.analysisTemplates entry named tests-dark replaces it. A leader without
+       testtrigger.testdefinitions fails the render: the dark stage's analysis step references tests-dark, and Argo
+       Rollouts leaves the Rollout InvalidSpec when it is missing. Followers get none. */ -}}
+{{- define "helm.canary.testsDark.wanted" -}}
+{{- if eq (include "helm.canary.enabled" .) "true" -}}
+  {{- $cfg := include "helm.canary.config" . | fromJson -}}
+  {{- if and (not $cfg.steps) $cfg.coordinator.enabled $cfg.dark (eq (include "helm.canary.leader" .) (toString .appName)) -}}
+    {{- $self := printf "%s-%s-tests-dark" (toString .Values.environment.name) (include "helm.fullname" .) -}}
+    {{- include "helm.canary.tests.ownTemplate" (dict "context" . "name" "tests-dark" "message" (printf "application '%s': the dark stage runs the chart's tests-dark AnalysisTemplate (%s) on the leader, which runs the application's testtrigger.testdefinitions through TestEngine against the canary, and it has none. Add applications.%s.testtrigger.testdefinitions, define a tests-dark entry under applications.%s.analysisTemplates, or set global.strategy.canary.dark: false." .appName $self .appName .appName)) -}}
   {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* "true" when the chart's own template of the given name (tests or tests-dark) renders for an application that runs
+       it: no applications.<app>.analysisTemplates entry of that name replaces it. Without testtrigger.testdefinitions
+       the render fails with the given message. Takes context (the application context), name and message. */ -}}
+{{- define "helm.canary.tests.ownTemplate" -}}
+{{- $replaced := false -}}
+{{- range (.context.application.analysisTemplates | default list) }}{{ if eq (toString .name) $.name }}{{ $replaced = true }}{{ end }}{{ end -}}
+{{- if not $replaced -}}
+  {{- $trigger := .context.application.testtrigger | default dict -}}
+  {{- if not (and (kindIs "map" $trigger) (get $trigger "testdefinitions")) -}}
+    {{- fail .message -}}
+  {{- end -}}
+true
 {{- end -}}
 {{- end -}}
 
@@ -91,17 +116,21 @@ true
 
 {{- /* The tests Job's TestEngine v1 request: helm.testtrigger.v1request, the request the PostSync hook and the prod-tests
        ConfigMap send for the same application, with four differences (V1_TRIGGER: Slip step routing and run kinds,
-       Caller contract rule 10): ServiceAddress is the app's -preview Service (the canary pods); TestEnvironmentVariables
-       gets RunKind canary and SlipStep none (no slip writes, no check-run, no webhook); Tolerations is [] so the test
-       pods land on on-demand nodes. Takes context (the application context) and requestHeaders (optional;
-       RequestHeaders inside TestEnvironmentVariables, for tests-dark).
-       ServiceAddress: http://<fullName>-preview.<namespace>.svc.cluster.local:<port>, on the -preview Service port that
-       reaches the app's http container port; none fails the render. A definition's own serviceAddress whose host is the
-       app's stable Service or its -preview Service (<fullName> or <fullName>-preview, with .<namespace>, .svc or
+       Caller contract rule 10): ServiceAddress is the app's -preview Service (the canary pods), or its stable Service
+       for tests-dark; TestEnvironmentVariables gets RunKind canary and SlipStep none (no slip writes, no check-run, no
+       webhook); Tolerations is [] so the test pods land on on-demand nodes. Takes context (the application context),
+       target (preview, the default, or stable) and requestHeaders (optional; RequestHeaders inside
+       TestEnvironmentVariables). tests and tests-dark both build their request here, so their bodies differ only in
+       ServiceAddress and RequestHeaders.
+       ServiceAddress: http://<fullName>-preview.<namespace>.svc.cluster.local:<port> (target preview) or
+       http://<fullName>.<namespace>.svc.cluster.local:<port> (target stable: tests-dark, whose X-MyCarrier-Canary header
+       the dark stage's header route sends to the canary), on the Service port that reaches the app's http container
+       port (both Services expose the same ports); none fails the render. A definition's own serviceAddress whose host
+       is the app's stable Service or its -preview Service (<fullName> or <fullName>-preview, with .<namespace>, .svc or
        .svc.cluster.local, with or without a scheme or user info) keeps its path on that address. It may name no port or
-       the http Service port; another port fails the render, because the chart cannot tell which -preview port serves
-       it. Any other host fails the render, because the canary run must test the canary's pods; the message shows the
-       address without its scheme or user info. CorrelationId is always a JSON string (a numeric global.correlationId
+       the http Service port; another port fails the render, because the chart cannot tell which port of the target
+       Service serves it. Any other host fails the render, because the canary run must test the canary's pods; the
+       message shows the address without its scheme or user info. CorrelationId is always a JSON string (a numeric global.correlationId
        such as 12345 becomes "12345"); the hook and the prod-tests ConfigMap render it as before.
        TestEngine refuses a canary in a prod-class environment (the request's EnvironmentName, the namespace,
        contains prod and not preprod) when a filter's first TestCategory starts with preprod (Caller contract rule 7),
@@ -111,11 +140,17 @@ true
 {{- $ctx := .context -}}
 {{- $fullName := include "helm.fullname" $ctx -}}
 {{- $namespace := include "helm.namespace" $ctx -}}
-{{- $previewPort := include "helm.canary.previewPort" (dict "application" $ctx.application "port" (dig "ports" "http" 8080 $ctx.application)) -}}
-{{- if not $previewPort -}}
-  {{- fail (printf "application '%s': the canary tests run calls the -preview Service on the Service port that reaches the application's http container port, and its -preview Service exposes none. Set applications.%s.ports.http to the container port the application serves on (with service.ports, also give it a Service port whose targetPort is that port)." $ctx.appName $ctx.appName) -}}
+{{- /* The wording of the failures below: the run, the target Service, and the way out. */ -}}
+{{- $stable := eq (toString .target) "stable" -}}
+{{- $kind := ternary "stable" "-preview" $stable -}}
+{{- $Run := ternary "The dark stage's tests-dark run" "The canary tests run" $stable -}}
+{{- $template := ternary "tests-dark" "tests" $stable -}}
+{{- $wayOut := ternary "set global.strategy.canary.dark: false" "leave tests out of global.strategy.canary.analysis.templates" $stable -}}
+{{- $servicePort := include "helm.canary.previewPort" (dict "application" $ctx.application "port" (dig "ports" "http" 8080 $ctx.application)) -}}
+{{- if not $servicePort -}}
+  {{- fail (printf "application '%s': %s calls the %s Service on the Service port that reaches the application's http container port, and its %s Service exposes none. Set applications.%s.ports.http to the container port the application serves on (with service.ports, also give it a Service port whose targetPort is that port)." $ctx.appName (untitle $Run) $kind $kind $ctx.appName) -}}
 {{- end -}}
-{{- $preview := printf "http://%s-preview.%s.svc.cluster.local:%v" $fullName $namespace $previewPort -}}
+{{- $base := printf "http://%s%s.%s.svc.cluster.local:%v" $fullName (ternary "" "-preview" $stable) $namespace $servicePort -}}
 {{- $ownHosts := list -}}
 {{- range (list $fullName (printf "%s-preview" $fullName)) -}}
   {{- $ownHosts = concat $ownHosts (list (lower .) (lower (printf "%s.%s" . $namespace)) (lower (printf "%s.%s.svc" . $namespace)) (lower (printf "%s.%s.svc.cluster.local" . $namespace))) -}}
@@ -124,7 +159,7 @@ true
 {{- $addresses := list -}}
 {{- range (dig "testtrigger" "testdefinitions" list $ctx.application) -}}
   {{- $definition := . -}}
-  {{- $address := $preview -}}
+  {{- $address := $base -}}
   {{- with .serviceAddress -}}
     {{- /* host[:port] and the path, without the scheme or user info (never printed: it can hold a password). */ -}}
     {{- $rest := regexReplaceAll "^[^/?#@]*@" (regexReplaceAll "^[A-Za-z][A-Za-z0-9+.-]*://" (toString .) "") "" -}}
@@ -132,12 +167,12 @@ true
     {{- $host := trimSuffix "." (lower (regexReplaceAll ":[0-9]*$" $hostPort "")) -}}
     {{- $port := trimPrefix ":" (regexFind ":[0-9]+$" $hostPort) -}}
     {{- if not (has $host $ownHosts) -}}
-      {{- fail (printf "application '%s': test definition '%s' sets serviceAddress '%s', whose host is not the application's own Service (%s). The canary tests run must test the canary, so it calls the -preview Service, and the chart cannot move another host there. Remove serviceAddress (the run then calls %s), point it at %s with the path the tests need, or leave tests out of global.strategy.canary.analysis.templates." $ctx.appName (toString $definition.name) $rest $stableFqdn $preview $stableFqdn) -}}
+      {{- fail (printf "application '%s': test definition '%s' sets serviceAddress '%s', whose host is not the application's own Service (%s). %s must test the canary, so it calls the %s Service, and the chart cannot move another host there. Remove serviceAddress (the run then calls %s), point it at %s with the path the tests need, or %s." $ctx.appName (toString $definition.name) $rest $stableFqdn $Run $kind $base $stableFqdn $wayOut) -}}
     {{- end -}}
-    {{- if and $port (ne $port (toString $previewPort)) -}}
-      {{- fail (printf "application '%s': test definition '%s' sets serviceAddress '%s', whose port %s is not the application's http Service port (%s). The canary tests run calls the -preview Service on its http port, and the chart cannot tell which -preview port serves port %s. Remove the port, or use port %s." $ctx.appName (toString $definition.name) $rest $port (toString $previewPort) $port (toString $previewPort)) -}}
+    {{- if and $port (ne $port (toString $servicePort)) -}}
+      {{- fail (printf "application '%s': test definition '%s' sets serviceAddress '%s', whose port %s is not the application's http Service port (%s). %s calls the %s Service on its http port, and the chart cannot tell which %s port serves port %s. Remove the port, or use port %s." $ctx.appName (toString $definition.name) $rest $port (toString $servicePort) $Run $kind $kind $port (toString $servicePort)) -}}
     {{- end -}}
-    {{- $address = printf "%s%s" $preview (trimPrefix $hostPort $rest) -}}
+    {{- $address = printf "%s%s" $base (trimPrefix $hostPort $rest) -}}
   {{- end -}}
   {{- $addresses = append $addresses $address -}}
 {{- end -}}
@@ -153,7 +188,7 @@ true
     {{- range $filters -}}
       {{- $category := trim (replace "TestCategory=" "" (first (splitList "&" (toString .)))) -}}
       {{- if hasPrefix "preprod" (lower $category) -}}
-        {{- fail (printf "application '%s': test definition '%s' has the filter '%s', whose first TestCategory starts with preprod. TestEngine refuses such a filter in a prod canary run (RunKind canary in a prod environment), so the tests analysis would fail every prod canary. Put a category that does not start with preprod first in the filter, or leave tests out of global.strategy.canary.analysis.templates in prod." $ctx.appName (toString $definition.name) (toString .)) -}}
+        {{- fail (printf "application '%s': test definition '%s' has the filter '%s', whose first TestCategory starts with preprod. TestEngine refuses such a filter in a prod canary run (RunKind canary in a prod environment), so the %s analysis would fail every prod canary. Put a category that does not start with preprod first in the filter, or %s in prod." $ctx.appName (toString $definition.name) (toString .) $template $wayOut) -}}
       {{- end -}}
     {{- end -}}
   {{- end -}}
@@ -161,9 +196,9 @@ true
 {{- include "helm.testtrigger.v1request" (merge (dict "testRun" $run) $ctx) -}}
 {{- end -}}
 
-{{- /* The Job spec of the tests metric, for an Argo Rollouts job provider: one pod that runs helm.canary.tests.script on
-       analysis.tests.image. Takes context (the application context), name (the container and label suffix) and
-       requestHeaders (optional). The TestEngine URL is the one the PostSync hook uses (helm.specs.testenginehook):
+{{- /* The Job spec of the tests and tests-dark metrics, for an Argo Rollouts job provider: one pod that runs
+       helm.canary.tests.script on analysis.tests.image. Takes context (the application context), name (the container
+       and label suffix), and target and requestHeaders (optional, passed to helm.canary.tests.request). The TestEngine URL is the one the PostSync hook uses (helm.specs.testenginehook):
        global.testengineWebhookUrl, else the v1 URL in Vault (url, or dev_url for the argo-events-test instance). The
        key is testtrigger.apikey, else the shared vault:DevOps/data/testengine/api#encoded_header (the hook sends
        testtrigger.apikey as it is, empty when unset). The key must be a vault: reference: a literal key would be stored
@@ -217,7 +252,7 @@ template:
         value: {{ include "helm.canary.tests.budgetSeconds" $ctx | quote }}
       - name: TESTS_REQUEST
         value: |-
-          {{- include "helm.canary.tests.request" (dict "context" $ctx "requestHeaders" .requestHeaders) | nindent 10 }}
+          {{- include "helm.canary.tests.request" (dict "context" $ctx "target" .target "requestHeaders" .requestHeaders) | nindent 10 }}
       resources:
         requests:
           cpu: 50m

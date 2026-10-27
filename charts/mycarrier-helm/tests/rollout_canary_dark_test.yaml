@@ -1,6 +1,7 @@
 suite: Rollout canary dark stage (header-gated, Tech Spec D11 and D20)
-# The dark stage is off by default until the chart renders tests-dark (DEVOPS-326), so these tests set dark: true and,
-# where the leader runs its suite, define tests-dark under the leader's analysisTemplates. Most opt out of the health
+# The dark stage is off by default, so these tests set dark: true and, where the leader runs its suite, define
+# tests-dark under the leader's analysisTemplates (the chart's own tests-dark, rendered from the leader's
+# testtrigger.testdefinitions, is in rollout_canary_tests_dark_test.yaml). Most opt out of the health
 # check so the step lists show the dark stage and the barriers alone. The dark stage renders only where the steps do, in
 # prod unless stepsOutsideProd is set (DEVOPS-516), so the tests that check it render a preprod drill.
 templates:
@@ -222,7 +223,7 @@ tests:
       - failedTemplate:
           errorPattern: "global.strategy.canary.leader 'web' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
 
-  # dark is off by default (DEVOPS-312, until DEVOPS-326 renders tests-dark): the coordinator's barriers render, and
+  # dark is off by default (DEVOPS-312): the coordinator's barriers render, and
   # the dark stage, its managed route and its leader are not needed.
   - it: renders no dark stage and no managed route by default
     set:
