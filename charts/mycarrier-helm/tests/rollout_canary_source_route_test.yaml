@@ -533,3 +533,79 @@ tests:
           content:
             name: test-stack-fe2-canary-source
           any: true
+
+  # The source routes are added to the parsed spec; a spec that does not parse fails the render instead of shipping
+  # the parser's error as the VirtualService.
+  - it: fails when the VirtualService spec does not parse
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                mine:
+                  match: [{uri: {prefix: /mine}}]
+                  rewrite:
+                    uri: '{{ printf "%c: [" 39 }}'
+    template: virtualService.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': its VirtualService spec does not parse as YAML"
+
+  # With traffic routing, an aborted Rollout's -preview Service keeps pointing at its canary ReplicaSet, which scales to
+  # 0; a sibling's canary pods would then get 503 through that Rollout's source routes. The coordinator aborts the
+  # sibling within the cascade window; without it nothing does, so the source routes need the coordinator.
+  - it: no twins and no rollout-role metadata with the coordinator off
+    set:
+      global.strategy.canary.coordinator.enabled: false
+      applications:
+        api: *sourceLabelApp
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - equal: {path: "spec.http[0].name", value: test-stack-api}
+        template: virtualService.yaml
+      - equal: {path: "spec.http[1].name", value: canary}
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+      - exists:
+          path: spec.strategy.canary.steps
+        template: rollout.yaml
+
+  # The twin is added next to its original; the original keeps its own matches and both weighted destinations.
+  - it: original route is unchanged next to its twin
+    set:
+      applications:
+        api: *sourceLabelApp
+    template: virtualService.yaml
+    asserts:
+      - equal:
+          path: spec.http[1]
+          value:
+            name: test-stack-api
+            match:
+              - headers:
+                  environment:
+                    exact: prod
+            route:
+              - destination:
+                  host: test-stack-api.prod.svc.cluster.local
+                  port:
+                    number: 8080
+                weight: 100
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+                weight: 0

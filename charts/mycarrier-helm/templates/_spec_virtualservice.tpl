@@ -1,12 +1,19 @@
-{{- /* The app's VirtualService spec. Where a canary Rollout's steps render (helm.canary.stepsRendered), its http routes
-       also carry the canary source routes (helm.canary.sourceRoutes, DEVOPS-326), so the spec is parsed and written out
+{{- /* The app's VirtualService spec. Where a canary Rollout's source routes render (helm.canary.sourceRoutesRendered),
+       its http routes also carry them (helm.canary.sourceRoutes, DEVOPS-326), so the spec is parsed and written out
        again there; every other render is helm.specs.virtualservice.base as it stands. helm.canary.virtualServices reads
        this spec too, and lists no source route: a source route has only the -preview destination. */ -}}
 {{- define "helm.specs.virtualservice" -}}
 {{- $spec := include "helm.specs.virtualservice.base" . -}}
-{{- if eq (include "helm.canary.stepsRendered" .) "true" -}}
+{{- if eq (include "helm.canary.sourceRoutesRendered" .) "true" -}}
   {{- $parsed := $spec | fromYaml -}}
-  {{- $_ := set $parsed "http" (include "helm.canary.sourceRoutes" (dict "http" $parsed.http "context" .) | fromJsonArray) -}}
+  {{- if hasKey $parsed "Error" -}}
+    {{- fail (printf "application '%s': its VirtualService spec does not parse as YAML, so the canary source routes cannot be added. Check the values that feed it (networking.istio.routes, redirects, allowedEndpoints, responseHeaders, corsPolicy)." .appName) -}}
+  {{- end -}}
+  {{- $ctx := .ctx -}}
+  {{- if not $ctx -}}
+    {{- $ctx = include "helm.context" . | fromJson -}}
+  {{- end -}}
+  {{- $_ := set $parsed "http" (include "helm.canary.sourceRoutes" (dict "http" $parsed.http "context" . "ctx" $ctx) | fromJsonArray) -}}
   {{- toYaml $parsed -}}
 {{- else -}}
   {{- $spec -}}

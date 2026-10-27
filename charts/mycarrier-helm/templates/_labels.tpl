@@ -28,18 +28,15 @@ mycarrier.tech/envType: {{ (include "helm.envType" .) | quote }}
 mycarrier.tech/service-namespace: {{ $namespace }}
 mycarrier.tech/reference: {{ $branchLabelSanitized | quote }}
 mycarrier.tech/commitDeployed: {{ $commitDeployed | toString | trunc 63 | quote }}
-mycarrier.tech/correlationId: {{ include "helm.labels.correlationId" . | quote }}
+mycarrier.tech/correlationId: {{ include "helm.labels.correlationId" $ctx | quote }}
 {{- end -}}
 
 {{- /* The value of the mycarrier.tech/correlationId label: global.correlationId as a string, cut to the 63
-       characters a label value allows, in its own case. The canary source routes match canary pods on it
-       (helm.canary.sourceRoutes), so they read it from here and always compare the value the pods carry. */ -}}
+       characters a label value allows, in its own case. Takes the built helm.context. The canary source routes match
+       canary pods on it (helm.canary.sourceRoutes), so they read it from here and always compare the value the pods
+       carry. */ -}}
 {{- define "helm.labels.correlationId" -}}
-{{- $ctx := .ctx -}}
-{{- if not $ctx -}}
-  {{- $ctx = include "helm.context" . | fromJson -}}
-{{- end -}}
-{{- $ctx.defaults.correlationId | toString | trunc 63 -}}
+{{- .defaults.correlationId | toString | trunc 63 -}}
 {{- end -}}
 
 {{- define "helm.labels.version" }}

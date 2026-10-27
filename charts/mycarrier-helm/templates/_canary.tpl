@@ -656,6 +656,25 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson (dict "plugin" (dict "name" "mycarrier/canary-coordinator" "config" (dict "kind" "barrier" "name" .name "timeout" $timeout))) -}}
 {{- end -}}
 
+{{- /* "true" when a VirtualService destination host is the app's -preview Service: its short name <fullName>-preview or
+       <fullName>-preview.<namespace>.svc[...]; "" otherwise. Takes host, fullName and namespace. One test for the
+       routes Argo Rollouts weights (helm.canary.routesFor) and the routes that get a source route
+       (helm.canary.sourceRoutes). */ -}}
+{{- define "helm.canary.isPreviewHost" -}}
+{{- $previewName := printf "%s-preview" .fullName -}}
+{{- if or (eq .host $previewName) (hasPrefix (printf "%s.%s.svc" $previewName .namespace) .host) }}true{{ end -}}
+{{- end -}}
+
+{{- /* True where a canary Rollout renders the canary source routes and the canary/stable pod labels they match
+       (DEVOPS-326): where its steps render (helm.canary.stepsRendered) and coordinator.enabled is true. With traffic
+       routing, an aborted Rollout's -preview Service keeps selecting its canary ReplicaSet while that scales to 0, so a
+       sibling's canary pods would get 503 through the aborted Rollout's source routes until the sibling aborts too. The
+       coordinator aborts every Rollout of the release within the cascade window (about abortScaleDownDelaySeconds);
+       without it nothing would, so with the coordinator off canary callers keep reaching stable. */ -}}
+{{- define "helm.canary.sourceRoutesRendered" -}}
+{{- if and (eq (include "helm.canary.stepsRendered" .) "true") (include "helm.canary.config" . | fromJson).coordinator.enabled }}true{{ else }}false{{ end -}}
+{{- end -}}
+
 {{- /* Names of the HTTP routes in a rendered VirtualService spec that send traffic to the app's Service, as JSON.
        A destination counts when its host is the Service's short name or <fullName>.<namespace>.svc[.cluster.local];
        other hosts that share the prefix, such as the <app>.dev.internal ServiceEntry, are not the Service. */ -}}
@@ -669,8 +688,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- range ($route.route | default list) -}}
     {{- $host := toString .destination.host -}}
     {{- if or (eq $host $.fullName) (eq $host $serviceDomain) (hasPrefix (printf "%s." $serviceDomain) $host) }}{{ $hit = true }}{{ end -}}
-    {{- $previewName := printf "%s-preview" $.fullName -}}
-    {{- if or (eq $host $previewName) (hasPrefix (printf "%s.%s.svc" $previewName $.namespace) $host) }}{{ $preview = true }}{{ end -}}
+    {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" $.fullName "namespace" $.namespace) }}{{ $preview = true }}{{ end -}}
   {{- end -}}
   {{- if and $hit (not $preview) -}}
     {{- fail (printf "VirtualService route '%s' sends traffic to %s without its -preview destination, so it would bypass the canary. A custom route with an explicit destination to the app's own Service gets no -preview destination; leave destination unset." $route.name $.fullName) -}}
@@ -691,7 +709,8 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 
 {{- /* The http routes of an app's VirtualService with a canary source route before each route that has the app's
        -preview destination and no fault or redirect, as JSON (DEVOPS-326 spec A3). Takes http (the parsed routes) and
-       context (the app context); helm.specs.virtualservice calls it where the steps render.
+       context (the app context) and ctx (its helm.context); helm.specs.virtualservice calls it where
+       helm.canary.sourceRoutesRendered is true.
        A source route, <name>-canary-source, takes every match of its original with two more conditions in each (a
        route without a match gets one match of just these): the caller is in the mesh (gateways: [mesh]) and its pod is
        a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by the Rollout's canaryMetadata and
@@ -704,16 +723,14 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
        in this order. */ -}}
 {{- define "helm.canary.sourceRoutes" -}}
 {{- $fullName := include "helm.fullname" .context -}}
-{{- $previewName := printf "%s-preview" $fullName -}}
-{{- $previewDomain := printf "%s.%s.svc" $previewName (include "helm.namespace" .context) -}}
-{{- $sourceLabels := dict "mycarrier.tech/rollout-role" "canary" "mycarrier.tech/correlationId" (include "helm.labels.correlationId" .context) -}}
+{{- $namespace := include "helm.namespace" .context -}}
+{{- $sourceLabels := dict "mycarrier.tech/rollout-role" "canary" "mycarrier.tech/correlationId" (include "helm.labels.correlationId" .ctx) -}}
 {{- $caller := dict "gateways" (list "mesh") "sourceLabels" $sourceLabels -}}
 {{- $routes := list -}}
 {{- range (.http | default list) -}}
   {{- $preview := dict -}}
   {{- range (.route | default list) -}}
-    {{- $host := toString .destination.host -}}
-    {{- if and (not $preview) (or (eq $host $previewName) (hasPrefix $previewDomain $host)) }}{{ $preview = .destination }}{{ end -}}
+    {{- if and (not $preview) (include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $fullName "namespace" $namespace)) }}{{ $preview = .destination }}{{ end -}}
   {{- end -}}
   {{- if and $preview (not .fault) (not .redirect) -}}
     {{- $matches := list -}}
