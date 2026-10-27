@@ -689,6 +689,46 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson $names -}}
 {{- end -}}
 
+{{- /* The http routes of an app's VirtualService with a canary source route before each route that has the app's
+       -preview destination and no fault or redirect, as JSON (DEVOPS-326 spec A3). Takes http (the parsed routes) and
+       context (the app context); helm.specs.virtualservice calls it where the steps render.
+       A source route, <name>-canary-source, takes every match of its original with two more conditions in each (a
+       route without a match gets one match of just these): the caller is in the mesh (gateways: [mesh]) and its pod is
+       a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by the Rollout's canaryMetadata and
+       carrying this release's mycarrier.tech/correlationId as the pod label renders it (helm.labels.correlationId;
+       Istio compares sourceLabels exactly). It sends the request to the original's first -preview destination and
+       keeps every other field of the original (headers, timeout, retries, rewrite, CORS), so a canary caller gets the
+       answer a stable caller gets, served by the canary. A route with a fault (-forbidden) answers the same whatever
+       its destination, and a redirect has none, so they get no source route: a canary caller falls through to them as
+       a stable caller does. Argo Rollouts puts its managed routes (canary-header) above all others and leaves the rest
+       in this order. */ -}}
+{{- define "helm.canary.sourceRoutes" -}}
+{{- $fullName := include "helm.fullname" .context -}}
+{{- $previewName := printf "%s-preview" $fullName -}}
+{{- $previewDomain := printf "%s.%s.svc" $previewName (include "helm.namespace" .context) -}}
+{{- $sourceLabels := dict "mycarrier.tech/rollout-role" "canary" "mycarrier.tech/correlationId" (include "helm.labels.correlationId" .context) -}}
+{{- $caller := dict "gateways" (list "mesh") "sourceLabels" $sourceLabels -}}
+{{- $routes := list -}}
+{{- range (.http | default list) -}}
+  {{- $preview := dict -}}
+  {{- range (.route | default list) -}}
+    {{- $host := toString .destination.host -}}
+    {{- if and (not $preview) (or (eq $host $previewName) (hasPrefix $previewDomain $host)) }}{{ $preview = .destination }}{{ end -}}
+  {{- end -}}
+  {{- if and $preview (not .fault) (not .redirect) -}}
+    {{- $matches := list -}}
+    {{- range (.match | default (list dict)) }}{{ $matches = append $matches (merge (deepCopy $caller) .) }}{{ end -}}
+    {{- $twin := omit . "name" "match" "route" -}}
+    {{- $_ := set $twin "name" (printf "%s-canary-source" .name) -}}
+    {{- $_ := set $twin "match" $matches -}}
+    {{- $_ := set $twin "route" (list (dict "destination" $preview)) -}}
+    {{- $routes = append $routes $twin -}}
+  {{- end -}}
+  {{- $routes = append $routes . -}}
+{{- end -}}
+{{- toJson $routes -}}
+{{- end -}}
+
 {{- /* trafficRouting.istio.virtualServices for the app: its own VirtualService and, for a frontend in a
        multi-frontend release, the shared <primary>-multifrontend one. The routes are read from the same templates
        that render those VirtualServices, so the list always matches what Istio gets, and every listed route

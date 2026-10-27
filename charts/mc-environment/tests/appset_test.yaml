@@ -207,6 +207,28 @@ tests:
                 - /metadata/labels/mycarrier.tech~1reference
                 - /metadata/labels/version
                 - /metadata/labels/mycarrier~1service-version
+  # mycarrier-helm's <route>-canary-source twins (DEVOPS-326) have a single -preview destination and are not managed by
+  # Argo Rollouts, so Argo CD must keep them in sync from git: the weights expression selects only multi-destination
+  # routes, and the managed-route expression only the route named canary-header.
+  - it: canary-source twin is not ignored
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.spec.ignoreDifferences[1].kind
+          value: VirtualService
+      - lengthEqual:
+          path: spec.template.spec.ignoreDifferences[1].jqPathExpressions
+          count: 2
+      - matchRegex:
+          path: spec.template.spec.ignoreDifferences[1].jqPathExpressions[0]
+          pattern: '^\.spec\.http\[\] \| select\(\(\(\.route // \[\]\) \| length\) > 1 and '
+      - equal:
+          path: spec.template.spec.ignoreDifferences[1].jqPathExpressions[1]
+          value: '.spec.http[] | select(.name == "canary-header")'
   - it: forwards the environment block (dependencyenv, namespaceOverride, domainOverride)
     values:
       - fixtures/environment-overrides.yaml

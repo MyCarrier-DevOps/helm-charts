@@ -5,9 +5,15 @@ references the default template set from the canary strategy:
       startingStep: 8
       templates:
         - templateName: prod-mycarrier-api-alerts
+    canaryMetadata:
+      labels:
+        mycarrier.tech/rollout-role: canary
     canaryService: mycarrier-api-preview
     dynamicStableScale: false
     minPodsPerReplicaSet: 2
+    stableMetadata:
+      labels:
+        mycarrier.tech/rollout-role: stable
     stableService: mycarrier-api
     steps:
       - plugin:

@@ -61,6 +61,19 @@ strategy:
     dynamicStableScale: false
     abortScaleDownDelaySeconds: 30
     minPodsPerReplicaSet: {{ ternary 2 1 $canary }}
+    {{- /* Where the steps render, the canary source routes (helm.canary.sourceRoutes, DEVOPS-326) match the callers
+           that are canary pods of this release. Argo Rollouts labels the canary ReplicaSet's pods with canaryMetadata
+           while it is the canary and replaces it with stableMetadata on promotion (in place, on the ReplicaSet and its
+           pods); the labels sit outside the pod template, so they start no new revision. After promotion or abort no
+           pod carries rollout-role: canary and the source routes match nothing. */}}
+    {{- if eq (include "helm.canary.stepsRendered" .) "true" }}
+    canaryMetadata:
+      labels:
+        mycarrier.tech/rollout-role: canary
+    stableMetadata:
+      labels:
+        mycarrier.tech/rollout-role: stable
+    {{- end }}
     trafficRouting:
       {{- if $canary }}
       {{- with and (eq (include "helm.canary.stepsRendered" .) "true") (include "helm.canary.managedRoutes" . | fromJsonArray) }}

@@ -1,4 +1,20 @@
+{{- /* The app's VirtualService spec. Where a canary Rollout's steps render (helm.canary.stepsRendered), its http routes
+       also carry the canary source routes (helm.canary.sourceRoutes, DEVOPS-326), so the spec is parsed and written out
+       again there; every other render is helm.specs.virtualservice.base as it stands. helm.canary.virtualServices reads
+       this spec too, and lists no source route: a source route has only the -preview destination. */ -}}
 {{- define "helm.specs.virtualservice" -}}
+{{- $spec := include "helm.specs.virtualservice.base" . -}}
+{{- if eq (include "helm.canary.stepsRendered" .) "true" -}}
+  {{- $parsed := $spec | fromYaml -}}
+  {{- $_ := set $parsed "http" (include "helm.canary.sourceRoutes" (dict "http" $parsed.http "context" .) | fromJsonArray) -}}
+  {{- toYaml $parsed -}}
+{{- else -}}
+  {{- $spec -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* The app's VirtualService spec as the chart writes it, without the canary source routes. */ -}}
+{{- define "helm.specs.virtualservice.base" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $baseFullName := include "helm.basename" . }}
 {{- $domain := include "helm.domain" $ }}
