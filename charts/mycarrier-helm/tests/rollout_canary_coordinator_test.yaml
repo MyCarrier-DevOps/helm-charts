@@ -587,7 +587,7 @@ tests:
       - failedTemplate:
           errorPattern: "barrier 'w5' has timeout 20m, which is not below progressDeadlineSeconds"
 
-  # DEVOPS-326: progressDeadlineSeconds defaults to 1200 where barriers render, so dark-passed's 15m stays below it.
+  # DEVOPS-326: progressDeadlineSeconds defaults to 1200 where the dark stage renders, above dark-passed's 15m.
   # With the coordinator off no barrier renders and the budget counts the deadline for each setWeight step, so the
   # default stays 600 there (1200 would put the standard preset at 4 x 1200 + 3 x 390 = 5970 s, above 5700).
   - it: keeps the 600 s default deadline with the coordinator off
