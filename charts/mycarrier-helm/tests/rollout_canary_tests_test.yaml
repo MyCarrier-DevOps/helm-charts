@@ -733,18 +733,19 @@ tests:
                 - templateName: prod-mycarrier-api-health
                 - templateName: prod-mycarrier-api-tests
 
-  # R7: the budget counts the tests Job's activeDeadlineSeconds (540) for each analysis step.
-  # standard: start 540 + 3 x (tests 540 + pause 300 + barrier 540) = 2160 (barriers) + 900 (pauses) + 3 x 540
-  - it: counts the tests template in the standard preset's budget (4680 s)
+  # R7: the budget counts the tests Job at its longest for each analysis step: activeDeadlineSeconds 540 + up to
+  # ceil(sqrt(1080)) = 33 s for Argo Rollouts to see it end = 573 (DEVOPS-515 counts the Job lag in the budget).
+  # standard: start 540 + 3 x (tests 573 + pause 300 + barrier 540) = 2160 (barriers) + 900 (pauses) + 3 x 573
+  - it: counts the tests template in the standard preset's budget (4779 s)
     template: rollout.yaml
     set: *prod
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "4680"
+          value: "4779"
 
-  # fast: start 540 + tests 540 + w25 540
-  - it: counts the tests template in the fast preset's budget (1620 s)
+  # fast: start 540 + tests 573 + w25 540
+  - it: counts the tests template in the fast preset's budget (1653 s)
     template: rollout.yaml
     set:
       <<: *prod
@@ -758,10 +759,10 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "1620"
+          value: "1653"
 
-  # manual: start 540 + tests 540 + manualTimeout 3600 + w10 540
-  - it: counts the tests template in the manual preset's budget (5220 s)
+  # manual: start 540 + tests 573 + manualTimeout 3600 + w10 540
+  - it: counts the tests template in the manual preset's budget (5253 s)
     template: rollout.yaml
     set:
       <<: *prod
@@ -775,10 +776,10 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5220"
+          value: "5253"
 
-  # coordinator off: 4 x progressDeadlineSeconds 600 + 3 x (tests 540 + pause 300)
-  - it: counts the tests template in the standard preset's budget with the coordinator off (4920 s)
+  # coordinator off: 4 x progressDeadlineSeconds 600 + 3 x (tests 573 + pause 300)
+  - it: counts the tests template in the standard preset's budget with the coordinator off (5019 s)
     template: rollout.yaml
     set:
       <<: *prod
@@ -793,10 +794,11 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "4920"
+          value: "5019"
 
-  # The Job's activeDeadlineSeconds is tests.timeout + startupSeconds (7m + 120 = 540 by default). 9m: 660. The
-  # coordinator is off, so no barrier window applies: 4 x progressDeadlineSeconds 600 + 3 x (660 + 300).
+  # The Job's activeDeadlineSeconds is tests.timeout + startupSeconds (7m + 120 = 540 by default). 9m: 660, which the
+  # budget counts with its lag, 660 + 37 = 697. The coordinator is off, so no barrier window applies:
+  # 4 x progressDeadlineSeconds 600 + 3 x (697 + 300).
   - it: counts tests.timeout + startupSeconds for each analysis step
     template: rollout.yaml
     set:
@@ -814,7 +816,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5280"
+          value: "5391"
 
   - it: sets the Job's poll budget and activeDeadlineSeconds from tests.timeout and startupSeconds
     template: analysistemplate.yaml
@@ -957,10 +959,10 @@ tests:
               tests:
                 timeout: 6m
     asserts:
-      # start 540 + 3 x (tests 480 + pause 300 + barrier 540)
+      # start 540 + 3 x (tests 480 + 31 + pause 300 + barrier 540)
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "4500"
+          value: "4593"
         documentIndex: 0
 
   # Pavlo's case 1: this app replaces health with count 1, so its step can end at once: it waits 573 s for the sibling.
@@ -1031,7 +1033,8 @@ tests:
           errorPattern: "and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 635 s"
 
   # canary-coordinator passes a barrier at once for a group of one, so one canary Rollout has no wait to check:
-  # 12m (activeDeadlineSeconds 840) renders; budget 540 + 3 x (840 + 300 + 540).
+  # 11m (activeDeadlineSeconds 780, 820 with its lag; 760 s with two Rollouts) renders;
+  # budget 540 + 3 x (820 + 300 + 540).
   - it: renders a long tests.timeout with one canary Rollout
     template: rollout.yaml
     set:
@@ -1043,11 +1046,11 @@ tests:
             analysis:
               templates: [tests]
               tests:
-                timeout: 12m
+                timeout: 11m
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5580"
+          value: "5520"
 
   - it: renders health off with the default timeout and one canary Rollout
     template: rollout.yaml
@@ -1099,10 +1102,10 @@ tests:
             coordinator:
               barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 11m, w25: 11m, w50: 11m}
     asserts:
-      # start 540 + 3 x (tests 660 + pause 300 + barrier 660)
+      # start 540 + 3 x (tests 660 + 37 + pause 300 + barrier 660)
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5400"
+          value: "5511"
         documentIndex: 0
 
   # No barriers, so no window to check (one canary Rollout, so lockstep is not needed).
@@ -1121,10 +1124,10 @@ tests:
               tests:
                 timeout: 10m
     asserts:
-      # 4 x 600 + 3 x (720 + 300)
+      # 4 x 600 + 3 x (720 + 38 + 300)
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5460"
+          value: "5574"
 
   # Explicit steps name the same templates for every Rollout: 573 - 60 = 513 against the first barrier after the step.
   - it: checks the first barrier after an explicit analysis step that runs tests
@@ -1447,10 +1450,9 @@ tests:
       - failedTemplate:
           errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 546 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 606 s"
 
-  # The budget keeps Tech Spec D22's formula, 2 x max(60, 250) = 500 for smoke: start 540 + 3 x (500 + 300 + 540), with
-  # one canary Rollout (no barrier wait). Counting the Job lag and interval there would raise budgets of stacks without
-  # tests too, so it is left to a separate change.
-  - it: keeps the budget formula for a Job template with count 2
+  # The budget counts every measurement of smoke as the window does, 2 x (250 + 23) + 60 = 606: start 540 +
+  # 3 x (606 + 300 + 540), with one canary Rollout (no barrier wait). Breaking: Tech Spec D22's formula gave 500.
+  - it: counts every measurement of a Job template with count 2 in the budget
     template: rollout.yaml
     set:
       <<: *prod
@@ -1467,7 +1469,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "4560"
+          value: "4878"
 
   # M3: TestEngine's DeployVerifier checks every Rollout of the correlation group, so tests needs lockstep.
   - it: fails tests with the coordinator off and more than one canary Rollout

@@ -342,9 +342,11 @@
        - pause: its duration; the manual preset's pause, which has none, counts manualTimeout (default 1h). The pause
          itself stays indefinite; manualTimeout only feeds the budget.
        - analysis: the longest of its templates (they run in parallel), each count x max(interval, the Job's
-         activeDeadlineSeconds when the template is a Job provider that sets it). The chart's health template uses
-         analysis.health.count and interval; the chart's tests template counts 1 x its Job's activeDeadlineSeconds
-         (analysis.tests.timeout + analysis.tests.startupSeconds); an
+         activeDeadlineSeconds when the template is a Job provider that sets it), plus, for a Job, the time Argo
+         Rollouts can take to see it end, ceil(sqrt(2 x activeDeadlineSeconds)); a Job with count n >= 2 at least
+         n x (activeDeadlineSeconds + that lag) + (n - 1) x interval. The chart's health template uses
+         analysis.health.count and interval; the chart's tests template counts its Job's activeDeadlineSeconds
+         (analysis.tests.timeout + analysis.tests.startupSeconds) + lag (540 + 33 by default); an
          applications.<app>.analysisTemplates entry (an extra template, or one that replaces health or supplies
          tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders it; Argo Rollouts runs count 0
          without an interval once) and interval (0 when unset). The lengths come from
@@ -366,13 +368,14 @@
        the step uses (<environment>-<fullName>-<name>): the chart's health (analysis.health count and interval), the
        chart's tests when the app runs it (helm.canary.tests.wanted), and each applications.<app>.analysisTemplates
        entry, which replaces the chart's template of the same name. For each, in seconds:
-       - budget: count x max(interval, the Job's activeDeadlineSeconds when it is a Job provider that sets it); count is
-         1 when unset or 0 (Argo Rollouts runs count 0 without an interval once). helm.canary.budgetSeconds adds it up.
-         It is Tech Spec D22's formula: it leaves out the Job lag below, which rollout-watch's 15 minutes past the
-         budget must cover.
-       - longest: budget, plus lag for a Job provider: ceil(sqrt(2 x activeDeadlineSeconds)), the time Argo Rollouts
-         v1.10.0 can take to see a Job end (helm.canary.tests.completionLagSeconds); for count n >= 2 the n x
-         (activeDeadlineSeconds + lag) + (n - 1) x interval above when larger.
+       - budget: the template at its longest, as Tech Spec D22's budget needs. count x max(interval, the Job's
+         activeDeadlineSeconds when it is a Job provider that sets it); count is 1 when unset or 0 (Argo Rollouts runs
+         count 0 without an interval once). A Job provider adds lag: ceil(sqrt(2 x activeDeadlineSeconds)), the time
+         Argo Rollouts v1.10.0 can take to see a Job end (helm.canary.tests.completionLagSeconds), so a count-1 Job
+         counts activeDeadlineSeconds + lag. A Job with count n >= 2 counts at least n x (activeDeadlineSeconds + lag)
+         + (n - 1) x interval: Argo Rollouts starts each measurement at the previous one's FinishedAt + interval, and a
+         Job's FinishedAt is when the controller sees it end. helm.canary.budgetSeconds adds it up.
+       - longest: the same as budget; the barrier window uses it.
        - shortest: (count - 1) x interval: Argo Rollouts takes the first measurement at once, and a Job can end at once.
        helm.canary.budgetSeconds and the barrier window of helm.canary.configuredSteps both read this table, so they
        cannot drift apart. */ -}}
@@ -384,7 +387,8 @@
 {{- $table := dict (printf "%shealth" $prefix) (dict "budget" (mul (int $health.count) $healthInterval) "longest" (mul (int $health.count) $healthInterval) "shortest" (mul (max 0 (sub (int $health.count) 1)) $healthInterval)) -}}
 {{- if eq (include "helm.canary.tests.wanted" .) "true" -}}
   {{- $deadline := include "helm.canary.tests.activeDeadlineSeconds" . | int -}}
-  {{- $_ := set $table (printf "%stests" $prefix) (dict "budget" $deadline "longest" (add $deadline (include "helm.canary.tests.completionLagSeconds" $deadline | int)) "shortest" 0) -}}
+  {{- $length := add $deadline (include "helm.canary.tests.completionLagSeconds" $deadline | int) -}}
+  {{- $_ := set $table (printf "%stests" $prefix) (dict "budget" $length "longest" $length "shortest" 0) -}}
 {{- end -}}
 {{- range (.application.analysisTemplates | default list) -}}
   {{- $count := 1 -}}
@@ -392,17 +396,14 @@
   {{- $interval := include "helm.canary.durationSeconds" (.interval | default "") | int -}}
   {{- $deadline := int (dig "provider" "job" "spec" "activeDeadlineSeconds" 0 .) -}}
   {{- $budget := mul $count (max $interval $deadline) -}}
-  {{- $job := and (kindIs "map" .provider) (hasKey .provider "job") -}}
-  {{- $lag := 0 -}}
-  {{- if $job }}{{ $lag = include "helm.canary.tests.completionLagSeconds" $deadline | int }}{{ end -}}
-  {{- $longest := add $budget $lag -}}
-  {{- /* Argo Rollouts v1.10.0 starts the next measurement at the previous one's FinishedAt + interval, and a Job's
-         FinishedAt is when the controller sees it end: a Job with count n >= 2 can run n x (activeDeadlineSeconds +
-         lag) + (n - 1) x interval. The budget keeps Tech Spec D22's count x max(interval, activeDeadlineSeconds). */ -}}
-  {{- if and $job (gt $count 1) -}}
-    {{- $longest = max $longest (add (mul $count (add $deadline $lag)) (mul (sub $count 1) $interval)) -}}
+  {{- if and (kindIs "map" .provider) (hasKey .provider "job") -}}
+    {{- $lag := include "helm.canary.tests.completionLagSeconds" $deadline | int -}}
+    {{- $budget = add $budget $lag -}}
+    {{- /* Each measurement starts at the previous one's FinishedAt + interval, and a Job's FinishedAt is when Argo
+           Rollouts sees it end. */ -}}
+    {{- if gt $count 1 }}{{ $budget = max $budget (add (mul $count (add $deadline $lag)) (mul (sub $count 1) $interval)) }}{{ end -}}
   {{- end -}}
-  {{- $_ := set $table (printf "%s%s" $prefix (toString .name)) (dict "budget" $budget "longest" $longest "shortest" (mul (sub $count 1) $interval)) -}}
+  {{- $_ := set $table (printf "%s%s" $prefix (toString .name)) (dict "budget" $budget "longest" $budget "shortest" (mul (sub $count 1) $interval)) -}}
 {{- end -}}
 {{- toJson $table -}}
 {{- end -}}
@@ -414,7 +415,7 @@
 {{- if $cfg.steps -}}
   {{- $set := $cfg.budgetSeconds -}}
   {{- if or (not (kindIs "float64" $set)) (lt $set 1.0) (ne $set (float64 (int $set))) -}}
-    {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
+    {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds), plus for a Job ceil(sqrt(2 x activeDeadlineSeconds)); a Job with count n >= 2 at least n x (activeDeadlineSeconds + that lag) + (n - 1) x interval) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
   {{- end -}}
   {{- $budget = int $set -}}
 {{- else -}}

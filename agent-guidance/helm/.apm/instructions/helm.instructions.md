@@ -672,13 +672,13 @@ global:
 
 The budget is `mycarrier.tech/canaryBudgetSeconds` (see What the release reads). The defaults are the coordinator on, `dark: false`, `analysis.health` at 3 x 30s and barrier timeouts of 9m.
 
-With `tests` in `analysis.templates` and the default `tests.timeout` (`7m`) and `tests.startupSeconds` (`120`), each analysis step counts the tests Job's `activeDeadlineSeconds` (540 s) instead of `health` (90 s):
+With `tests` in `analysis.templates` and the default `tests.timeout` (`7m`) and `tests.startupSeconds` (`120`), each analysis step counts the tests Job at its longest, `activeDeadlineSeconds` (540 s) + 33 s for Argo Rollouts to see it end = 573 s, instead of `health` (90 s):
 
 | Preset | Budget with `tests` and the defaults | With the coordinator off |
 |--------|--------------------------------------|--------------------------|
-| `standard` | 4680 s: 2160 s of barriers (`start` and three weight barriers), 900 s of pauses and 3 x 540 s | 4920 s |
-| `fast` | 1620 s | 1740 s |
-| `manual` | 5220 s, with the pause counted as `manualTimeout` (`1h`) | 5340 s |
+| `standard` | 4779 s: 2160 s of barriers (`start` and three weight barriers), 900 s of pauses and 3 x 573 s | 5019 s |
+| `fast` | 1653 s | 1773 s |
+| `manual` | 5253 s, with the pause counted as `manualTimeout` (`1h`) | 5373 s |
 
 `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
 
@@ -687,7 +687,7 @@ With `tests` in `analysis.templates` and the default `tests.timeout` (`7m`) and 
 - `mycarrier.tech/rolloutGroupSize`: the number of such Rollouts in the release.
 - `mycarrier.tech/bakeMinutes`: `bakeMinutes` (default `30`), alert-gate's watch window after promotion. rollout-watch puts the smallest value of the release's Rollouts in the `alert.gate` event. Set a longer window for a service with a known slow-burn history. The maximum is `100`: alert-gate's run has a 2-hour deadline (`activeDeadlineSeconds` 7200) and spends about 750 s outside its window, so a longer window would be killed before it ends. A value above `100` or below `1` fails the render, with or without Rollouts.
 - `mycarrier.tech/canaryBudgetSeconds`: the worst-case length of the Rollout's canary steps, in whole seconds (Tech Spec D22). rollout-watch times out at the largest value of the release's Rollouts plus 15 minutes, so it never times out a canary that is still inside its steps. The leader runs `tests-dark` and its followers do not, so their values can differ. Outside prod without `stepsOutsideProd` it is absent, but the chart still computes the budget, the same as in prod, and runs its checks.
-  - **Preset.** The chart adds up the steps it renders for the Rollout. A pause counts its duration. The `manual` preset's pause counts `manualTimeout` (default `1h`); the pause itself still has no time limit. An analysis step counts its longest template, because its templates run in parallel. A template counts `count` x max(`interval`, `activeDeadlineSeconds`); `activeDeadlineSeconds` counts only for a `job` provider that sets it in `job.spec`. The chart's `health` uses `analysis.health.count` and `interval`. The chart's `tests` counts 1 x its Job's `activeDeadlineSeconds`, which is `analysis.tests.timeout` + `analysis.tests.startupSeconds` (540 s by default). An `analysisTemplates` entry (an extra template, a replacement `health`, or `tests-dark`) uses its own `count` (default 1; `count: 0` without an `interval` runs once) and `interval` (0 when unset). A barrier counts its timeout. A weight step above 0 waits until the canary's pods are available, for up to `progressDeadlineSeconds`: with the coordinator on, the barrier timeouts cover that wait; with `coordinator.enabled: false`, each such weight step (100 included) counts `progressDeadlineSeconds`. Every other step counts 0. The background `alerts` analysis runs next to the steps and does not count. `budgetSeconds` is ignored with a preset.
+  - **Preset.** The chart adds up the steps it renders for the Rollout. A pause counts its duration. The `manual` preset's pause counts `manualTimeout` (default `1h`); the pause itself still has no time limit. An analysis step counts its longest template, because its templates run in parallel. A template counts `count` x max(`interval`, `activeDeadlineSeconds`); `activeDeadlineSeconds` counts only for a `job` provider that sets it in `job.spec`. A `job` template also counts the time Argo Rollouts v1.10.0 can take to see a Job end, ceil(sqrt(2 x `activeDeadlineSeconds`)) (33 s at 540 s), and with `count` n of 2 or more at least n x (`activeDeadlineSeconds` + that lag) + (n - 1) x `interval`, because each measurement starts an interval after Argo Rollouts sees the previous Job end. The chart's `health` uses `analysis.health.count` and `interval`. The chart's `tests` counts its Job's `activeDeadlineSeconds`, which is `analysis.tests.timeout` + `analysis.tests.startupSeconds` (540 s by default), plus that lag: 573 s by default. An `analysisTemplates` entry (an extra template, a replacement `health`, or `tests-dark`) uses its own `count` (default 1; `count: 0` without an `interval` runs once) and `interval` (0 when unset). A barrier counts its timeout. A weight step above 0 waits until the canary's pods are available, for up to `progressDeadlineSeconds`: with the coordinator on, the barrier timeouts cover that wait; with `coordinator.enabled: false`, each such weight step (100 included) counts `progressDeadlineSeconds`. Every other step counts 0. The background `alerts` analysis runs next to the steps and does not count. `budgetSeconds` is ignored with a preset.
   - **Explicit steps.** The chart does not add up an explicit `steps` list. Set `budgetSeconds` to its worst-case length by the same rules, from `1` to `5700`. Without it, the render fails, in every environment, also where the steps do not render. Count an indefinite pause (`pause: {}`) as the time a person needs to promote it.
   - **Limits.** A budget above `5700` fails the render, in every environment. rollout-watch's release workflow has `activeDeadlineSeconds` 10800, which covers about 70 minutes before the canary starts, the budget and 15 minutes after it (DEVOPS-319). The `manual` preset with `dark: true` adds up to 5850 s with the defaults, before the leader's `tests-dark`, and fails. Lower `manualTimeout` until the leader's budget fits: at `45m`, `tests-dark` can take up to 750 s. To lower a budget, lower `manualTimeout`, the barrier timeouts, or the templates' `count` or `interval`; with explicit steps, shorten their pauses and lower `budgetSeconds`. With the `manual` preset, a `manualTimeout` of zero fails the render, and the schema refuses one that is not a duration such as `90s`, `30m` or `1h`. The other presets and explicit steps ignore `manualTimeout`.
 
@@ -1409,6 +1409,14 @@ When reviewing or creating helm value changes:
 ## Breaking changes
 
 Newest first. Each entry names the chart version, what broke, and what a stack's values must change.
+
+### mycarrier-helm, the release after 4.7.11
+
+`mycarrier.tech/canaryBudgetSeconds` now counts a `job` analysis template at its longest (DEVOPS-515): Argo Rollouts v1.10.0 can take ceil(sqrt(2 x `activeDeadlineSeconds`)) seconds to see a Job end, and it starts the next measurement only an interval after that. Only canary Rollouts (repository property `canary`) with a `job` template under `applications.<app>.analysisTemplates` (an extra template, a replacement `health` or `tests`, or `tests-dark`) change; no stack runs a canary Rollout today.
+
+- A `job` template with `count` 1 now counts `activeDeadlineSeconds` + ceil(sqrt(2 x `activeDeadlineSeconds`)), for example 600 + 35 = 635 s.
+- A `job` template with `count` n of 2 or more now counts at least n x (`activeDeadlineSeconds` + ceil(sqrt(2 x `activeDeadlineSeconds`))) + (n - 1) x `interval`. A `standard`-preset stack with a `smoke` Job of `count: 2`, `interval: 1m` and `activeDeadlineSeconds: 400` goes from 5460 s to 5814 s.
+- A budget above 5700 s fails the render, so a stack near the cap can now fail. Lower that template's `count`, `interval` or `activeDeadlineSeconds`, or lower `coordinator.barrierTimeouts` or `manualTimeout`. An explicit `steps` list states its own `budgetSeconds`: recount it by the same rules.
 
 ### mycarrier-helm, the release after 4.7.10
 

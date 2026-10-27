@@ -104,8 +104,11 @@ def run_status(status):
 
 DROP = (None, None)  # close the connection without an answer
 TRUNCATED = "truncated"  # (TRUNCATED, code, body): the body is shorter than its Content-Length
-DRIP = "drip"  # (DRIP, None, None): 200 headers, then one byte every 0.1 s
-HEADER_DRIP = "header-drip"  # (HEADER_DRIP, None, None): the status line, then one header byte every 0.5 s
+DRIP = "drip"  # (DRIP, None, None): 200 headers, then one byte every 0.1 s for 40 s
+HEADER_DRIP = "header-drip"  # (HEADER_DRIP, None, None): the status line, then one header byte every 0.5 s for 60 s
+# The timing cases bound the run loosely (budget + 8 s or more, since self.elapsed includes the interpreter's start and
+# the machine may be busy), and the slow answers last far longer than those bounds, so the cases still fail when the
+# bound they pin is removed.
 
 
 class Stub(http.server.BaseHTTPRequestHandler):
@@ -153,7 +156,7 @@ class Stub(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "1000")
             self.end_headers()
             try:
-                for _ in range(100):
+                for _ in range(400):
                     self.wfile.write(b" ")
                     self.wfile.flush()
                     time.sleep(0.1)
@@ -309,10 +312,10 @@ class TestsJobScript(unittest.TestCase):
 
     def test_a_404_after_the_grace_fails(self):
         Stub.reset(posts=[accepted(RUN_A)], runs={RUN_A: [(404, {"title": "Not Found", "status": 404})]})
-        rc, out = self.run_script(grace="0.3", budget="20")
+        rc, out = self.run_script(grace="0.3", budget="40")
         self.assertEqual(rc, 1, out)
         self.assertIn("still answered 404", out)
-        self.assertLess(self.elapsed, 10, "the 404 grace, not the poll budget, ends the run")
+        self.assertLess(self.elapsed, 30, "the 404 grace, not the poll budget (40 s), ends the run")
         self.assertEqual(len(self.posts()), 1)
 
     def test_a_5xx_on_the_run_fails(self):
@@ -369,7 +372,7 @@ class TestsJobScript(unittest.TestCase):
 
     def test_a_poll_timeout_fails(self):
         Stub.reset(posts=[accepted(RUN_A)], runs={RUN_A: [run_status("running")]})
-        rc, out = self.run_script(budget="0.5")
+        rc, out = self.run_script(budget="2")
         self.assertEqual(rc, 1, out)
         self.assertIn("did not end in time (last status: running)", out)
         self.assertIn("poll budget of", out)
@@ -377,7 +380,7 @@ class TestsJobScript(unittest.TestCase):
     def test_the_poll_budget_covers_the_resubmit(self):
         Stub.reset(posts=[accepted(RUN_A), accepted(RUN_B)],
                    runs={RUN_A: [run_status("no_results")], RUN_B: [run_status("running")]})
-        rc, out = self.run_script(budget="0.5")
+        rc, out = self.run_script(budget="3")
         self.assertEqual(rc, 1, out)
         self.assertIn("run %s did not end in time" % RUN_B, out)
         self.assertEqual(len(self.posts()), 2)
@@ -472,7 +475,7 @@ class TestsJobScript(unittest.TestCase):
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             closed_port = s.getsockname()[1]
-        rc, out = self.run_script(url="http://127.0.0.1:%d/api/v1/trigger" % closed_port, budget="0.5")
+        rc, out = self.run_script(url="http://127.0.0.1:%d/api/v1/trigger" % closed_port, budget="1")
         self.assertEqual(rc, 1, out)
         self.assertIn("GET /v1/capabilities: no answer (ConnectionRefusedError)", out)
         self.assertIn("never answered; the poll budget of", out)
@@ -484,7 +487,7 @@ class TestsJobScript(unittest.TestCase):
         self.assertEqual(rc, 1, out)
         self.assertIn("GET /v1/capabilities: no answer (TimeoutError)", out)
         self.assertIn("FAIL: GET /v1/capabilities never answered; the poll budget of 1 s", out)
-        self.assertLess(self.elapsed, 4, "the slow answer ran past the budget")
+        self.assertLess(self.elapsed, 9, "the slow answer (40 s) ran past the budget (1 s)")
         self.assertEqual(self.posts(), [])
 
     # P1: the whole call is bounded by the budget, also when the status line and headers arrive one byte at a time.
@@ -494,7 +497,7 @@ class TestsJobScript(unittest.TestCase):
         self.assertEqual(rc, 1, out)
         self.assertIn("GET /v1/capabilities: no answer (TimeoutError)", out)
         self.assertIn("FAIL: GET /v1/capabilities never answered; the poll budget of 2 s", out)
-        self.assertLess(self.elapsed, 3.5, "the slow headers ran past the budget")
+        self.assertLess(self.elapsed, 10, "the slow headers (60 s) ran past the budget (2 s)")
         self.assertEqual(self.posts(), [])
 
     # P5: no resubmit when less than the floor of the budget is left: the new run could not end in time.
@@ -511,9 +514,9 @@ class TestsJobScript(unittest.TestCase):
     def test_a_post_after_the_budget_is_not_sent(self):
         too_early = (425, {"title": "Too Early", "status": 425, "detail": "nothing was dispatched; retry later"})
         Stub.reset(posts=[too_early, accepted(RUN_A)], runs={RUN_A: [run_status("passed")]})
-        rc, out = self.run_script(budget="1", TESTS_POLL_INTERVAL_SECONDS="5")
+        rc, out = self.run_script(budget="3", TESTS_POLL_INTERVAL_SECONDS="30")
         self.assertEqual(rc, 1, out)
-        self.assertIn("FAIL: POST /v1/trigger was not sent: the poll budget of 1 s", out)
+        self.assertIn("FAIL: POST /v1/trigger was not sent: the poll budget of 3 s", out)
         self.assertNotIn("may have started a run", out)
         self.assertEqual(len(self.posts()), 1)
 

@@ -558,7 +558,9 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "1170"
 
-  # smoke is a Job: 2 x max(1m, activeDeadlineSeconds 400) = 800; start 540 + 800 + w25 540
+  # smoke is a Job with count 2: Argo Rollouts starts the second Job an interval after it sees the first end, up to
+  # ceil(sqrt(2 x 400)) = 29 s late, so 2 x (400 + 29) + 1m = 918 (more than 2 x max(1m, 400) + 29 = 829);
+  # start 540 + 918 + w25 540 (DEVOPS-515; it was 1880 before Job measurements counted in full).
   - it: counts a Job template's activeDeadlineSeconds when it is longer than the interval
     set:
       global:
@@ -594,7 +596,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "1880"
+          value: "1998"
 
   # A Job without activeDeadlineSeconds counts its interval: 2 x 1m = 120; start 540 + 120 + w25 540
   - it: counts a Job template's interval when it sets no activeDeadlineSeconds
@@ -632,7 +634,8 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "1200"
 
-  # Argo Rollouts runs count 0 without an interval once: 1 x activeDeadlineSeconds 300; start 540 + 300 + w25 540
+  # Argo Rollouts runs count 0 without an interval once: 1 x activeDeadlineSeconds 300, plus up to ceil(sqrt(600)) = 25 s
+  # for Argo Rollouts to see the Job end (DEVOPS-515); start 540 + 325 + w25 540
   - it: counts a template with count 0 and no interval as one measurement
     set:
       global:
@@ -666,7 +669,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "1380"
+          value: "1405"
 
   # A health entry under analysisTemplates replaces the chart's: 4 x 1m = 240; start 540 + 240 + w25 540
   - it: counts a replacement health template's own count and interval
@@ -697,7 +700,8 @@ tests:
           value: "1320"
 
   # Follower: start 540 + dark-ready 540 + dark-passed 540 + health 90 + w25 540 = 2250. The leader also runs tests-dark,
-  # a Job of 1 x activeDeadlineSeconds 600: 2850. rollout-watch takes the largest value of the release group.
+  # a Job of 1 x activeDeadlineSeconds 600, plus up to ceil(sqrt(1200)) = 35 s for Argo Rollouts to see it end
+  # (DEVOPS-515): 2885. rollout-watch takes the largest value of the release group.
   - it: gives the leader the tests-dark analysis in its budget and the follower none
     set:
       global:
@@ -734,7 +738,7 @@ tests:
           count: 2
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "2850"
+          value: "2885"
         documentSelector:
           path: metadata.name
           value: test-stack-api

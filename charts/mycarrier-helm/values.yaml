@@ -87,12 +87,13 @@ global:
   #                               # timeout is the poll budget; startupSeconds (30 to 600) is the pod's start slack
   #                               # (Kubernetes counts activeDeadlineSeconds from the Job's creation; a pod Pending
   #                               # past it ends DeadlineExceeded with no FAIL line). activeDeadlineSeconds is timeout
-  #                               # + startupSeconds (540 s), which the canary budget counts per analysis step
-  #                               # (standard 4680 s, fast 1620 s, manual 5220 s with the defaults). With the
-  #                               # coordinator on and two or more canary Rollouts, one Rollout's longest run of a step
-  #                               # (a Job adds ceil(sqrt(2 x activeDeadlineSeconds))) minus another's shortest
-  #                               # ((count - 1) x interval) must stay below the next barrier's timeout, or the render
-  #                               # fails (513 s with the defaults). Also failing: a serviceAddress off the app's own
+  #                               # + startupSeconds (540 s); the canary budget counts it with the Job's detection
+  #                               # lag (573 s) per analysis step (standard 4779 s, fast 1653 s, manual 5253 s with
+  #                               # the defaults). With the coordinator on and two or more canary Rollouts, one
+  #                               # Rollout's longest run of the steps since the previous barrier (a Job adds
+  #                               # ceil(sqrt(2 x activeDeadlineSeconds))) minus another's shortest ((count - 1) x
+  #                               # interval) must stay below the barrier's timeout, or the render fails (513 s with
+  #                               # the defaults). Also failing: a serviceAddress off the app's own
   #                               # Service or with another port than the http Service port, a literal apikey,
   #                               # managed routes (dark: true with the coordinator on), the coordinator off with
   #                               # more than one Rollout, no correlationId where the steps render, and in prod a

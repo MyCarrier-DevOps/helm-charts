@@ -446,8 +446,9 @@ def poll(base, key, run_id, posted, deadline):
         try:
             status, document, text = call("GET", base + "/v1/runs/" + run_id, key, deadline)
         except NoAnswer as e:
-            last = "no answer (%s)" % e
-            log("GET /v1/runs/%s: %s" % (run_id, last))
+            log("GET /v1/runs/%s: no answer (%s)" % (run_id, e))
+            if time.monotonic() < deadline:  # a call the end of the budget cut short keeps the last status
+                last = "no answer (%s)" % e
         else:
             if status == 200 and isinstance(document, dict) and isinstance(document.get("status"), str):
                 state = document["status"]
