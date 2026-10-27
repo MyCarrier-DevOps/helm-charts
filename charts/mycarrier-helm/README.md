@@ -191,6 +191,49 @@ steps until they do. A migrating Rollout (`migratingToRollouts`) renders the bar
 |---|---|
 | A Rollout rendered canary steps whenever `deploymentType: rollout` was set without `migratingToRollouts` | Set the repository's `deployment-strategy` property to `canary`; chart-renderer passes it. Without it the Rollout renders no steps. |
 
+## Canary tests in the release after 4.7.11 (canary Rollouts, opt-in)
+
+The release after 4.7.11 adds the chart's `tests` AnalysisTemplate (DEVOPS-515). It applies only to canary Rollouts:
+applications with `deploymentType: rollout`, without `migratingToRollouts`, in a repository whose `deployment-strategy`
+property is `canary` (`global.deploymentStrategy`, passed by chart-renderer; see the section above). It renders only
+for a stack that lists `tests` in `global.strategy.canary.analysis.templates` (or references
+`<environment>-<fullName>-tests` in explicit `steps`), so other renders do not change. Like `health` and `alerts`, a
+Rollout whose property is not `canary` renders no `tests` template and runs none of its checks, with or without `tests`
+listed. Each analysis step then runs a Job that sends the application's
+`testtrigger.testdefinitions` to TestEngine's v1 API, with `ServiceAddress` the `-preview` Service, `RunKind: canary`,
+`SlipStep: none` and `Tolerations: []`, polls the run, and passes only when the run passes. A run that ends `no_results`
+or `infra_failed` is sent once more. A failed suite, a second `no_results`, TestEngine with `RUN_KINDS_ENABLED` off, a 5xx
+or the end of `analysis.tests.timeout` (default `7m`) fails the AnalysisRun and aborts the canary. A Job image (or
+Vault init image) that cannot be pulled leaves the measurement Inconclusive: the Rollout pauses at its canary weight,
+serving production traffic, until the siblings' barrier times out and the coordinator aborts it (about 9 minutes), or,
+with one canary Rollout, until rollout-watch times out (`canaryBudgetSeconds` + 15 minutes, about 93 minutes on
+`standard`) and gitops-rollback reverts the release. Mirror the image to ACR and set `analysis.tests.image` to the
+mirror.
+
+| Values | Effect |
+|---|---|
+| `analysis.templates: [tests]` | Every canary Rollout application needs `testtrigger.testdefinitions` in that environment, or the render fails. The template renders in every environment where it is listed, like `health`. To roll back, remove `tests` from the list. |
+| `analysis.tests.timeout` (default `7m`) | The poll budget. The Job's `activeDeadlineSeconds` is the timeout + `startupSeconds` (540 s by default), and the canary budget counts it, with the 33 s Argo Rollouts can take to see the Job end, for each analysis step: 4779 s for `standard`, 1653 s for `fast` and 5253 s for `manual` with the defaults. With the coordinator on and more than one canary Rollout, one Rollout's longest run of an analysis step (its longest template; a Job adds ceil(sqrt(2 x `activeDeadlineSeconds`)) for Argo to see it end) minus another's shortest ((count - 1) x interval of its templates) must stay below the next barrier's timeout (9m), or the render fails: two Rollouts with the defaults wait 513 s. Several analysis steps between two barriers add up; each Rollout's own `analysisTemplates` replacements count; at `dark-passed` only the leader's `tests-dark` counts. A release with one canary Rollout has no barrier wait. |
+| `analysis.tests.startupSeconds` (default `120`, 30 to 600) | Slack for the Job's pod to start (scheduling, an on-demand node, the image pull, Vault injection): Kubernetes counts `activeDeadlineSeconds` from the Job's creation. A pod still Pending past it ends `DeadlineExceeded`, with no `FAIL:` line, and a TestEngine run already started is left running. |
+| `analysis.tests.image` | The Job's Python image; the default is the pinned image of the alerts check. |
+| A prod filter whose first `TestCategory` starts with `preprod` | Fails the render: TestEngine refuses it in a prod canary. |
+| A test definition's `serviceAddress` | Must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port; the canary run keeps its path on the `-preview` Service. Another host or port fails the render, and so does a `-preview` Service with no `http` port. |
+| `testtrigger.apikey` | Unset (the shared `vault:DevOps/data/testengine/api#encoded_header`) or a `vault:` reference; a literal key fails the render. |
+| Managed routes (`dark: true` with the coordinator on, or a `setHeaderRoute` or `setMirrorRoute` step in explicit `steps`), `coordinator.enabled: false` with more than one canary Rollout, or no `global.correlationId` where the steps render | Fails the render: TestEngine's DeployVerifier fails a canary run without the canary header on a Rollout with managed routes, and checks every Rollout of the correlation group; TestEngine refuses a run without a CorrelationId. With the coordinator off, `dark: true` adds no route. |
+
+**Breaking (canary budget).** `mycarrier.tech/canaryBudgetSeconds` now counts a `job` analysis template at its longest:
+`activeDeadlineSeconds` + ceil(sqrt(2 x `activeDeadlineSeconds`)) (the time Argo Rollouts v1.10.0 can take to see a Job
+end), and with `count` n of 2 or more at least n x (`activeDeadlineSeconds` + that lag) + (n - 1) x `interval`. This
+changes canary Rollouts with a `job` template under `applications.<app>.analysisTemplates`, with or without `tests`; no
+stack runs a canary Rollout today. A budget above 5700 s fails the render: a `standard`-preset stack with a `smoke` Job of
+`count: 2`, `interval: 1m` and `activeDeadlineSeconds: 400` goes from 5460 s to 5814 s and fails. Lower that template's
+`count`, `interval` or `activeDeadlineSeconds`, or the barrier timeouts or `manualTimeout`; recount `budgetSeconds` for
+an explicit `steps` list.
+
+The prod TestEngine runs with `RUN_KINDS_ENABLED=false` until the DEVOPS-321 pilot; until then, a prod canary with
+`tests` fails at its first analysis step. The 4.7.11 schema refuses `analysis.tests`, and 4.7.11 fails the render of a
+canary Rollout that lists `tests`.
+
 ## Chart Structure
 
 ```

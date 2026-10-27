@@ -205,6 +205,44 @@ spec:
         jsonPath: "{$}"
         timeoutSeconds: 15
 {{- end }}
+{{- /* The chart's tests template (DEVOPS-515) for a canary Rollout that lists tests in analysis.templates or references
+       <environment>-<fullName>-tests in explicit steps (helm.canary.tests.wanted), unless an
+       applications.<app>.analysisTemplates entry named tests replaces it. Like health, it renders in every environment
+       where it is listed, also where the Rollout renders steps: [], so stepsOutsideProd changes only the Rollout. One
+       Job runs the app's TestEngine suite against the -preview Service (helm.canary.tests.jobSpec) and exits 0 only when
+       the run passes, so a failing suite fails the AnalysisRun and aborts the canary. TestEngine's caller contract
+       (V1_TRIGGER.md rule 13): count 1, failureLimit 0 and inconclusiveLimit 0. A failed measurement fails the run. An
+       inconclusive one ends the run Inconclusive: Argo Rollouts v1.10.0 records it when the Job's pod waits on
+       ErrImagePull, ImagePullBackOff or InvalidImageName (the Job image, or the Vault webhook's init image). With
+       inconclusiveLimit 0 the Rollout then pauses at its canary weight (PauseReasonInconclusiveAnalysis), still serving
+       production traffic, with the suite never run. With more than one canary Rollout, the siblings' next barrier times
+       out and canary-coordinator's cascade aborts it (about 9 minutes). With one, nothing aborts it until rollout-watch
+       times out at mycarrier.tech/canaryBudgetSeconds + 15 minutes (about 93 minutes on the standard preset), publishes
+       prod.rollback, and gitops-rollback reverts the release. Hence analysis.tests.image should be an ACR mirror. */}}
+{{- if eq (include "helm.canary.tests.wanted" $appContext) "true" }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $environment }}-{{ $fullName }}-tests
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+spec:
+  metrics:
+  - name: tests
+    count: 1
+    failureLimit: 0
+    inconclusiveLimit: 0
+    provider:
+      job:
+        spec:
+          {{- include "helm.canary.tests.jobSpec" (dict "context" $appContext "name" "tests") | nindent 10 }}
+{{- end }}
 {{- range $index, $template := $appValues.analysisTemplates }}
 {{- /* The release-era job contract (a test container run directly against -preview, with RELEASE_ID,
        RELEASE_DEFINITION_NAME and BRANCH_NAME) is gone: canary tests run through TestEngine (DEVOPS-312). */}}

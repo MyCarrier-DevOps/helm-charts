@@ -27,10 +27,10 @@
        steps. Elsewhere a canary Rollout renders steps: [] and Argo Rollouts promotes the new version at once: no
        barriers, analysis steps, pauses, dark stage, background analysis or mycarrier.tech/canaryBudgetSeconds. The
        render-time checks of helm.canary.configuredSteps and helm.canary.budgetSeconds still run in every environment
-       for a canary Rollout (the health path, both analysis opt-outs, extra templates, barrier timeouts, the leader rule
-       with the leader's tests-dark, budgetSeconds for explicit steps and the budget limit): a stack moves to canary as a
-       whole, so the same Rollouts exist in every environment, and a stack sees these failures on its first render, not
-       at its first prod canary. Only the coordinator's global.correlationId requirement applies just where the steps
+       for a canary Rollout (the health path, both analysis opt-outs, extra templates, barrier timeouts, the tests
+       template's barrier window, the leader rule with the leader's tests-dark, budgetSeconds for explicit steps and the
+       budget limit): a stack moves to canary as a whole, so the same Rollouts exist in every environment, and a stack
+       sees these failures on its first render, not at its first prod canary. Only the coordinator's global.correlationId requirement applies just where the steps
        render. */ -}}
 {{- define "helm.canary.stepsRendered" -}}
 {{- if and (eq (include "helm.canary.enabled" .) "true") (or (eq (toString .Values.environment.name) "prod") (eq (toString (include "helm.canary.config" . | fromJson).stepsOutsideProd) "true")) }}true{{ else }}false{{ end -}}
@@ -43,8 +43,11 @@
        off until DEVOPS-326 renders tests-dark.
        bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
        and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds).
-       stepsOutsideProd renders the steps outside prod (helm.canary.stepsRendered). */ -}}
+       stepsOutsideProd renders the steps outside prod (helm.canary.stepsRendered). analysis.tests (timeout, the poll
+       budget; startupSeconds, the pod's start slack; and image) configures the chart's tests template, which renders
+       only for a Rollout that runs it (helm.canary.tests.wanted). */ -}}
 {{- define "helm.canary.config" -}}
+{{- $python := "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516" -}}
 {{- $defaults := dict
       "preset" "standard"
       "stepsOutsideProd" false
@@ -56,7 +59,8 @@
       "analysis" (dict "templates" (list)
         "health" (dict "enabled" true "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
         "alerts" (dict "enabled" true "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
-          "image" "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516"))
+          "image" $python)
+        "tests" (dict "timeout" "7m" "startupSeconds" 120 "image" $python))
       "coordinator" (dict
         "enabled" true
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
@@ -69,8 +73,9 @@
          standard  10, analysis, pause 5m, 25, analysis, pause 5m, 50, analysis, pause 5m, 100
          fast      25, analysis, 100
          manual    10, analysis, pause (until resumed), 100
-       Each analysis step runs health (unless analysis.health.enabled is false) and the extra analysis.templates; each
-       references <environment>-<fullName>-<template>, and every referenced template must render for the app
+       Each analysis step runs health (unless analysis.health.enabled is false) and the extra analysis.templates (the
+       chart renders tests, DEVOPS-515, for an app with testtrigger.testdefinitions); each references
+       <environment>-<fullName>-<template>, and every referenced template must render for the app
        (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
        when one is missing. alerts is not in these steps: it runs as background analysis
        (helm.canary.backgroundAnalysis), and outside prod it is left out.
@@ -120,7 +125,7 @@
     {{- if eq . "health" -}}
       {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.%s.canaryHealthPath or global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet liveness probe under applications.%s.probes.livenessProbe (the chart's default liveness probe is HTTP only for global.language csharp), or opt out with global.strategy.canary.analysis.health.enabled: false." $.appName $.appName $.appName) -}}
     {{- end -}}
-    {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health and alerts; compare (DEVOPS-322) is not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
+    {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health, alerts and tests; compare (DEVOPS-322) is not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
   {{- end -}}
   {{- $templates = append $templates (dict "templateName" (printf "%s-%s-%s" $.Values.environment.name $fullName .)) -}}
 {{- end -}}
@@ -177,6 +182,130 @@
     {{- end -}}
   {{- end -}}
 {{- end -}}
+{{- /* Checks of the chart's tests template (DEVOPS-515) that read the steps; they run in every environment, like the
+       other checks here.
+       - Managed routes (the dark stage's canary-header, or a setHeaderRoute or setMirrorRoute step of explicit steps):
+         TestEngine's DeployVerifier fails a canary run of a Rollout with managed routes that sends no X-MyCarrier-Canary
+         header, and the header route exists only during the dark stage, so every tests run would fail.
+       - Lockstep: the DeployVerifier checks every Rollout of the correlation group, which must be in flight. With
+         coordinator.enabled false and more than one canary Rollout, a sibling that already promoted (or has not
+         started) fails the run after part of the release shipped.
+       - global.correlationId, where the steps render: the request sends it as CorrelationId, and TestEngine answers 422
+         without it.
+       - The barrier window, while tests is listed (helm.canary.tests.listed; also when an app replaces tests). In an
+         analysis step every canary Rollout of the release runs its own templates in parallel; after the steps up to the
+         next barrier, canary-coordinator holds the barrier until the whole group has reached it. Between two barriers,
+         Rollout j waits for Rollout i for i's longest run of the analysis steps since the previous barrier minus j's
+         shortest run of them (the steps are shared, so pauses and setWeights cancel out). Each step's lengths come
+         from each Rollout's own templates (helm.canary.analysis.templateSeconds, the table the budget uses, so a
+         replaced health or tests and the extra templates count): the longest is its longest template, with the time
+         Argo Rollouts takes to see a Job end (a Job with count n can run n x (activeDeadlineSeconds + that lag) +
+         (n - 1) x interval); the shortest is its templates' largest (count - 1) x interval (Argo Rollouts takes the
+         first measurement at once, and a Job can end at once). The dark stage's analysis step (tests-dark) runs on the
+         leader only, so in a preset with the coordinator and dark on, only the leader's lengths count before the first
+         setWeight. The render fails when the worst ordered pair of different Rollouts reaches the barrier's timeout:
+         the barrier would time out and abort the release. A release with one canary Rollout has no pair, and
+         canary-coordinator passes a group of one at once, so it is never checked. The spread of pod readiness between
+         Rollouts is not counted. Checked at every barrier that follows an analysis step, for preset (w10, w25, w50,
+         dark-passed) and explicit steps alike; a barrier without a timeout in the 90s, 9m or 1h form is skipped, as in
+         the progress-deadline check above, and the sums restart after it. Without barriers (coordinator.enabled false)
+         there is nothing to check. */ -}}
+{{- if eq (include "helm.canary.tests.wanted" .) "true" -}}
+  {{- $managed := list -}}
+  {{- range $steps -}}
+    {{- $route := dig "setHeaderRoute" "name" (dig "setMirrorRoute" "name" "" .) . -}}
+    {{- if and $route (not (has $route $managed)) }}{{ $managed = append $managed $route }}{{ end -}}
+  {{- end -}}
+  {{- if $managed -}}
+    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true, or from explicit steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the header route exists only during the dark stage, so every tests run would fail. Set global.strategy.canary.dark: false (and remove setHeaderRoute and setMirrorRoute steps), or remove tests from global.strategy.canary.analysis.templates, until DEVOPS-326 settles canary tests with the dark stage." .appName (join ", " $managed)) -}}
+  {{- end -}}
+  {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
+  {{- if and (not $coordinator.enabled) (gt (len $rollouts) 1) -}}
+    {{- fail (printf "application '%s': the canary tests template needs the coordinator when the release has more than one canary Rollout (%s). TestEngine's DeployVerifier checks every Rollout of the release's correlation group, and each must be in flight; with global.strategy.canary.coordinator.enabled false each Rollout runs its own steps, so a sibling that already promoted (or has not started) fails the run after part of the release shipped. Set coordinator.enabled: true, or remove tests from global.strategy.canary.analysis.templates." .appName (join ", " $rollouts)) -}}
+  {{- end -}}
+  {{- if and $rendered (not (toString (dig "correlationId" "" (.Values.global | default dict)))) -}}
+    {{- fail (printf "application '%s': the canary tests template sends global.correlationId as the TestEngine run's CorrelationId, and it is empty, so TestEngine would answer 422 (CorrelationId is required for /v1/trigger). Set global.correlationId (the pipeline sets it on every render)." .appName) -}}
+  {{- end -}}
+{{- end -}}
+{{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
+{{- if and (eq (include "helm.canary.tests.listed" .) "true") (gt (len $rollouts) 1) -}}
+  {{- $environment := toString .Values.environment.name -}}
+  {{- $selfPrefix := printf "%s-%s-" $environment $fullName -}}
+  {{- /* Each canary Rollout's template table and template-name prefix, and every table entry by its full name (explicit
+         steps name templates literally, so every Rollout runs those). */ -}}
+  {{- $tables := dict -}}
+  {{- $prefixes := dict -}}
+  {{- $byName := dict -}}
+  {{- range $name := $rollouts -}}
+    {{- $appContext := merge (dict "appName" $name "application" (index $.Values.applications $name)) (omit $ "appName" "application") -}}
+    {{- $table := include "helm.canary.analysis.templateSeconds" $appContext | fromJson -}}
+    {{- $_ := set $tables $name $table -}}
+    {{- $_ := set $prefixes $name (printf "%s-%s-" $environment (include "helm.fullname" $appContext)) -}}
+    {{- range $key, $entry := $table }}{{ $_ := set $byName $key $entry }}{{ end -}}
+  {{- end -}}
+  {{- /* The dark stage's analysis step (tests-dark) runs on the leader only: followers go from dark-ready straight to
+         dark-passed. In a preset with the coordinator and dark on it is the only analysis step before the first
+         setWeight, so there only the leader's lengths count; the leader's own render sees it (a follower's steps do
+         not have it). */ -}}
+  {{- $leaderOnly := and (not $cfg.steps) $coordinator.enabled $cfg.dark -}}
+  {{- $leader := "" -}}
+  {{- if $leaderOnly }}{{ $leader = include "helm.canary.leader" . }}{{ end -}}
+  {{- $beforeWeights := true -}}
+  {{- /* Each Rollout's longest and shortest run of the analysis steps since the previous barrier, summed: the steps are
+         shared by every Rollout, so the pauses and setWeights between them cancel out. */ -}}
+  {{- $longSum := dict -}}
+  {{- $shortSum := dict -}}
+  {{- range $name := $rollouts }}{{ $_ := set $longSum $name 0 }}{{ $_ := set $shortSum $name 0 }}{{ end -}}
+  {{- $pending := false -}}
+  {{- range $steps -}}
+    {{- $plugin := dig "plugin" dict . -}}
+    {{- if hasKey . "setWeight" }}{{ $beforeWeights = false }}{{ end -}}
+    {{- if hasKey . "analysis" -}}
+      {{- $names := list -}}
+      {{- range (dig "analysis" "templates" list .) }}{{ $names = append $names (toString .templateName) }}{{ end -}}
+      {{- /* Longest and shortest run of this step for each Rollout: a preset step names this Rollout's templates, which
+             map to each Rollout's own by their suffix; explicit steps name the same templates for every Rollout. */ -}}
+      {{- range $name := $rollouts -}}
+        {{- if not (and $leaderOnly $beforeWeights (ne $name $leader)) -}}
+          {{- $long := 0 -}}
+          {{- $short := 0 -}}
+          {{- range $names -}}
+            {{- $entry := dict -}}
+            {{- if and (not $cfg.steps) (hasPrefix $selfPrefix .) -}}
+              {{- $entry = index (index $tables $name) (printf "%s%s" (index $prefixes $name) (trimPrefix $selfPrefix .)) | default dict -}}
+            {{- else -}}
+              {{- $entry = index $byName . | default dict -}}
+            {{- end -}}
+            {{- $long = max $long (int (dig "longest" 0 $entry)) -}}
+            {{- $short = max $short (int (dig "shortest" 0 $entry)) -}}
+          {{- end -}}
+          {{- $_ := set $longSum $name (add (index $longSum $name) $long) -}}
+          {{- $_ := set $shortSum $name (add (index $shortSum $name) $short) -}}
+        {{- end -}}
+      {{- end -}}
+      {{- $pending = true -}}
+    {{- else if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") -}}
+      {{- $timeout := toString (dig "config" "timeout" "" $plugin) -}}
+      {{- $timeoutSeconds := include "helm.canary.durationSeconds" $timeout | int -}}
+      {{- if and $pending $timeoutSeconds -}}
+        {{- $worst := dict "wait" -1 -}}
+        {{- range $waiter := $rollouts -}}
+          {{- range $other := $rollouts -}}
+            {{- if ne $waiter $other -}}
+              {{- $wait := sub (index $longSum $other) (index $shortSum $waiter) -}}
+              {{- if gt (int $wait) (int $worst.wait) }}{{ $worst = dict "wait" (int $wait) "waiter" $waiter "other" $other "longest" (index $longSum $other) "shortest" (index $shortSum $waiter) }}{{ end -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+        {{- if ge (int $worst.wait) $timeoutSeconds -}}
+          {{- fail (printf "application '%s': barrier '%s' has timeout %s (%d s), and Rollout '%s' can wait there %d s for Rollout '%s': in the analysis steps since the previous barrier, '%s' may run %d s (each step's longest template, with the time Argo Rollouts takes to see a Job end) and '%s' can end after %d s (each step's largest (count - 1) x interval of its templates). canary-coordinator holds the barrier until every Rollout of the release reaches it, so at or above the barrier's timeout it times out and aborts the release. Lower global.strategy.canary.analysis.tests.timeout (or the count, interval or activeDeadlineSeconds of '%s''s templates), or raise global.strategy.canary.coordinator.barrierTimeouts above %d s (each below progressDeadlineSeconds, and the canary budget at or below 5700 s)." $.appName (toString (dig "config" "name" "" $plugin)) $timeout $timeoutSeconds $worst.waiter (int $worst.wait) $worst.other $worst.other (int $worst.longest) $worst.waiter (int $worst.shortest) $worst.other (int $worst.wait)) -}}
+        {{- end -}}
+      {{- end -}}
+      {{- range $name := $rollouts }}{{ $_ := set $longSum $name 0 }}{{ $_ := set $shortSum $name 0 }}{{ end -}}
+      {{- $pending = false -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 {{- toYaml $steps }}
 {{- end -}}
 
@@ -213,10 +342,15 @@
        - pause: its duration; the manual preset's pause, which has none, counts manualTimeout (default 1h). The pause
          itself stays indefinite; manualTimeout only feeds the budget.
        - analysis: the longest of its templates (they run in parallel), each count x max(interval, the Job's
-         activeDeadlineSeconds when the template is a Job provider that sets it). The chart's health template uses
-         analysis.health.count and interval; an applications.<app>.analysisTemplates entry (an extra template, or one
-         that replaces health or supplies tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders
-         it; Argo Rollouts runs count 0 without an interval once) and interval (0 when unset).
+         activeDeadlineSeconds when the template is a Job provider that sets it), plus, for a Job, the time Argo
+         Rollouts can take to see it end, ceil(sqrt(2 x activeDeadlineSeconds)); a Job with count n >= 2 at least
+         n x (activeDeadlineSeconds + that lag) + (n - 1) x interval. The chart's health template uses
+         analysis.health.count and interval; the chart's tests template counts its Job's activeDeadlineSeconds
+         (analysis.tests.timeout + analysis.tests.startupSeconds) + lag (540 + 33 by default); an
+         applications.<app>.analysisTemplates entry (an extra template, or one that replaces health or supplies
+         tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders it; Argo Rollouts runs count 0
+         without an interval once) and interval (0 when unset). The lengths come from
+         helm.canary.analysis.templateSeconds.
        - a canary-coordinator barrier: its timeout.
        - a setWeight step above 0 waits until the canary's pods are available, for up to progressDeadlineSeconds. With
          the coordinator on, the barrier timeouts cover that wait; with coordinator.enabled false, each such setWeight
@@ -230,6 +364,50 @@
        helm.canary.configuredSteps runs first, so its own checks report before these.
        The budget is computed, and its checks run, in every environment (budgetSeconds for an explicit steps list
        included), and it is the same in and outside prod; rollout.yaml renders it only where the steps render. */ -}}
+{{- /* The length of every AnalysisTemplate an analysis step of this canary Rollout can reference, as JSON, by the name
+       the step uses (<environment>-<fullName>-<name>): the chart's health (analysis.health count and interval), the
+       chart's tests when the app runs it (helm.canary.tests.wanted), and each applications.<app>.analysisTemplates
+       entry, which replaces the chart's template of the same name. For each, in seconds:
+       - budget: the template at its longest, as Tech Spec D22's budget needs. count x max(interval, the Job's
+         activeDeadlineSeconds when it is a Job provider that sets it); count is 1 when unset or 0 (Argo Rollouts runs
+         count 0 without an interval once). A Job provider adds lag: ceil(sqrt(2 x activeDeadlineSeconds)), the time
+         Argo Rollouts v1.10.0 can take to see a Job end (helm.canary.tests.completionLagSeconds), so a count-1 Job
+         counts activeDeadlineSeconds + lag. A Job with count n >= 2 counts at least n x (activeDeadlineSeconds + lag)
+         + (n - 1) x interval: Argo Rollouts starts each measurement at the previous one's FinishedAt + interval, and a
+         Job's FinishedAt is when the controller sees it end. helm.canary.budgetSeconds adds it up.
+       - longest: the same as budget; the barrier window uses it.
+       - shortest: (count - 1) x interval: Argo Rollouts takes the first measurement at once, and a Job can end at once.
+       helm.canary.budgetSeconds and the barrier window of helm.canary.configuredSteps both read this table, so they
+       cannot drift apart. */ -}}
+{{- define "helm.canary.analysis.templateSeconds" -}}
+{{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- $prefix := printf "%s-%s-" (toString .Values.environment.name) (include "helm.fullname" .) -}}
+{{- $health := $cfg.analysis.health -}}
+{{- $healthInterval := include "helm.canary.durationSeconds" $health.interval | int -}}
+{{- $table := dict (printf "%shealth" $prefix) (dict "budget" (mul (int $health.count) $healthInterval) "longest" (mul (int $health.count) $healthInterval) "shortest" (mul (max 0 (sub (int $health.count) 1)) $healthInterval)) -}}
+{{- if eq (include "helm.canary.tests.wanted" .) "true" -}}
+  {{- $deadline := include "helm.canary.tests.activeDeadlineSeconds" . | int -}}
+  {{- $length := add $deadline (include "helm.canary.tests.completionLagSeconds" $deadline | int) -}}
+  {{- $_ := set $table (printf "%stests" $prefix) (dict "budget" $length "longest" $length "shortest" 0) -}}
+{{- end -}}
+{{- range (.application.analysisTemplates | default list) -}}
+  {{- $count := 1 -}}
+  {{- if hasKey . "count" }}{{ $count = max 1 (int .count) }}{{ end -}}
+  {{- $interval := include "helm.canary.durationSeconds" (.interval | default "") | int -}}
+  {{- $deadline := int (dig "provider" "job" "spec" "activeDeadlineSeconds" 0 .) -}}
+  {{- $budget := mul $count (max $interval $deadline) -}}
+  {{- if and (kindIs "map" .provider) (hasKey .provider "job") -}}
+    {{- $lag := include "helm.canary.tests.completionLagSeconds" $deadline | int -}}
+    {{- $budget = add $budget $lag -}}
+    {{- /* Each measurement starts at the previous one's FinishedAt + interval, and a Job's FinishedAt is when Argo
+           Rollouts sees it end. */ -}}
+    {{- if gt $count 1 }}{{ $budget = max $budget (add (mul $count (add $deadline $lag)) (mul (sub $count 1) $interval)) }}{{ end -}}
+  {{- end -}}
+  {{- $_ := set $table (printf "%s%s" $prefix (toString .name)) (dict "budget" $budget "longest" $budget "shortest" (mul (sub $count 1) $interval)) -}}
+{{- end -}}
+{{- toJson $table -}}
+{{- end -}}
+
 {{- define "helm.canary.budgetSeconds" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $steps := include "helm.canary.configuredSteps" . | fromYamlArray -}}
@@ -237,7 +415,7 @@
 {{- if $cfg.steps -}}
   {{- $set := $cfg.budgetSeconds -}}
   {{- if or (not (kindIs "float64" $set)) (lt $set 1.0) (ne $set (float64 (int $set))) -}}
-    {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds)) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
+    {{- fail (printf "global.strategy.canary.budgetSeconds is %s; an explicit global.strategy.canary.steps list needs it, as a whole number of seconds from 1 to 5700 (Tech Spec D22). It is the canary's worst-case length: the release's rollout-watch times out at it plus 15 minutes. Add up the pause durations, each analysis step's longest template (count x max(interval, the Job's activeDeadlineSeconds), plus for a Job ceil(sqrt(2 x activeDeadlineSeconds)); a Job with count n >= 2 at least n x (activeDeadlineSeconds + that lag) + (n - 1) x interval) and each barrier timeout." (ternary "not set" (toString $set) (kindIs "invalid" $set))) -}}
   {{- end -}}
   {{- $budget = int $set -}}
 {{- else -}}
@@ -248,17 +426,10 @@
       {{- fail (printf "global.strategy.canary.manualTimeout is '%v'; the manual preset needs a duration above zero such as 90s, 30m or 1h (default 1h). It is how long the release's rollout-watch allows for the manual pause (Tech Spec D22); the pause itself has no time limit." $cfg.manualTimeout) -}}
     {{- end -}}
   {{- end -}}
-  {{- /* Seconds per AnalysisTemplate an analysis step can reference, by the name the step uses. */ -}}
-  {{- $prefix := printf "%s-%s-" (toString .Values.environment.name) (include "helm.fullname" .) -}}
-  {{- $health := $cfg.analysis.health -}}
-  {{- $templates := dict (printf "%shealth" $prefix) (mul (int $health.count) (include "helm.canary.durationSeconds" $health.interval | int)) -}}
-  {{- range (.application.analysisTemplates | default list) -}}
-    {{- $count := 1 -}}
-    {{- if hasKey . "count" }}{{ $count = max 1 (int .count) }}{{ end -}}
-    {{- $interval := include "helm.canary.durationSeconds" (.interval | default "") | int -}}
-    {{- $deadline := int (dig "provider" "job" "spec" "activeDeadlineSeconds" 0 .) -}}
-    {{- $_ := set $templates (printf "%s%s" $prefix (toString .name)) (mul $count (max $interval $deadline)) -}}
-  {{- end -}}
+  {{- /* Seconds per AnalysisTemplate an analysis step can reference, by the name the step uses: the budget column of
+         helm.canary.analysis.templateSeconds, which the barrier window reads too. */ -}}
+  {{- $templates := dict -}}
+  {{- range $name, $entry := (include "helm.canary.analysis.templateSeconds" . | fromJson) }}{{ $_ := set $templates $name (int $entry.budget) }}{{ end -}}
   {{- range $steps -}}
     {{- $plugin := dig "plugin" dict . -}}
     {{- if hasKey . "pause" -}}
@@ -309,15 +480,17 @@
 {{- end -}}
 
 {{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
-       chart's own health template when health is on, the app has none of that name and its health URL is known, and
-       the chart's alerts template when alerts is on, the app has none of that name, the environment is prod and the
-       service label is known. */ -}}
+       chart's own health template when health is on, the app has none of that name and its health URL is known, the
+       chart's alerts template when alerts is on, the app has none of that name, the environment is prod and the
+       service label is known, and the chart's tests template when the app runs it (helm.canary.tests.wanted, which
+       fails the render when the app has no testtrigger.testdefinitions). */ -}}
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
 {{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
 {{- $analysis := (include "helm.canary.config" . | fromJson).analysis -}}
 {{- if and (not (has "health" $names)) $analysis.health.enabled (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
 {{- if and (not (has "alerts" $names)) $analysis.alerts.enabled (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
+{{- if eq (include "helm.canary.tests.wanted" .) "true" }}{{ $names = append $names "tests" }}{{ end -}}
 {{- toJson $names -}}
 {{- end -}}
 

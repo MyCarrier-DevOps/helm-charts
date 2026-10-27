@@ -339,8 +339,9 @@ tests:
           value: "2"
 
   # The budget, with the leader's tests-dark, is the same in and outside prod, so its limit fails both. Manual preset
-  # with the dark stage and manualTimeout 45m: start 540 + dark-ready 540 + tests-dark 900 (the Job's
-  # activeDeadlineSeconds) + dark-passed 540 + health 90 + pause 2700 + w10 540 = 5850 s (4950 s without tests-dark).
+  # with the dark stage and manualTimeout 45m: start 540 + dark-ready 540 + tests-dark 943 (the Job's
+  # activeDeadlineSeconds 900 + ceil(sqrt(1800)) = 43 s for Argo Rollouts to see it end, DEVOPS-515) + dark-passed 540
+  # + health 90 + pause 2700 + w10 540 = 5893 s (4950 s without tests-dark).
   - it: fails the leader's budget above 5700 s outside prod
     template: rollout.yaml
     set: &leaderBudget
@@ -375,7 +376,7 @@ tests:
                             image: registry.example.com/tests:1.0.0
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5850 s; the maximum is 5700 s"
+          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5893 s; the maximum is 5700 s"
 
   - it: fails the leader's budget above 5700 s in prod too
     template: rollout.yaml
@@ -385,7 +386,7 @@ tests:
         name: prod
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5850 s; the maximum is 5700 s"
+          errorPattern: "application 'api': the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5893 s; the maximum is 5700 s"
 
   - it: renders steps [] in a demo environment by default
     template: rollout.yaml
