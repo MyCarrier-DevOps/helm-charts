@@ -193,19 +193,23 @@
        - global.correlationId, where the steps render: the request sends it as CorrelationId, and TestEngine answers 422
          without it.
        - The barrier window, while tests is listed (helm.canary.tests.listed; also when an app replaces tests). In an
-         analysis step every canary Rollout of the release runs its own templates in parallel, then the pause, then the
-         next barrier, and canary-coordinator holds the barrier until the whole group has reached it. Rollout j waits
-         there for Rollout i for i's longest step minus j's shortest step. Each Rollout's step lengths come from its own
-         templates (helm.canary.analysis.templateSeconds, the table the budget uses, so a replaced health or tests and
-         the extra templates count): the longest is its longest template, with up to ceil(sqrt(2 x
-         activeDeadlineSeconds)) seconds for Argo Rollouts to see a Job end; the shortest is its templates' largest
-         (count - 1) x interval (Argo Rollouts takes the first measurement at once, and a Job can end at once). The
-         render fails when the worst ordered pair of different Rollouts reaches the timeout of the barrier after the
-         step: the barrier would time out and abort the release. A release with one canary Rollout has no pair, and
+         analysis step every canary Rollout of the release runs its own templates in parallel; after the steps up to the
+         next barrier, canary-coordinator holds the barrier until the whole group has reached it. Between two barriers,
+         Rollout j waits for Rollout i for i's longest run of the analysis steps since the previous barrier minus j's
+         shortest run of them (the steps are shared, so pauses and setWeights cancel out). Each step's lengths come
+         from each Rollout's own templates (helm.canary.analysis.templateSeconds, the table the budget uses, so a
+         replaced health or tests and the extra templates count): the longest is its longest template, with the time
+         Argo Rollouts takes to see a Job end (a Job with count n can run n x (activeDeadlineSeconds + that lag) +
+         (n - 1) x interval); the shortest is its templates' largest (count - 1) x interval (Argo Rollouts takes the
+         first measurement at once, and a Job can end at once). The dark stage's analysis step (tests-dark) runs on the
+         leader only, so in a preset with the coordinator and dark on, only the leader's lengths count before the first
+         setWeight. The render fails when the worst ordered pair of different Rollouts reaches the barrier's timeout:
+         the barrier would time out and abort the release. A release with one canary Rollout has no pair, and
          canary-coordinator passes a group of one at once, so it is never checked. The spread of pod readiness between
-         Rollouts is not counted. Checked on the first barrier after each analysis step, for preset (w10, w25, w50) and
-         explicit steps alike; a barrier without a timeout in the 90s, 9m or 1h form is skipped, as in the
-         progress-deadline check above. Without barriers (coordinator.enabled false) there is nothing to check. */ -}}
+         Rollouts is not counted. Checked at every barrier that follows an analysis step, for preset (w10, w25, w50,
+         dark-passed) and explicit steps alike; a barrier without a timeout in the 90s, 9m or 1h form is skipped, as in
+         the progress-deadline check above, and the sums restart after it. Without barriers (coordinator.enabled false)
+         there is nothing to check. */ -}}
 {{- if eq (include "helm.canary.tests.wanted" .) "true" -}}
   {{- $managed := list -}}
   {{- range $steps -}}
@@ -239,49 +243,65 @@
     {{- $_ := set $prefixes $name (printf "%s-%s-" $environment (include "helm.fullname" $appContext)) -}}
     {{- range $key, $entry := $table }}{{ $_ := set $byName $key $entry }}{{ end -}}
   {{- end -}}
+  {{- /* The dark stage's analysis step (tests-dark) runs on the leader only: followers go from dark-ready straight to
+         dark-passed. In a preset with the coordinator and dark on it is the only analysis step before the first
+         setWeight, so there only the leader's lengths count; the leader's own render sees it (a follower's steps do
+         not have it). */ -}}
+  {{- $leaderOnly := and (not $cfg.steps) $coordinator.enabled $cfg.dark -}}
+  {{- $leader := "" -}}
+  {{- if $leaderOnly }}{{ $leader = include "helm.canary.leader" . }}{{ end -}}
+  {{- $beforeWeights := true -}}
+  {{- /* Each Rollout's longest and shortest run of the analysis steps since the previous barrier, summed: the steps are
+         shared by every Rollout, so the pauses and setWeights between them cancel out. */ -}}
+  {{- $longSum := dict -}}
+  {{- $shortSum := dict -}}
+  {{- range $name := $rollouts }}{{ $_ := set $longSum $name 0 }}{{ $_ := set $shortSum $name 0 }}{{ end -}}
   {{- $pending := false -}}
-  {{- $worst := dict -}}
   {{- range $steps -}}
     {{- $plugin := dig "plugin" dict . -}}
+    {{- if hasKey . "setWeight" }}{{ $beforeWeights = false }}{{ end -}}
     {{- if hasKey . "analysis" -}}
       {{- $names := list -}}
       {{- range (dig "analysis" "templates" list .) }}{{ $names = append $names (toString .templateName) }}{{ end -}}
-      {{- /* Longest and shortest step of each Rollout: a preset step names this Rollout's templates, which map to each
-             Rollout's own by their suffix; explicit steps name the same templates for every Rollout. */ -}}
-      {{- $longest := dict -}}
-      {{- $shortest := dict -}}
+      {{- /* Longest and shortest run of this step for each Rollout: a preset step names this Rollout's templates, which
+             map to each Rollout's own by their suffix; explicit steps name the same templates for every Rollout. */ -}}
       {{- range $name := $rollouts -}}
-        {{- $long := 0 -}}
-        {{- $short := 0 -}}
-        {{- range $names -}}
-          {{- $entry := dict -}}
-          {{- if and (not $cfg.steps) (hasPrefix $selfPrefix .) -}}
-            {{- $entry = index (index $tables $name) (printf "%s%s" (index $prefixes $name) (trimPrefix $selfPrefix .)) | default dict -}}
-          {{- else -}}
-            {{- $entry = index $byName . | default dict -}}
+        {{- if not (and $leaderOnly $beforeWeights (ne $name $leader)) -}}
+          {{- $long := 0 -}}
+          {{- $short := 0 -}}
+          {{- range $names -}}
+            {{- $entry := dict -}}
+            {{- if and (not $cfg.steps) (hasPrefix $selfPrefix .) -}}
+              {{- $entry = index (index $tables $name) (printf "%s%s" (index $prefixes $name) (trimPrefix $selfPrefix .)) | default dict -}}
+            {{- else -}}
+              {{- $entry = index $byName . | default dict -}}
+            {{- end -}}
+            {{- $long = max $long (int (dig "longest" 0 $entry)) -}}
+            {{- $short = max $short (int (dig "shortest" 0 $entry)) -}}
           {{- end -}}
-          {{- $long = max $long (int (dig "longest" 0 $entry)) -}}
-          {{- $short = max $short (int (dig "shortest" 0 $entry)) -}}
-        {{- end -}}
-        {{- $_ := set $longest $name $long -}}
-        {{- $_ := set $shortest $name $short -}}
-      {{- end -}}
-      {{- $worst = dict "wait" -1 -}}
-      {{- range $waiter := $rollouts -}}
-        {{- range $other := $rollouts -}}
-          {{- if ne $waiter $other -}}
-            {{- $wait := sub (index $longest $other) (index $shortest $waiter) -}}
-            {{- if gt (int $wait) (int $worst.wait) }}{{ $worst = dict "wait" (int $wait) "waiter" $waiter "other" $other "longest" (index $longest $other) "shortest" (index $shortest $waiter) }}{{ end -}}
-          {{- end -}}
+          {{- $_ := set $longSum $name (add (index $longSum $name) $long) -}}
+          {{- $_ := set $shortSum $name (add (index $shortSum $name) $short) -}}
         {{- end -}}
       {{- end -}}
       {{- $pending = true -}}
-    {{- else if and $pending (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") -}}
+    {{- else if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") -}}
       {{- $timeout := toString (dig "config" "timeout" "" $plugin) -}}
       {{- $timeoutSeconds := include "helm.canary.durationSeconds" $timeout | int -}}
-      {{- if and $timeoutSeconds (ge (int $worst.wait) $timeoutSeconds) -}}
-        {{- fail (printf "application '%s': barrier '%s' has timeout %s (%d s), and Rollout '%s' can wait there %d s for Rollout '%s': in the analysis step before it, '%s' may run %d s (its longest template, with up to ceil(sqrt(2 x activeDeadlineSeconds)) s for Argo Rollouts to see a Job end) and '%s' can end after %d s (its templates' largest (count - 1) x interval). canary-coordinator holds the barrier until every Rollout of the release reaches it, so at or above the barrier's timeout it times out and aborts the release. Lower global.strategy.canary.analysis.tests.timeout (or the count, interval or activeDeadlineSeconds of '%s''s templates), or raise global.strategy.canary.coordinator.barrierTimeouts above %d s (each below progressDeadlineSeconds, and the canary budget at or below 5700 s)." $.appName (toString (dig "config" "name" "" $plugin)) $timeout $timeoutSeconds $worst.waiter (int $worst.wait) $worst.other $worst.other (int $worst.longest) $worst.waiter (int $worst.shortest) $worst.other (int $worst.wait)) -}}
+      {{- if and $pending $timeoutSeconds -}}
+        {{- $worst := dict "wait" -1 -}}
+        {{- range $waiter := $rollouts -}}
+          {{- range $other := $rollouts -}}
+            {{- if ne $waiter $other -}}
+              {{- $wait := sub (index $longSum $other) (index $shortSum $waiter) -}}
+              {{- if gt (int $wait) (int $worst.wait) }}{{ $worst = dict "wait" (int $wait) "waiter" $waiter "other" $other "longest" (index $longSum $other) "shortest" (index $shortSum $waiter) }}{{ end -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+        {{- if ge (int $worst.wait) $timeoutSeconds -}}
+          {{- fail (printf "application '%s': barrier '%s' has timeout %s (%d s), and Rollout '%s' can wait there %d s for Rollout '%s': in the analysis steps since the previous barrier, '%s' may run %d s (each step's longest template, with the time Argo Rollouts takes to see a Job end) and '%s' can end after %d s (each step's largest (count - 1) x interval of its templates). canary-coordinator holds the barrier until every Rollout of the release reaches it, so at or above the barrier's timeout it times out and aborts the release. Lower global.strategy.canary.analysis.tests.timeout (or the count, interval or activeDeadlineSeconds of '%s''s templates), or raise global.strategy.canary.coordinator.barrierTimeouts above %d s (each below progressDeadlineSeconds, and the canary budget at or below 5700 s)." $.appName (toString (dig "config" "name" "" $plugin)) $timeout $timeoutSeconds $worst.waiter (int $worst.wait) $worst.other $worst.other (int $worst.longest) $worst.waiter (int $worst.shortest) $worst.other (int $worst.wait)) -}}
+        {{- end -}}
       {{- end -}}
+      {{- range $name := $rollouts }}{{ $_ := set $longSum $name 0 }}{{ $_ := set $shortSum $name 0 }}{{ end -}}
       {{- $pending = false -}}
     {{- end -}}
   {{- end -}}
@@ -324,10 +344,11 @@
        - analysis: the longest of its templates (they run in parallel), each count x max(interval, the Job's
          activeDeadlineSeconds when the template is a Job provider that sets it). The chart's health template uses
          analysis.health.count and interval; the chart's tests template counts 1 x its Job's activeDeadlineSeconds
-         (analysis.tests.timeout + analysis.tests.startupSeconds); an applications.<app>.analysisTemplates entry (an
-         extra template, or one that replaces health or supplies tests-dark) uses its own count (1 when unset, as
-         analysistemplate.yaml renders it; Argo Rollouts runs count 0 without an interval once) and interval (0 when
-         unset). The lengths come from helm.canary.analysis.templateSeconds.
+         (analysis.tests.timeout + analysis.tests.startupSeconds); an
+         applications.<app>.analysisTemplates entry (an extra template, or one that replaces health or supplies
+         tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders it; Argo Rollouts runs count 0
+         without an interval once) and interval (0 when unset). The lengths come from
+         helm.canary.analysis.templateSeconds.
        - a canary-coordinator barrier: its timeout.
        - a setWeight step above 0 waits until the canary's pods are available, for up to progressDeadlineSeconds. With
          the coordinator on, the barrier timeouts cover that wait; with coordinator.enabled false, each such setWeight
@@ -347,8 +368,11 @@
        entry, which replaces the chart's template of the same name. For each, in seconds:
        - budget: count x max(interval, the Job's activeDeadlineSeconds when it is a Job provider that sets it); count is
          1 when unset or 0 (Argo Rollouts runs count 0 without an interval once). helm.canary.budgetSeconds adds it up.
-       - longest: budget, plus ceil(sqrt(2 x activeDeadlineSeconds)) for a Job provider, the time Argo Rollouts v1.10.0
-         can take to see a Job end (helm.canary.tests.completionLagSeconds).
+         It is Tech Spec D22's formula: it leaves out the Job lag below, which rollout-watch's 15 minutes past the
+         budget must cover.
+       - longest: budget, plus lag for a Job provider: ceil(sqrt(2 x activeDeadlineSeconds)), the time Argo Rollouts
+         v1.10.0 can take to see a Job end (helm.canary.tests.completionLagSeconds); for count n >= 2 the n x
+         (activeDeadlineSeconds + lag) + (n - 1) x interval above when larger.
        - shortest: (count - 1) x interval: Argo Rollouts takes the first measurement at once, and a Job can end at once.
        helm.canary.budgetSeconds and the barrier window of helm.canary.configuredSteps both read this table, so they
        cannot drift apart. */ -}}
@@ -368,9 +392,17 @@
   {{- $interval := include "helm.canary.durationSeconds" (.interval | default "") | int -}}
   {{- $deadline := int (dig "provider" "job" "spec" "activeDeadlineSeconds" 0 .) -}}
   {{- $budget := mul $count (max $interval $deadline) -}}
+  {{- $job := and (kindIs "map" .provider) (hasKey .provider "job") -}}
   {{- $lag := 0 -}}
-  {{- if and (kindIs "map" .provider) (hasKey .provider "job") }}{{ $lag = include "helm.canary.tests.completionLagSeconds" $deadline | int }}{{ end -}}
-  {{- $_ := set $table (printf "%s%s" $prefix (toString .name)) (dict "budget" $budget "longest" (add $budget $lag) "shortest" (mul (sub $count 1) $interval)) -}}
+  {{- if $job }}{{ $lag = include "helm.canary.tests.completionLagSeconds" $deadline | int }}{{ end -}}
+  {{- $longest := add $budget $lag -}}
+  {{- /* Argo Rollouts v1.10.0 starts the next measurement at the previous one's FinishedAt + interval, and a Job's
+         FinishedAt is when the controller sees it end: a Job with count n >= 2 can run n x (activeDeadlineSeconds +
+         lag) + (n - 1) x interval. The budget keeps Tech Spec D22's count x max(interval, activeDeadlineSeconds). */ -}}
+  {{- if and $job (gt $count 1) -}}
+    {{- $longest = max $longest (add (mul $count (add $deadline $lag)) (mul (sub $count 1) $interval)) -}}
+  {{- end -}}
+  {{- $_ := set $table (printf "%s%s" $prefix (toString .name)) (dict "budget" $budget "longest" $longest "shortest" (mul (sub $count 1) $interval)) -}}
 {{- end -}}
 {{- toJson $table -}}
 {{- end -}}

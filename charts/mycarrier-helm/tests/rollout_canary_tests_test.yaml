@@ -890,7 +890,7 @@ tests:
                 timeout: 8m
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis step before it, 'worker' may run 635 s \\(its longest template, with up to ceil\\(sqrt\\(2 x activeDeadlineSeconds\\)\\) s for Argo Rollouts to see a Job end\\) and 'api' can end after 60 s"
+          errorPattern: "application 'api': barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 635 s \\(each step's longest template, with the time Argo Rollouts takes to see a Job end\\) and 'api' can end after 60 s"
 
   # The edge: 445s gives 565 + 34 - 60 = 539 < 540; 446s gives 566 + 34 - 60 = 540, which reaches 540.
   - it: renders a tests.timeout whose wait ends 1 s before the barrier's timeout
@@ -999,7 +999,7 @@ tests:
                   statusEndpoint: /health
     asserts:
       - failedTemplate:
-          errorPattern: "and Rollout 'api' can wait there 690 s for Rollout 'worker': in the analysis step before it, 'worker' may run 750 s"
+          errorPattern: "and Rollout 'api' can wait there 690 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 750 s"
 
   # Pavlo's case 3: a sibling replaces tests with its own Job (activeDeadlineSeconds 600): 600 + 35 - 60 = 575 s.
   - it: counts a sibling's own tests replacement
@@ -1028,7 +1028,7 @@ tests:
                             image: registry.example.com/tests:1
     asserts:
       - failedTemplate:
-          errorPattern: "and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis step before it, 'worker' may run 635 s"
+          errorPattern: "and Rollout 'api' can wait there 575 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 635 s"
 
   # canary-coordinator passes a barrier at once for a group of one, so one canary Rollout has no wait to check:
   # 12m (activeDeadlineSeconds 840) renders; budget 540 + 3 x (840 + 300 + 540).
@@ -1210,6 +1210,264 @@ tests:
             kind: barrier
             name: w20
         documentIndex: 0
+
+  # Item 1 (second review): the wait at a barrier sums each Rollout's runs of every analysis step since the previous
+  # barrier. [tests][health] before w20 (7m): worker can run 573 + 90 = 663 s, api can end after 0 + 60 = 60 s: 603 s.
+  - it: sums every analysis step since the previous barrier, tests then health
+    template: rollout.yaml
+    set:
+      <<: *pair
+      global:
+        <<: *global
+        strategy:
+          canary:
+            budgetSeconds: 1500
+            steps:
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: start, timeout: 2m}}
+              - setWeight: 20
+              - analysis: {templates: [{templateName: prod-mycarrier-api-tests}]}
+              - analysis: {templates: [{templateName: prod-mycarrier-api-health}]}
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w20, timeout: 7m}}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w20' has timeout 7m \\(420 s\\), and Rollout 'api' can wait there 603 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 663 s .* and 'api' can end after 60 s"
+
+  - it: sums every analysis step since the previous barrier, health then tests
+    template: rollout.yaml
+    set:
+      <<: *pair
+      global:
+        <<: *global
+        strategy:
+          canary:
+            budgetSeconds: 1500
+            steps:
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: start, timeout: 2m}}
+              - setWeight: 20
+              - analysis: {templates: [{templateName: prod-mycarrier-api-health}]}
+              - analysis: {templates: [{templateName: prod-mycarrier-api-tests}]}
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w20, timeout: 7m}}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w20' has timeout 7m \\(420 s\\), and Rollout 'api' can wait there 603 s for Rollout 'worker'"
+
+  # The sums restart at every barrier: w20 sees tests only (573 - 0 = 573 < 10m), w30 sees health only (90 - 60 = 30).
+  - it: restarts the sums at every barrier
+    template: rollout.yaml
+    set:
+      <<: *pair
+      global:
+        <<: *global
+        strategy:
+          canary:
+            progressDeadlineSeconds: 900
+            budgetSeconds: 2500
+            steps:
+              - setWeight: 20
+              - analysis: {templates: [{templateName: prod-mycarrier-api-tests}]}
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w20, timeout: 10m}}
+              - setWeight: 30
+              - analysis: {templates: [{templateName: prod-mycarrier-api-health}]}
+              - plugin: {name: mycarrier/canary-coordinator, config: {kind: barrier, name: w30, timeout: 2m}}
+              - setWeight: 100
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # Item 2 (second review): the dark stage's tests-dark runs on the leader only. The tests template's own checks refuse a
+  # Rollout with managed routes (the dark stage), so these values reach the barrier window as in the review's
+  # reproduction: tests is listed, and every app replaces the chart's tests with its own short web metric, so no app runs
+  # the chart's tests Job; the window check still runs because tests is listed.
+  # (a) leader api's tests-dark is a 300 s Job (300 + 25 = 325 s); follower worker's 600 s tests-dark never runs:
+  # worker waits 325 s at dark-passed (9m), so the release renders.
+  - it: counts only the leader's tests-dark at dark-passed
+    template: rollout.yaml
+    set: &dark
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            dark: true
+            leader: api
+            analysis:
+              templates: [tests]
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - &webTests
+              name: tests
+              provider:
+                web:
+                  statusEndpoint: /selftest
+            - name: tests-dark
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 300
+                    backoffLimit: 0
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - *webTests
+            - name: tests-dark
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 600
+                    backoffLimit: 0
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # (b) a leader tests-dark of 520 s runs 520 + 33 = 553 s, so the follower waits 553 s at dark-passed (540 s).
+  - it: fails when the follower would wait at dark-passed for the leader's tests-dark
+    template: rollout.yaml
+    set:
+      <<: *dark
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - *webTests
+            - &longDark
+              name: tests-dark
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 520
+                    backoffLimit: 0
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - *webTests
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': barrier 'dark-passed' has timeout 9m \\(540 s\\), and Rollout 'worker' can wait there 553 s for Rollout 'api': in the analysis steps since the previous barrier, 'api' may run 553 s .* and 'worker' can end after 0 s"
+
+  # (c) the follower's own tests-dark (count 3, interval 200s) never runs, so it does not shorten the wait.
+  - it: ignores a follower's own tests-dark at dark-passed
+    template: rollout.yaml
+    set:
+      <<: *dark
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - *webTests
+            - *longDark
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - *webTests
+            - name: tests-dark
+              count: 3
+              interval: 200s
+              provider:
+                web:
+                  statusEndpoint: /dark
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'dark-passed' has timeout 9m \\(540 s\\), and Rollout 'worker' can wait there 553 s for Rollout 'api'"
+
+  # Item 3 (second review): Argo Rollouts starts a Job metric's next measurement at the previous one's FinishedAt +
+  # interval, so smoke (a Job, count 2, interval 60s, activeDeadlineSeconds 250) runs up to 2 x (250 + 23) + 60 = 606 s:
+  # 606 - 60 = 546 s at w10 (540 s). tests.timeout 3m keeps the tests Job (300 + 25 = 325 s) the shorter one.
+  - it: counts each measurement of a Job template with count 2
+    template: rollout.yaml
+    set:
+      <<: *pair
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests, smoke]
+              tests:
+                timeout: 3m
+      applications:
+        api: &withSmoke
+          <<: *api
+          analysisTemplates:
+            - name: smoke
+              count: 2
+              interval: 60s
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 250
+                    backoffLimit: 0
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: smoke
+                            image: registry.example.com/smoke:1
+        worker: *withSmoke
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 546 s for Rollout 'worker': in the analysis steps since the previous barrier, 'worker' may run 606 s"
+
+  # The budget keeps Tech Spec D22's formula, 2 x max(60, 250) = 500 for smoke: start 540 + 3 x (500 + 300 + 540), with
+  # one canary Rollout (no barrier wait). Counting the Job lag and interval there would raise budgets of stacks without
+  # tests too, so it is left to a separate change.
+  - it: keeps the budget formula for a Job template with count 2
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        <<: *global
+        strategy:
+          canary:
+            analysis:
+              templates: [tests, smoke]
+              tests:
+                timeout: 3m
+      applications:
+        api: *withSmoke
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4560"
 
   # M3: TestEngine's DeployVerifier checks every Rollout of the correlation group, so tests needs lockstep.
   - it: fails tests with the coordinator off and more than one canary Rollout
