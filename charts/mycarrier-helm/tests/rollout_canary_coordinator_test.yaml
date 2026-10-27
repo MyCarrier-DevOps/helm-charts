@@ -41,7 +41,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 21
+          count: 22
       - equal:
           path: spec.strategy.canary.steps[0].plugin
           value:
@@ -54,13 +54,13 @@ tests:
           path: spec.strategy.canary.steps[5].plugin.config
           value: {kind: barrier, name: dark-passed, timeout: 15m}
       - equal:
-          path: spec.strategy.canary.steps[11].plugin.config.name
+          path: spec.strategy.canary.steps[12].plugin.config.name
           value: w10
       - equal:
-          path: spec.strategy.canary.steps[15].plugin.config.name
+          path: spec.strategy.canary.steps[16].plugin.config.name
           value: w25
       - equal:
-          path: spec.strategy.canary.steps[19].plugin.config.name
+          path: spec.strategy.canary.steps[20].plugin.config.name
           value: w50
 
   # coordinator.enabled: false stays allowed: no plugin step renders, and global.correlationId is not required.

@@ -69,6 +69,8 @@ tests:
                 config: {kind: barrier, name: dark-passed, timeout: 15m}
             - setHeaderRoute:
                 name: canary-header
+            - setCanaryScale:
+                weight: 25
             - setWeight: 25
             - setCanaryScale:
                 matchTrafficWeight: true
@@ -138,13 +140,13 @@ tests:
           value: test-stack-api
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 12
+          count: 13
         documentSelector:
           path: metadata.name
           value: test-stack-worker
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 11
+          count: 12
         documentSelector:
           path: metadata.name
           value: test-stack-api
@@ -677,10 +679,12 @@ tests:
       - failedTemplate:
           errorPattern: "darkReplicas.*minimum"
 
-  # Spec A4: setCanaryScale {matchTrafficWeight: true} at weight 0 would size the canary to 0 pods, so the reset sits
-  # immediately after the first setWeight: the darkReplicas pods stay up into the first weight, and the canary never
-  # drops to 0 between the dark stage and promotion. Nothing scales the canary between the route removal and the first
-  # setWeight.
+  # Spec A4: setCanaryScale {matchTrafficWeight: true} at weight 0 would size the canary to 0 pods, and setWeight W with
+  # the dark {replicas: darkReplicas} still in force would send W% of the traffic to the dark pods alone (Argo Rollouts
+  # sets the weight from the step, whatever the canary's size). So after the route removal setCanaryScale {weight: W}
+  # (W the preset's first weight) sizes the canary for W%, at least minPodsPerReplicaSet (2) pods, before setWeight W
+  # moves traffic, and setCanaryScale {matchTrafficWeight: true} right after it hands the size back to the weights. The
+  # canary never drops to 0 between the dark stage and promotion.
   - it: reset follows the first weight (fast)
     set:
       global:
@@ -723,6 +727,8 @@ tests:
                 config: {kind: barrier, name: dark-passed, timeout: 15m}
             - setHeaderRoute:
                 name: canary-header
+            - setCanaryScale:
+                weight: 25
             - setWeight: 25
             - setCanaryScale:
                 matchTrafficWeight: true
@@ -757,18 +763,23 @@ tests:
       - equal:
           path: spec.strategy.canary.steps[7]
           value:
-            setWeight: 10
+            setCanaryScale:
+              weight: 10
       - equal:
           path: spec.strategy.canary.steps[8]
+          value:
+            setWeight: 10
+      - equal:
+          path: spec.strategy.canary.steps[9]
           value:
             setCanaryScale:
               matchTrafficWeight: true
       - equal:
-          path: spec.strategy.canary.steps[9].analysis.templates[0].templateName
+          path: spec.strategy.canary.steps[10].analysis.templates[0].templateName
           value: prod-test-stack-api-health
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 21
+          count: 22
 
   - it: reset follows the first weight (manual)
     set:
@@ -794,19 +805,24 @@ tests:
       - equal:
           path: spec.strategy.canary.steps[7]
           value:
-            setWeight: 10
+            setCanaryScale:
+              weight: 10
       - equal:
           path: spec.strategy.canary.steps[8]
+          value:
+            setWeight: 10
+      - equal:
+          path: spec.strategy.canary.steps[9]
           value:
             setCanaryScale:
               matchTrafficWeight: true
       - equal:
-          path: spec.strategy.canary.steps[10]
+          path: spec.strategy.canary.steps[11]
           value:
             pause: {}
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 13
+          count: 14
 
   # Without the dark stage nothing scales the canary: the weights size it (with the canary floor).
   - it: renders no setCanaryScale with dark false

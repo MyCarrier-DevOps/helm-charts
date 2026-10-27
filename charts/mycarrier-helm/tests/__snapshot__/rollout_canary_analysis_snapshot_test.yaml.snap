@@ -2,7 +2,7 @@ references the default template set from the canary strategy:
   1: |
     abortScaleDownDelaySeconds: 30
     analysis:
-      startingStep: 7
+      startingStep: 8
       templates:
         - templateName: prod-mycarrier-api-alerts
     canaryService: mycarrier-api-preview
@@ -41,6 +41,8 @@ references the default template set from the canary strategy:
           name: mycarrier/canary-coordinator
       - setHeaderRoute:
           name: canary-header
+      - setCanaryScale:
+          weight: 10
       - setWeight: 10
       - setCanaryScale:
           matchTrafficWeight: true

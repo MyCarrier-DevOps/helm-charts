@@ -8,7 +8,7 @@ templates:
 tests:
   # R1: with no canary values the Rollout gets the Services, Istio routing and the standard ladder, with the coordinator's
   # barriers and the mandatory health analysis after each weight (DEVOPS-312), after the dark stage (on by default,
-  # DEVOPS-326), whose reset to the weights follows the first setWeight.
+  # DEVOPS-326), whose reset to the weights wraps the first setWeight.
   - it: renders the stable and canary Services, Istio routing and the standard ladder by default
     template: rollout.yaml
     set:
@@ -78,6 +78,8 @@ tests:
                 config: {kind: barrier, name: dark-passed, timeout: 15m}
             - setHeaderRoute:
                 name: canary-header
+            - setCanaryScale:
+                weight: 10
             - setWeight: 10
             - setCanaryScale:
                 matchTrafficWeight: true

@@ -326,9 +326,9 @@ tests:
     asserts:
       - equal:
           path: spec.strategy.canary.analysis.startingStep
-          value: 7
+          value: 8
       - equal:
-          path: spec.strategy.canary.steps[7]
+          path: spec.strategy.canary.steps[8]
           value:
             setWeight: 10
 

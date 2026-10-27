@@ -580,6 +580,8 @@ tests:
                 config: {kind: barrier, name: dark-passed, timeout: 15m}
             - setHeaderRoute:
                 name: canary-header
+            - setCanaryScale:
+                weight: 25
             - setWeight: 25
             - setCanaryScale:
                 matchTrafficWeight: true
@@ -668,9 +670,9 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 21
+          count: 22
       - equal:
-          path: spec.strategy.canary.steps[9]
+          path: spec.strategy.canary.steps[10]
           value:
             analysis:
               templates:
@@ -701,9 +703,9 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 21
+          count: 22
       - equal:
-          path: spec.strategy.canary.steps[9]
+          path: spec.strategy.canary.steps[10]
           value:
             analysis:
               templates:

@@ -47,11 +47,11 @@
        only for a Rollout that runs it (helm.canary.tests.wanted).
        The dark-stage timing (DEVOPS-326, decision 7) lives here: dark-passed's 15m timeout fits the leader's tests-dark
        Job (573 s with the defaults) in the followers' wait, and progressDeadlineSeconds 1200 keeps every barrier
-       timeout below the deadline. The 1200 default applies where barriers render: a canary Rollout
-       (helm.canary.enabled) with coordinator.enabled. Without barriers the default stays 600: a routed Rollout whose
-       property is not canary (its render does not change), and a canary Rollout with the coordinator off, whose
-       budget counts the deadline for each setWeight step (4 x 1200 would put the standard preset at 5970 s, above
-       the 5700 s limit). manualTimeout 40m is the largest whole 5 minutes that keeps the manual preset's leader
+       timeout below the deadline. The 1200 default applies to a canary Rollout (helm.canary.enabled) with
+       coordinator.enabled, in every environment (also where its steps do not render). Otherwise it stays 600: on a
+       routed Rollout whose property is not canary (its render does not change), and on a canary Rollout with the
+       coordinator off, which has no barriers and whose budget counts the deadline for each setWeight step (4 x 1200
+       would put the standard preset at 5970 s, above the 5700 s limit). manualTimeout 40m is the largest whole 5 minutes that keeps the manual preset's leader
        budget at or below 5700 s (helm.canary.budgetSeconds: 5583 s). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $python := "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516" -}}
@@ -102,13 +102,17 @@
        matched on X-MyCarrier-Canary: <global.correlationId, lower-cased> (helm.canary.correlationId), the dark-ready
        barrier, the <environment>-<fullName>-tests-dark analysis on the leader only (the chart renders it,
        helm.canary.testsDark.wanted, unless the leader defines its own), the dark-passed barrier, then the route is
-       removed. setCanaryScale {matchTrafficWeight: true} follows the first setWeight of the ladder: Argo Rollouts keeps
-       the last setCanaryScale in force for every later step, so without it the canary would stay at darkReplicas pods
-       through the weights; at weight 0 it would size the canary to 0 pods (a weight-sized canary of weight 0 has none,
-       whatever minPodsPerReplicaSet says), and the dark-tested pods would be replaced at the first weight. Right after
-       the first setWeight the darkReplicas pods are already up, so that step completes, and from then on the canary
-       follows the weight with at least minPodsPerReplicaSet (2) pods. The dark stage waits for the coordinator because
-       followers rely on its barriers to wait for the leader's suite.
+       removed. The ladder's first weight W is then wrapped: setCanaryScale {weight: W}, setWeight W, setCanaryScale
+       {matchTrafficWeight: true}. Argo Rollouts keeps the last setCanaryScale in force for every later step, so the
+       size must be handed back to the weights, but not at weight 0, where it would size the canary to 0 pods (a
+       weight-sized canary of weight 0 has none, whatever minPodsPerReplicaSet says) and replace the dark-tested pods
+       at the first weight; and not after setWeight W alone, because Argo Rollouts sets the traffic weight from the
+       step while the dark {replicas: darkReplicas} is still in force, so W% would land on the darkReplicas pods until
+       the canary grows (an HPA scaled out under load: more than 8 replicas at 25%, more than 20 at 10%).
+       setCanaryScale {weight: W} sizes the canary for W% first, max(ceil(W x replicas / 100), minPodsPerReplicaSet),
+       capped at replicas, and setWeight W completes only once it is available. From then on the canary follows the
+       weight with at least minPodsPerReplicaSet (2) pods. The dark stage waits for the coordinator because followers
+       rely on its barriers to wait for the leader's suite.
        These are the steps the configuration describes. They are built in every environment, with the real leader, so
        their checks (the leader rule and the leader's tests-dark included) run in every environment and the budget is
        the same in and outside prod; they render only where helm.canary.stepsRendered is true (helm.canary.steps). Only
@@ -184,8 +188,10 @@
   {{- fail (printf "global.strategy.canary.preset '%s' is not one of standard, fast, manual" $cfg.preset) -}}
 {{- end -}}
 {{- range $i, $weight := $ladder -}}
+  {{- $reset := and (eq $i 0) $coordinator.enabled $cfg.dark -}}
+  {{- if $reset }}{{ $steps = append $steps (dict "setCanaryScale" (dict "weight" $weight)) }}{{ end -}}
   {{- $steps = append $steps (dict "setWeight" $weight) -}}
-  {{- if and (eq $i 0) $coordinator.enabled $cfg.dark }}{{ $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) }}{{ end -}}
+  {{- if $reset }}{{ $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) }}{{ end -}}
   {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
   {{- if eq $cfg.preset "manual" }}{{ $steps = append $steps (dict "pause" (dict)) }}{{ else if $pause }}{{ $steps = append $steps (dict "pause" $pause) }}{{ end -}}
   {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" (printf "w%d" $weight) "coordinator" $coordinator) | fromJson) }}{{ end -}}
