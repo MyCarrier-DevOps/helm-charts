@@ -1,7 +1,10 @@
 suite: Rollout canary alerts (chart AnalysisTemplate on DEVOPS-329's label contract, DEVOPS-312)
+# The dark stage is off in these tests (values/dark-off.yaml); a test that checks it turns it on.
 templates:
   - analysistemplate.yaml
   - rollout.yaml
+values:
+  - values/dark-off.yaml
 tests:
   # prod: an ExternalSecret for the web metric's token, and a template with the alert-rules Job and the alerts metric.
   - it: renders the token ExternalSecret from the DevOps mount in prod
@@ -323,9 +326,9 @@ tests:
     asserts:
       - equal:
           path: spec.strategy.canary.analysis.startingStep
-          value: 8
+          value: 7
       - equal:
-          path: spec.strategy.canary.steps[8]
+          path: spec.strategy.canary.steps[7]
           value:
             setWeight: 10
 

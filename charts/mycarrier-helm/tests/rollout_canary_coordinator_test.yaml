@@ -1,14 +1,15 @@
 suite: Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)
-# The coordinator is on and the dark stage off by default; rollout_canary_dark_test.yaml covers the dark stage. Most of
-# these tests opt out of the health check (alerts stays on, and renders only in prod) so the step lists show the
+# The coordinator and the dark stage are on by default; rollout_canary_dark_test.yaml covers the dark stage, and these
+# tests turn it off (dark: false) except the default render. Most of these tests opt out of the health check (alerts stays on, and renders only in prod) so the step lists show the
 # barriers alone; rollout_canary_analysis_test.yaml covers the analysis steps. The steps render only in prod unless
 # stepsOutsideProd is set (DEVOPS-516), so the tests that check them render a preprod drill;
 # rollout_canary_prod_only_test.yaml covers the other environments.
 templates:
   - rollout.yaml
 tests:
-  # R-coord: the coordinator is on by default, so a Rollout with no canary values gets the barriers, after the health
-  # analysis and the pause of each weight.
+  # R-coord: the coordinator is on by default, so a Rollout with no canary values gets the barriers: start, the dark
+  # stage's dark-ready and dark-passed (the dark stage is on by default, DEVOPS-326), and one after the health analysis
+  # and the pause of each weight.
   - it: renders the barriers by default
     set:
       global:
@@ -30,23 +31,36 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 14
+          count: 21
       - equal:
           path: spec.strategy.canary.steps[0].plugin
           value:
             name: mycarrier/canary-coordinator
             config: {kind: barrier, name: start, timeout: 9m}
       - equal:
-          path: spec.strategy.canary.steps[4].plugin.config.name
+          path: spec.strategy.canary.steps[3].plugin.config
+          value: {kind: barrier, name: dark-ready, timeout: 9m}
+      - equal:
+          path: spec.strategy.canary.steps[5].plugin.config
+          value: {kind: barrier, name: dark-passed, timeout: 15m}
+      - equal:
+          path: spec.strategy.canary.steps[11].plugin.config.name
           value: w10
       - equal:
-          path: spec.strategy.canary.steps[8].plugin.config.name
+          path: spec.strategy.canary.steps[15].plugin.config.name
           value: w25
       - equal:
-          path: spec.strategy.canary.steps[12].plugin.config.name
+          path: spec.strategy.canary.steps[19].plugin.config.name
           value: w50
 
   # coordinator.enabled: false stays allowed: no plugin step renders, and global.correlationId is not required.
@@ -101,6 +115,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             analysis:
               health:
@@ -152,6 +167,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
       environment:
@@ -191,6 +207,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: manual
             analysis:
@@ -230,6 +247,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -304,6 +322,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             analysis:
               health:
@@ -357,6 +376,9 @@ tests:
         appStack: test-stack
         language: nodejs
         correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -440,13 +462,14 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             preset: fast
             analysis:
               health:
                 enabled: false
             coordinator:
               barrierTimeouts:
-                w25: 10m
+                w25: 20m
       environment:
         name: preprod
       applications:
@@ -460,7 +483,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'w25' has timeout 10m, which is not below progressDeadlineSeconds \\(600 s\\)"
+          errorPattern: "barrier 'w25' has timeout 20m, which is not below progressDeadlineSeconds \\(1200 s\\)"
 
   - it: accepts a longer barrier timeout when the release raises progressDeadlineSeconds
     set:
@@ -471,6 +494,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             progressDeadlineSeconds: 1900
@@ -505,6 +529,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -561,3 +586,37 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "barrier 'w5' has timeout 20m, which is not below progressDeadlineSeconds"
+
+  # DEVOPS-326: progressDeadlineSeconds defaults to 1200 where barriers render, so dark-passed's 15m stays below it.
+  # With the coordinator off no barrier renders and the budget counts the deadline for each setWeight step, so the
+  # default stays 600 there (1200 would put the standard preset at 4 x 1200 + 3 x 390 = 5970 s, above 5700).
+  - it: keeps the 600 s default deadline with the coordinator off
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: nodejs
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            coordinator:
+              enabled: false
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3570"

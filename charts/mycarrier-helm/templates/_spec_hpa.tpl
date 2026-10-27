@@ -1,15 +1,20 @@
+{{- /* The HPA's minReplicas: autoscaling.minReplicas, else replicas, else 2. helm.canary.minReplicas reads it too. */ -}}
+{{- define "helm.hpa.minReplicas" -}}
+{{- $replicas := dig "replicas" 2 .application }}
+{{- $configuredMinReplicas := dig "autoscaling" "minReplicas" nil .application }}
+{{- $configuredMinReplicas | default $replicas | int -}}
+{{- end -}}
+
 {{- define "helm.specs.hpa" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $namespace := include "helm.namespace" . }}
-{{- $replicas := dig "replicas" 2 .application }}
 {{- $ctx := .ctx -}}
 {{- if not $ctx -}}
   {{- $ctx = include "helm.context" . | fromJson -}}
 {{- end -}}
 {{- $autoscalingDefaults := $ctx.chartDefaults.autoscaling -}}
 {{- $maxMultiplier := $autoscalingDefaults.maxReplicasMultiplier -}}
-{{- $configuredMinReplicas := dig "autoscaling" "minReplicas" nil .application }}
-{{- $minReplicas := $configuredMinReplicas | default $replicas }}
+{{- $minReplicas := include "helm.hpa.minReplicas" . | int }}
 {{- $configuredMaxReplicas := dig "autoscaling" "maxReplicas" nil .application }}
 {{- $maxReplicas := $configuredMaxReplicas | default (mul $minReplicas $maxMultiplier) }}
 maxReplicas: {{ $maxReplicas }}

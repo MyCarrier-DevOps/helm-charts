@@ -585,3 +585,65 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "so the tests-dark analysis would fail every prod canary. .* or set global.strategy.canary.dark: false in prod."
+
+  # The barrier window (helm.canary.configuredSteps) runs whenever the dark stage runs the leader's tests-dark, not only
+  # when tests is listed: followers go from dark-ready straight to dark-passed and wait there for the leader's suite.
+  # With the chart's tests-dark (573 s) a 9m dark-passed (540 s) times out and aborts the release.
+  - it: fails a dark-passed window shorter than the leader's tests-dark
+    template: rollout.yaml
+    set:
+      <<: *followers
+      global:
+        <<: *global
+        strategy:
+          canary:
+            dark: true
+            leader: api
+            coordinator:
+              barrierTimeouts:
+                dark-passed: 9m
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'dark-passed' has timeout 9m \\(540 s\\), and Rollout 'worker' can wait there 573 s for Rollout 'api'"
+
+  - it: fits the leader's tests-dark in the default dark-passed window
+    template: rollout.yaml
+    set: *followers
+    asserts:
+      - notFailedTemplate: {}
+      - contains:
+          path: spec.strategy.canary.steps
+          content:
+            plugin:
+              name: mycarrier/canary-coordinator
+              config: {kind: barrier, name: dark-passed, timeout: 15m}
+
+  # A leader's own tests-dark (applications.<app>.analysisTemplates) counts with its own length: a Job with
+  # activeDeadlineSeconds 900 runs up to 900 + ceil(sqrt(1800)) = 943 s, above the default 15m.
+  - it: fails a dark-passed window shorter than the leader's own tests-dark
+    template: rollout.yaml
+    set:
+      <<: *followers
+      applications:
+        api:
+          <<: *api
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 900
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1.0.0
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'dark-passed' has timeout 15m \\(900 s\\), and Rollout 'worker' can wait there 943 s for Rollout 'api'"

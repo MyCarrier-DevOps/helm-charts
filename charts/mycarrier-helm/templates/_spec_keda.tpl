@@ -68,6 +68,17 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
 {{- end }}
 {{- end -}}
 
+{{- /* The ScaledObject's minReplicaCount: keda.minReplicaCount (0 allowed), else the chart default (2).
+       helm.canary.minReplicas reads it too. */ -}}
+{{- define "helm.keda.minReplicaCount" -}}
+{{- $ctx := .ctx -}}
+{{- if not $ctx -}}
+  {{- $ctx = include "helm.context" . | fromJson -}}
+{{- end -}}
+{{- $configuredMinReplicas := dig "minReplicaCount" nil (.application.keda | default dict) }}
+{{- ternary ($configuredMinReplicas | int) ($ctx.chartDefaults.keda.minReplicaCount | int) (not (kindIs "invalid" $configuredMinReplicas)) -}}
+{{- end -}}
+
 {{- define "helm.specs.keda.scaledObject" -}}
 {{- $fullName := include "helm.fullname" . }}
 {{- $ctx := .ctx -}}
@@ -81,8 +92,7 @@ Must be called before any other KEDA spec helper to fail fast on bad config.
 {{- $defaultClusterAuthRef := printf "servicebus-connectionstring-%s" $metaEnv -}}
 {{- $clusterAuthRef := dig "clusterAuthRef" $defaultClusterAuthRef $kedaConfig -}}
 {{/* Compute min/max replica counts - use kindIs "invalid" to allow 0 */}}
-{{- $configuredMinReplicas := dig "minReplicaCount" nil $kedaConfig }}
-{{- $minReplicaCount := ternary ($configuredMinReplicas | int) ($kedaDefaults.minReplicaCount | int) (not (kindIs "invalid" $configuredMinReplicas)) }}
+{{- $minReplicaCount := include "helm.keda.minReplicaCount" . | int }}
 {{- $configuredMaxReplicas := dig "maxReplicaCount" nil $kedaConfig }}
 {{- $maxReplicaCount := ternary ($configuredMaxReplicas | int) ($kedaDefaults.maxReplicaCount | int) (not (kindIs "invalid" $configuredMaxReplicas)) }}
 {{- $triggers := include "helm.specs.keda.triggers" . | fromJsonArray -}}

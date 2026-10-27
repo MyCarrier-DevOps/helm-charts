@@ -40,7 +40,10 @@ rollbackWindow:
 strategy:
 {{- if $routed }}
 {{- /* The canary contract: the chart's stable and -preview Services, the Tech Spec's canary defaults (stable keeps
-       full capacity, 30 s before an aborted canary scales down, at least one pod per ReplicaSet), Istio weights on
+       full capacity, 30 s before an aborted canary scales down, at least 2 pods per ReplicaSet on a canary Rollout,
+       DEVOPS-326 spec A4: Argo Rollouts sizes a weight-sized canary max(ceil(weight x replicas / 100), 2), capped at
+       replicas, and helm.canary.configuredSteps refuses a minimum below 2 where the steps render; 1 on a Rollout whose
+       property is not canary, so its render does not change), Istio weights on
        every route that reaches the app (helm.canary.virtualServices), the routes the steps manage (the dark stage's
        canary-header, helm.canary.managedRoutes), the release-wide steps (helm.canary.steps), and the background analysis
        that runs the alerts check from the first weight until promotion (helm.canary.backgroundAnalysis). Outside prod
@@ -57,7 +60,7 @@ strategy:
     canaryService: {{ $fullName }}-preview
     dynamicStableScale: false
     abortScaleDownDelaySeconds: 30
-    minPodsPerReplicaSet: 1
+    minPodsPerReplicaSet: {{ ternary 2 1 $canary }}
     trafficRouting:
       {{- if $canary }}
       {{- with and (eq (include "helm.canary.stepsRendered" .) "true") (include "helm.canary.managedRoutes" . | fromJsonArray) }}

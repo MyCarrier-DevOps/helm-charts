@@ -1,7 +1,10 @@
 suite: Rollout canary analysis (chart AnalysisTemplates, DEVOPS-312)
+# The dark stage is off in these tests (values/dark-off.yaml); rollout_canary_dark_test.yaml covers it.
 templates:
   - analysistemplate.yaml
   - rollout.yaml
+values:
+  - values/dark-off.yaml
 tests:
   # R3: the chart's health template calls the -preview Service and needs "Healthy"; a non-2xx answer is an error,
   # and a second error in a row aborts the canary (consecutiveErrorLimit 1). Analysis is mandatory, so it renders with

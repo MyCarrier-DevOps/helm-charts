@@ -7,7 +7,8 @@ templates:
   - analysistemplate.yaml
 tests:
   # R1: with no canary values the Rollout gets the Services, Istio routing and the standard ladder, with the coordinator's
-  # barriers and the mandatory health analysis after each weight (DEVOPS-312).
+  # barriers and the mandatory health analysis after each weight (DEVOPS-312), after the dark stage (on by default,
+  # DEVOPS-326), whose reset to the weights follows the first setWeight.
   - it: renders the stable and canary Services, Istio routing and the standard ladder by default
     template: rollout.yaml
     set:
@@ -31,6 +32,13 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - equal:
           path: spec.strategy.canary.stableService
@@ -51,7 +59,28 @@ tests:
             - plugin:
                 name: mycarrier/canary-coordinator
                 config: {kind: barrier, name: start, timeout: 9m}
+            - setCanaryScale:
+                replicas: 2
+            - setHeaderRoute:
+                name: canary-header
+                match:
+                  - headerName: X-MyCarrier-Canary
+                    headerValue:
+                      exact: corr-1
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-ready, timeout: 9m}
+            - analysis:
+                templates:
+                  - templateName: preprod-test-stack-api-tests-dark
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-passed, timeout: 15m}
+            - setHeaderRoute:
+                name: canary-header
             - setWeight: 10
+            - setCanaryScale:
+                matchTrafficWeight: true
             - analysis:
                 templates:
                   - templateName: preprod-test-stack-api-health
@@ -80,6 +109,7 @@ tests:
                 config: {kind: barrier, name: w50, timeout: 9m}
             - setWeight: 100
 
+  # DEVOPS-326 decision 7: 1200 s, above the dark-passed barrier's 15m.
   - it: renders the progress deadline, abort and rollback window defaults
     template: rollout.yaml
     set:
@@ -100,10 +130,17 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - equal:
           path: spec.progressDeadlineSeconds
-          value: 600
+          value: 1200
       - equal:
           path: spec.progressDeadlineAbort
           value: true
@@ -122,6 +159,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            dark: false
             progressDeadlineSeconds: 1200
       environment:
         name: preprod
@@ -150,6 +188,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
       environment:
@@ -190,6 +229,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: manual
       environment:
@@ -232,6 +272,7 @@ tests:
         language: csharp
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
       environment:
         name: preprod
@@ -370,6 +411,9 @@ tests:
         appStack: test-stack
         language: nodejs
         correlationId: abc-123
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -395,6 +439,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -438,6 +485,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -542,6 +592,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -580,6 +633,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: csharp
+        strategy:
+          canary:
+            dark: false
       environment:
         name: prod
       applications:
@@ -611,6 +667,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: csharp
+        strategy:
+          canary:
+            dark: false
       environment:
         name: prod
       applications:
@@ -657,6 +716,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: dev
       applications:
@@ -687,6 +749,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -727,6 +792,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -767,6 +835,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -800,6 +871,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -850,6 +924,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -923,6 +1000,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -954,6 +1034,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -985,6 +1068,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -1037,6 +1123,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -1110,6 +1199,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: feature20-saia
       applications:
@@ -1156,6 +1248,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -1194,6 +1289,9 @@ tests:
         appStack: test-stack
         correlationId: corr-1
         language: nodejs
+        strategy:
+          canary:
+            dark: false
       environment:
         name: preprod
       applications:
@@ -1212,8 +1310,8 @@ tests:
           path: spec.progressDeadlineSeconds
           value: 1800
 
-  # Tech Spec chart contract: "strategy.canary defaults: dynamicStableScale false, abortScaleDownDelaySeconds 30,
-  # minPodsPerReplicaSet 1".
+  # Tech Spec chart contract: "strategy.canary defaults: dynamicStableScale false, abortScaleDownDelaySeconds 30",
+  # and minPodsPerReplicaSet 2 on a canary Rollout (DEVOPS-326 spec A4; it was 1).
   - it: renders the Tech Spec's canary defaults on a canary Rollout
     template: rollout.yaml
     set:
@@ -1234,6 +1332,13 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - equal:
           path: spec.strategy.canary.dynamicStableScale
@@ -1243,7 +1348,7 @@ tests:
           value: 30
       - equal:
           path: spec.strategy.canary.minPodsPerReplicaSet
-          value: 1
+          value: 2
 
   # D18: bakeMinutes is accepted release-wide and read by the release; the Rollout is unaffected.
   - it: accepts global.strategy.canary.bakeMinutes
@@ -1256,6 +1361,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             bakeMinutes: 60
       environment:
@@ -1277,3 +1383,154 @@ tests:
           path: spec.strategy.canary.steps[1]
           value:
             setWeight: 10
+
+  # Spec A4, decision 5: a canary Rollout's canary has at least 2 pods at every weight (Argo Rollouts sizes it
+  # max(ceil(weight x replicas / 100), minPodsPerReplicaSet), capped at spec.replicas). A Rollout whose property is not
+  # canary keeps 1, so its render does not change.
+  - it: canary floor (canary Rollout)
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api: &floorApp
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 2
+
+  - it: canary floor (rolling Rollout)
+    template: rollout.yaml
+    set:
+      global:
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+      environment:
+        name: prod
+      applications:
+        api: *floorApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 1
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 600
+
+  # Review Focus 4: minPodsPerReplicaSet is capped at spec.replicas, so a canary Rollout whose minimum replicas is below
+  # 2 would still run 1 canary pod. Where the steps render (prod, or stepsOutsideProd) the render fails; the minimum is
+  # autoscaling.minReplicas with the HPA, keda.minReplicaCount with KEDA, else replicas.
+  - it: minimum below 2 fails where steps render (hpa)
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api:
+          <<: *floorApp
+          autoscaling:
+            enabled: true
+            minReplicas: 1
+            maxReplicas: 4
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(autoscaling.minReplicas\\)"
+
+  - it: minimum below 2 fails where steps render (keda)
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api:
+          <<: *floorApp
+          keda:
+            enabled: true
+            type: topic
+            topicName: my-topic
+            subscriptionName: my-sub
+            minReplicaCount: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(keda.minReplicaCount\\)"
+
+  - it: minimum below 2 fails where steps render (replicas)
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+      environment:
+        name: preprod
+      applications:
+        api:
+          <<: *floorApp
+          replicas: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(replicas\\)"
+
+  - it: renders a KEDA-scaled canary Rollout whose minimum is the KEDA default 2
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api:
+          <<: *floorApp
+          keda:
+            enabled: true
+            type: topic
+            topicName: my-topic
+            subscriptionName: my-sub
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 2

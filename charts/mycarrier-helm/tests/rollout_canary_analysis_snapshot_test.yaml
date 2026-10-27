@@ -3,8 +3,9 @@ templates:
   - analysistemplate.yaml
   - rollout.yaml
 # The default template set for a canary Rollout in prod with no canary values (analysis is mandatory, DEVOPS-312): the
-# chart's health template, the alerts template with its ExternalSecret, and the Rollout's canary strategy that
-# references them, with the coordinator's barriers. The snapshots cover the specs only, so a chart version bump does
+# chart's health template, the alerts template with its ExternalSecret, the chart's tests-dark template for the dark
+# stage's leader (on by default, DEVOPS-326; it runs the app's testtrigger.testdefinitions), and the Rollout's canary
+# strategy that references them, with the coordinator's barriers, the dark stage and the canary floor. The snapshots cover the specs only, so a chart version bump does
 # not change them; any change to what the canary runs does.
 tests:
   - it: renders the default analysis template set
@@ -28,9 +29,16 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - hasDocuments:
-          count: 3
+          count: 4
       - equal:
           path: metadata.name
           value: prod-mycarrier-api-health
@@ -52,6 +60,13 @@ tests:
       - matchSnapshot:
           path: spec
         documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: prod-mycarrier-api-tests-dark
+        documentIndex: 3
+      - matchSnapshot:
+          path: spec
+        documentIndex: 3
 
   - it: references the default template set from the canary strategy
     template: rollout.yaml

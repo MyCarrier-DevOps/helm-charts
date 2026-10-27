@@ -61,9 +61,10 @@ global:
   #                               # whose property is not canary. The render checks of a canary Rollout (leader,
   #                               # tests-dark, budgetSeconds, the budget limit included) run in every environment;
   #                               # only global.correlationId is required just where the steps render.
-  #     manualTimeout: 1h         # how long the release's rollout-watch allows for the manual pause (D22); it counts
+  #     manualTimeout: 40m        # how long the release's rollout-watch allows for the manual pause (D22); it counts
   #                               # in the canary budget, and the pause itself has no time limit. With the manual
   #                               # preset, zero fails the render. The other presets and explicit steps ignore it.
+  #                               # 40m keeps the manual leader's budget with the dark stage at 5583 s (<= 5700).
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
   #     # budgetSeconds: 1800     # required with steps, in every environment: their worst-case length in seconds
   #                               # (pauses, each analysis step's longest template, barrier timeouts), 1 to 5700.
@@ -88,8 +89,9 @@ global:
   #                               # (Kubernetes counts activeDeadlineSeconds from the Job's creation; a pod Pending
   #                               # past it ends DeadlineExceeded with no FAIL line). activeDeadlineSeconds is timeout
   #                               # + startupSeconds (540 s); the canary budget counts it with the Job's detection
-  #                               # lag (573 s) per analysis step (standard 4779 s, fast 1653 s, manual 5253 s with
-  #                               # the defaults). With the coordinator on and two or more canary Rollouts, one
+  #                               # lag (573 s) per analysis step (standard 4779 s, fast 1653 s, manual 4053 s with
+  #                               # the other defaults and dark: false). With the coordinator on and two or more
+  #                               # canary Rollouts, one
   #                               # Rollout's longest run of the steps since the previous barrier (a Job adds
   #                               # ceil(sqrt(2 x activeDeadlineSeconds))) minus another's shortest ((count - 1) x
   #                               # interval) must stay below the barrier's timeout, or the render fails (513 s with
@@ -114,12 +116,18 @@ global:
   #         # service: mycarrier    # the rules' service label; default alerts.serviceName, else global.appStack
   #                               # (not the default app), lower-cased. In prod none fails the render: set one,
   #                               # or enabled: false
-  #     progressDeadlineSeconds: 600   # time without progress (e.g. a canary pod Pending or not Ready) before the
-  #                               # canary aborts; size it above the slowest pod start. applications.<app>.
-  #                               # progressDeadlineSeconds overrides it for one slow-starting app.
-  #     dark: false               # header-gated dark stage before the weights (D11); renders only with the
-  #                               # coordinator. Off until the chart renders tests-dark (DEVOPS-326)
-  #     darkReplicas: 1           # canary pods during the dark stage
+  #     progressDeadlineSeconds: 1200  # time without progress (e.g. a canary pod Pending or not Ready) before the
+  #                               # canary aborts; size it above the slowest pod start and above every barrier
+  #                               # timeout. applications.<app>.progressDeadlineSeconds overrides it for one
+  #                               # slow-starting app. 1200 with the coordinator on (DEVOPS-326); 600 with
+  #                               # coordinator.enabled false (no barriers; the budget counts it per setWeight) and on
+  #                               # Rollouts whose property is not canary.
+  #     dark: true                # header-gated dark stage before the weights (D11, on since DEVOPS-326); renders
+  #                               # only with the coordinator and a preset. The leader needs
+  #                               # testtrigger.testdefinitions (the chart's tests-dark) or its own tests-dark, and
+  #                               # prod TestEngine needs RUN_KINDS_ENABLED=true; false turns it off.
+  #     darkReplicas: 2           # canary pods during the dark stage; at least 2, so one pod restart does not drop
+  #                               # the canary-header route mid-suite
   #     bakeMinutes: 30           # alert-gate's watch window after promotion (D18); set it longer for a service with
   #                               # a known slow-burn history. Rendered on every canary Rollout as the
   #                               # mycarrier.tech/bakeMinutes annotation, which the release's rollout-watch reads
@@ -127,14 +135,19 @@ global:
   #     coordinator:              # release-wide lockstep (DEVOPS-325's mycarrier/canary-coordinator step plugin, D20);
   #       enabled: true           # needs global.correlationId where the steps render (the pipeline sets it); false
   #                               # where the plugin is not on the cluster: the controller rejects unknown plugins
-  #       barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 9m, w10: 9m, w25: 9m, w50: 9m}
+  #       barrierTimeouts: {start: 9m, dark-ready: 9m, dark-passed: 15m, w10: 9m, w25: 9m, w50: 9m}
   #                               # each below progressDeadlineSeconds: Argo counts the wait at a barrier toward the
-  #                               # deadline. The leader's dark suite must finish inside dark-passed's timeout.
+  #                               # deadline. The leader's dark suite (tests-dark, 573 s with the defaults) must
+  #                               # finish inside dark-passed's timeout; with two or more canary Rollouts the render
+  #                               # fails when it cannot.
   #   With the coordinator on, a preset starts with a start barrier (it arms the plugin's Abort hook) and gets a
   #   w<weight> barrier after each weight; an explicit steps list renders verbatim and carries its own barriers.
-  #   With dark on, the start barrier is followed by the dark stage: canary pods at weight 0 behind a canary-header
-  #   route matched on X-MyCarrier-Canary: <global.correlationId>, the dark-ready barrier, the leader's tests-dark
-  #   suite (global.strategy.canary.leader, or the only Rollout app), the dark-passed barrier, then the route goes.
+  #   With dark on, the start barrier is followed by the dark stage: darkReplicas canary pods at weight 0 behind a
+  #   canary-header route matched on X-MyCarrier-Canary: <global.correlationId, lower-cased>, the dark-ready barrier,
+  #   the leader's tests-dark suite (global.strategy.canary.leader, or the only Rollout app), the dark-passed barrier,
+  #   then the route goes. The canary keeps its darkReplicas pods into the first weight and then follows the weight.
+  #   A canary Rollout runs at least 2 canary pods at every weight (minPodsPerReplicaSet 2), so where the steps
+  #   render its minimum replicas (autoscaling.minReplicas, keda.minReplicaCount, else replicas) must be 2 or more.
   #   With coordinator.enabled: false each Rollout of a release runs its own steps: one can be at 50% while another
   #   is at 10%, or abort while another promotes. mycarrier.tech/rolloutGroupSize on each Rollout is the number the
   #   coordinator waits for.

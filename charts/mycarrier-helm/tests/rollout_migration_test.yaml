@@ -1,9 +1,12 @@
 suite: Deployment to Rollout migration (migratingToRollouts)
+# The dark stage is off in these tests (values/dark-off.yaml): a canary Rollout here is about the switch, not its steps.
 templates:
   - rollout.yaml
   - deployment.yaml
   - autoscaler.yaml
   - keda-scaledobject.yaml
+values:
+  - values/dark-off.yaml
 tests:
   # Release 1 of the two-release migration: deploymentType rollout + migratingToRollouts true.
   - it: keeps rendering the Deployment while migratingToRollouts is set, so Argo CD does not prune it
