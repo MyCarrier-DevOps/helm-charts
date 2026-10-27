@@ -669,11 +669,15 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- end -}}
 
 {{- /* True where a canary Rollout renders the canary source routes and the canary/stable pod labels they match
-       (DEVOPS-326): where its steps render (helm.canary.stepsRendered) and coordinator.enabled is true. With traffic
-       routing, an aborted Rollout's -preview Service keeps selecting its canary ReplicaSet while that scales to 0, so a
-       sibling's canary pods would get 503 through the aborted Rollout's source routes until the sibling aborts too. The
-       coordinator aborts every Rollout of the release within the cascade window (about abortScaleDownDelaySeconds);
-       without it nothing would, so with the coordinator off canary callers keep reaching stable. */ -}}
+       (DEVOPS-326): where its steps render (helm.canary.stepsRendered) and coordinator.enabled is true. The coordinator
+       moves every Rollout of the release through the same weights in lock-step, so a callee's canary is sized for the
+       weight its canary callers are at. Without it a caller can be at 50% while its callee is at 10%, and the source
+       routes would send the caller canary's whole share to a callee canary sized for 10%; so with the coordinator off
+       canary callers keep reaching stable. After a Rollout aborts, Argo Rollouts v1.10.0 (dynamicStableScale false)
+       points its -preview Service back at its stable ReplicaSet on every reconcile (rollout/trafficrouting.go), after
+       pointing it at the aborted canary ReplicaSet while that still has available pods
+       (reconcileStableAndCanaryService, rollout/service.go), so for up to abortScaleDownDelaySeconds (30 s) the
+       siblings' canary callers reach its aborted canary pods or its stable pods, then stable. */ -}}
 {{- define "helm.canary.sourceRoutesRendered" -}}
 {{- if and (eq (include "helm.canary.stepsRendered" .) "true") (include "helm.canary.config" . | fromJson).coordinator.enabled }}true{{ else }}false{{ end -}}
 {{- end -}}

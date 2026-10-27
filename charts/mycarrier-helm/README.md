@@ -252,8 +252,10 @@ where its steps render (prod, or `stepsOutsideProd`): `darkReplicas` canary pods
 `canary-header` route that sends `X-MyCarrier-Canary: <global.correlationId, lower-cased>` to the canary, the
 `dark-ready` barrier, the leader's `<environment>-<fullName>-tests-dark` analysis, the `dark-passed` barrier (15m), and
 the removal of the route. `tests-dark` is the chart's `tests` Job sent to the leader's stable Service with that header,
-`RunKind: canary` and `SlipStep: none`; a failing suite aborts the release before any customer request reaches a
-canary. The first weight W is then wrapped in `setCanaryScale {weight: W}`, `setWeight W` and
+`RunKind: canary` and `SlipStep: none`; a failing suite aborts the release before any customer HTTP request reaches a
+canary through the routes. Queue-driven work is not gated: the canary pods of a Rollout that consumes a queue (a KEDA
+or Service Bus worker) do real work through the whole dark window, and their HTTP calls to the release's other canary
+Rollouts reach those Rollouts' canaries, still untested, through the source routes. The first weight W is then wrapped in `setCanaryScale {weight: W}`, `setWeight W` and
 `setCanaryScale {matchTrafficWeight: true}`, so the canary is sized for W% before traffic moves and never drops to 0.
 
 Every canary Rollout renders `minPodsPerReplicaSet: 2`: the canary has at least 2 pods at every weight and otherwise
@@ -266,8 +268,15 @@ out, and a route with no match left gets no source route) whose pods carry that 
 canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
 host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, so a public
 request with the release's correlation id in the header reaches the canary during the dark stage (an accepted risk). After
-one Rollout of the release aborts, the others' canary pods get 503 from it until the coordinator aborts them too (about
-30 s).
+one Rollout of the release aborts, for up to about 30 s (`abortScaleDownDelaySeconds`) the others' canary pods that call
+it reach its aborted canary pods or its stable pods, then stable. The source routes render only with the coordinator,
+for load proportionality: it moves the release's Rollouts through the same weights in lock-step, while without it a
+caller can be at 50% and its callee at 10%, and the caller canary's whole share would go to a callee canary sized for
+10%. Even in lock-step, at weight W a callee's canary receives about W x (2 - W) of its callers' traffic (the caller
+canary's share plus W of the caller stable's share) on pods sized for W, at least 2: about 1.9 times its weight's share
+at 10%, 1.75 times at 25%, 1.5 times at 50%. It compounds down a call chain, an HPA averaging over all pods does not
+correct it, and the 2-pod floor absorbs it at small replica counts; the DEVOPS-321 pilot watches canary pod CPU and
+latency against stable on callees that take most of their traffic from a sibling.
 
 | Before | Edit |
 |---|---|
