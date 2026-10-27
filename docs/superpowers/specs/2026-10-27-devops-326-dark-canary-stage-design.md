@@ -109,6 +109,7 @@ Run as a drill on the Development cluster with `global.strategy.canary.stepsOuts
 
 - Argo's `canary-header` route has no gateway restriction, so during the dark stage a public request carrying the correlation id reaches the canary through ingress. Accepted in Q25 (2026-10-13); restate it in the spec.
 - Calls that leave the mesh (public host, ingress gateway, KrakenD) reach stable, not the canary (A3).
+- After a sibling Rollout aborts, this release's canary callers get 503 from that sibling for up to the cascade window (about `abortScaleDownDelaySeconds`, 30 s): with traffic routing the aborted Rollout's `-preview` Service keeps selecting its canary ReplicaSet while that scales to 0 (Argo Rollouts v1.10.0 `rollout/service.go`: the switch back to stable applies only without `trafficRouting`), so its source routes send canary callers to no pods until the coordinator aborts the callers' Rollouts too. That is why the source routes and the canary/stable pod labels render only with `coordinator.enabled` (and where the steps render); with the coordinator off nothing would abort the callers, so canary callers keep reaching stable. *Added 2026-10-27 (Task 3 review).*
 
 ## Non-goals
 
