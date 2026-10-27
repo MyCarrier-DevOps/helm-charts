@@ -126,7 +126,7 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | `global.strategy.canary.bakeMinutes` above 100 | Set it to 100 or less: alert-gate's run has a 7200 s deadline and spends about 750 s outside its window. Above 100 fails every render. |
 | An explicit `global.strategy.canary.steps` list | Set `global.strategy.canary.budgetSeconds` to the steps' worst-case length in seconds (1 to 5700): the pause durations, each analysis step's longest template (`count` x max(`interval`, a Job's `activeDeadlineSeconds`)) and each barrier timeout, or without barriers `progressDeadlineSeconds` for each weight step above 0. Without it, every Rollout fails to render. |
 | The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h` on 4.7.9 to 4.7.12, `40m` since) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
-| A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (at 45m, the manual preset with the dark stage leaves 750 s for the leader's `tests-dark`), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
+| A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults on 4.7.9 to 4.7.12; since the release after 4.7.12 the defaults fit, 5583 s for the manual leader with `manualTimeout` 40m), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (on 4.7.9 to 4.7.12, 45m left 750 s for the leader's `tests-dark`; since the release after 4.7.12, with `dark-passed` at 15m, the default 40m fits and 45m fails at 5883 s), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
 | A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: false` | Remove it (`true` is the default). The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so `false` fails the render. |
 | A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Nothing is required. Since the release after 4.7.10 the chart reads the property (`global.deploymentStrategy`): a Rollout renders canary steps, and drops its prod PostSync hook, only when it is `canary`. Otherwise it renders without steps and keeps its hook. |
 | A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
@@ -152,7 +152,9 @@ extra template that does not render, a barrier timeout at or above `progressDead
 leader's `tests-dark`, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s and a zero `manualTimeout`
 with the manual preset fail the render outside prod too. A stack moves to canary as a whole, so the same Rollouts exist
 in every environment, and it sees these failures on its first render, not at its first prod canary. Only
-`global.correlationId` for the coordinator is required just where the steps render.
+`global.correlationId` for the coordinator is required just where the steps render. Since the release after 4.7.12 the
+canary pod floor (a minimum of 2 replicas) is checked there too, and the dark stage adds its own checks (see
+[The dark stage on by default](#the-dark-stage-on-by-default-in-the-release-after-4712-canary-rollouts)).
 
 | 4.7.9 values | Edit |
 |---|---|
@@ -262,7 +264,7 @@ It matches in-mesh callers (`gateways: [mesh]`) whose pods carry that label and 
 `mycarrier.tech/correlationId` (as the pod renders it), and sends them to the `-preview` destination, so a release's
 canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
 host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, so a public
-request with the release's correlation id in the header reaches the canary during the dark stage (accepted, Q25). After
+request with the release's correlation id in the header reaches the canary during the dark stage (an accepted risk). After
 one Rollout of the release aborts, the others' canary pods get 503 from it until the coordinator aborts them too (about
 30 s).
 
