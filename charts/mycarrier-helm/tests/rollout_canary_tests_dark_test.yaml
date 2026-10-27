@@ -402,7 +402,9 @@ tests:
           path: spec.metrics[0].name
           value: prod-tests-dark
 
-  - it: renders no tests-dark with the dark stage off or the coordinator off
+  # tests-dark renders under the conditions that give the leader its tests-dark step: a preset with the coordinator
+  # and the dark stage on.
+  - it: renders no tests-dark with the coordinator off
     template: analysistemplate.yaml
     set:
       <<: *dark
@@ -413,6 +415,54 @@ tests:
             coordinator:
               enabled: false
             dark: true
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+        not: true
+
+  - it: renders no tests-dark with the dark stage off
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: false
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+        not: true
+
+  # An explicit steps list renders no dark stage, so dark: true there gives no tests-dark.
+  - it: renders no tests-dark with explicit steps and the dark stage on
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+            budgetSeconds: 600
+            steps:
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-health
+              - setWeight: 100
     asserts:
       - containsDocument:
           kind: AnalysisTemplate
@@ -453,7 +503,33 @@ tests:
               templates: [tests]
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, .*TestEngine's DeployVerifier fails .* Set global.strategy.canary.dark: false .* until Q54"
+          errorPattern: "^application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, from the dark stage, global.strategy.canary.dark: true\\): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run would fail. The dark stage already runs the suite against the canary \\(tests-dark\\). Set global.strategy.canary.dark: false or remove tests from global.strategy.canary.analysis.templates until Q54 \\(a DeployVerifier check of header-less canary runs per Rollout\\) is resolved.$"
+
+  # A5 with explicit steps: a setHeaderRoute or setMirrorRoute step is the managed route, and there is no dark stage
+  # and no tests-dark, so the message names neither.
+  - it: tests with a header route in explicit steps fails naming Q54, without the dark stage
+    template: rollout.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+            budgetSeconds: 1500
+            steps:
+              - setHeaderRoute: {name: smoke, match: [{headerName: X-Smoke, headerValue: {exact: "1"}}]}
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-tests
+              - setHeaderRoute: {name: smoke}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "^application 'api': the canary tests template cannot run on a Rollout with managed routes \\(smoke, from setHeaderRoute or setMirrorRoute steps in global.strategy.canary.steps\\): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the tests run sends none, so every tests run would fail. Remove the setHeaderRoute and setMirrorRoute steps, or stop running tests \\(remove it from global.strategy.canary.analysis.templates and from the steps\\), until Q54 \\(a DeployVerifier check of header-less canary runs per Rollout\\) is resolved.$"
 
   # #158's serviceAddress and filter rules apply with the stable Service; their messages name the dark stage's way out.
   - it: fails a tests-dark serviceAddress on another host, naming the stable Service and dark false

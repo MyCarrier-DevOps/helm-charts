@@ -131,7 +131,8 @@ true
        the http Service port; another port fails the render, because the chart cannot tell which port of the target
        Service serves it. Any other host fails the render, because the canary run must test the canary's pods; the
        message shows the address without its scheme or user info. CorrelationId is always a JSON string (a numeric global.correlationId
-       such as 12345 becomes "12345"); the hook and the prod-tests ConfigMap render it as before.
+       such as 12345 becomes "12345", helm.canary.correlationIdString) in its own case; the hook and the prod-tests ConfigMap
+       render it as before.
        TestEngine refuses a canary in a prod-class environment (the request's EnvironmentName, the namespace,
        contains prod and not preprod) when a filter's first TestCategory starts with preprod (Caller contract rule 7),
        so such a filter fails the render here, with TestEngine's own reading of a filter: the text before the first &,
@@ -176,9 +177,7 @@ true
   {{- end -}}
   {{- $addresses = append $addresses $address -}}
 {{- end -}}
-{{- $correlationId := dig "correlationId" "" ($ctx.Values.global | default dict) -}}
-{{- if and (kindIs "float64" $correlationId) (eq $correlationId (float64 (int64 $correlationId))) }}{{ $correlationId = int64 $correlationId }}{{ end -}}
-{{- $run := dict "serviceAddresses" $addresses "tolerations" (list) "runKind" "canary" "slipStep" "none" "requestHeaders" (.requestHeaders | default dict) "correlationId" (toString ($correlationId | default "")) -}}
+{{- $run := dict "serviceAddresses" $addresses "tolerations" (list) "runKind" "canary" "slipStep" "none" "requestHeaders" (.requestHeaders | default dict) "correlationId" (include "helm.canary.correlationIdString" $ctx) -}}
 {{- $environmentName := lower (toString $namespace) -}}
 {{- if and (contains "prod" $environmentName) (not (contains "preprod" $environmentName)) -}}
   {{- range (dig "testtrigger" "testdefinitions" list $ctx.application) -}}

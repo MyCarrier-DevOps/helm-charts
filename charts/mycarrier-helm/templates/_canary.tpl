@@ -182,11 +182,12 @@
 {{- end -}}
 {{- /* Checks of the chart's tests template (DEVOPS-515) that read the steps; they run in every environment, like the
        other checks here.
-       - Managed routes (the dark stage's canary-header, or a setHeaderRoute or setMirrorRoute step of explicit steps):
-         TestEngine's DeployVerifier fails a canary run of a Rollout with managed routes that sends no X-MyCarrier-Canary
-         header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run
-         would fail until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved (spec A5).
-         The dark stage's own tests-dark sends the header, so it is not refused.
+       - Managed routes (the dark stage's canary-header with a preset, or a setHeaderRoute or setMirrorRoute step of
+         explicit steps, which render no dark stage): TestEngine's DeployVerifier fails a canary run of a Rollout with
+         managed routes that sends no X-MyCarrier-Canary header, and the tests run sends none (with the dark stage it
+         runs at the weight steps, after the header route is removed), so every tests run would fail until Q54 (a
+         DeployVerifier check of header-less canary runs per Rollout) is resolved (spec A5). The message names the
+         source. The dark stage's own tests-dark sends the header, so it is not refused.
        - Lockstep: the DeployVerifier checks every Rollout of the correlation group, which must be in flight. With
          coordinator.enabled false and more than one canary Rollout, a sibling that already promoted (or has not
          started) fails the run after part of the release shipped.
@@ -217,7 +218,11 @@
     {{- if and $route (not (has $route $managed)) }}{{ $managed = append $managed $route }}{{ end -}}
   {{- end -}}
   {{- if $managed -}}
-    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true, or from explicit steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run would fail. The dark stage already runs the suite against the canary (tests-dark). Set global.strategy.canary.dark: false (and remove setHeaderRoute and setMirrorRoute steps), or remove tests from global.strategy.canary.analysis.templates, until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved." .appName (join ", " $managed)) -}}
+    {{- $q54 := "until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved." -}}
+    {{- if $cfg.steps -}}
+      {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from setHeaderRoute or setMirrorRoute steps in global.strategy.canary.steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the tests run sends none, so every tests run would fail. Remove the setHeaderRoute and setMirrorRoute steps, or stop running tests (remove it from global.strategy.canary.analysis.templates and from the steps), %s" .appName (join ", " $managed) $q54) -}}
+    {{- end -}}
+    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run would fail. The dark stage already runs the suite against the canary (tests-dark). Set global.strategy.canary.dark: false or remove tests from global.strategy.canary.analysis.templates %s" .appName (join ", " $managed) $q54) -}}
   {{- end -}}
   {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
   {{- if and (not $coordinator.enabled) (gt (len $rollouts) 1) -}}
@@ -708,14 +713,19 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* global.correlationId as a lower-cased string, the one form every value that routes on it uses (DEVOPS-326): the
-       dark stage's header route and the tests-dark X-MyCarrier-Canary header. TestEngine requires the header lower
-       case; slip ids are minted lower case. A numeric id renders as its digits (12345, not 1.2345e+04), as
-       helm.canary.tests.request renders the request's CorrelationId, which keeps its case. */ -}}
-{{- define "helm.canary.correlationId" -}}
+{{- /* global.correlationId as a string, in its own case: a numeric id renders as its digits (12345, not 1.2345e+04);
+       unset, empty or 0 renders "". helm.canary.tests.request sends it as the request's CorrelationId. */ -}}
+{{- define "helm.canary.correlationIdString" -}}
 {{- $id := dig "correlationId" "" (.Values.global | default dict) -}}
 {{- if and (kindIs "float64" $id) (eq $id (float64 (int64 $id))) }}{{ $id = int64 $id }}{{ end -}}
-{{- lower (toString $id) -}}
+{{- toString ($id | default "") -}}
+{{- end -}}
+
+{{- /* global.correlationId lower-cased (helm.canary.correlationIdString), the one form every value that routes on it
+       uses (DEVOPS-326): the dark stage's header route and the tests-dark X-MyCarrier-Canary header. TestEngine
+       requires the header lower case; slip ids are minted lower case. */ -}}
+{{- define "helm.canary.correlationId" -}}
+{{- lower (include "helm.canary.correlationIdString" .) -}}
 {{- end -}}
 
 {{- /* The leader of the release, which alone runs the dark-stage suite (D20): global.strategy.canary.leader, which must
