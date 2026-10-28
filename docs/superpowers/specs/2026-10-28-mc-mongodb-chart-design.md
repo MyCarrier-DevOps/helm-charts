@@ -17,8 +17,9 @@ The work ships in two phases, in order:
    resources, turns backups on in production only, and points the service's injected Mongo connection string at the
    in-cluster instance instead of the shared one.
 
-The chart can be used by one service or shared by several (a standalone release that others connect to); nothing in
-it assumes a single consumer.
+The chart serves one application user per release. Several services can share a release by using that user's
+connection string (from the same namespace, or by copying it); separate users per consumer are out of scope until a
+consumer needs them.
 
 ## Goals
 
@@ -212,13 +213,20 @@ version of it.
   `mongodb.storage.*`, `mongodb.resources`, `mongodb.backup.schedule`, `mongodb.backup.timeZone` and
   `mongodb.backup.retentionDays`.
 - **What mycarrier-helm computes:**
-  - Production means `eq $metaenv "prod"`, the same test `_lang.tpl` uses for the code path that injects the
-    connection string.
+  - Production means `hasPrefix "prod" $metaenv`. This covers plain `prod` (what `_lang.tpl` checks) and any
+    `prod-*` environment, which the chart's domain and affinity helpers already treat as production. It errs toward
+    backing up: a production-like environment that gets backups costs storage, while a production environment
+    without backups is an anti-goal.
   - Name: `<appStack>-mongodb`.
   - Backup: enabled exactly when production. A stack cannot turn it on outside production or off in production.
   - Backup path: `<environment.name>/<appStack>`.
   - Backup container: the cluster name (see Open questions).
   - Members: `mongodb.members` if set, otherwise 3 in production and 1 elsewhere.
+- **Data on removal:** Argo prunes the `MongoDBCommunity` when a stack turns `mongodb.enabled` off or an
+  environment is removed. The StatefulSet's data claims keep the default PVC retention (`Retain`), so the disks
+  survive the resource being pruned and can be reattached by turning it back on. Deleting a feature namespace
+  deletes its claims, so feature environments leave nothing behind. **Builder verifies** MCK doesn't set
+  `persistentVolumeClaimRetentionPolicy.whenDeleted: Delete` or owner references on the claims.
 - **Feature environments:** each feature namespace gets its own empty MongoDB when the stack enables it, without
   backups (feature environments' meta environment is dev).
 - **Connection string swap:** in `_lang.tpl`, when `mongodb.enabled`, `MongoConnection_<metaenv>` becomes
@@ -262,3 +270,6 @@ version of it.
 - Members default 1, and 3 in production under mycarrier-helm.
 - Feature environments get their own MongoDB when enabled.
 - The swap only touches the existing injection path; non-csharp stacks wire the Secret themselves.
+- Production is `hasPrefix "prod"` on the meta environment, erring toward backups.
+- Pruning the resource keeps the data disks (default PVC retention); feature namespaces take theirs with them.
+- One app user per release; per-consumer users wait for a consumer that needs them.
