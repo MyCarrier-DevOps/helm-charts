@@ -24,6 +24,9 @@ global:
   language: csharp
   correlationId: corr-1
   deploymentStrategy: canary
+  strategy:
+    canary:
+      dark: false
 environment:
   name: prod
 alerts:

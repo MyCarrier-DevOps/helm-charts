@@ -52,9 +52,11 @@ applications:
           secretId: vault:QA/data/app_auth#SecretId
           filters: [TestCategory=CoreAPI]
 """
-# The dark stage's leader gets the same Job as tests-dark (DEVOPS-326); tests itself refuses the dark stage.
+# The dark stage's leader gets the same Job as tests-dark (DEVOPS-326); tests itself refuses the dark stage, so the
+# tests fixture sets dark: false.
 DARK_VALUES = VALUES.replace("      analysis:\n        templates: [tests]\n", "      dark: true\n")
-assert DARK_VALUES != VALUES
+VALUES = VALUES.replace("      analysis:\n", "      dark: false\n      analysis:\n")
+assert DARK_VALUES != VALUES and "dark: false" in VALUES
 KEY = "Bearer dGVzdC1rZXk="
 RUN_A = "a" * 32
 RUN_B = "b" * 32
