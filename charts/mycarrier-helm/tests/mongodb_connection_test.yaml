@@ -1,0 +1,37 @@
+suite: MongoConnection injection with dependencyDeployments.mongodb
+templates:
+  - deployment.yaml
+set:
+  global:
+    appStack: tools
+    language: csharp
+    dependencies: { mongodb: true }
+  environment: { name: preprod }
+  applications.api:
+    deploymentType: deployment
+    image: { registry: r, repository: api, tag: "1.0.0" }
+tests:
+  - it: reads MongoConnection_<env> from the in-cluster MongoDB's connection Secret when it is deployed
+    set:
+      dependencyDeployments.mongodb.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MongoConnection_preprod
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: KeyVault_MongoConnection, value: MongoConnection_preprod }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: KeyVaultMongoConnection, value: MongoConnection_preprod }
+
+  - it: keeps the Vault reference when MongoDB is not deployed
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MongoConnection_preprod
+            value: "vault:secrets/data/preprod/tools/shared/mongodb-tools-preprod#value"

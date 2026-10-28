@@ -2930,6 +2930,71 @@
           }
         }
       }
+    },
+    "dependencyDeployments": {
+      "type": "object",
+      "description": "Dependencies deployed in-cluster alongside the stack, for internal tools. Product applications use the shared services (global.dependencies).",
+      "additionalProperties": false,
+      "properties": {
+        "mongodb": {
+          "type": "object",
+          "description": "A MongoDB replica set for the stack (mc-mongodb). Backups run in production only; the environment decides, not the stack.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Deploy MongoDB with the stack. MongoConnection_<env> then points at it."
+            },
+            "members": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Replica set members. Defaults to 3 in production and 1 elsewhere."
+            },
+            "version": {
+              "type": "string",
+              "description": "MongoDB server version (exact)."
+            },
+            "storage": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "size": {
+                  "type": "string",
+                  "description": "Data volume size per member."
+                },
+                "storageClassName": {
+                  "type": "string",
+                  "description": "Storage class for the data volume (empty uses the cluster default)."
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "description": "Resources for the mongod container. Replaces the default as a whole."
+            },
+            "backup": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "schedule": {
+                  "type": "string",
+                  "description": "Cron schedule for backups."
+                },
+                "timeZone": {
+                  "type": "string",
+                  "description": "Time zone for the backup schedule."
+                },
+                "retentionDays": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Backups older than this many days are deleted after each successful backup."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {

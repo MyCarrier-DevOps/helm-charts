@@ -1,0 +1,122 @@
+suite: dependencyDeployments.mongodb (in-cluster MongoDB)
+templates:
+  - mongodb.yaml
+set:
+  global: { appStack: tools, language: csharp }
+  environment: { name: prod }
+  dependencyDeployments.mongodb.enabled: true
+tests:
+  - it: renders nothing when not enabled
+    set:
+      dependencyDeployments.mongodb.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: deploys a 3-member replica set named after the stack in production
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: metadata.name, value: tools-mongodb}
+      - equal: {path: metadata.namespace, value: prod}
+      - equal: {path: spec.members, value: 3}
+
+  - it: backs up production to the production container
+    documentSelector: {path: kind, value: PersistentVolume}
+    asserts:
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: production}
+
+  - it: mounts the backup folder <environment>/<appStack>
+    documentSelector: {path: spec.schedule, value: "0 2 * * *"}
+    asserts:
+      - equal: {path: metadata.name, value: tools-mongodb-backup}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: prod/tools
+
+  - it: renders the on-demand restore in production
+    documentSelector: {path: metadata.name, value: tools-mongodb-restore}
+    asserts:
+      - isKind: {of: CronJob}
+      - equal: {path: spec.suspend, value: true}
+
+  - it: uses the stack name as the connection string's database
+    documentSelector: {path: spec.target.name, value: tools-mongodb-connection}
+    asserts:
+      - isKind: {of: ExternalSecret}
+      - matchRegex:
+          path: spec.target.template.data.connectionString
+          pattern: '@tools-mongodb-svc\.prod\.svc\.cluster\.local:27017/tools\?replicaSet=tools-mongodb&'
+
+  - it: renders no backup or restore outside production (dev, preprod, feature environments)
+    set:
+      environment: { name: preprod }
+    asserts:
+      - hasDocuments: {count: 4}
+
+  - it: deploys one member outside production
+    set:
+      environment: { name: feature14 }
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.members, value: 1}
+      - equal: {path: metadata.namespace, value: feature14}
+
+  - it: deploys no backup in dev
+    set:
+      environment: { name: dev }
+    asserts:
+      - hasDocuments: {count: 4}
+
+  - it: backs up any production-like environment (prod-*)
+    set:
+      environment: { name: prod-eu }
+    asserts:
+      - hasDocuments: {count: 8}
+
+  - it: takes the stack's members over the environment default
+    set:
+      dependencyDeployments.mongodb.members: 5
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.members, value: 5}
+
+  - it: takes the stack's server version, storage and resources
+    set:
+      dependencyDeployments.mongodb:
+        enabled: true
+        version: "8.0.35"
+        storage: { size: 50Gi }
+        resources: { requests: { cpu: "1" } }
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.version, value: "8.0.35"}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 50Gi}
+      - notExists: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName"}
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].resources
+          value: { requests: { cpu: "1" } }
+
+  - it: takes the stack's backup schedule, time zone and retention
+    set:
+      dependencyDeployments.mongodb:
+        enabled: true
+        backup: { schedule: "30 4 * * *", timeZone: America/Chicago, retentionDays: 14 }
+    documentSelector: {path: spec.schedule, value: "30 4 * * *"}
+    asserts:
+      - equal: {path: spec.timeZone, value: America/Chicago}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content: { name: RETENTION_DAYS, value: "14" }
+
+  - it: rejects a stack turning backups on or off (production decides)
+    set:
+      dependencyDeployments.mongodb.backup.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "enabled"
+
+  - it: rejects settings dependencyDeployments.mongodb does not expose
+    set:
+      dependencyDeployments.mongodb.backup.container: other
+    asserts:
+      - failedTemplate:
+          errorPattern: "container"
