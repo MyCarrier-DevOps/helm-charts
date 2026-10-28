@@ -125,3 +125,20 @@ tests:
         documentIndex: 0
       - equal: {path: spec.volumeName, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
         documentIndex: 1
+
+  # Cluster policy (require-run-as-non-root, require-ro-rootfs) rejects the pod otherwise.
+  - it: runs the backup as the mongo image's non-root user on a read-only root filesystem
+    documentIndex: 2
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot, value: true}
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser, value: 999}
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.runAsGroup, value: 999}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext
+          value: {readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content: {name: tmp, mountPath: /tmp}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content: {name: HOME, value: /tmp}

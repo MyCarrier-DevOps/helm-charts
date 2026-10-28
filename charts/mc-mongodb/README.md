@@ -22,7 +22,9 @@ instance.
   - a backup `CronJob` (default daily at 02:00 UTC, keeping 7 days);
   - a suspended restore `CronJob`.
 
-MongoDB, backup and restore pods run without an Istio sidecar.
+MongoDB, backup and restore pods run without an Istio sidecar. They meet the clusters' Kyverno policies:
+- the replica set's containers get liveness and readiness probes, which the operator doesn't set itself;
+- backup and restore run as the `mongo` image's non-root user (999) on a read-only root filesystem.
 
 ## Prerequisites
 

@@ -14,12 +14,21 @@ Usage: include "mc-mongodb.backupPodSpec" (dict "ctx" $ctx "script" $script "env
 */}}
 {{- define "mc-mongodb.backupPodSpec" -}}
 restartPolicy: Never
+# The mongo image's mongodb user, on a read-only root filesystem (cluster policy); /tmp is the only scratch space.
 securityContext:
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
   seccompProfile:
     type: RuntimeDefault
 containers:
   - name: mongo
     image: {{ .ctx.backup.image }}
+    securityContext:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
     command:
       - /bin/bash
       - -c
@@ -32,6 +41,8 @@ containers:
             key: connectionString
       - name: RETENTION_DAYS
         value: {{ .ctx.backup.retentionDays | toString | quote }}
+      - name: HOME
+        value: /tmp
       {{- with .env }}
       {{- toYaml . | nindent 6 }}
       {{- end }}
@@ -39,12 +50,16 @@ containers:
       - name: backups
         mountPath: /backups
         subPath: {{ .ctx.backup.path }}
+      - name: tmp
+        mountPath: /tmp
     resources:
       {{- toYaml .ctx.backup.resources | nindent 6 }}
 volumes:
   - name: backups
     persistentVolumeClaim:
       claimName: {{ include "mc-mongodb.backupVolumeName" .ctx }}
+  - name: tmp
+    emptyDir: {}
 {{- end }}
 
 {{/*

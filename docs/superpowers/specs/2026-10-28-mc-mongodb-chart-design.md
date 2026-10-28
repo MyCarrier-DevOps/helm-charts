@@ -230,6 +230,19 @@ Role only in the operator's namespace when it watches all namespaces. The chart 
 `statefulSet.spec.template.spec.serviceAccountName` to it; the operator's pod-template merge keeps a non-empty
 override. A per-release name keeps two releases in one namespace (two stacks in `dev`) from sharing one.
 
+### Cluster policies
+
+The app clusters enforce Kyverno policies in app namespaces (`prod` included): liveness and readiness probes on every
+StatefulSet container, a read-only root filesystem, non-root users, and images only from Harbor, ACR, ghcr.io and a
+few named upstream paths. Checked with the Kyverno CLI against both clusters' policies, using the StatefulSet MCK
+1.14.0 actually builds (on a local cluster):
+- `mongod` gets TCP startup, liveness and readiness probes on 27017 (the startup probe allows 10 minutes for the
+  agent's first configuration); the agent gets a TCP liveness probe on its status port, 5000, and keeps the
+  operator's readiness probe.
+- Backup and restore pods run as uid/gid 999 (the `mongo` image's user), read-only root, `/tmp` as an emptyDir.
+- `mongo:8.0.34` is rewritten to `harbor.mycarrier.tech/proxy-cache` by the clusters' harbor-container-webhook. The
+  operator's images come through a Harbor quay.io proxy project, set in the operator's values.
+
 ## Embedding in mycarrier-helm (phase 2)
 
 Both phases ship together: mycarrier-helm depends on `mc-mongodb` from this repository (`file://../mc-mongodb`), so a

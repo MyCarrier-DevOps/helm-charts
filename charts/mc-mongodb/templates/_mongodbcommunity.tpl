@@ -58,10 +58,34 @@ spec:
             fsGroup: 2000
             seccompProfile:
               type: RuntimeDefault
+          # Cluster policy requires liveness and readiness probes on every container; the operator sets only the
+          # agent's readiness probe. mongod opens its port once the agent has written its configuration, which the
+          # startup probe allows up to 10 minutes for. The agent serves its status on 5000.
           containers:
             - name: mongod
               resources:
                 {{- toYaml .resources | nindent 16 }}
+              startupProbe:
+                tcpSocket:
+                  port: 27017
+                periodSeconds: 10
+                failureThreshold: 60
+              livenessProbe:
+                tcpSocket:
+                  port: 27017
+                periodSeconds: 30
+                failureThreshold: 6
+              readinessProbe:
+                tcpSocket:
+                  port: 27017
+                periodSeconds: 10
+            - name: mongodb-agent
+              livenessProbe:
+                tcpSocket:
+                  port: 5000
+                initialDelaySeconds: 30
+                periodSeconds: 30
+                failureThreshold: 6
       volumeClaimTemplates:
         - metadata:
             name: data-volume

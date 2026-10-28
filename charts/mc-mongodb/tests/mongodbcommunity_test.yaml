@@ -82,3 +82,18 @@ tests:
   - it: runs the pods under the release's own ServiceAccount
     asserts:
       - equal: {path: spec.statefulSet.spec.template.spec.serviceAccountName, value: mydb-mc-mongodb-database}
+
+  # Cluster policy requires a liveness and a readiness probe on every StatefulSet container; the operator gives the
+  # agent only a readiness probe and mongod none, so admission would reject the StatefulSet it creates.
+  - it: probes mongod on its port, with a startup allowance for the first configuration
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].name", value: mongod}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].startupProbe.tcpSocket.port", value: 27017}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].livenessProbe.tcpSocket.port", value: 27017}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].readinessProbe.tcpSocket.port", value: 27017}
+
+  - it: probes the agent's liveness on its status port and keeps the operator's readiness probe
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].name", value: mongodb-agent}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].livenessProbe.tcpSocket.port", value: 5000}
+      - notExists: {path: "spec.statefulSet.spec.template.spec.containers[1].readinessProbe"}
