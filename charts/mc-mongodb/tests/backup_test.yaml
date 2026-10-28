@@ -71,6 +71,7 @@ tests:
       - equal: {path: spec.timeZone, value: Etc/UTC}
       - equal: {path: spec.concurrencyPolicy, value: Forbid}
       - equal: {path: spec.jobTemplate.spec.backoffLimit, value: 2}
+      - equal: {path: spec.jobTemplate.spec.activeDeadlineSeconds, value: 21600}
       - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "false"}
       - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault}
       - equal: {path: spec.jobTemplate.spec.template.spec.restartPolicy, value: Never}
@@ -105,3 +106,22 @@ tests:
       - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "mongodump [^\\n]*--archive=\"/backups/\\$ts.archive.gz.partial\""}
       - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "(?s)mongodump.*mv .*cutoff"}
       - notMatchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "--oplog"}
+
+  - it: lets the backup deadline be configured
+    documentIndex: 2
+    set:
+      backup.activeDeadlineSeconds: 3600
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.activeDeadlineSeconds, value: 3600}
+
+  - it: keeps the full release name in the volume name under a long namespace
+    release:
+      name: inventory-service-mongodb-aaaa-one
+      namespace: feature14-some-really-long-application-stack-namespace-xx
+    asserts:
+      - equal: {path: metadata.name, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
+        documentIndex: 0
+      - equal: {path: spec.csi.volumeHandle, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
+        documentIndex: 0
+      - equal: {path: spec.volumeName, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
+        documentIndex: 1

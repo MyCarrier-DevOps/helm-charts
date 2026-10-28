@@ -50,7 +50,11 @@ spec:
           annotations:
             sidecar.istio.io/inject: "false"
         spec:
+          # Replaces the operator's default pod security context whole, so it repeats all of it.
           securityContext:
+            runAsUser: 2000
+            runAsNonRoot: true
+            fsGroup: 2000
             seccompProfile:
               type: RuntimeDefault
           containers:

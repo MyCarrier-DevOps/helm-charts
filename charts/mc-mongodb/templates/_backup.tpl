@@ -1,9 +1,11 @@
 {{/*
 Name of the backup PersistentVolume and its claim. PVs are cluster-scoped, so the namespace is part of the name.
+Not truncated: PV and PVC names allow 253 characters, and cutting the release name off would let two releases share
+a volume.
 Usage: include "mc-mongodb.backupVolumeName" $ctx
 */}}
 {{- define "mc-mongodb.backupVolumeName" -}}
-{{- printf "%s-%s-backup" .namespace .name | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-%s-backup" .namespace .name }}
 {{- end }}
 
 {{/*
@@ -135,6 +137,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
+      activeDeadlineSeconds: {{ .backup.activeDeadlineSeconds }}
       template:
         metadata:
           labels:

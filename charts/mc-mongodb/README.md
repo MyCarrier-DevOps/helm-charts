@@ -145,5 +145,6 @@ The resources are named templates that take one context dict (`mc-mongodb.contex
 | `backup.storageAccount` | Storage account holding the backup containers                       | `mycarriermongobackups`                |
 | `backup.resourceGroup`  | Resource group of the storage account                               | `rg_management_controlplane`           |
 | `backup.subscriptionId` | Subscription of the storage account                                 | `99b54c45-a73d-4d40-915e-c0392b589e8c` |
+| `backup.activeDeadlineSeconds` | Longest a backup Job may run before it is failed              | `21600`                                |
 | `backup.image`          | Image providing mongodump and mongorestore                          | `mongo:8.0.34`                         |
 | `backup.resources`      | Resources for the backup and restore containers                     | `{...}`                                |

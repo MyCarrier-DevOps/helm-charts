@@ -65,3 +65,14 @@ tests:
     asserts:
       - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 50Gi}
       - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName", value: managed-csi-premium}
+
+  - it: sets the operator's full default pod security context, since an override replaces it whole
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.securityContext
+          value:
+            runAsUser: 2000
+            runAsNonRoot: true
+            fsGroup: 2000
+            seccompProfile:
+              type: RuntimeDefault

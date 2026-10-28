@@ -55,6 +55,7 @@ password:
 ## @param backup.storageAccount Storage account holding the backup containers
 ## @param backup.resourceGroup Resource group of the storage account
 ## @param backup.subscriptionId Subscription of the storage account
+## @param backup.activeDeadlineSeconds Longest a backup Job may run before it is failed, so a hung dump can't block later backups
 ## @param backup.image Image providing mongodump and mongorestore
 ## @param backup.resources [object] Resources for the backup and restore containers
 backup:
@@ -67,6 +68,7 @@ backup:
   storageAccount: mycarriermongobackups
   resourceGroup: rg_management_controlplane
   subscriptionId: 99b54c45-a73d-4d40-915e-c0392b589e8c
+  activeDeadlineSeconds: 21600
   image: mongo:8.0.34
   resources:
     requests:
