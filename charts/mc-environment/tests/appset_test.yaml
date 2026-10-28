@@ -439,3 +439,30 @@ tests:
       - equal:
           path: spec.template.spec.ignoreDifferences[0].jsonPointers[2]
           value: /metadata/labels/mycarrier.tech~1reference
+
+  # mycarrier-helm gained dependencyDeployments (in-cluster MongoDB); forwarded per environment like the other keys.
+  - it: forwards dependencyDeployments to the subchart values for the environment that sets it
+    values:
+      - fixtures/basic-environments.yaml
+    set:
+      environments:
+        - name: dev
+          dependencyDeployments:
+            mongodb: { enabled: true }
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.generators[0].list.elements[0].Values.dependencyDeployments.mongodb.enabled
+          value: true
+
+  - it: forwards no dependencyDeployments when an environment omits it
+    values:
+      - fixtures/basic-environments.yaml
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - notExists:
+          path: spec.generators[0].list.elements[0].Values.dependencyDeployments

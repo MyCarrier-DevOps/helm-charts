@@ -47,6 +47,9 @@ spec:
                 {{ with $env.infrastructure }}infrastructure:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
+                {{ with $env.dependencyDeployments }}dependencyDeployments:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
                 {{- with $.Values.alerts }}
                 alerts:
                   {{- toYaml . | nindent 18 }}
