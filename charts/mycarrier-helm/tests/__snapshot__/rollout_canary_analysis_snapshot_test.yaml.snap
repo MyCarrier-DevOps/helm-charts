@@ -9,7 +9,6 @@ references the default template set from the canary strategy:
       labels:
         mycarrier.tech/rollout-role: canary
     canaryService: mycarrier-api-preview
-    dynamicStableScale: false
     minPodsPerReplicaSet: 2
     stableMetadata:
       labels:

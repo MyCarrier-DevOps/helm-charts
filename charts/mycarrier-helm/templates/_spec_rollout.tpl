@@ -11,7 +11,12 @@ selector:
 analysis:
   successfulRunHistoryLimit: {{ dig "updateStrategy" "successfulRunHistoryLimit" 10 .application }}
   unsuccessfulRunHistoryLimit: {{ dig "updateStrategy" "unsuccessfulRunHistoryLimit" 10 .application }}
-minReadySeconds: {{ .application.minReadySeconds | default 0 }}
+{{- /* Zero-valued fields the rollouts controller's typed Update drops (a non-pointer field tagged omitempty, here
+       minReadySeconds) are not rendered: Argo CD would diff the rendered 0 against the live Rollout, which lacks it,
+       and show the Rollout OutOfSync for the whole canary. 0 is the default. */}}
+{{- if gt (int (.application.minReadySeconds | default 0)) 0 }}
+minReadySeconds: {{ .application.minReadySeconds }}
+{{- end }}
 {{- /* migratingToRollouts renders both workloads for one release; deploymentType picks the one the HPA/KEDA autoscaler
        targets. On the way in (deploymentType rollout) the chart keeps the Deployment so its pods keep serving; on the
        way back (deploymentType deployment) it keeps the Rollout. Either way the Rollout borrows the Deployment's pod
@@ -40,7 +45,9 @@ rollbackWindow:
 strategy:
 {{- if $routed }}
 {{- /* The canary contract: the chart's stable and -preview Services, the Tech Spec's canary defaults (stable keeps
-       full capacity, 30 s before an aborted canary scales down, at least 2 pods per ReplicaSet on a canary Rollout,
+       full capacity (dynamicStableScale false, Argo Rollouts' default, so it is not rendered: the rollouts
+       controller's typed Update drops a false non-pointer omitempty field and Argo CD would show the Rollout
+       OutOfSync for the whole canary), 30 s before an aborted canary scales down, at least 2 pods per ReplicaSet on a canary Rollout,
        DEVOPS-326 spec A4: Argo Rollouts sizes a weight-sized canary max(ceil(weight x replicas / 100), 2), capped at
        replicas, and helm.canary.configuredSteps refuses a minimum below 2 where the steps render; 1 on a Rollout whose
        property is not canary, so its render does not change), Istio weights on
@@ -58,7 +65,6 @@ strategy:
   canary:
     stableService: {{ $fullName }}
     canaryService: {{ $fullName }}-preview
-    dynamicStableScale: false
     abortScaleDownDelaySeconds: 30
     minPodsPerReplicaSet: {{ ternary 2 1 $canary }}
     {{- /* Where the source routes render (helm.canary.sourceRoutesRendered), every Rollout of the release labels its
