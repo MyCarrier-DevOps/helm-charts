@@ -155,8 +155,9 @@ global:
   #   the leader's tests-dark suite (global.strategy.canary.leader, or the only Rollout app), the dark-passed barrier,
   #   then the route goes. The canary keeps its darkReplicas pods into the first weight and then follows the weight.
   #   A canary Rollout runs at least 2 canary pods at every weight (minPodsPerReplicaSet 2), so where the steps
-  #   render its minimum replicas (autoscaling.minReplicas, keda.minReplicaCount, else replicas; 1 with the top-level
-  #   scaling value and no autoscaler) must be 2 or more.
+  #   render its minimum replicas (autoscaling.minReplicas, keda.idleReplicaCount when set, else keda.minReplicaCount,
+  #   else replicas; 1 with the top-level scaling value and no autoscaler) must be 2 or more: KEDA scales the Rollout
+  #   to idleReplicaCount while its triggers are idle, so a canary Rollout leaves it unset.
   #   Where the steps render, the coordinator is on and the steps move in lock-step (a preset, or an explicit steps
   #   list with a canary-coordinator barrier between every two setWeight steps), canary pods are labelled
   #   mycarrier.tech/rollout-role: canary (stable pods: stable), and each VirtualService route with the -preview

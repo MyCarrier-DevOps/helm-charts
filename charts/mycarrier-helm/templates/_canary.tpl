@@ -132,7 +132,8 @@
   {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
 {{- end -}}
 {{- /* The canary floor (spec A4): minPodsPerReplicaSet 2 is capped at spec.replicas, so a Rollout that can run 1 pod
-       would run a 1-pod canary. Checked where the steps render; elsewhere the Rollout promotes at once. */ -}}
+       would run a 1-pod canary, and one that KEDA scales to 0 (keda.idleReplicaCount) no canary pods. Checked where
+       the steps render; elsewhere the Rollout promotes at once. */ -}}
 {{- if $rendered -}}
   {{- $minimum := include "helm.canary.minReplicas" . | fromJson -}}
   {{- if lt (int $minimum.replicas) 2 -}}
@@ -881,14 +882,22 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* The fewest pods a canary Rollout runs, as JSON {replicas, source, fix}: keda.minReplicaCount with KEDA,
-       autoscaling.minReplicas with the HPA (helm.kedaCondition, helm.hpaCondition, as helm.specs.rollout decides), 1
-       with the top-level scaling value (helm.specs.rollout then renders no replicas and Argo Rollouts runs 1), else the
-       Rollout's replicas (helm.specs.replicas). fix is the remedy the canary-floor check prints. */ -}}
+{{- /* The fewest pods a canary Rollout runs, as JSON {replicas, source, fix}: with KEDA, keda.idleReplicaCount when it
+       is set (KEDA scales the Rollout to it, below minReplicaCount, while its triggers are idle; Argo Rollouts v1.10.0
+       caps minPodsPerReplicaSet at spec.replicas and keeps a count of 0 at 0, CheckMinPodsPerReplicaSet in
+       utils/replicaset/canary.go, so the canary drops to 0 pods), else keda.minReplicaCount; autoscaling.minReplicas
+       with the HPA (helm.kedaCondition, helm.hpaCondition, as helm.specs.rollout decides); 1 with the top-level scaling
+       value (helm.specs.rollout then renders no replicas and Argo Rollouts runs 1); else the Rollout's replicas
+       (helm.specs.replicas). fix is the remedy the canary-floor check prints. */ -}}
 {{- define "helm.canary.minReplicas" -}}
 {{- $set := printf "Set applications.%s.%%s to 2 or more." .appName -}}
 {{- if eq "true" (include "helm.kedaCondition" . | trim) -}}
-  {{- toJson (dict "replicas" (include "helm.keda.minReplicaCount" . | int) "source" "keda.minReplicaCount" "fix" (printf $set "keda.minReplicaCount")) -}}
+  {{- $idle := dig "idleReplicaCount" nil (.application.keda | default dict) -}}
+  {{- if not (kindIs "invalid" $idle) -}}
+    {{- toJson (dict "replicas" ($idle | int) "source" "keda.idleReplicaCount: KEDA scales the Rollout to it while its triggers are idle" "fix" (printf "Remove applications.%s.keda.idleReplicaCount." .appName)) -}}
+  {{- else -}}
+    {{- toJson (dict "replicas" (include "helm.keda.minReplicaCount" . | int) "source" "keda.minReplicaCount" "fix" (printf $set "keda.minReplicaCount")) -}}
+  {{- end -}}
 {{- else if eq "true" (include "helm.hpaCondition" . | trim) -}}
   {{- toJson (dict "replicas" (include "helm.hpa.minReplicas" . | int) "source" "autoscaling.minReplicas" "fix" (printf $set "autoscaling.minReplicas")) -}}
 {{- else if .Values.scaling -}}

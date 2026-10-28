@@ -1437,7 +1437,8 @@ tests:
 
   # Review Focus 4: minPodsPerReplicaSet is capped at spec.replicas, so a canary Rollout whose minimum replicas is below
   # 2 would still run 1 canary pod. Where the steps render (prod, or stepsOutsideProd) the render fails; the minimum is
-  # autoscaling.minReplicas with the HPA, keda.minReplicaCount with KEDA, else replicas.
+  # autoscaling.minReplicas with the HPA, keda.idleReplicaCount (when set) or else keda.minReplicaCount with KEDA,
+  # else replicas.
   - it: minimum below 2 fails where steps render (hpa)
     template: rollout.yaml
     set:
@@ -1487,6 +1488,64 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(keda.minReplicaCount\\)"
+
+  # KEDA scales the target to idleReplicaCount (it supports only 0) while its triggers are idle, below minReplicaCount;
+  # Argo Rollouts caps minPodsPerReplicaSet at spec.replicas and keeps a count of 0 at 0 (CheckMinPodsPerReplicaSet,
+  # utils/replicaset/canary.go:357-372, v1.10.0), so the canary would drop to 0 pods.
+  - it: keda.idleReplicaCount fails where steps render, whatever minReplicaCount is
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api:
+          <<: *floorApp
+          keda:
+            enabled: true
+            type: topic
+            topicName: my-topic
+            subscriptionName: my-sub
+            minReplicaCount: 2
+            idleReplicaCount: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 0 \\(keda.idleReplicaCount: KEDA scales the Rollout to it while its triggers are idle\\)\\..* Remove applications\\.api\\.keda\\.idleReplicaCount\\.$"
+
+  - it: renders a KEDA-scaled canary Rollout with minReplicaCount 2 and no idleReplicaCount
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        correlationId: corr-1
+        language: csharp
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api:
+          <<: *floorApp
+          keda:
+            enabled: true
+            type: topic
+            topicName: my-topic
+            subscriptionName: my-sub
+            minReplicaCount: 2
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 2
 
   - it: minimum below 2 fails where steps render (replicas)
     template: rollout.yaml
