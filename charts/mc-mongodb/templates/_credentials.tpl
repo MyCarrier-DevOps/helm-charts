@@ -1,8 +1,8 @@
 {{/*
 Generated credentials: one Password generator and an ExternalSecret per user. Each ExternalSecret writes a Secret
-holding the generated password (read by the operator) and the connection string consumers use. CreatedOnce plus
-Retain keeps the password stable across syncs; recreating an ExternalSecret regenerates it, and the operator then
-updates the user to match.
+holding the generated password (read by the operator) and the connection string consumers use. CreatedOnce keeps
+the password stable across syncs; deleting and recreating an ExternalSecret regenerates it (its Secret is owned and
+goes with it), and the operator then updates the user to match.
 Usage: include "mc-mongodb.credentials" $ctx
 */}}
 {{- define "mc-mongodb.credentials" -}}
