@@ -954,6 +954,8 @@ applications:
       activationMessageCount: 1         # messages needed to activate from zero
 ```
 
+On a canary Rollout (repository property `canary`), `idleReplicaCount` fails the render wherever the canary steps render (prod, or `stepsOutsideProd`): KEDA scales the Rollout to it while its triggers are idle, and the canary would drop to 0 pods (see [Rollouts](#rollouts), Dark stage, Canary pod floor).
+
 #### Multiple Triggers
 A single ScaledObject can scale off more than one trigger — for example, a worker that drains a primary topic subscription and also needs to react to a dead-letter queue. Use `keda.triggers` (a list) instead of the flat `type`/`queueName`/`topicName`/`subscriptionName`/`messageCount`/`activationMessageCount` fields. The flat fields and `keda.triggers` are **mutually exclusive** — one application uses one shape or the other, never both.
 
@@ -1435,7 +1437,7 @@ When reviewing or creating helm value changes:
 16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases
 17. **Prod canary Rollout test triggers** — For a prod Rollout whose repository's `deployment-strategy` property is `canary`: `enableV1: true`, `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
 18. **Canary steps outside prod** — Canary Rollouts (property `canary`) run their steps in prod only; `global.strategy.canary.stepsOutsideProd: true` only in the values of a test drill's environment, never in the shared `helm/values.yaml`
-19. **Canary dark stage and pod floor** — For a stack whose repository property is `canary`: wherever the canary steps render (prod, or `stepsOutsideProd`; with the coordinator off or explicit `steps` too), each canary Rollout's minimum replicas is at least 2. Where the dark stage renders (coordinator on, `dark: true`, a preset; every environment): `global.strategy.canary.leader` set when the release has two or more canary Rollouts; the leader has `testtrigger.testdefinitions` in every environment (or `dark: false` there); `tests` in `analysis.templates` only with `dark: false`; no `progressDeadlineSeconds` at or below 900; and `dark: false` for a multi-frontend release
+19. **Canary dark stage and pod floor** — For a stack whose repository property is `canary`: wherever the canary steps render (prod, or `stepsOutsideProd`; with the coordinator off or explicit `steps` too), each canary Rollout's minimum replicas is at least 2 (`autoscaling.minReplicas` with the HPA; with KEDA, `keda.minReplicaCount` and no `keda.idleReplicaCount`; else `replicas`, which counts as 1 with the top-level `scaling` value and no autoscaler). Where the dark stage renders (coordinator on, `dark: true`, a preset; every environment): `global.strategy.canary.leader` set when the release has two or more canary Rollouts; the leader has `testtrigger.testdefinitions` in every environment (or `dark: false` there); `tests` in `analysis.templates` only with `dark: false`; no `progressDeadlineSeconds` at or below 900; and `dark: false` for a multi-frontend release
 
 ---
 

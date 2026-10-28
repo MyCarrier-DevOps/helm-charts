@@ -1582,7 +1582,7 @@
               },
               "idleReplicaCount": {
                 "type": "integer",
-                "description": "Number of replicas when idle (set to 0 to enable scale-to-zero)"
+                "description": "Number of replicas when idle (set to 0 to enable scale-to-zero). A canary Rollout refuses it where its canary steps render (canary pod floor): KEDA scales the Rollout to it while its triggers are idle, and the canary would drop to 0 pods."
               },
               "minReplicaCount": {
                 "type": "integer",
