@@ -1313,7 +1313,8 @@ tests:
           value: 1800
 
   # Tech Spec chart contract: "strategy.canary defaults: dynamicStableScale false, abortScaleDownDelaySeconds 30",
-  # and minPodsPerReplicaSet 2 on a canary Rollout (DEVOPS-326 spec A4; it was 1).
+  # and minPodsPerReplicaSet 2 on a canary Rollout (DEVOPS-326 spec A4; it was 1). dynamicStableScale false is Argo
+  # Rollouts' default and is not rendered: see the zero-valued fields test below.
   - it: renders the Tech Spec's canary defaults on a canary Rollout
     template: rollout.yaml
     set:
@@ -1342,15 +1343,103 @@ tests:
                 secretId: vault:QA/data/app_auth#SecretId
                 filters: [TestCategory=CoreAPI]
     asserts:
-      - equal:
+      - notExists:
           path: spec.strategy.canary.dynamicStableScale
-          value: false
       - equal:
           path: spec.strategy.canary.abortScaleDownDelaySeconds
           value: 30
       - equal:
           path: spec.strategy.canary.minPodsPerReplicaSet
           value: 2
+
+  # DEVOPS-326 R3: the rollouts controller rewrites the Rollout with a typed Update that drops zero-valued
+  # non-pointer fields tagged omitempty (minReadySeconds, dynamicStableScale). Rendering them makes Argo CD show the
+  # Rollout OutOfSync for the whole canary.
+  - it: renders no minReadySeconds and no dynamicStableScale on a canary Rollout without minReadySeconds
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        strategy:
+          canary:
+            dark: false
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - notExists:
+          path: spec.minReadySeconds
+      - notExists:
+          path: spec.strategy.canary.dynamicStableScale
+
+  - it: renders no minReadySeconds when it is 0
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        strategy:
+          canary:
+            dark: false
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          minReadySeconds: 0
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - notExists:
+          path: spec.minReadySeconds
+
+  - it: renders minReadySeconds when the application sets it
+    template: rollout.yaml
+    set:
+      global:
+        deploymentStrategy: canary
+        strategy:
+          canary:
+            dark: false
+        appStack: test-stack
+        correlationId: corr-1
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          minReadySeconds: 15
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.minReadySeconds
+          value: 15
 
   # D18: bakeMinutes is accepted release-wide and read by the release; the Rollout is unaffected.
   - it: accepts global.strategy.canary.bakeMinutes

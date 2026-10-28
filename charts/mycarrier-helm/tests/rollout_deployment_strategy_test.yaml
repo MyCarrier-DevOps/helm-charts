@@ -358,7 +358,6 @@ tests:
           content:
             stableService: test-stack-api
             canaryService: test-stack-api-preview
-            dynamicStableScale: false
             abortScaleDownDelaySeconds: 30
       - template: service.yaml
         hasDocuments:
