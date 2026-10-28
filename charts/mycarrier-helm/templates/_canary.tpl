@@ -396,11 +396,16 @@
          without an interval once) and interval (0 when unset). The lengths come from
          helm.canary.analysis.templateSeconds.
        - a canary-coordinator barrier: its timeout.
-       - a setWeight step above 0 waits until the canary's pods are available, for up to progressDeadlineSeconds. With
-         the coordinator on, the barrier timeouts cover that wait; with coordinator.enabled false, each such setWeight
-         step (100 included) counts progressDeadlineSeconds.
-       - every other step (setWeight 0, setCanaryScale, setHeaderRoute): 0. The background alerts analysis runs alongside
-         the steps and is not counted.
+       - a setWeight or setCanaryScale step waits until the canary's pods are available
+         (AtDesiredReplicaCountsForCanary, rollout/canary.go:318-327 in Argo Rollouts v1.10.0), for up to
+         progressDeadlineSeconds. With coordinator.enabled false, each setWeight step above 0 (100 included) counts
+         progressDeadlineSeconds. With the coordinator on these waits count 0. With two or more canary Rollouts, a
+         Rollout whose pods start slowly holds its siblings at the next barrier, whose timeout bounds the wait. With
+         one, the barriers pass at once, so the budget does not cover these waits, and a canary whose pods start slowly
+         at several steps can outlast rollout-watch's timeout (budget + 15 minutes) while still inside its progress
+         deadlines.
+       - every other step (setHeaderRoute), and setWeight 0 and setCanaryScale with the coordinator off: 0. The
+         background alerts analysis runs alongside the steps and is not counted.
        The leader runs tests-dark and its followers do not, so their budgets can differ. An explicit steps list states its
        own budget in budgetSeconds (required there); with a preset the chart computes it and budgetSeconds is ignored.
        rollout-watch's release workflow has activeDeadlineSeconds 10800, which covers about 70 minutes before the canary
