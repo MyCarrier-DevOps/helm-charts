@@ -221,6 +221,15 @@ helm-unittest suites under `charts/mc-mongodb/tests/`, written test-first:
 
 The release workflow picks up a new chart folder automatically; the unit-test workflow runs its suites.
 
+### Database pod ServiceAccount
+
+MCK 1.14.0 runs the replica set's pods under ServiceAccount `mongodb-kubernetes-appdb`
+(`mongodb-community-operator/controllers/construct/mongodbstatefulset.go`), and its chart creates that account and its
+Role only in the operator's namespace when it watches all namespaces. The chart therefore renders
+`<name>-database` (ServiceAccount, Role with the operator's database rules, RoleBinding) and sets
+`statefulSet.spec.template.spec.serviceAccountName` to it; the operator's pod-template merge keeps a non-empty
+override. A per-release name keeps two releases in one namespace (two stacks in `dev`) from sharing one.
+
 ## Embedding in mycarrier-helm (phase 2)
 
 Both phases ship together: mycarrier-helm depends on `mc-mongodb` from this repository (`file://../mc-mongodb`), so a

@@ -76,3 +76,9 @@ tests:
             fsGroup: 2000
             seccompProfile:
               type: RuntimeDefault
+
+  # The operator names the pods' ServiceAccount mongodb-kubernetes-appdb and creates it only in its own namespace;
+  # each release brings its own (templates/rbac.yaml), so stacks sharing a namespace don't share one.
+  - it: runs the pods under the release's own ServiceAccount
+    asserts:
+      - equal: {path: spec.statefulSet.spec.template.spec.serviceAccountName, value: mydb-mc-mongodb-database}

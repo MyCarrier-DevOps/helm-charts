@@ -50,7 +50,7 @@ tests:
     set:
       environment: { name: preprod }
     asserts:
-      - hasDocuments: {count: 4}
+      - hasDocuments: {count: 7}
 
   - it: deploys one member outside production
     set:
@@ -64,13 +64,13 @@ tests:
     set:
       environment: { name: dev }
     asserts:
-      - hasDocuments: {count: 4}
+      - hasDocuments: {count: 7}
 
   - it: backs up any production-like environment (prod-*)
     set:
       environment: { name: prod-eu }
     asserts:
-      - hasDocuments: {count: 8}
+      - hasDocuments: {count: 11}
 
   - it: takes the stack's members over the environment default
     set:
@@ -120,3 +120,9 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "container"
+
+  - it: gives the database pods the stack's own ServiceAccount and Role
+    documentSelector: {path: kind, value: ServiceAccount}
+    asserts:
+      - equal: {path: metadata.name, value: tools-mongodb-database}
+      - equal: {path: metadata.namespace, value: prod}

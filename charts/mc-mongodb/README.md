@@ -12,6 +12,9 @@ instance.
   - the app user (`appUser.name`, default `app`) with `readWriteAnyDatabase` and `dbAdminAnyDatabase`: an app has a
     primary database and may create any number of others;
   - `backup`, with the `backup` and `restore` roles.
+- A ServiceAccount, Role and RoleBinding (`<fullname>-database`) for the database pods, with the operator's database
+  rules: the MongoDB agent reads Secrets and gets, patches and deletes its pods. The operator's own
+  `mongodb-kubernetes-appdb` exists only in the operator's namespace.
 - An External Secrets `Password` generator and one `ExternalSecret` per user. Each password is generated once
   (`refreshPolicy: CreatedOnce`) and kept if the ExternalSecret goes away (`deletionPolicy: Retain`).
 - With `backup.enabled`:

@@ -50,6 +50,7 @@ spec:
           annotations:
             sidecar.istio.io/inject: "false"
         spec:
+          serviceAccountName: {{ .name }}-database
           # Replaces the operator's default pod security context whole, so it repeats all of it.
           securityContext:
             runAsUser: 2000

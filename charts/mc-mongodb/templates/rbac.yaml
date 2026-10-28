@@ -1,0 +1,3 @@
+{{- if .Values.standalone }}
+{{ include "mc-mongodb.rbac" (include "mc-mongodb.context" . | fromJson) }}
+{{- end }}

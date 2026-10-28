@@ -2,6 +2,8 @@
 {{- $ctx := include "helm.mongodb.context" . | fromJson }}
 {{ include "mc-mongodb.credentials" $ctx }}
 ---
+{{ include "mc-mongodb.rbac" $ctx }}
+---
 {{ include "mc-mongodb.mongodbcommunity" $ctx }}
 ---
 {{ include "mc-mongodb.backup" $ctx }}
