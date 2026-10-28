@@ -58,3 +58,5 @@ __snapshot__
 !charts/mycarrier-helm/tests/__snapshot__/
 .vscode
 .debug
+# Dependencies fetched by helm dependency update
+charts/*/charts/

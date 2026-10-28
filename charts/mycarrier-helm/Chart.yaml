@@ -5,3 +5,9 @@ type: application
 icon: https://go.mycarrier.io/hs-fs/hubfs/Logos/PNG-MC-COLOR-Logo.png?width=366&height=85&name=PNG-MC-COLOR-Logo.png
 version: 4.7.15
 appVersion: 3.0.29
+dependencies:
+  # Local, so a mycarrier-helm release packages the mc-mongodb in the same commit. Its templates render nothing
+  # here (mc-mongodb.standalone: false); mycarrier-helm calls its named templates (templates/mongodb.yaml).
+  - name: mc-mongodb
+    version: ">=0.1.0"
+    repository: file://../mc-mongodb
