@@ -68,8 +68,10 @@ off-by-default switch is the safeguard.
 - A blob container per cluster in `mycarriermongobackups` (`rg_management_controlplane`, subscription
   `99b54c45-a73d-4d40-915e-c0392b589e8c`); production's container is `production`. The account's network rules allow
   the app clusters.
-- Each cluster's AKS kubelet identity has a data-plane role (Storage Blob Data Contributor) on its container. This is
-  Azure RBAC on the cluster, as for the cluster's other storage access; no keys or secrets are involved.
+- Each cluster's AKS kubelet identity can read the storage account's keys (`listKeys`, e.g. Storage Account Key
+  Operator Service Role). With no secret on the PV, the blob CSI driver uses the kubelet identity to fetch the account
+  key at mount time. This is Azure RBAC on the cluster; the chart carries no keys or secrets. (Blobfuse authenticating
+  as the identity itself, `AzureStorageAuthType: MSI`, needs a per-cluster client ID today, so it isn't used.)
 
 ## The standalone chart (phase 1)
 
