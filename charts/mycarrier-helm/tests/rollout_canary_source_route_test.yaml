@@ -1,11 +1,13 @@
 suite: Rollout canary source routes (canary pods of a release call its canaries, DEVOPS-326 spec A3)
-# Where a canary Rollout's steps render, its VirtualService gets a <route>-canary-source twin immediately before every
-# route that has the app's -preview destination and no fault or redirect. The twin matches only callers in the mesh
-# whose pods carry the release's canary labels (Argo Rollouts' canaryMetadata, mycarrier.tech/rollout-role: canary, and
-# the pod's own mycarrier.tech/correlationId label) and sends them to the -preview Service; everything else of the
-# original route (headers, timeout, retries, rewrite, CORS) carries over, so a canary caller gets the outcome a stable
-# caller gets, served by the canary. Routes without a twin (-forbidden, redirects, routes to other hosts) answer canary
-# callers exactly as they answer stable ones. The dark stage is off here; the twins do not depend on it.
+# Where a canary Rollout's steps render with the coordinator's barriers between weights (a preset, or an explicit steps
+# list with a barrier between every two setWeight steps), its VirtualService gets a <route>-canary-source twin
+# immediately before every route that has the app's -preview destination and no fault or redirect. The twin matches
+# only callers in the mesh whose pods carry the release's canary labels (Argo Rollouts' canaryMetadata,
+# mycarrier.tech/rollout-role: canary, and the pod's own mycarrier.tech/correlationId label) and sends them to the
+# -preview Service; everything else of the original route (headers, timeout, retries, rewrite, CORS) carries over, so a
+# canary caller gets the outcome a stable caller gets, served by the canary. Routes without a twin (-forbidden,
+# redirects, routes to other hosts) answer canary callers exactly as they answer stable ones. The dark stage is off
+# here; the twins do not depend on it.
 templates:
   - virtualService.yaml
   - rollout.yaml
@@ -556,9 +558,9 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': its VirtualService spec does not parse as YAML"
 
-  # The coordinator moves a release's Rollouts through the same weights in lock-step. Without it a caller can be at 50%
-  # while its callee is at 10%, and the source routes would send the caller canary's whole share to a callee canary
-  # sized for 10%, so the source routes need the coordinator.
+  # The coordinator's barriers move a release's Rollouts through the same weights in lock-step. Without them a caller
+  # can be at 50% while its callee is at 10%, and the source routes would send the caller canary's whole share to a
+  # callee canary sized for 10%, so the source routes need the coordinator.
   - it: no twins and no rollout-role metadata with the coordinator off
     set:
       global.strategy.canary.coordinator.enabled: false
@@ -581,6 +583,84 @@ tests:
         template: rollout.yaml
       - exists:
           path: spec.strategy.canary.steps
+        template: rollout.yaml
+
+  # Lock-step comes from the barriers between weights, not from coordinator.enabled: an explicit steps list without a
+  # barrier between two setWeight steps lets one Rollout reach 50% while another is still at 10%, and the twins would
+  # send the first one's whole canary share to the second one's canary, sized for 10%.
+  - it: no twins and no rollout-role metadata with explicit steps that have no barrier between weights
+    set:
+      global.strategy.canary.budgetSeconds: 600
+      global.strategy.canary.steps:
+        - setWeight: 10
+        - pause: {duration: 5m}
+        - setWeight: 50
+        - pause: {duration: 5m}
+      applications:
+        api: *sourceLabelApp
+        web: *sourceLabelApp
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: virtualService.yaml
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+            - pause: {duration: 5m}
+            - setWeight: 50
+            - pause: {duration: 5m}
+        template: rollout.yaml
+
+  - it: twins and rollout-role metadata with explicit steps that have a barrier between every two weights
+    set:
+      global.strategy.canary.budgetSeconds: 1140
+      global.strategy.canary.steps:
+        - setWeight: 10
+        - pause: {duration: 5m}
+        - plugin:
+            name: mycarrier/canary-coordinator
+            config: {kind: barrier, name: w10, timeout: 9m}
+        - setWeight: 50
+        - pause: {duration: 5m}
+      applications:
+        api: *sourceLabelApp
+        web: *sourceLabelApp
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: virtualService.yaml
+      - lengthEqual:
+          path: spec.http
+          count: 4
+        template: virtualService.yaml
+      - equal: {path: "spec.http[0].name", value: test-stack-api-canary-source}
+        template: virtualService.yaml
+        documentIndex: 0
+      - equal: {path: "spec.http[0].name", value: test-stack-web-canary-source}
+        template: virtualService.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.strategy.canary.canaryMetadata
+          value:
+            labels:
+              mycarrier.tech/rollout-role: canary
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.stableMetadata
+          value:
+            labels:
+              mycarrier.tech/rollout-role: stable
         template: rollout.yaml
 
   # The twin is added next to its original; the original keeps its own matches and both weighted destinations.

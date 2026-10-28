@@ -157,11 +157,12 @@ global:
   #   A canary Rollout runs at least 2 canary pods at every weight (minPodsPerReplicaSet 2), so where the steps
   #   render its minimum replicas (autoscaling.minReplicas, keda.minReplicaCount, else replicas; 1 with the top-level
   #   scaling value and no autoscaler) must be 2 or more.
-  #   Where the steps render and the coordinator is on, canary pods are labelled mycarrier.tech/rollout-role: canary
-  #   (stable pods: stable), and each VirtualService route with the -preview destination and no fault or redirect gets
-  #   a <route>-canary-source route before it that sends in-mesh callers from the release's canary pods (that label
-  #   and the pod's mycarrier.tech/correlationId) to the -preview destination: a release's canaries call each other's
-  #   canaries. Calls that leave the mesh reach stable.
+  #   Where the steps render, the coordinator is on and the steps move in lock-step (a preset, or an explicit steps
+  #   list with a canary-coordinator barrier between every two setWeight steps), canary pods are labelled
+  #   mycarrier.tech/rollout-role: canary (stable pods: stable), and each VirtualService route with the -preview
+  #   destination and no fault or redirect gets a <route>-canary-source route before it that sends in-mesh callers
+  #   from the release's canary pods (that label and the pod's mycarrier.tech/correlationId) to the -preview
+  #   destination: a release's canaries call each other's canaries. Calls that leave the mesh reach stable.
   #   With coordinator.enabled: false each Rollout of a release runs its own steps: one can be at 50% while another
   #   is at 10%, or abort while another promotes. mycarrier.tech/rolloutGroupSize on each Rollout is the number the
   #   coordinator waits for.
