@@ -26,12 +26,18 @@ consumer needs them.
 - Render a `MongoDBCommunity` resource; the operator does the rest.
 - Generate credentials in-cluster. Nobody puts a MongoDB password in Vault or Git.
 - Backups with a configurable schedule and retention, defaulting to one backup per day kept for 7 days.
-- Backups land in the `mycarriermongobackups` storage account: one container per cluster, a folder per
-  environment and service.
+- Backups land in the `mycarriermongobackups` storage account: one container per cluster (production's is
+  `production`), a folder per environment and service.
 - Restore is one action in the Argo CD UI, and a sync can never trigger it.
 - In mycarrier-helm: backups on in production, off everywhere else, with no per-stack setting needed.
 - In mycarrier-helm: the injected connection string switches to the in-cluster instance **if and only if** the stack
   deploys it. Stacks that don't are unchanged.
+
+## Audience
+
+Internal tools only. Product applications use MongoDB Atlas, and their data is never migrated to an in-cluster
+instance. A product stack turning this on is a configuration error; the chart doesn't try to detect it, and the
+off-by-default switch is the safeguard.
 
 ## Non-goals
 
@@ -42,7 +48,8 @@ consumer needs them.
 - Point-in-time recovery beyond what a nightly `mongodump --oplog` gives.
 - Alerting on failed backups. A failed backup shows as a failed Job; alerting can come later through the chart's
   alerts feature.
-- Creating the per-cluster blob containers or the storage account.
+- Creating the per-cluster blob containers or the storage account, or granting access to them.
+- Migrating data from Atlas or the shared instance, or guarding against a product stack enabling this.
 
 ## Anti-goals (failure even if it renders)
 
@@ -58,10 +65,11 @@ consumer needs them.
   November 2025) and still serves `mongodbcommunity.mongodb.com/v1` `MongoDBCommunity`.
 - External Secrets Operator with the `Password` generator CRD (`passwords.generators.external-secrets.io`). It is
   present on the management cluster; confirm on each app cluster.
-- The `ClusterSecretStore` `vault-backend` (already used by mycarrier-helm).
 - A blob container per cluster in `mycarriermongobackups` (`rg_management_controlplane`, subscription
-  `99b54c45-a73d-4d40-915e-c0392b589e8c`), and the account's network rules allow the app clusters.
-- The storage account name and key in Vault at a path the chart can read (see Open questions).
+  `99b54c45-a73d-4d40-915e-c0392b589e8c`); production's container is `production`. The account's network rules allow
+  the app clusters.
+- Each cluster's AKS kubelet identity has a data-plane role (Storage Blob Data Contributor) on its container. This is
+  Azure RBAC on the cluster, as for the cluster's other storage access; no keys or secrets are involved.
 
 ## The standalone chart (phase 1)
 
@@ -94,57 +102,65 @@ installs break it, and the failure mode is production with no backups.
 | `storage.storageClassName` | `""` | Empty uses the cluster default. |
 | `resources` | modest requests/limits | mongod container resources. |
 | `appUser.name` | `app` | Application user. |
-| `appUser.database` | release name | Database the app user's roles apply to (see Open questions on scope). |
+| `appUser.database` | `<fullname>` | The app user's database. It is the path of the connection string the chart builds, so services take the database name from the connection string. |
 | `password.length` | `32` | Generated password length. |
 | `backup.enabled` | `false` | Render the backup and restore CronJobs and their storage. |
 | `backup.schedule` | `"0 2 * * *"` | Cron schedule. |
 | `backup.timeZone` | `"Etc/UTC"` | CronJob time zone. |
 | `backup.retentionDays` | `7` | Backups older than this are deleted after each successful backup. |
-| `backup.cluster` | none, required when enabled | Blob container name (one per cluster). Render fails if empty. |
+| `backup.container` | none, required when enabled | Blob container name (one per cluster, e.g. `production`). Render fails if empty. |
 | `backup.path` | `<namespace>/<fullname>` | Folder inside the container. |
-| `backup.storageSecret.vaultPath` / `.vaultProperty` | see Open questions | Where the storage account name and key live in Vault. |
+| `backup.storageAccount` | `mycarriermongobackups` | Storage account. |
+| `backup.resourceGroup` | `rg_management_controlplane` | Its resource group. |
+| `backup.subscriptionId` | `99b54c45-a73d-4d40-915e-c0392b589e8c` | Its subscription (it is not the clusters' subscription). |
 | `backup.image` | official `mongo` image, same tag as `version` | Has `mongodump` / `mongorestore`. |
 | `backup.resources` | modest | Backup and restore container resources. |
 
 A `values.schema.json` validates these, including `members >= 1`, `retentionDays >= 1`, and a required non-empty
-`backup.cluster` when `backup.enabled`.
+`backup.container` when `backup.enabled`.
 
 ### Resources rendered
 
 All names derive from `<fullname>`; `<ns>` is the release namespace.
 
-1. **Password generation (External Secrets).** A `generators.external-secrets.io/v1alpha1` `Password` and two
-   `ExternalSecret`s (app user, backup user), each using `dataFrom[].sourceRef.generatorRef` to produce a Secret
-   with key `password`.
+1. **Credentials (External Secrets).** A `generators.external-secrets.io/v1alpha1` `Password` and two
+   `ExternalSecret`s (app user, backup user), each using `dataFrom[].sourceRef.generatorRef`. Each one's
+   `target.template` writes a Secret with two keys:
+   - `password`, which the operator reads through `passwordSecretRef`;
+   - `connectionString`, built in the template from that password:
+     `mongodb://<user>:<password>@<fullname>-svc.<ns>.svc.cluster.local:27017/<database>?replicaSet=<fullname>&authSource=admin`.
+     For the app user `<database>` is `appUser.database`; for the backup user it is omitted.
+   Services take their database name from the connection string, which the operator's own connection-string Secret
+   doesn't carry (its path is the auth database, `admin`), so the chart builds its own. The app Secret is
+   `<fullname>-connection`; the backup Secret is `<fullname>-backup-connection`. **Builder verifies** the operator's
+   Service name and that the generated password needs no URL-encoding.
    - `refreshInterval: "0"` so the password is generated once.
    - No symbols in the generated password (it ends up in connection strings).
    - `target.deletionPolicy: Retain` and no `Replace=true`/`Force=true` sync options on these objects. The password
      regenerates only if the ExternalSecret is deleted and recreated; when that happens the operator updates the
-     user's SCRAM credentials and its connection-string Secret, so the worst case is restarting the app pods.
+     user's SCRAM credentials, and the regenerated Secret already holds a matching connection string, so the worst case is
+     restarting the app pods.
      **Builder verifies** that the operator reconciles a changed password Secret.
 2. **`MongoDBCommunity`** (`mongodbcommunity.mongodb.com/v1`):
    - `type: ReplicaSet`, `members`, `version`, `featureCompatibilityVersion`.
    - `security.authentication.modes: [SCRAM]`.
    - `users`:
-     - app user, `db: admin`, `passwordSecretRef` to its generated Secret, `scramCredentialsSecretName`, and
-       `connectionStringSecretName: <fullname>-connection` so consumers reference a fixed name rather than the
-       operator's default `<resource>-<db>-<user>`.
-     - backup user, `db: admin`, roles `backup` and `restore` on `admin`, `connectionStringSecretName:
-       <fullname>-backup-connection`.
+     - app user, `db: admin`, `passwordSecretRef` (key `password`) to its generated Secret,
+       `scramCredentialsSecretName`, and roles `readWrite` and `dbAdmin` on `appUser.database`.
+     - backup user, `db: admin`, roles `backup` and `restore` on `admin`.
+     - `connectionStringSecretName` is left to the operator's default; nothing consumes that Secret.
    - `statefulSet.metadata` / `statefulSet.spec` overrides: data volume claim size and storage class, mongod
      resources, and pod annotation `sidecar.istio.io/inject: "false"`. **Builder verifies** the override paths
      against the MCK samples (the CRD leaves `statefulSet.spec` free-form).
 3. **When `backup.enabled`:**
-   - **Storage key `ExternalSecret`** from `vault-backend`, producing Secret `<fullname>-backup-storage` with keys
-     `azurestorageaccountname` and `azurestorageaccountkey` (what `blob.csi.azure.com` expects in
-     `nodeStageSecretRef`).
    - **Static `PersistentVolume`** (cluster-scoped, so the name must be unique per cluster: `<ns>-<fullname>-backup`):
      - `csi.driver: blob.csi.azure.com`, `storageClassName: azureblob-fuse-premium` (as the existing debug PV),
        `ReadWriteMany`, `persistentVolumeReclaimPolicy: Retain`.
      - `volumeHandle: <ns>-<fullname>-backup`.
-     - `volumeAttributes.containerName: <backup.cluster>`, `storageAccount: mycarriermongobackups`,
-       `resourceGroup: rg_management_controlplane`.
-     - `nodeStageSecretRef` to the storage key Secret.
+     - `volumeAttributes`: `containerName: <backup.container>`, `storageAccount`, `resourceGroup`,
+       `subscriptionID` from values, and managed-identity auth (`AzureStorageAuthType: MSI`), which uses the kubelet
+       identity. No `nodeStageSecretRef`. **Builder verifies** the attribute names against the blob CSI driver's
+       static-provisioning docs, including that it doesn't try to fetch an account key cross-subscription.
    - **`PersistentVolumeClaim`** in `<ns>`, bound to that PV by `volumeName`.
    - **Backup `CronJob`** `<fullname>-backup`:
      - Mounts the PVC with `subPath: <backup.path>`.
@@ -190,10 +206,11 @@ pods from connecting.
 helm-unittest suites under `charts/mc-mongodb/tests/`, written test-first:
 
 - Defaults render the generator, the ExternalSecrets and the `MongoDBCommunity`, and no backup resources.
-- `backup.enabled` renders the PV, PVC, storage ExternalSecret and both CronJobs with the right names, `subPath`,
+- `backup.enabled` renders the PV, PVC and both CronJobs with the right names, `subPath`,
   schedule, time zone and retention.
 - The restore CronJob is always `suspend: true`.
-- `backup.enabled` with an empty `backup.cluster` fails to render.
+- `backup.enabled` with an empty `backup.container` fails to render.
+- The app connection string's path is `appUser.database` and the app user's roles are on that database.
 - `standalone: false` renders nothing.
 - The PV name and `volumeHandle` include the namespace.
 
@@ -220,7 +237,9 @@ version of it.
   - Name: `<appStack>-mongodb`.
   - Backup: enabled exactly when production. A stack cannot turn it on outside production or off in production.
   - Backup path: `<environment.name>/<appStack>`.
-  - Backup container: the cluster name (see Open questions).
+  - Backup container: `production` (backups only run in production).
+  - Database: `appStack`, the same in every environment, so a production backup restores into a matching database
+    elsewhere.
   - Members: `mongodb.members` if set, otherwise 3 in production and 1 elsewhere.
 - **Data on removal:** Argo prunes the `MongoDBCommunity` when a stack turns `mongodb.enabled` off or an
   environment is removed. The StatefulSet's data claims keep the default PVC retention (`Retain`), so the disks
@@ -230,7 +249,7 @@ version of it.
 - **Feature environments:** each feature namespace gets its own empty MongoDB when the stack enables it, without
   backups (feature environments' meta environment is dev).
 - **Connection string swap:** in `_lang.tpl`, when `mongodb.enabled`, `MongoConnection_<metaenv>` becomes
-  `valueFrom.secretKeyRef` (Secret `<appStack>-mongodb-connection`, key `connectionString.standard`) instead of the
+  `valueFrom.secretKeyRef` (Secret `<appStack>-mongodb-connection`, key `connectionString`) instead of the
   Vault reference. This is a new env shape there: the block emits only `value:` today. `KeyVault_MongoConnection`
   and `KeyVaultMongoConnection` keep naming that variable. When `mongodb.enabled` is false, nothing in the rendered
   output changes (a test pins this).
@@ -246,15 +265,12 @@ version of it.
   resources; the connection-string swap appears only when enabled; a stack with `mongodb.enabled: false` renders
   exactly what it renders today.
 
-## Open questions (need an answer before phase 1 is planned)
+## Answered during review
 
-1. **Storage account key in Vault:** the Vault path and properties holding the `mycarriermongobackups` account name
-   and key, readable through `vault-backend` from every app cluster.
-2. **Cluster name:** no value in mycarrier-helm or mc-environment names the cluster. How should mycarrier-helm learn
-   which container to write to (a value chart-renderer sets, a per-cluster global, a fixed mapping from meta
-   environment)? And what are the container names?
-3. **App user scope:** `readWrite` + `dbAdmin` on one database (the service's), or `readWriteAnyDatabase` so a
-   service can create databases freely as it may against the shared instance today.
+- Production's backup container is named `production`, not after the cluster.
+- Storage access is the AKS kubelet identity through Azure RBAC; the chart carries no storage credentials.
+- Services read the database name from the connection string.
+- Internal tools only; no migration, and no guard beyond off by default.
 
 ## Decisions taken here (not discussed explicitly)
 
@@ -262,10 +278,11 @@ version of it.
 - Named templates with a computed context so mycarrier-helm can drive environment-dependent values.
 - External Secrets `Password` generator for credentials, with the regeneration caveat above.
 - A separate backup user with `backup` + `restore` roles; the app user can't run `mongodump --oplog`.
-- Fixed connection-string Secret names via `connectionStringSecretName`.
+- The chart builds the connection string itself (ExternalSecret template) so it carries the database name.
+- The app user gets `readWrite` + `dbAdmin` on its own database only.
+- Database name under mycarrier-helm is `appStack`.
 - Restore of a specific file uses `kubectl create job --from … --dry-run` with `RESTORE_FILE`; no values key.
 - No sidecars on MongoDB, backup or restore pods.
-- Storage account key auth through `nodeStageSecretRef`, as the debug PV does.
 - MongoDB 8.0, pinned, with `featureCompatibilityVersion` pinned.
 - Members default 1, and 3 in production under mycarrier-helm.
 - Feature environments get their own MongoDB when enabled.
