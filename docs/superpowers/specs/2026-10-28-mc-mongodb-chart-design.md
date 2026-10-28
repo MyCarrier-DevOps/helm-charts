@@ -102,7 +102,7 @@ installs break it, and the failure mode is production with no backups.
 | `storage.storageClassName` | `""` | Empty uses the cluster default. |
 | `resources` | modest requests/limits | mongod container resources. |
 | `appUser.name` | `app` | Application user. |
-| `appUser.database` | `<fullname>` | The app user's database. It is the path of the connection string the chart builds, so services take the database name from the connection string. |
+| `appUser.database` | `<fullname>` | The app's primary database: the path of the connection string the chart builds, which services read their database name from. It doesn't limit access. |
 | `password.length` | `32` | Generated password length. |
 | `backup.enabled` | `false` | Render the backup and restore CronJobs and their storage. |
 | `backup.schedule` | `"0 2 * * *"` | Cron schedule. |
@@ -146,7 +146,9 @@ All names derive from `<fullname>`; `<ns>` is the release namespace.
    - `security.authentication.modes: [SCRAM]`.
    - `users`:
      - app user, `db: admin`, `passwordSecretRef` (key `password`) to its generated Secret,
-       `scramCredentialsSecretName`, and roles `readWrite` and `dbAdmin` on `appUser.database`.
+       `scramCredentialsSecretName`, and roles `readWriteAnyDatabase` and `dbAdminAnyDatabase` on `admin`. Apps rely
+       on a primary database (the connection string's) plus any number of secondary databases and collections they
+       create themselves.
      - backup user, `db: admin`, roles `backup` and `restore` on `admin`.
      - `connectionStringSecretName` is left to the operator's default; nothing consumes that Secret.
    - `statefulSet.metadata` / `statefulSet.spec` overrides: data volume claim size and storage class, mongod
@@ -210,7 +212,8 @@ helm-unittest suites under `charts/mc-mongodb/tests/`, written test-first:
   schedule, time zone and retention.
 - The restore CronJob is always `suspend: true`.
 - `backup.enabled` with an empty `backup.container` fails to render.
-- The app connection string's path is `appUser.database` and the app user's roles are on that database.
+- The app connection string's path is `appUser.database`, and the app user holds `readWriteAnyDatabase` and
+  `dbAdminAnyDatabase`.
 - `standalone: false` renders nothing.
 - The PV name and `volumeHandle` include the namespace.
 
@@ -269,7 +272,8 @@ version of it.
 
 - Production's backup container is named `production`, not after the cluster.
 - Storage access is the AKS kubelet identity through Azure RBAC; the chart carries no storage credentials.
-- Services read the database name from the connection string.
+- Services read their primary database name from the connection string, and create any number of further
+  databases and collections, so the app user has `readWriteAnyDatabase` + `dbAdminAnyDatabase`.
 - Internal tools only; no migration, and no guard beyond off by default.
 
 ## Decisions taken here (not discussed explicitly)
@@ -279,7 +283,6 @@ version of it.
 - External Secrets `Password` generator for credentials, with the regeneration caveat above.
 - A separate backup user with `backup` + `restore` roles; the app user can't run `mongodump --oplog`.
 - The chart builds the connection string itself (ExternalSecret template) so it carries the database name.
-- The app user gets `readWrite` + `dbAdmin` on its own database only.
 - Database name under mycarrier-helm is `appStack`.
 - Restore of a specific file uses `kubectl create job --from … --dry-run` with `RESTORE_FILE`; no values key.
 - No sidecars on MongoDB, backup or restore pods.
