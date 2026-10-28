@@ -1,9 +1,11 @@
 suite: Rollout canary bakeMinutes annotation (alert-gate's window after promotion, D18, DEVOPS-312/319)
 # Every canary Rollout carries mycarrier.tech/bakeMinutes from global.strategy.canary.bakeMinutes (default 30); the
 # release's rollout-watch reads it into the alert.gate event. alert-gate's run has a 7200 s deadline, so the window is
-# capped at 100 minutes.
+# capped at 100 minutes. The dark stage is off in these tests (values/dark-off.yaml); it does not change the annotation.
 templates:
   - rollout.yaml
+values:
+  - values/dark-off.yaml
 tests:
   - it: renders bakeMinutes 30 by default on a canary Rollout
     set:

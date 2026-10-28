@@ -4,10 +4,14 @@ suite: Rollout canary tests AnalysisTemplate (TestEngine v1 caller contract, DEV
 # testtrigger.testdefinitions to TestEngine's v1 API, polls the run and exits 0 only when it passes
 # (.github/scripts/test_canary_tests_check.py tests the script itself). Defaults: tests.timeout 8m (480 s), so the
 # Job's activeDeadlineSeconds is 540; barriers 9m (540 s); health 3 x 30s (90 s); standard pauses 5m (300 s).
+# tests runs at the weight steps and refuses the dark stage until Q54 (DEVOPS-326 spec A5), so the dark stage is off in
+# these tests (values/dark-off.yaml); the tests that check the interplay turn it on.
 templates:
   - analysistemplate.yaml
   - rollout.yaml
   - triggertestengine.yaml
+values:
+  - values/dark-off.yaml
 tests:
   # R5: TestEngine's caller contract rule 13 for an Argo Rollouts Job metric.
   - it: renders the tests metric with count 1, failureLimit 0 and inconclusiveLimit 0
@@ -175,9 +179,15 @@ tests:
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].name
           value: TESTS_REQUEST
+      # The way out the script names when TestEngine has RUN_KINDS_ENABLED off.
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: remove tests from global.strategy.canary.analysis.templates
       - lengthEqual:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
-          count: 4
+          count: 5
 
   - it: uses the app's testtrigger.apikey, global.testengineWebhookUrl and the argo-events-test URL like the hook
     template: analysistemplate.yaml
@@ -761,8 +771,8 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "1653"
 
-  # manual: start 540 + tests 573 + manualTimeout 3600 + w10 540
-  - it: counts the tests template in the manual preset's budget (5253 s)
+  # manual: start 540 + tests 573 + manualTimeout 2400 (40m) + w10 540
+  - it: counts the tests template in the manual preset's budget (4053 s)
     template: rollout.yaml
     set:
       <<: *prod
@@ -776,7 +786,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "5253"
+          value: "4053"
 
   # coordinator off: 4 x progressDeadlineSeconds 600 + 3 x (tests 573 + pause 300)
   - it: counts the tests template in the standard preset's budget with the coordinator off (5019 s)
@@ -1282,9 +1292,9 @@ tests:
   # Item 2 (second review): the dark stage's tests-dark runs on the leader only. The tests template's own checks refuse a
   # Rollout with managed routes (the dark stage), so these values reach the barrier window as in the review's
   # reproduction: tests is listed, and every app replaces the chart's tests with its own short web metric, so no app runs
-  # the chart's tests Job; the window check still runs because tests is listed.
+  # the chart's tests Job; the window check runs because tests is listed and because the dark stage runs tests-dark.
   # (a) leader api's tests-dark is a 300 s Job (300 + 25 = 325 s); follower worker's 600 s tests-dark never runs:
-  # worker waits 325 s at dark-passed (9m), so the release renders.
+  # worker waits 325 s at dark-passed (15m), so the release renders.
   - it: counts only the leader's tests-dark at dark-passed
     template: rollout.yaml
     set: &dark
@@ -1344,7 +1354,7 @@ tests:
       - hasDocuments:
           count: 2
 
-  # (b) a leader tests-dark of 520 s runs 520 + 33 = 553 s, so the follower waits 553 s at dark-passed (540 s).
+  # (b) a leader tests-dark of 860 s runs 860 + 42 = 902 s, so the follower waits 902 s at dark-passed (15m, 900 s).
   - it: fails when the follower would wait at dark-passed for the leader's tests-dark
     template: rollout.yaml
     set:
@@ -1362,7 +1372,7 @@ tests:
               provider:
                 job:
                   spec:
-                    activeDeadlineSeconds: 520
+                    activeDeadlineSeconds: 860
                     backoffLimit: 0
                     template:
                       spec:
@@ -1379,7 +1389,7 @@ tests:
             - *webTests
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': barrier 'dark-passed' has timeout 9m \\(540 s\\), and Rollout 'worker' can wait there 553 s for Rollout 'api': in the analysis steps since the previous barrier, 'api' may run 553 s .* and 'worker' can end after 0 s"
+          errorPattern: "application 'api': barrier 'dark-passed' has timeout 15m \\(900 s\\), and Rollout 'worker' can wait there 902 s for Rollout 'api': in the analysis steps since the previous barrier, 'api' may run 902 s .* and 'worker' can end after 0 s"
 
   # (c) the follower's own tests-dark (count 3, interval 200s) never runs, so it does not shorten the wait.
   - it: ignores a follower's own tests-dark at dark-passed
@@ -1410,7 +1420,7 @@ tests:
                   statusEndpoint: /dark
     asserts:
       - failedTemplate:
-          errorPattern: "barrier 'dark-passed' has timeout 9m \\(540 s\\), and Rollout 'worker' can wait there 553 s for Rollout 'api'"
+          errorPattern: "barrier 'dark-passed' has timeout 15m \\(900 s\\), and Rollout 'worker' can wait there 902 s for Rollout 'api'"
 
   # Item 3 (second review): Argo Rollouts starts a Job metric's next measurement at the previous one's FinishedAt +
   # interval, so smoke (a Job, count 2, interval 60s, activeDeadlineSeconds 250) runs up to 2 x (250 + 23) + 60 = 606 s:
@@ -1513,7 +1523,7 @@ tests:
                   url: http://tests.example/dark
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, .*TestEngine's DeployVerifier fails .* Set global.strategy.canary.dark: false .* until DEVOPS-326"
+          errorPattern: "application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, .*TestEngine's DeployVerifier fails .* Set global.strategy.canary.dark: false .* until Q54"
 
   # P6: the dark stage renders only with the coordinator, so dark: true with it off adds no managed route.
   - it: renders tests with dark true and the coordinator off, where no dark stage renders

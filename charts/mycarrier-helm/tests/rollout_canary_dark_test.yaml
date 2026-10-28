@@ -1,15 +1,17 @@
 suite: Rollout canary dark stage (header-gated, Tech Spec D11 and D20)
-# The dark stage is off by default until the chart renders tests-dark (DEVOPS-326), so these tests set dark: true and,
-# where the leader runs its suite, define tests-dark under the leader's analysisTemplates. Most opt out of the health
+# The dark stage is on by default (DEVOPS-326); most of these tests still set dark: true and, where the leader runs its
+# suite, define tests-dark under the leader's analysisTemplates (the chart's own tests-dark, rendered from the leader's
+# testtrigger.testdefinitions, is in rollout_canary_tests_dark_test.yaml). Most opt out of the health
 # check so the step lists show the dark stage and the barriers alone. The dark stage renders only where the steps do, in
 # prod unless stepsOutsideProd is set (DEVOPS-516), so the tests that check it render a preprod drill.
 templates:
   - rollout.yaml
 tests:
   # Tech Spec chart contract: with dark on, every preset starts with the dark stage after barrier start. The header
-  # route is removed after dark-passed. setCanaryScale {matchTrafficWeight: true} then hands the canary's size back to
-  # the weights: Argo Rollouts keeps the last setCanaryScale in force for every later step, so without it the canary
-  # would stay at darkReplicas pods through 10/25/50%. Analysis is mandatory, so the leader runs tests-dark.
+  # route is removed after dark-passed. setCanaryScale {matchTrafficWeight: true}, right after the first setWeight
+  # (DEVOPS-326 spec A4), then hands the canary's size back to the weights: Argo Rollouts keeps the last setCanaryScale
+  # in force for every later step, so without it the canary would stay at darkReplicas pods through 10/25/50%.
+  # Analysis is mandatory, so the leader runs tests-dark.
   - it: starts every preset with the dark stage when dark is on
     set:
       global:
@@ -49,7 +51,7 @@ tests:
                 name: mycarrier/canary-coordinator
                 config: {kind: barrier, name: start, timeout: 9m}
             - setCanaryScale:
-                replicas: 1
+                replicas: 2
             - setHeaderRoute:
                 name: canary-header
                 match:
@@ -64,12 +66,14 @@ tests:
                   - templateName: preprod-test-stack-api-tests-dark
             - plugin:
                 name: mycarrier/canary-coordinator
-                config: {kind: barrier, name: dark-passed, timeout: 9m}
+                config: {kind: barrier, name: dark-passed, timeout: 15m}
             - setHeaderRoute:
                 name: canary-header
             - setCanaryScale:
-                matchTrafficWeight: true
+                weight: 25
             - setWeight: 25
+            - setCanaryScale:
+                matchTrafficWeight: true
             - plugin:
                 name: mycarrier/canary-coordinator
                 config: {kind: barrier, name: w25, timeout: 9m}
@@ -136,13 +140,13 @@ tests:
           value: test-stack-api
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 12
+          count: 13
         documentSelector:
           path: metadata.name
           value: test-stack-worker
       - lengthEqual:
           path: spec.strategy.canary.steps
-          count: 11
+          count: 12
         documentSelector:
           path: metadata.name
           value: test-stack-api
@@ -222,9 +226,9 @@ tests:
       - failedTemplate:
           errorPattern: "global.strategy.canary.leader 'web' is not an application with deploymentType rollout that runs canary steps; choose one of: api"
 
-  # dark is off by default (DEVOPS-312, until DEVOPS-326 renders tests-dark): the coordinator's barriers render, and
-  # the dark stage, its managed route and its leader are not needed.
-  - it: renders no dark stage and no managed route by default
+  # dark is on by default (DEVOPS-326): after the start barrier the dark stage renders, with its managed route, and the
+  # only canary Rollout leads it with the chart's tests-dark from its test definitions.
+  - it: renders the dark stage and its managed route by default
     set:
       global:
         deploymentStrategy: canary
@@ -245,6 +249,13 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - equal:
           path: spec.strategy.canary.steps[0].plugin.config.name
@@ -252,11 +263,20 @@ tests:
       - equal:
           path: spec.strategy.canary.steps[1]
           value:
-            setWeight: 10
-      - notExists:
+            setCanaryScale:
+              replicas: 2
+      - equal:
+          path: spec.strategy.canary.steps[4]
+          value:
+            analysis:
+              templates:
+                - templateName: preprod-test-stack-api-tests-dark
+      - equal:
           path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: canary-header
 
-  - it: needs no leader while the dark stage is off by default
+  - it: needs no leader with the dark stage off
     set:
       global:
         deploymentStrategy: canary
@@ -265,6 +285,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             analysis:
               health:
                 enabled: false
@@ -580,6 +601,7 @@ tests:
         language: nodejs
         strategy:
           canary:
+            dark: false
             leader: api
       environment:
         name: dev
@@ -595,3 +617,350 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # DEVOPS-326 (spec A1, decision 3): the dark stage is on by default. A canary Rollout in prod with no canary values
+  # starts with the start barrier, then darkReplicas (default 2, decision 4) canary pods behind the canary-header route.
+  - it: dark stage on by default
+    set: &prodDefault
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+      environment:
+        name: prod
+      applications:
+        api: &suiteApp
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[0].plugin.config.name
+          value: start
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            setCanaryScale:
+              replicas: 2
+      - equal:
+          path: spec.strategy.canary.steps[2].setHeaderRoute.name
+          value: canary-header
+
+  # Decision 4: one dark canary pod restart would drop availability to 0 and Argo Rollouts would remove the header
+  # route mid-suite, so darkReplicas is at least 2 (the schema's minimum; the render checks it too).
+  - it: darkReplicas below 2 fails
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+            darkReplicas: 1
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - failedTemplate:
+          errorPattern: "darkReplicas.*minimum"
+
+  # Spec A4: setCanaryScale {matchTrafficWeight: true} at weight 0 would size the canary to 0 pods, and setWeight W with
+  # the dark {replicas: darkReplicas} still in force would send W% of the traffic to the dark pods alone (Argo Rollouts
+  # sets the weight from the step, whatever the canary's size). So after the route removal setCanaryScale {weight: W}
+  # (W the preset's first weight) sizes the canary for W%, at least minPodsPerReplicaSet (2) pods, before setWeight W
+  # moves traffic, and setCanaryScale {matchTrafficWeight: true} right after it hands the size back to the weights. The
+  # canary never drops to 0 between the dark stage and promotion.
+  - it: reset follows the first weight (fast)
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            dark: true
+            darkReplicas: 2
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: start, timeout: 9m}
+            - setCanaryScale:
+                replicas: 2
+            - setHeaderRoute:
+                name: canary-header
+                match:
+                  - headerName: X-MyCarrier-Canary
+                    headerValue:
+                      exact: corr-1
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-ready, timeout: 9m}
+            - analysis:
+                templates:
+                  - templateName: prod-test-stack-api-tests-dark
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: dark-passed, timeout: 15m}
+            - setHeaderRoute:
+                name: canary-header
+            - setCanaryScale:
+                weight: 25
+            - setWeight: 25
+            - setCanaryScale:
+                matchTrafficWeight: true
+            - analysis:
+                templates:
+                  - templateName: prod-test-stack-api-health
+            - plugin:
+                name: mycarrier/canary-coordinator
+                config: {kind: barrier, name: w25, timeout: 9m}
+            - setWeight: 100
+
+  - it: reset follows the first weight (standard)
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[6]
+          value:
+            setHeaderRoute:
+              name: canary-header
+      - equal:
+          path: spec.strategy.canary.steps[7]
+          value:
+            setCanaryScale:
+              weight: 10
+      - equal:
+          path: spec.strategy.canary.steps[8]
+          value:
+            setWeight: 10
+      - equal:
+          path: spec.strategy.canary.steps[9]
+          value:
+            setCanaryScale:
+              matchTrafficWeight: true
+      - equal:
+          path: spec.strategy.canary.steps[10].analysis.templates[0].templateName
+          value: prod-test-stack-api-health
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 22
+
+  - it: reset follows the first weight (manual)
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: manual
+            dark: true
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[6]
+          value:
+            setHeaderRoute:
+              name: canary-header
+      - equal:
+          path: spec.strategy.canary.steps[7]
+          value:
+            setCanaryScale:
+              weight: 10
+      - equal:
+          path: spec.strategy.canary.steps[8]
+          value:
+            setWeight: 10
+      - equal:
+          path: spec.strategy.canary.steps[9]
+          value:
+            setCanaryScale:
+              matchTrafficWeight: true
+      - equal:
+          path: spec.strategy.canary.steps[11]
+          value:
+            pause: {}
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 14
+
+  # Without the dark stage nothing scales the canary: the weights size it (with the canary floor).
+  - it: renders no setCanaryScale with dark false
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - notContains:
+          path: spec.strategy.canary.steps
+          content:
+            setCanaryScale:
+              matchTrafficWeight: true
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            setWeight: 10
+
+  # Review Focus 3: the header route matches the lower-cased string form of global.correlationId
+  # (helm.canary.correlationId), whatever its case or type, the form tests-dark sends.
+  - it: header route value is the lower-cased id (ABC-12)
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: ABC-12
+        strategy:
+          canary:
+            dark: true
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[2].setHeaderRoute.match[0].headerValue.exact
+          value: abc-12
+
+  - it: header route value is the lower-cased id (numeric 12345)
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: 12345
+        strategy:
+          canary:
+            dark: true
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[2].setHeaderRoute.match[0].headerValue.exact
+          value: "12345"
+
+  # Review Focus 5: an explicit steps list renders verbatim (no dark stage, no reset moved, no step added) and the
+  # canary floor still applies.
+  - it: explicit steps render verbatim with the floor
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            budgetSeconds: 600
+            steps:
+              - setCanaryScale:
+                  replicas: 3
+              - setCanaryScale:
+                  matchTrafficWeight: true
+              - setWeight: 5
+              - pause: {duration: 5m}
+              - setWeight: 100
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setCanaryScale:
+                replicas: 3
+            - setCanaryScale:
+                matchTrafficWeight: true
+            - setWeight: 5
+            - pause: {duration: 5m}
+            - setWeight: 100
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 2
+
+  # Decision 7: the leader's tests-dark Job (573 s with the defaults) fits the followers' wait at dark-passed (15m), and
+  # every barrier timeout stays below progressDeadlineSeconds (1200 s).
+  - it: timing defaults
+    set: *prodDefault
+    asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 1200
+      - equal:
+          path: spec.strategy.canary.steps[5].plugin.config
+          value: {kind: barrier, name: dark-passed, timeout: 15m}
+      - equal:
+          path: spec.strategy.canary.steps[3].plugin.config
+          value: {kind: barrier, name: dark-ready, timeout: 9m}
+
+  - it: timing defaults keep refusing a barrier timeout at the progress deadline
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: true
+            coordinator:
+              barrierTimeouts:
+                dark-passed: 20m
+      environment:
+        name: prod
+      applications:
+        api: *suiteApp
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'dark-passed' has timeout 20m, which is not below progressDeadlineSeconds \\(1200 s\\)"

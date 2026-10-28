@@ -1,0 +1,786 @@
+suite: Rollout canary source routes (canary pods of a release call its canaries, DEVOPS-326 spec A3)
+# Where a canary Rollout's steps render with the coordinator's barriers between weights (a preset, or an explicit steps
+# list with a barrier between every two setWeight steps), its VirtualService gets a <route>-canary-source twin
+# immediately before every route that has the app's -preview destination and no fault or redirect. The twin matches
+# only callers in the mesh whose pods carry the release's canary labels (Argo Rollouts' canaryMetadata,
+# mycarrier.tech/rollout-role: canary, and the pod's own mycarrier.tech/correlationId label) and sends them to the
+# -preview Service; everything else of the original route (headers, timeout, retries, rewrite, CORS) carries over, so a
+# canary caller gets the outcome a stable caller gets, served by the canary. Routes without a twin (-forbidden,
+# redirects, routes to other hosts) answer canary callers exactly as they answer stable ones. The dark stage is off
+# here; the twins do not depend on it.
+templates:
+  - virtualService.yaml
+  - rollout.yaml
+  - deployment.yaml
+  - frontendVirtualService.yaml
+set:
+  global:
+    deploymentStrategy: canary
+    appStack: test-stack
+    language: nodejs
+    correlationId: ABC-12
+    strategy:
+      canary:
+        dark: false
+        analysis:
+          health:
+            enabled: false
+  environment:
+    name: prod
+tests:
+  - it: twin precedes each preview route
+    set:
+      global.language: csharp
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              redirects:
+                old: new
+              routes:
+                mine:
+                  match: [{uri: {prefix: /mine}}]
+                other:
+                  match: [{uri: {prefix: /other}}]
+                  destination: other.example.svc.cluster.local
+              allowedEndpoints: [/v1/thing]
+    template: virtualService.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 15
+      - equal: {path: "spec.http[0].name", value: test-stack-api-canary-source}
+      - equal: {path: "spec.http[1].name", value: test-stack-api}
+      - equal: {path: "spec.http[2].name", value: old}
+      - equal: {path: "spec.http[3].name", value: mine-canary-source}
+      - equal: {path: "spec.http[4].name", value: mine}
+      - equal: {path: "spec.http[5].name", value: other}
+      - equal: {path: "spec.http[6].name", value: test-stack-api-allowed-liveness-canary-source}
+      - equal: {path: "spec.http[7].name", value: test-stack-api-allowed-liveness}
+      - equal: {path: "spec.http[8].name", value: test-stack-api-allowed-health-canary-source}
+      - equal: {path: "spec.http[9].name", value: test-stack-api-allowed-health}
+      - equal: {path: "spec.http[10].name", value: test-stack-api-allowed-api-canary-source}
+      - equal: {path: "spec.http[11].name", value: test-stack-api-allowed-api}
+      - equal: {path: "spec.http[12].name", value: test-stack-api-allowed-v1-thing-canary-source}
+      - equal: {path: "spec.http[13].name", value: test-stack-api-allowed-v1-thing}
+      - equal: {path: "spec.http[14].name", value: test-stack-api-forbidden}
+
+  # R8: a canary caller asking for a blocked path falls through every twin to the same -forbidden 403 a stable caller
+  # gets. -forbidden has the -preview destination, but its fault decides the outcome, so it gets no twin.
+  - it: -forbidden gets no twin and keeps its position
+    set:
+      global.language: csharp
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+    template: virtualService.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 9
+      - equal: {path: "spec.http[7].name", value: test-stack-api-allowed-api}
+      - equal: {path: "spec.http[8].name", value: test-stack-api-forbidden}
+      - equal:
+          path: spec.http[8].fault.abort.httpStatus
+          value: 403
+      - notContains:
+          path: spec.http
+          content:
+            name: test-stack-api-forbidden-canary-source
+          any: true
+
+  - it: twin matches canary pods of this release in the mesh only
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              responseHeaders:
+                response:
+                  set:
+                    X-Test: one
+    template: virtualService.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 4
+      - equal:
+          path: spec.http[0]
+          value:
+            name: test-stack-api-canary-source
+            match:
+              - headers:
+                  environment:
+                    exact: prod
+                sourceLabels:
+                  mycarrier.tech/rollout-role: canary
+                  mycarrier.tech/correlationId: ABC-12
+                gateways: [mesh]
+            route:
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+      - equal: {path: "spec.http[1].name", value: test-stack-api}
+      # The catch-all canary route has no match: its twin gets one match of just the caller conditions.
+      - equal:
+          path: spec.http[2]
+          value:
+            name: canary-canary-source
+            match:
+              - sourceLabels:
+                  mycarrier.tech/rollout-role: canary
+                  mycarrier.tech/correlationId: ABC-12
+                gateways: [mesh]
+            route:
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+            headers:
+              response:
+                set:
+                  X-Test: one
+            timeout: 151s
+            retries:
+              retryOn: 5xx,reset
+              attempts: 3
+              perTryTimeout: 50s
+      - equal: {path: "spec.http[3].name", value: canary}
+
+  # Istio sourceLabels compare exactly, so the twin carries the pod label's value as the pod template renders it (the
+  # id's own case, cut to 63 characters, numbers as their digits), not the lower-cased form the header values use.
+  - it: source label value equals the pod label value (upper case)
+    set:
+      applications:
+        api: &sourceLabelApp
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+    asserts:
+      - equal:
+          path: spec.http[0].match[0].sourceLabels["mycarrier.tech/correlationId"]
+          value: ABC-12
+        template: virtualService.yaml
+      - equal:
+          path: spec.template.metadata.labels["mycarrier.tech/correlationId"]
+          value: ABC-12
+        template: rollout.yaml
+
+  - it: source label value equals the pod label value (numeric)
+    set:
+      global.correlationId: 12345
+      applications:
+        api: *sourceLabelApp
+    asserts:
+      - equal:
+          path: spec.http[0].match[0].sourceLabels["mycarrier.tech/correlationId"]
+          value: "12345"
+        template: virtualService.yaml
+      - equal:
+          path: spec.template.metadata.labels["mycarrier.tech/correlationId"]
+          value: "12345"
+        template: rollout.yaml
+
+  - it: source label value equals the pod label value (longer than 63 characters)
+    set:
+      global.correlationId: ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-0123456789-XYZ
+      applications:
+        api: *sourceLabelApp
+    asserts:
+      - equal:
+          path: spec.http[0].match[0].sourceLabels["mycarrier.tech/correlationId"]
+          value: ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-012345678
+        template: virtualService.yaml
+      - equal:
+          path: spec.template.metadata.labels["mycarrier.tech/correlationId"]
+          value: ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-012345678
+        template: rollout.yaml
+
+  # Review Focus 2: allowed routes on the Service's own port (service.ports), a custom route on another port, and the
+  # allowlist on the environment-header route: every twin keeps its original's port and matches.
+  - it: twins keep port and matches for extra-port allowed routes
+    set:
+      global.language: csharp
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          service:
+            ports:
+              - name: http
+                port: 9090
+                targetPort: 8080
+          networking:
+            istio:
+              routes:
+                grpc:
+                  match: [{uri: {prefix: /grpc}}]
+                  port: 9091
+              allowedEndpoints: [/v1/thing]
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[0].name", value: test-stack-api-canary-source}
+      - equal:
+          path: spec.http[0].route
+          value:
+            - destination:
+                host: test-stack-api-preview.prod.svc.cluster.local
+                port:
+                  number: 8080
+      - lengthEqual:
+          path: spec.http[0].match
+          count: 4
+      - equal:
+          path: spec.http[0].match[3]
+          value:
+            headers:
+              environment:
+                exact: prod
+            uri:
+              exact: /v1/thing
+            sourceLabels:
+              mycarrier.tech/rollout-role: canary
+              mycarrier.tech/correlationId: ABC-12
+            gateways: [mesh]
+      - equal: {path: "spec.http[2].name", value: grpc-canary-source}
+      - equal:
+          path: spec.http[2].route[0].destination.port.number
+          value: 9091
+      - equal:
+          path: spec.http[2].match
+          value:
+            - uri:
+                prefix: /grpc
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+              gateways: [mesh]
+      - equal: {path: "spec.http[10].name", value: test-stack-api-allowed-v1-thing-canary-source}
+      - equal:
+          path: spec.http[10].route
+          value:
+            - destination:
+                host: test-stack-api-preview.prod.svc.cluster.local
+                port:
+                  number: 9090
+      - equal:
+          path: spec.http[10].match
+          value:
+            - uri:
+                exact: /v1/thing
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+              gateways: [mesh]
+
+  - it: twins keep port and matches with enforceAllowlistOnEnvironmentHeader false
+    set:
+      global.language: csharp
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              enforceAllowlistOnEnvironmentHeader: false
+    template: virtualService.yaml
+    asserts:
+      - equal:
+          path: spec.http[0]
+          value:
+            name: test-stack-api-canary-source
+            match:
+              - headers:
+                  environment:
+                    exact: prod
+                sourceLabels:
+                  mycarrier.tech/rollout-role: canary
+                  mycarrier.tech/correlationId: ABC-12
+                gateways: [mesh]
+            route:
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+      - equal: {path: "spec.http[1].name", value: test-stack-api}
+
+  # Everything of the original except name, match and route carries over, so a rewrite applies to canary callers too.
+  - it: twin carries the original's rewrite, headers, CORS, timeout and retries
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          service:
+            timeout: 30s
+          networking:
+            istio:
+              responseHeaders:
+                response:
+                  set:
+                    X-Test: one
+              corsPolicy:
+                allowOrigins: [{exact: https://example.com}]
+              routes:
+                legacy:
+                  match: [{uri: {prefix: /legacy}}]
+                  rewrite:
+                    uri: /
+    template: virtualService.yaml
+    asserts:
+      - equal:
+          path: spec.http[2]
+          value:
+            name: legacy-canary-source
+            match:
+              - uri:
+                  prefix: /legacy
+                sourceLabels:
+                  mycarrier.tech/rollout-role: canary
+                  mycarrier.tech/correlationId: ABC-12
+                gateways: [mesh]
+            route:
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+            rewrite:
+              uri: /
+            headers:
+              response:
+                set:
+                  X-Test: one
+            corsPolicy:
+              allowOrigins: [{exact: https://example.com}]
+            timeout: 30s
+            retries:
+              retryOn: 5xx,reset
+              attempts: 3
+              perTryTimeout: 50s
+      - equal: {path: "spec.http[3].name", value: legacy}
+
+  # Argo Rollouts weights only the routes listed in trafficRouting; the twins have only the -preview destination and
+  # must stay as git renders them.
+  - it: twins are not managed by Argo Rollouts
+    set:
+      global.language: csharp
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                mine:
+                  match: [{uri: {prefix: /mine}}]
+    template: rollout.yaml
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-api
+              routes:
+                - test-stack-api
+                - mine
+                - test-stack-api-allowed-liveness
+                - test-stack-api-allowed-health
+                - test-stack-api-allowed-api
+                - test-stack-api-forbidden
+
+  # Review Focus 1: Deployments, StatefulSets and Jobs of the release carry the same mycarrier.tech/correlationId; only
+  # Argo Rollouts' canaryMetadata gives canary pods the canary role, so the twins never catch their traffic.
+  - it: deployment pods in a canary stack carry no canary-role label
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+        worker:
+          deploymentType: deployment
+          image: {registry: registry.example.com, repository: worker, tag: "1.0.0"}
+          ports: {http: 8080}
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["mycarrier.tech/rollout-role"]
+        template: deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["mycarrier.tech/correlationId"]
+          value: ABC-12
+        template: deployment.yaml
+      - notExists:
+          path: spec.template.metadata.labels["mycarrier.tech/rollout-role"]
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.canaryMetadata
+          value:
+            labels:
+              mycarrier.tech/rollout-role: canary
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.stableMetadata
+          value:
+            labels:
+              mycarrier.tech/rollout-role: stable
+        template: rollout.yaml
+
+  - it: no twins where steps do not render
+    set:
+      environment.name: preprod
+      applications:
+        api: *sourceLabelApp
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - equal: {path: "spec.http[0].name", value: test-stack-api}
+        template: virtualService.yaml
+      - equal: {path: "spec.http[1].name", value: canary}
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+
+  - it: no twins on rolling Rollouts
+    set:
+      global.deploymentStrategy: rolling
+      applications:
+        api: *sourceLabelApp
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - equal: {path: "spec.http[0].name", value: test-stack-api}
+        template: virtualService.yaml
+      - equal: {path: "spec.http[1].name", value: canary}
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+
+  - it: no twins on Deployments
+    set:
+      applications:
+        worker:
+          deploymentType: deployment
+          image: {registry: registry.example.com, repository: worker, tag: "1.0.0"}
+          ports: {http: 8080}
+    template: virtualService.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 2
+      - equal: {path: "spec.http[0].name", value: test-stack-worker}
+      - equal: {path: "spec.http[1].name", value: test-stack-worker-default}
+
+  - it: no twins on the multi-frontend VirtualService
+    set:
+      applications:
+        fe1:
+          deploymentType: rollout
+          replicas: 2
+          isFrontend: true
+          isPrimary: true
+          image: {registry: registry.example.com, repository: fe1, tag: "1.0.0"}
+          ports: {http: 4200}
+        fe2:
+          deploymentType: rollout
+          replicas: 2
+          isFrontend: true
+          image: {registry: registry.example.com, repository: fe2, tag: "1.0.0"}
+          ports: {http: 4200}
+    template: frontendVirtualService.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 4
+      - equal: {path: "spec.http[0].name", value: test-stack-fe1-env-match}
+      - equal: {path: "spec.http[1].name", value: test-stack-fe2-env-match}
+      - equal: {path: "spec.http[2].name", value: test-stack-fe1-catchall}
+      - equal: {path: "spec.http[3].name", value: canary}
+      - notContains:
+          path: spec.http
+          content:
+            name: test-stack-fe1-canary-source
+          any: true
+      - notContains:
+          path: spec.http
+          content:
+            name: test-stack-fe2-canary-source
+          any: true
+
+  # The source routes are added to the parsed spec; a spec that does not parse fails the render instead of shipping
+  # the parser's error as the VirtualService.
+  - it: fails when the VirtualService spec does not parse
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                mine:
+                  match: [{uri: {prefix: /mine}}]
+                  rewrite:
+                    uri: '{{ printf "%c: [" 39 }}'
+    template: virtualService.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': its VirtualService spec does not parse as YAML"
+
+  # The coordinator's barriers move a release's Rollouts through the same weights in lock-step. Without them a caller
+  # can be at 50% while its callee is at 10%, and the source routes would send the caller canary's whole share to a
+  # callee canary sized for 10%, so the source routes need the coordinator.
+  - it: no twins and no rollout-role metadata with the coordinator off
+    set:
+      global.strategy.canary.coordinator.enabled: false
+      applications:
+        api: *sourceLabelApp
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - equal: {path: "spec.http[0].name", value: test-stack-api}
+        template: virtualService.yaml
+      - equal: {path: "spec.http[1].name", value: canary}
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+      - exists:
+          path: spec.strategy.canary.steps
+        template: rollout.yaml
+
+  # Lock-step comes from the barriers between weights, not from coordinator.enabled: an explicit steps list without a
+  # barrier between two setWeight steps lets one Rollout reach 50% while another is still at 10%, and the twins would
+  # send the first one's whole canary share to the second one's canary, sized for 10%.
+  - it: no twins and no rollout-role metadata with explicit steps that have no barrier between weights
+    set:
+      global.strategy.canary.budgetSeconds: 600
+      global.strategy.canary.steps:
+        - setWeight: 10
+        - pause: {duration: 5m}
+        - setWeight: 50
+        - pause: {duration: 5m}
+      applications:
+        api: *sourceLabelApp
+        web: *sourceLabelApp
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: virtualService.yaml
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+            - pause: {duration: 5m}
+            - setWeight: 50
+            - pause: {duration: 5m}
+        template: rollout.yaml
+
+  # A barrier somewhere in the list is not enough: here 25 and 50 have none between them, so one Rollout can be at 50%
+  # while another is still at 25%.
+  - it: no twins and no rollout-role metadata when one pair of weights has no barrier between them
+    set:
+      global.strategy.canary.budgetSeconds: 540
+      global.strategy.canary.steps:
+        - setWeight: 10
+        - plugin:
+            name: mycarrier/canary-coordinator
+            config: {kind: barrier, name: w10, timeout: 9m}
+        - setWeight: 25
+        - setWeight: 50
+      applications:
+        api: *sourceLabelApp
+        web: *sourceLabelApp
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: virtualService.yaml
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+
+  - it: twins and rollout-role metadata with explicit steps that have a barrier between every two weights
+    set:
+      global.strategy.canary.budgetSeconds: 1140
+      global.strategy.canary.steps:
+        - setWeight: 10
+        - pause: {duration: 5m}
+        - plugin:
+            name: mycarrier/canary-coordinator
+            config: {kind: barrier, name: w10, timeout: 9m}
+        - setWeight: 50
+        - pause: {duration: 5m}
+      applications:
+        api: *sourceLabelApp
+        web: *sourceLabelApp
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: virtualService.yaml
+      - lengthEqual:
+          path: spec.http
+          count: 4
+        template: virtualService.yaml
+      - equal: {path: "spec.http[0].name", value: test-stack-api-canary-source}
+        template: virtualService.yaml
+        documentIndex: 0
+      - equal: {path: "spec.http[0].name", value: test-stack-web-canary-source}
+        template: virtualService.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.strategy.canary.canaryMetadata
+          value:
+            labels:
+              mycarrier.tech/rollout-role: canary
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.stableMetadata
+          value:
+            labels:
+              mycarrier.tech/rollout-role: stable
+        template: rollout.yaml
+
+  # The twin is added next to its original; the original keeps its own matches and both weighted destinations.
+  - it: original route is unchanged next to its twin
+    set:
+      applications:
+        api: *sourceLabelApp
+    template: virtualService.yaml
+    asserts:
+      - equal:
+          path: spec.http[1]
+          value:
+            name: test-stack-api
+            match:
+              - headers:
+                  environment:
+                    exact: prod
+            route:
+              - destination:
+                  host: test-stack-api.prod.svc.cluster.local
+                  port:
+                    number: 8080
+                weight: 100
+              - destination:
+                  host: test-stack-api-preview.prod.svc.cluster.local
+                  port:
+                    number: 8080
+                weight: 0
+
+  # R8: a match entry whose gateways leave out mesh never matches an in-mesh caller, so a stable caller falls through
+  # it. Its twin must not match in the mesh either, so an ingress-only custom route gets no twin.
+  - it: ingress-only custom route gets no twin
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                external:
+                  match: [{uri: {prefix: /external}, gateways: [istio-system/ingress]}]
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[2].name", value: external}
+      - notContains:
+          path: spec.http
+          content:
+            name: external-canary-source
+          any: true
+
+  # Entries without gateways, or with mesh among them, keep their twin entry; an entry bound to the mesh and a gateway
+  # keeps only mesh in its twin, as the caller conditions require.
+  - it: twin keeps only the match entries that can match in the mesh
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                mixed:
+                  match:
+                    - {uri: {prefix: /external}, gateways: [istio-system/ingress]}
+                    - {uri: {prefix: /both}, gateways: [mesh, istio-system/ingress]}
+                    - {uri: {prefix: /any}}
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[2].name", value: mixed-canary-source}
+      - equal:
+          path: spec.http[2].match
+          value:
+            - uri:
+                prefix: /both
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+              gateways: [mesh]
+            - uri:
+                prefix: /any
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+              gateways: [mesh]
+      - equal: {path: "spec.http[3].name", value: mixed}
+      - lengthEqual:
+          path: spec.http[3].match
+          count: 3

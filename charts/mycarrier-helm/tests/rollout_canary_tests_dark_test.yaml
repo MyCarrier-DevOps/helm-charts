@@ -1,0 +1,695 @@
+suite: Rollout canary tests-dark AnalysisTemplate (dark stage leader suite, DEVOPS-326)
+# With the coordinator and the dark stage on, the leader's dark stage runs <environment>-<fullName>-tests-dark: the
+# tests template's Job (DEVOPS-515) against the leader's stable Service, with X-MyCarrier-Canary set to the lower-cased
+# global.correlationId, so the header route sends the suite to the canary at weight 0. The fixtures turn the
+# coordinator and the dark stage on explicitly. The correlation id is upper case on purpose: the header route and the
+# header carry it lower-cased, and the request's CorrelationId keeps it as given, as the tests template does.
+templates:
+  - analysistemplate.yaml
+  - rollout.yaml
+tests:
+  - it: renders tests-dark for the leader
+    template: analysistemplate.yaml
+    set: &dark
+      global: &global
+        appStack: mycarrier
+        language: csharp
+        deploymentStrategy: canary
+        correlationId: 6F1C9D2E-4A5B-4C7D-8E9F-0A1B2C3D4E5F
+        gitbranch: main
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+      environment:
+        name: prod
+      alerts:
+        serviceName: MyCarrier
+      applications:
+        api: &api
+          deploymentType: rollout
+          image: &image
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            testdefinitions:
+              - &definition
+                name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+
+  - it: references the chart's tests-dark from the leader's dark stage
+    template: rollout.yaml
+    set: *dark
+    asserts:
+      - contains:
+          path: spec.strategy.canary.steps
+          content:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-api-tests-dark
+
+  # Same metric and Job settings as the tests template: count 1, failureLimit 0, inconclusiveLimit 0, the same Job and
+  # script, with tests-dark as the metric, container and label suffix.
+  - it: runs the tests metric and Job as tests-dark
+    template: analysistemplate.yaml
+    documentSelector: &testsDarkTemplate
+      path: metadata.name
+      value: prod-mycarrier-api-tests-dark
+    set: *dark
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "9"
+            argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+      - equal:
+          path: spec.metrics[0].name
+          value: tests-dark
+      - equal:
+          path: spec.metrics[0].count
+          value: 1
+      - equal:
+          path: spec.metrics[0].failureLimit
+          value: 0
+      - equal:
+          path: spec.metrics[0].inconclusiveLimit
+          value: 0
+      - equal:
+          path: spec.metrics[0].provider.job.spec.backoffLimit
+          value: 0
+      - equal:
+          path: spec.metrics[0].provider.job.spec.activeDeadlineSeconds
+          value: 540
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.metadata
+          value:
+            labels:
+              app.kubernetes.io/name: mycarrier-api-tests-dark
+              app.kubernetes.io/component: canary-analysis
+            annotations:
+              sidecar.istio.io/inject: "false"
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].name
+          value: tests-dark
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: '(?s)GET.*/v1/capabilities.*/v1/trigger.*/v1/runs/.*sys\.exit\(main\(\)\)\n$'
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[0]
+          value:
+            name: TESTENGINE_URL
+            value: vault:DevOps/data/testengine/api/v1#url
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[1]
+          value:
+            name: TESTENGINE_APIKEY
+            value: vault:DevOps/data/testengine/api#encoded_header
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[2]
+          value:
+            name: TESTS_BUDGET_SECONDS
+            value: "420"
+      # The script's RUN_KINDS_ENABLED failures name this way out; tests names analysis.templates.
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: "set global.strategy.canary.dark: false"
+      - lengthEqual:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
+          count: 5
+
+  # Decision 1 (Q44): the suite calls the leader's stable Service; the header route sends it to the canary. A
+  # definition's own serviceAddress on the app's stable or -preview Service keeps its path on the stable address.
+  - it: targets the stable Service
+    template: analysistemplate.yaml
+    documentSelector: *testsDarkTemplate
+    set:
+      <<: *dark
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - *definition
+              - <<: *definition
+                name: pathed
+                serviceAddress: http://mycarrier-api.prod.svc.cluster.local/api/x
+              - <<: *definition
+                name: previewpathed
+                serviceAddress: mycarrier-api-preview.prod:8080/smoke
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '(?s)"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:8080",.*"TestName": "apitests".*"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:8080/api/x",.*"TestName": "pathed".*"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:8080/smoke",.*"TestName": "previewpathed"'
+      - notMatchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '-preview'
+
+  - it: sends the lower-cased canary header
+    template: analysistemplate.yaml
+    documentSelector: *testsDarkTemplate
+    set: *dark
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"RequestHeaders": \{\s*"X-MyCarrier-Canary": "6f1c9d2e-4a5b-4c7d-8e9f-0a1b2c3d4e5f"\s*\},'
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"RunKind": "canary",'
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"SlipStep": "none"'
+
+  # One lower-cased form of the correlation id everywhere it routes: the header route matches what tests-dark sends.
+  - it: matches the header route on the lower-cased correlation id
+    template: rollout.yaml
+    set: *dark
+    asserts:
+      - contains:
+          path: spec.strategy.canary.steps
+          content:
+            setHeaderRoute:
+              name: canary-header
+              match:
+                - headerName: X-MyCarrier-Canary
+                  headerValue:
+                    exact: 6f1c9d2e-4a5b-4c7d-8e9f-0a1b2c3d4e5f
+
+  # A numeric global.correlationId routes as its digits, not as a float.
+  - it: renders a numeric correlation id as its digits in the header route and the header
+    template: rollout.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        correlationId: 12345678901
+    asserts:
+      - contains:
+          path: spec.strategy.canary.steps
+          content:
+            setHeaderRoute:
+              name: canary-header
+              match:
+                - headerName: X-MyCarrier-Canary
+                  headerValue:
+                    exact: "12345678901"
+
+  - it: sends a numeric correlation id as its digits in the canary header
+    template: analysistemplate.yaml
+    documentSelector: *testsDarkTemplate
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        correlationId: 12345678901
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"X-MyCarrier-Canary": "12345678901"'
+
+  # A2: the tests-dark body equals the tests body for the same app except ServiceAddress and RequestHeaders. tests and
+  # tests-dark cannot render together (tests refuses the dark stage, A5), so the pair renders each with its own dark
+  # setting from the same app and compares both to one literal.
+  - it: "body pair (1 of 2): tests, with dark off, sends this body"
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: prod-mycarrier-api-tests
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: false
+            analysis:
+              templates: [tests]
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          value: |-
+            {
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "6F1C9D2E-4A5B-4C7D-8E9F-0A1B2C3D4E5F",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "RunKind": "canary",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api-preview.prod.svc.cluster.local:8080",
+                    "SlipStep": "none"
+                  },
+                  "TestFilters": [
+                    "TestCategory=CoreAPI"
+                  ],
+                  "TestName": "apitests",
+                  "Tolerations": [],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }
+
+  - it: "body pair (2 of 2): tests-dark, with dark on, sends the tests body except ServiceAddress and RequestHeaders"
+    template: analysistemplate.yaml
+    documentSelector: *testsDarkTemplate
+    set: *dark
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          value: |-
+            {
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "6F1C9D2E-4A5B-4C7D-8E9F-0A1B2C3D4E5F",
+                    "EnvironmentName": "prod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "RequestHeaders": {
+                      "X-MyCarrier-Canary": "6f1c9d2e-4a5b-4c7d-8e9f-0a1b2c3d4e5f"
+                    },
+                    "RunKind": "canary",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080",
+                    "SlipStep": "none"
+                  },
+                  "TestFilters": [
+                    "TestCategory=CoreAPI"
+                  ],
+                  "TestName": "apitests",
+                  "Tolerations": [],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }
+
+  # D20: only the leader runs the dark-stage suite, so only it gets tests-dark, and a follower needs no test
+  # definitions.
+  - it: followers render no tests-dark
+    template: analysistemplate.yaml
+    set: &followers
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+            leader: api
+      applications:
+        api: *api
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-worker-tests-dark
+          namespace: prod
+        not: true
+
+  - it: renders the follower's Rollout without test definitions
+    template: rollout.yaml
+    set: *followers
+    asserts:
+      - notFailedTemplate: {}
+      - notContains:
+          path: spec.strategy.canary.steps
+          content:
+            analysis:
+              templates:
+                - templateName: prod-mycarrier-worker-tests-dark
+        documentSelector:
+          path: metadata.name
+          value: mycarrier-worker
+
+  # An applications.<app>.analysisTemplates entry named tests-dark replaces the chart's, as for health and tests.
+  - it: renders an analysisTemplates entry named tests-dark in place of the chart's
+    template: analysistemplate.yaml
+    documentSelector: *testsDarkTemplate
+    set:
+      <<: *dark
+      applications:
+        api:
+          <<: *api
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                web:
+                  url: http://tests.example/dark
+    asserts:
+      - equal:
+          path: spec.metrics[0].name
+          value: prod-tests-dark
+
+  # tests-dark renders under the conditions that give the leader its tests-dark step: a preset with the coordinator
+  # and the dark stage on.
+  - it: renders no tests-dark with the coordinator off
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: false
+            dark: true
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+        not: true
+
+  - it: renders no tests-dark with the dark stage off
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: false
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+        not: true
+
+  # An explicit steps list renders no dark stage, so dark: true there gives no tests-dark.
+  - it: renders no tests-dark with explicit steps and the dark stage on
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+            budgetSeconds: 600
+            steps:
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-health
+              - setWeight: 100
+    asserts:
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-tests-dark
+          namespace: prod
+          any: true
+        not: true
+
+  - it: leader without test definitions fails
+    template: rollout.yaml
+    set:
+      <<: *dark
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': the dark stage runs the chart's tests-dark AnalysisTemplate \\(prod-mycarrier-api-tests-dark\\) on the leader, .*testtrigger.testdefinitions.* set global.strategy.canary.dark: false"
+
+  # A5: tests runs at the weight steps, after the dark stage removed its header route, and DeployVerifier fails a
+  # canary run of a Rollout with managed routes that sends no X-MyCarrier-Canary header until Q54 is resolved.
+  - it: tests with dark on fails naming Q54
+    template: rollout.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+            analysis:
+              templates: [tests]
+    asserts:
+      - failedTemplate:
+          errorPattern: "^application 'api': the canary tests template cannot run on a Rollout with managed routes \\(canary-header, from the dark stage, global.strategy.canary.dark: true\\): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run would fail. The dark stage already runs the suite against the canary \\(tests-dark\\). Set global.strategy.canary.dark: false or remove tests from global.strategy.canary.analysis.templates until Q54 \\(a DeployVerifier check of header-less canary runs per Rollout\\) is resolved.$"
+
+  # A5 with explicit steps: a setHeaderRoute or setMirrorRoute step is the managed route, and there is no dark stage
+  # and no tests-dark, so the message names neither.
+  - it: tests with a header route in explicit steps fails naming Q54, without the dark stage
+    template: rollout.yaml
+    set:
+      <<: *dark
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: true
+            budgetSeconds: 1500
+            steps:
+              - setHeaderRoute: {name: smoke, match: [{headerName: X-Smoke, headerValue: {exact: "1"}}]}
+              - setWeight: 20
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-tests
+              - setHeaderRoute: {name: smoke}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "^application 'api': the canary tests template cannot run on a Rollout with managed routes \\(smoke, from setHeaderRoute or setMirrorRoute steps in global.strategy.canary.steps\\): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the tests run sends none, so every tests run would fail. Remove the setHeaderRoute and setMirrorRoute steps, or stop running tests \\(remove it from global.strategy.canary.analysis.templates and from the steps\\), until Q54 \\(a DeployVerifier check of header-less canary runs per Rollout\\) is resolved.$"
+
+  # #158's serviceAddress and filter rules apply with the stable Service; their messages name the dark stage's way out.
+  - it: fails a tests-dark serviceAddress on another host, naming the stable Service and dark false
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - <<: *definition
+                serviceAddress: https://api.mycarrier.example/v1
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': test definition 'apitests' sets serviceAddress 'api.mycarrier.example/v1', whose host is not the application's own Service \\(mycarrier-api.prod.svc.cluster.local\\). The dark stage's tests-dark run must test the canary, so it calls the stable Service, .* Remove serviceAddress \\(the run then calls http://mycarrier-api.prod.svc.cluster.local:8080\\), .* or set global.strategy.canary.dark: false."
+
+  - it: fails a tests-dark serviceAddress on another port, naming the stable Service
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - <<: *definition
+                serviceAddress: mycarrier-api:9090/x
+    asserts:
+      - failedTemplate:
+          errorPattern: "The dark stage's tests-dark run calls the stable Service on its http port, and the chart cannot tell which stable port serves port 9090"
+
+  - it: fails a preprod filter in a prod tests-dark run, naming dark false
+    template: analysistemplate.yaml
+    set:
+      <<: *dark
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - <<: *definition
+                filters: [TestCategory=PreprodSmoke]
+    asserts:
+      - failedTemplate:
+          errorPattern: "so the tests-dark analysis would fail every prod canary. .* or set global.strategy.canary.dark: false in prod."
+
+  # The barrier window (helm.canary.configuredSteps) runs whenever the dark stage runs the leader's tests-dark, not only
+  # when tests is listed: followers go from dark-ready straight to dark-passed and wait there for the leader's suite.
+  # With the chart's tests-dark (573 s) a 9m dark-passed (540 s) times out and aborts the release.
+  - it: fails a dark-passed window shorter than the leader's tests-dark
+    template: rollout.yaml
+    set:
+      <<: *followers
+      global:
+        <<: *global
+        strategy:
+          canary:
+            dark: true
+            leader: api
+            coordinator:
+              barrierTimeouts:
+                dark-passed: 9m
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'dark-passed' has timeout 9m \\(540 s\\), and Rollout 'worker' can wait there 573 s for Rollout 'api'"
+
+  - it: fits the leader's tests-dark in the default dark-passed window
+    template: rollout.yaml
+    set: *followers
+    asserts:
+      - notFailedTemplate: {}
+      - contains:
+          path: spec.strategy.canary.steps
+          content:
+            plugin:
+              name: mycarrier/canary-coordinator
+              config: {kind: barrier, name: dark-passed, timeout: 15m}
+
+  # A leader's own tests-dark (applications.<app>.analysisTemplates) counts with its own length: a Job with
+  # activeDeadlineSeconds 900 runs up to 900 + ceil(sqrt(1800)) = 943 s, above the default 15m.
+  - it: fails a dark-passed window shorter than the leader's own tests-dark
+    template: rollout.yaml
+    set:
+      <<: *followers
+      applications:
+        api:
+          <<: *api
+          analysisTemplates:
+            - name: tests-dark
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 900
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: tests
+                            image: registry.example.com/tests:1.0.0
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'dark-passed' has timeout 15m \\(900 s\\), and Rollout 'worker' can wait there 943 s for Rollout 'api'"
+
+  # With the dark stage on, the barrier window also runs at w10, w25 and w50 without tests listed, so a sibling's long
+  # analysis step fails the render where it did not before: worker's health Job (activeDeadlineSeconds 600) runs up to
+  # 600 + ceil(sqrt(1200)) = 635 s at w10, and api's chart health can end after 60 s, a 575 s wait against 9m (540 s).
+  - it: fails a weight barrier shorter than a sibling's analysis step without tests listed
+    template: rollout.yaml
+    set: &slowHealth
+      <<: *followers
+      applications:
+        api: *api
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: health
+              count: 1
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 600
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: health
+                            image: registry.example.com/health:1.0.0
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 575 s for Rollout 'worker'"
+
+  - it: does not check the weight barriers without tests listed when dark is false
+    template: rollout.yaml
+    set:
+      <<: *slowHealth
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: false
+            leader: api
+    asserts:
+      - notFailedTemplate: {}

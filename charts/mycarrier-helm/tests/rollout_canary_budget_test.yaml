@@ -5,14 +5,16 @@ suite: Rollout canary budget annotation (mycarrier.tech/canaryBudgetSeconds, Tec
 # every other step 0; background analysis is not counted. An explicit steps list states it in budgetSeconds. Above
 # 5700 s the render fails: rollout-watch's workflow has activeDeadlineSeconds 10800 and spends about 70 minutes before
 # the canary and 15 minutes after the budget.
-# Defaults: barriers 9m (540 s), health 3 x 30s (90 s), standard pauses 5m (300 s), manualTimeout 1h (3600 s).
+# Defaults: barriers 9m (540 s; dark-passed 15m, 900 s), health 3 x 30s (90 s), standard pauses 5m (300 s),
+# manualTimeout 40m (2400 s). The dark stage is on by default (DEVOPS-326); the "budgets fit" tests at the end cover the
+# defaults with it, and the other tests turn it off (dark: false) to count the ladder alone.
 # The budget renders only where the steps render: in prod, or with stepsOutsideProd (DEVOPS-516), so most tests render
 # a preprod drill. rollout_canary_prod_only_test.yaml covers its absence outside prod.
 templates:
   - rollout.yaml
 tests:
   # start 540 + 3 x (health 90 + pause 300 + barrier 540)
-  - it: renders 3330 s for the standard preset by default
+  - it: renders 3330 s for the standard preset with the dark stage off
     set:
       global: &global
         deploymentStrategy: canary
@@ -22,6 +24,7 @@ tests:
         strategy:
           canary:
             stepsOutsideProd: true
+            dark: false
       environment: &preprod
         name: preprod
       applications:
@@ -50,6 +53,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
       environment: *preprod
@@ -60,8 +64,8 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "1170"
 
-  # start 540 + health 90 + manual pause 3600 (manualTimeout 1h) + w10 540
-  - it: renders 4770 s for the manual preset, counting its pause as manualTimeout 1h
+  # start 540 + health 90 + manual pause 2400 (manualTimeout 40m) + w10 540
+  - it: renders 3570 s for the manual preset, counting its pause as manualTimeout 40m
     set:
       global:
         deploymentStrategy: canary
@@ -70,6 +74,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: manual
       environment: *preprod
@@ -78,7 +83,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "4770"
+          value: "3570"
       # The pause itself stays indefinite; manualTimeout only feeds the budget.
       - equal:
           path: spec.strategy.canary.steps[3]
@@ -127,8 +132,8 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "1290"
 
-  # manual: manualTimeout 3600 + health 90 + 2 x 600 (10 and 100).
-  - it: renders 4890 s for the manual preset with the coordinator off
+  # manual: manualTimeout 2400 + health 90 + 2 x 600 (10 and 100).
+  - it: renders 3690 s for the manual preset with the coordinator off
     set:
       global:
         deploymentStrategy: canary
@@ -146,7 +151,7 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "4890"
+          value: "3690"
 
   # A lower progressDeadlineSeconds lowers the wait per weight step: 3 x 390 + 4 x 300.
   - it: counts progressDeadlineSeconds per weight step with the coordinator off
@@ -177,6 +182,9 @@ tests:
         appStack: test-stack
         language: csharp
         correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
       environment:
         name: prod
       applications:
@@ -198,6 +206,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: manual
             manualTimeout: 30m
@@ -218,6 +227,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             preset: manual
             manualTimeout: 0s
       environment: *preprod
@@ -256,6 +266,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             manualTimeout: 2h
       environment: *preprod
@@ -275,6 +286,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             manualTimeout: 0s
@@ -382,6 +394,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             budgetSeconds: 99
       environment: *preprod
@@ -402,6 +415,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             preset: manual
             manualTimeout: 2h
       environment: *preprod
@@ -421,6 +435,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: manual
             manualTimeout: 4530s
@@ -441,6 +456,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             preset: manual
             manualTimeout: 4531s
       environment: *preprod
@@ -460,6 +476,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             analysis:
               health:
@@ -483,6 +500,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             coordinator:
               barrierTimeouts:
@@ -505,6 +523,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -540,6 +559,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -570,6 +590,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -608,6 +629,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -645,6 +667,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
             analysis:
@@ -681,6 +704,7 @@ tests:
         correlationId: corr-1
         strategy:
           canary:
+            dark: false
             stepsOutsideProd: true
             preset: fast
       environment: *preprod
@@ -699,9 +723,9 @@ tests:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
           value: "1320"
 
-  # Follower: start 540 + dark-ready 540 + dark-passed 540 + health 90 + w25 540 = 2250. The leader also runs tests-dark,
+  # Follower: start 540 + dark-ready 540 + dark-passed 900 + health 90 + w25 540 = 2610. The leader also runs tests-dark,
   # a Job of 1 x activeDeadlineSeconds 600, plus up to ceil(sqrt(1200)) = 35 s for Argo Rollouts to see it end
-  # (DEVOPS-515): 2885. rollout-watch takes the largest value of the release group.
+  # (DEVOPS-515): 3245. rollout-watch takes the largest value of the release group.
   - it: gives the leader the tests-dark analysis in its budget and the follower none
     set:
       global:
@@ -738,13 +762,13 @@ tests:
           count: 2
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "2885"
+          value: "3245"
         documentSelector:
           path: metadata.name
           value: test-stack-api
       - equal:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
-          value: "2250"
+          value: "2610"
         documentSelector:
           path: metadata.name
           value: test-stack-worker
@@ -763,3 +787,99 @@ tests:
           of: Rollout
       - notExists:
           path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+
+  # DEVOPS-326 decisions 7 and 8: with the defaults (dark stage on, dark-passed 15m, manualTimeout 40m) every preset
+  # fits the 5700 s cap, for the leader, which runs the chart's tests-dark (activeDeadlineSeconds 540 + lag 33 = 573 s),
+  # and for its follower, which holds at dark-passed instead.
+  # standard leader: start 540 + dark-ready 540 + tests-dark 573 + dark-passed 900
+  #   + 3 x (health 90 + pause 300 + barrier 540) = 5343; follower 5343 - 573 = 4770.
+  - it: budgets fit (standard)
+    set:
+      global: &fitGlobal
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            leader: api
+      environment:
+        name: prod
+      applications: &fitApps
+        api:
+          <<: *rollout
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+        worker:
+          <<: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5343"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "4770"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  # fast leader: start 540 + dark 540 + 573 + 900 + health 90 + w25 540 = 3183; follower 2610.
+  - it: budgets fit (fast)
+    set:
+      global:
+        <<: *fitGlobal
+        strategy:
+          canary:
+            leader: api
+            preset: fast
+      environment:
+        name: prod
+      applications: *fitApps
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3183"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "2610"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  # manual leader: start 540 + dark 540 + 573 + 900 + health 90 + pause 2400 (manualTimeout 40m) + w10 540 = 5583;
+  # follower 5010. 40m is the largest whole 5 minutes that keeps the leader at or below 5700 s (45m: 5883).
+  - it: budgets fit (manual)
+    set:
+      global:
+        <<: *fitGlobal
+        strategy:
+          canary:
+            leader: api
+            preset: manual
+      environment:
+        name: prod
+      applications: *fitApps
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5583"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5010"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker

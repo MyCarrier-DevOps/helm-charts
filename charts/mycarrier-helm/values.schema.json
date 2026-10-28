@@ -34,8 +34,8 @@
                 "manualTimeout": {
                   "type": "string",
                   "pattern": "^[0-9]+(s|m|h)$",
-                  "default": "1h",
-                  "description": "How long the release's rollout-watch allows for the manual preset's pause (Tech Spec D22): it counts as this duration in the canary budget (mycarrier.tech/canaryBudgetSeconds). The pause itself has no time limit. With the manual preset, zero fails the render. Ignored by the standard and fast presets and by an explicit steps list."
+                  "default": "40m",
+                  "description": "How long the release's rollout-watch allows for the manual preset's pause (Tech Spec D22): it counts as this duration in the canary budget (mycarrier.tech/canaryBudgetSeconds). The pause itself has no time limit. With the manual preset, zero fails the render. Ignored by the standard and fast presets and by an explicit steps list. The default 40m is the largest whole 5 minutes that keeps the manual preset's leader budget, with the dark stage, at or below 5700 s (5583 s; DEVOPS-326)."
                 },
                 "steps": {
                   "type": "array",
@@ -104,13 +104,12 @@
                 "progressDeadlineSeconds": {
                   "type": "integer",
                   "minimum": 1,
-                  "default": 600,
-                  "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true)."
+                  "description": "A canary that makes no progress for this long aborts (progressDeadlineAbort is always true). Every barrier timeout must stay below it. The default depends on the Rollout: 1200 on a canary Rollout that renders the dark stage (coordinator on, dark true and a preset; DEVOPS-326: above dark-passed's 15m); 600 on a canary Rollout with dark false (its default barrier timeouts, 9m, sit below 600) or an explicit steps list (its own barrier timeouts are checked against 600), on one with coordinator.enabled false, which renders no barriers and counts it for each setWeight step in its budget, and on a Rollout whose deployment-strategy property is not canary."
                 },
                 "dark": {
                   "type": "boolean",
-                  "default": false,
-                  "description": "Header-gated dark stage before the weight ladder (Tech Spec D11): canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary: <global.correlationId>, and the leader's tests-dark suite between the dark-ready and dark-passed barriers. Renders only with the coordinator on. Off by default until the chart renders tests-dark (DEVOPS-326); with true, a tests-dark AnalysisTemplate must render for the leader, or the render fails."
+                  "default": true,
+                  "description": "Header-gated dark stage before the weight ladder (Tech Spec D11): darkReplicas canary pods at weight 0, a canary-header route matched on X-MyCarrier-Canary: <global.correlationId, lower-cased>, and the leader's tests-dark suite between the dark-ready and dark-passed barriers. Renders only with the coordinator on and a preset. On by default (DEVOPS-326): the leader needs testtrigger.testdefinitions (the chart's tests-dark) or its own tests-dark AnalysisTemplate, or the render fails, and prod TestEngine must run with RUN_KINDS_ENABLED=true, or tests-dark fails and the release aborts. false turns it off (the way back, and what the chart's tests template needs until Q54)."
                 },
                 "leader": {
                   "type": "string",
@@ -119,9 +118,9 @@
                 },
                 "darkReplicas": {
                   "type": "integer",
-                  "minimum": 1,
-                  "default": 1,
-                  "description": "Canary pods during the dark stage."
+                  "minimum": 2,
+                  "default": 2,
+                  "description": "Canary pods during the dark stage. At least 2 (DEVOPS-326): with one, a single pod restart leaves the canary with no available pod and Argo Rollouts removes the canary-header route in the middle of the suite."
                 },
                 "bakeMinutes": {
                   "type": "integer",
@@ -142,9 +141,9 @@
                     },
                     "barrierTimeouts": {
                       "type": "object",
-                      "description": "Timeout per barrier name; a barrier that times out aborts the Rollout and, through the plugin, its siblings. Each must stay below progressDeadlineSeconds: Argo Rollouts counts the wait at a barrier toward the deadline, and the render fails otherwise.",
+                      "description": "Timeout per barrier name; a barrier that times out aborts the Rollout and, through the plugin, its siblings. Each must stay below progressDeadlineSeconds: Argo Rollouts counts the wait at a barrier toward the deadline, and the render fails otherwise. dark-passed defaults to 15m so the leader's tests-dark (573 s with the defaults) fits in the followers' wait; with two or more canary Rollouts the render fails when it does not (DEVOPS-326).",
                       "additionalProperties": { "type": "string", "pattern": "^[0-9]+(s|m|h)$" },
-                      "default": { "start": "9m", "dark-ready": "9m", "dark-passed": "9m", "w10": "9m", "w25": "9m", "w50": "9m" }
+                      "default": { "start": "9m", "dark-ready": "9m", "dark-passed": "15m", "w10": "9m", "w25": "9m", "w50": "9m" }
                     }
                   }
                 }
@@ -586,7 +585,7 @@
           "progressDeadlineSeconds": {
             "type": "integer",
             "minimum": 1,
-            "description": "Overrides global.strategy.canary.progressDeadlineSeconds for this application's Rollout, for an app whose pods take longer to become Ready. Not a step setting, so lockstep is unaffected."
+            "description": "Overrides global.strategy.canary.progressDeadlineSeconds for this application's Rollout, for an app whose pods take longer to become Ready. Not a step setting, so lockstep is unaffected. Every barrier timeout must stay below it (dark-passed is 15m by default), or the render fails."
           },
           "migratingToRollouts": {
             "oneOf": [
@@ -1583,7 +1582,7 @@
               },
               "idleReplicaCount": {
                 "type": "integer",
-                "description": "Number of replicas when idle (set to 0 to enable scale-to-zero)"
+                "description": "Number of replicas when idle (set to 0 to enable scale-to-zero). A canary Rollout refuses it where its canary steps render (canary pod floor): KEDA scales the Rollout to it while its triggers are idle, and the canary would drop to 0 pods."
               },
               "minReplicaCount": {
                 "type": "integer",

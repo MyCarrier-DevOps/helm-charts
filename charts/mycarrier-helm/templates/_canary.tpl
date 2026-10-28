@@ -39,23 +39,35 @@
 {{- /* global.strategy.canary merged over the defaults, as JSON. It configures the steps of a canary Rollout
        (helm.canary.enabled); a routed Rollout without steps reads only progressDeadlineSeconds from it. Analysis is
        mandatory for every canary Rollout (DEVOPS-312): health and alerts are on unless opted out, and templates lists
-       only extra templates. analysis.enabled is deprecated and has no default; rollout.yaml refuses false. dark stays
-       off until DEVOPS-326 renders tests-dark.
+       only extra templates. analysis.enabled is deprecated and has no default; rollout.yaml refuses false.
        bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
        and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds).
        stepsOutsideProd renders the steps outside prod (helm.canary.stepsRendered). analysis.tests (timeout, the poll
        budget; startupSeconds, the pod's start slack; and image) configures the chart's tests template, which renders
-       only for a Rollout that runs it (helm.canary.tests.wanted). */ -}}
+       only for a Rollout that runs it (helm.canary.tests.wanted).
+       The dark-stage timing (DEVOPS-326, decision 7) lives here: dark-passed's 15m timeout fits the leader's tests-dark
+       Job (573 s with the defaults) in the followers' wait, and progressDeadlineSeconds 1200 keeps every barrier
+       timeout below the deadline. The 1200 default applies where the dark stage renders: a canary Rollout
+       (helm.canary.enabled) with coordinator.enabled, dark true and a preset (no explicit steps), in every environment
+       (also where its steps do not render). Otherwise it stays 600: on a routed Rollout whose property is not canary
+       (its render does not change); on a canary Rollout with dark false, whose default barrier timeouts (9m) sit
+       below 600, or with an explicit steps list, whose own barrier timeouts are checked against 600; and on a canary
+       Rollout with the coordinator off, which has no barriers and whose budget counts the deadline for each
+       setWeight step (4 x 1200 would put the standard preset at 5970 s, above the 5700 s limit). With the coordinator
+       on the budget does not count the deadline, so it does not change the budget. manualTimeout 40m is the largest
+       whole 5 minutes that keeps the manual preset's leader budget at or below 5700 s (helm.canary.budgetSeconds:
+       5583 s). */ -}}
 {{- define "helm.canary.config" -}}
 {{- $python := "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516" -}}
+{{- $canary := and (kindIs "map" .application) (eq (include "helm.canary.enabled" .) "true") -}}
 {{- $defaults := dict
       "preset" "standard"
       "stepsOutsideProd" false
       "progressDeadlineSeconds" 600
-      "dark" false
-      "darkReplicas" 1
+      "dark" true
+      "darkReplicas" 2
       "bakeMinutes" 30
-      "manualTimeout" "1h"
+      "manualTimeout" "40m"
       "analysis" (dict "templates" (list)
         "health" (dict "enabled" true "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
         "alerts" (dict "enabled" true "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
@@ -63,10 +75,12 @@
         "tests" (dict "timeout" "7m" "startupSeconds" 120 "image" $python))
       "coordinator" (dict
         "enabled" true
-        "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "9m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
+        "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "15m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
 {{- $global := .Values.global | default dict -}}
 {{- $cfg := deepCopy (dig "strategy" "canary" dict $global) -}}
-{{- toJson (mustMergeOverwrite (deepCopy $defaults) $cfg) -}}
+{{- $merged := mustMergeOverwrite (deepCopy $defaults) $cfg -}}
+{{- if and $canary $merged.coordinator.enabled $merged.dark (not $merged.steps) (not (hasKey $cfg "progressDeadlineSeconds")) }}{{ $_ := set $merged "progressDeadlineSeconds" 1200 }}{{ end -}}
+{{- toJson $merged -}}
 {{- end -}}
 
 {{- /* The canary steps: global.strategy.canary.steps verbatim when set, otherwise the preset ladder (DEVOPS-307):
@@ -87,13 +101,22 @@
        Rollout of the release crosses each boundary together; the manual preset's pause stays before its barrier, so a
        resume of the group fans out and the barrier then holds it. An explicit steps list renders verbatim and carries
        its own barriers. The plugin's webhook host and token live in the controller, never in the Rollout spec.
-       With the coordinator on and dark (default false until DEVOPS-326, D11), the start barrier is followed by the
-       header-gated dark stage: darkReplicas canary pods at weight 0, a canary-header route matched on
-       X-MyCarrier-Canary: <global.correlationId>, the dark-ready barrier, the <environment>-<fullName>-tests-dark
-       analysis on the leader only, the dark-passed barrier, then the route is removed. setCanaryScale
-       {matchTrafficWeight: true} closes the stage: Argo Rollouts keeps the last setCanaryScale in force for every later
-       step, so without it the canary would stay at darkReplicas pods through the weights. The dark stage waits for the
-       coordinator because followers rely on its barriers to wait for the leader's suite.
+       With the coordinator on and dark (default true since DEVOPS-326, D11), the start barrier is followed by the
+       header-gated dark stage: darkReplicas (default 2, at least 2) canary pods at weight 0, a canary-header route
+       matched on X-MyCarrier-Canary: <global.correlationId, lower-cased> (helm.canary.correlationId), the dark-ready
+       barrier, the <environment>-<fullName>-tests-dark analysis on the leader only (the chart renders it,
+       helm.canary.testsDark.wanted, unless the leader defines its own), the dark-passed barrier, then the route is
+       removed. The ladder's first weight W is then wrapped: setCanaryScale {weight: W}, setWeight W, setCanaryScale
+       {matchTrafficWeight: true}. Argo Rollouts keeps the last setCanaryScale in force for every later step, so the
+       size must be handed back to the weights, but not at weight 0, where it would size the canary to 0 pods (a
+       weight-sized canary of weight 0 has none, whatever minPodsPerReplicaSet says) and replace the dark-tested pods
+       at the first weight; and not after setWeight W alone, because Argo Rollouts sets the traffic weight from the
+       step while the dark {replicas: darkReplicas} is still in force, so W% would land on the darkReplicas pods until
+       the canary grows (an HPA scaled out under load: more than 8 replicas at 25%, more than 20 at 10%).
+       setCanaryScale {weight: W} sizes the canary for W% first, max(ceil(W x replicas / 100), minPodsPerReplicaSet),
+       capped at replicas, and setWeight W completes only once it is available. From then on the canary follows the
+       weight with at least minPodsPerReplicaSet (2) pods. The dark stage waits for the coordinator because followers
+       rely on its barriers to wait for the leader's suite.
        These are the steps the configuration describes. They are built in every environment, with the real leader, so
        their checks (the leader rule and the leader's tests-dark included) run in every environment and the budget is
        the same in and outside prod; they render only where helm.canary.stepsRendered is true (helm.canary.steps). Only
@@ -107,6 +130,15 @@
 {{- $coordinator := $cfg.coordinator -}}
 {{- if and $rendered $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
   {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
+{{- end -}}
+{{- /* The canary floor (spec A4): minPodsPerReplicaSet 2 is capped at spec.replicas, so a Rollout that can run 1 pod
+       would run a 1-pod canary, and one that KEDA scales to 0 (keda.idleReplicaCount) no canary pods. Checked where
+       the steps render; elsewhere the Rollout promotes at once. */ -}}
+{{- if $rendered -}}
+  {{- $minimum := include "helm.canary.minReplicas" . | fromJson -}}
+  {{- if lt (int $minimum.replicas) 2 -}}
+    {{- fail (printf "application '%s': a canary Rollout needs at least 2 pods, and its minimum is %d (%s). Argo Rollouts keeps the canary at minPodsPerReplicaSet (2) pods at every weight, but never above the Rollout's replicas, so the canary would run fewer than 2 pods. %s" .appName (int $minimum.replicas) $minimum.source $minimum.fix) -}}
+  {{- end -}}
 {{- end -}}
 {{- $fullName := include "helm.fullname" . -}}
 {{- $steps := list -}}
@@ -135,19 +167,19 @@
   {{- if not (include "helm.canary.leader" .) -}}
     {{- fail (printf "the dark stage runs its test suite on one leader, and this release has %d canary Rollouts; set global.strategy.canary.leader to one of: %s." (len (include "helm.canary.rollouts" . | fromJsonArray)) (join ", " (include "helm.canary.rollouts" . | fromJsonArray))) -}}
   {{- end -}}
-  {{- $correlationId := toString (dig "correlationId" "" (.Values.global | default dict)) -}}
+  {{- if lt (int $cfg.darkReplicas) 2 -}}
+    {{- fail (printf "global.strategy.canary.darkReplicas is %v; the minimum is 2. With one dark canary pod a single restart leaves the canary with no available pod, and Argo Rollouts removes the canary-header route in the middle of the dark suite. Set darkReplicas to 2 or more." $cfg.darkReplicas) -}}
+  {{- end -}}
   {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
-  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" $correlationId))))) -}}
+  {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" (include "helm.canary.correlationId" .)))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
+  {{- /* The leader's tests-dark renders (helm.canary.analysis.available): helm.canary.testsDark.wanted renders the
+         chart's, or fails the render, unless the leader defines its own. */ -}}
   {{- if eq (include "helm.canary.leader" .) .appName -}}
-    {{- if not (has "tests-dark" $available) -}}
-      {{- fail (printf "application '%s': the dark stage runs the tests-dark AnalysisTemplate on the leader, and the chart does not render it yet (DEVOPS-312, DEVOPS-326). Set global.strategy.canary.dark: false, or define tests-dark under applications.%s.analysisTemplates." .appName .appName) -}}
-    {{- end -}}
     {{- $steps = append $steps (dict "analysis" (dict "templates" (list (dict "templateName" (printf "%s-%s-tests-dark" .Values.environment.name $fullName))))) -}}
   {{- end -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-passed" "coordinator" $coordinator) | fromJson) -}}
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header")) -}}
-  {{- $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) -}}
 {{- end -}}
 {{- $ladder := list -}}
 {{- $pause := dict -}}
@@ -160,8 +192,11 @@
 {{- else -}}
   {{- fail (printf "global.strategy.canary.preset '%s' is not one of standard, fast, manual" $cfg.preset) -}}
 {{- end -}}
-{{- range $weight := $ladder -}}
+{{- range $i, $weight := $ladder -}}
+  {{- $reset := and (eq $i 0) $coordinator.enabled $cfg.dark -}}
+  {{- if $reset }}{{ $steps = append $steps (dict "setCanaryScale" (dict "weight" $weight)) }}{{ end -}}
   {{- $steps = append $steps (dict "setWeight" $weight) -}}
+  {{- if $reset }}{{ $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) }}{{ end -}}
   {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
   {{- if eq $cfg.preset "manual" }}{{ $steps = append $steps (dict "pause" (dict)) }}{{ else if $pause }}{{ $steps = append $steps (dict "pause" $pause) }}{{ end -}}
   {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" (printf "w%d" $weight) "coordinator" $coordinator) | fromJson) }}{{ end -}}
@@ -184,15 +219,20 @@
 {{- end -}}
 {{- /* Checks of the chart's tests template (DEVOPS-515) that read the steps; they run in every environment, like the
        other checks here.
-       - Managed routes (the dark stage's canary-header, or a setHeaderRoute or setMirrorRoute step of explicit steps):
-         TestEngine's DeployVerifier fails a canary run of a Rollout with managed routes that sends no X-MyCarrier-Canary
-         header, and the header route exists only during the dark stage, so every tests run would fail.
+       - Managed routes (the dark stage's canary-header with a preset, or a setHeaderRoute or setMirrorRoute step of
+         explicit steps, which render no dark stage): TestEngine's DeployVerifier fails a canary run of a Rollout with
+         managed routes that sends no X-MyCarrier-Canary header, and the tests run sends none (with the dark stage it
+         runs at the weight steps, after the header route is removed), so every tests run would fail until Q54 (a
+         DeployVerifier check of header-less canary runs per Rollout) is resolved (spec A5). The message names the
+         source. The dark stage's own tests-dark sends the header, so it is not refused.
        - Lockstep: the DeployVerifier checks every Rollout of the correlation group, which must be in flight. With
          coordinator.enabled false and more than one canary Rollout, a sibling that already promoted (or has not
          started) fails the run after part of the release shipped.
        - global.correlationId, where the steps render: the request sends it as CorrelationId, and TestEngine answers 422
          without it.
-       - The barrier window, while tests is listed (helm.canary.tests.listed; also when an app replaces tests). In an
+       - The barrier window, while tests is listed (helm.canary.tests.listed; also when an app replaces tests) or the
+         dark stage runs the leader's tests-dark (a preset with the coordinator and dark on; the chart's tests-dark or
+         the leader's own, DEVOPS-326), whose followers wait at dark-passed for the leader's suite. In an
          analysis step every canary Rollout of the release runs its own templates in parallel; after the steps up to the
          next barrier, canary-coordinator holds the barrier until the whole group has reached it. Between two barriers,
          Rollout j waits for Rollout i for i's longest run of the analysis steps since the previous barrier minus j's
@@ -217,7 +257,11 @@
     {{- if and $route (not (has $route $managed)) }}{{ $managed = append $managed $route }}{{ end -}}
   {{- end -}}
   {{- if $managed -}}
-    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true, or from explicit steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the header route exists only during the dark stage, so every tests run would fail. Set global.strategy.canary.dark: false (and remove setHeaderRoute and setMirrorRoute steps), or remove tests from global.strategy.canary.analysis.templates, until DEVOPS-326 settles canary tests with the dark stage." .appName (join ", " $managed)) -}}
+    {{- $q54 := "until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved." -}}
+    {{- if $cfg.steps -}}
+      {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from setHeaderRoute or setMirrorRoute steps in global.strategy.canary.steps): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and the tests run sends none, so every tests run would fail. Remove the setHeaderRoute and setMirrorRoute steps, or stop running tests (remove it from global.strategy.canary.analysis.templates and from the steps), %s" .appName (join ", " $managed) $q54) -}}
+    {{- end -}}
+    {{- fail (printf "application '%s': the canary tests template cannot run on a Rollout with managed routes (%s, from the dark stage, global.strategy.canary.dark: true): TestEngine's DeployVerifier fails a canary run of such a Rollout that sends no X-MyCarrier-Canary header, and tests runs at the weight steps, after the dark stage removed its header route, so every tests run would fail. The dark stage already runs the suite against the canary (tests-dark). Set global.strategy.canary.dark: false or remove tests from global.strategy.canary.analysis.templates %s" .appName (join ", " $managed) $q54) -}}
   {{- end -}}
   {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
   {{- if and (not $coordinator.enabled) (gt (len $rollouts) 1) -}}
@@ -228,7 +272,8 @@
   {{- end -}}
 {{- end -}}
 {{- $rollouts := include "helm.canary.rollouts" . | fromJsonArray -}}
-{{- if and (eq (include "helm.canary.tests.listed" .) "true") (gt (len $rollouts) 1) -}}
+{{- $leaderOnly := and (not $cfg.steps) $coordinator.enabled $cfg.dark -}}
+{{- if and (or (eq (include "helm.canary.tests.listed" .) "true") $leaderOnly) (gt (len $rollouts) 1) -}}
   {{- $environment := toString .Values.environment.name -}}
   {{- $selfPrefix := printf "%s-%s-" $environment $fullName -}}
   {{- /* Each canary Rollout's template table and template-name prefix, and every table entry by its full name (explicit
@@ -247,7 +292,6 @@
          dark-passed. In a preset with the coordinator and dark on it is the only analysis step before the first
          setWeight, so there only the leader's lengths count; the leader's own render sees it (a follower's steps do
          not have it). */ -}}
-  {{- $leaderOnly := and (not $cfg.steps) $coordinator.enabled $cfg.dark -}}
   {{- $leader := "" -}}
   {{- if $leaderOnly }}{{ $leader = include "helm.canary.leader" . }}{{ end -}}
   {{- $beforeWeights := true -}}
@@ -339,24 +383,29 @@
        release's rollout-watch (DEVOPS-319) times out at the largest value of the release group plus 15 minutes, so
        the budget covers the steps helm.canary.configuredSteps describes for this Rollout at their longest, and
        rollout-watch never times out a canary that is still inside its designed steps:
-       - pause: its duration; the manual preset's pause, which has none, counts manualTimeout (default 1h). The pause
+       - pause: its duration; the manual preset's pause, which has none, counts manualTimeout (default 40m). The pause
          itself stays indefinite; manualTimeout only feeds the budget.
        - analysis: the longest of its templates (they run in parallel), each count x max(interval, the Job's
          activeDeadlineSeconds when the template is a Job provider that sets it), plus, for a Job, the time Argo
          Rollouts can take to see it end, ceil(sqrt(2 x activeDeadlineSeconds)); a Job with count n >= 2 at least
          n x (activeDeadlineSeconds + that lag) + (n - 1) x interval. The chart's health template uses
-         analysis.health.count and interval; the chart's tests template counts its Job's activeDeadlineSeconds
-         (analysis.tests.timeout + analysis.tests.startupSeconds) + lag (540 + 33 by default); an
+         analysis.health.count and interval; the chart's tests and tests-dark templates count their Job's
+         activeDeadlineSeconds (analysis.tests.timeout + analysis.tests.startupSeconds) + lag (540 + 33 by default); an
          applications.<app>.analysisTemplates entry (an extra template, or one that replaces health or supplies
          tests-dark) uses its own count (1 when unset, as analysistemplate.yaml renders it; Argo Rollouts runs count 0
          without an interval once) and interval (0 when unset). The lengths come from
          helm.canary.analysis.templateSeconds.
        - a canary-coordinator barrier: its timeout.
-       - a setWeight step above 0 waits until the canary's pods are available, for up to progressDeadlineSeconds. With
-         the coordinator on, the barrier timeouts cover that wait; with coordinator.enabled false, each such setWeight
-         step (100 included) counts progressDeadlineSeconds.
-       - every other step (setWeight 0, setCanaryScale, setHeaderRoute): 0. The background alerts analysis runs alongside
-         the steps and is not counted.
+       - a setWeight or setCanaryScale step waits until the canary's pods are available
+         (AtDesiredReplicaCountsForCanary, rollout/canary.go:318-327 in Argo Rollouts v1.10.0), for up to
+         progressDeadlineSeconds. With coordinator.enabled false, each setWeight step above 0 (100 included) counts
+         progressDeadlineSeconds. With the coordinator on these waits count 0. With two or more canary Rollouts, a
+         Rollout whose pods start slowly holds its siblings at the next barrier, whose timeout bounds the wait. With
+         one, the barriers pass at once, so the budget does not cover these waits, and a canary whose pods start slowly
+         at several steps can outlast rollout-watch's timeout (budget + 15 minutes) while still inside its progress
+         deadlines.
+       - every other step (setHeaderRoute), and setWeight 0 and setCanaryScale with the coordinator off: 0. The
+         background alerts analysis runs alongside the steps and is not counted.
        The leader runs tests-dark and its followers do not, so their budgets can differ. An explicit steps list states its
        own budget in budgetSeconds (required there); with a preset the chart computes it and budgetSeconds is ignored.
        rollout-watch's release workflow has activeDeadlineSeconds 10800, which covers about 70 minutes before the canary
@@ -366,7 +415,8 @@
        included), and it is the same in and outside prod; rollout.yaml renders it only where the steps render. */ -}}
 {{- /* The length of every AnalysisTemplate an analysis step of this canary Rollout can reference, as JSON, by the name
        the step uses (<environment>-<fullName>-<name>): the chart's health (analysis.health count and interval), the
-       chart's tests when the app runs it (helm.canary.tests.wanted), and each applications.<app>.analysisTemplates
+       chart's tests and tests-dark when the app runs them (helm.canary.tests.wanted, helm.canary.testsDark.wanted), and
+       each applications.<app>.analysisTemplates
        entry, which replaces the chart's template of the same name. For each, in seconds:
        - budget: the template at its longest, as Tech Spec D22's budget needs. count x max(interval, the Job's
          activeDeadlineSeconds when it is a Job provider that sets it); count is 1 when unset or 0 (Argo Rollouts runs
@@ -385,10 +435,13 @@
 {{- $health := $cfg.analysis.health -}}
 {{- $healthInterval := include "helm.canary.durationSeconds" $health.interval | int -}}
 {{- $table := dict (printf "%shealth" $prefix) (dict "budget" (mul (int $health.count) $healthInterval) "longest" (mul (int $health.count) $healthInterval) "shortest" (mul (max 0 (sub (int $health.count) 1)) $healthInterval)) -}}
-{{- if eq (include "helm.canary.tests.wanted" .) "true" -}}
+{{- $chartTests := list -}}
+{{- if eq (include "helm.canary.tests.wanted" .) "true" }}{{ $chartTests = append $chartTests "tests" }}{{ end -}}
+{{- if eq (include "helm.canary.testsDark.wanted" .) "true" }}{{ $chartTests = append $chartTests "tests-dark" }}{{ end -}}
+{{- if $chartTests -}}
   {{- $deadline := include "helm.canary.tests.activeDeadlineSeconds" . | int -}}
   {{- $length := add $deadline (include "helm.canary.tests.completionLagSeconds" $deadline | int) -}}
-  {{- $_ := set $table (printf "%stests" $prefix) (dict "budget" $length "longest" $length "shortest" 0) -}}
+  {{- range $chartTests }}{{ $_ := set $table (printf "%s%s" $prefix .) (dict "budget" $length "longest" $length "shortest" 0) }}{{ end -}}
 {{- end -}}
 {{- range (.application.analysisTemplates | default list) -}}
   {{- $count := 1 -}}
@@ -423,7 +476,7 @@
   {{- if eq $cfg.preset "manual" -}}
     {{- $manual = include "helm.canary.durationSeconds" $cfg.manualTimeout | int -}}
     {{- if not $manual -}}
-      {{- fail (printf "global.strategy.canary.manualTimeout is '%v'; the manual preset needs a duration above zero such as 90s, 30m or 1h (default 1h). It is how long the release's rollout-watch allows for the manual pause (Tech Spec D22); the pause itself has no time limit." $cfg.manualTimeout) -}}
+      {{- fail (printf "global.strategy.canary.manualTimeout is '%v'; the manual preset needs a duration above zero such as 90s, 30m or 1h (default 40m). It is how long the release's rollout-watch allows for the manual pause (Tech Spec D22); the pause itself has no time limit." $cfg.manualTimeout) -}}
     {{- end -}}
   {{- end -}}
   {{- /* Seconds per AnalysisTemplate an analysis step can reference, by the name the step uses: the budget column of
@@ -482,8 +535,9 @@
 {{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
        chart's own health template when health is on, the app has none of that name and its health URL is known, the
        chart's alerts template when alerts is on, the app has none of that name, the environment is prod and the
-       service label is known, and the chart's tests template when the app runs it (helm.canary.tests.wanted, which
-       fails the render when the app has no testtrigger.testdefinitions). */ -}}
+       service label is known, the chart's tests template when the app runs it (helm.canary.tests.wanted, which
+       fails the render when the app has no testtrigger.testdefinitions), and the chart's tests-dark template for the
+       dark stage's leader (helm.canary.testsDark.wanted, which fails the same way). */ -}}
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
 {{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
@@ -491,6 +545,7 @@
 {{- if and (not (has "health" $names)) $analysis.health.enabled (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
 {{- if and (not (has "alerts" $names)) $analysis.alerts.enabled (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
 {{- if eq (include "helm.canary.tests.wanted" .) "true" }}{{ $names = append $names "tests" }}{{ end -}}
+{{- if eq (include "helm.canary.testsDark.wanted" .) "true" }}{{ $names = append $names "tests-dark" }}{{ end -}}
 {{- toJson $names -}}
 {{- end -}}
 
@@ -611,6 +666,44 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson (dict "plugin" (dict "name" "mycarrier/canary-coordinator" "config" (dict "kind" "barrier" "name" .name "timeout" $timeout))) -}}
 {{- end -}}
 
+{{- /* "true" when a VirtualService destination host is the app's -preview Service: its short name <fullName>-preview or
+       <fullName>-preview.<namespace>.svc[...]; "" otherwise. Takes host, fullName and namespace. One test for the
+       routes Argo Rollouts weights (helm.canary.routesFor) and the routes that get a source route
+       (helm.canary.sourceRoutes). */ -}}
+{{- define "helm.canary.isPreviewHost" -}}
+{{- $previewName := printf "%s-preview" .fullName -}}
+{{- if or (eq .host $previewName) (hasPrefix (printf "%s.%s.svc" $previewName .namespace) .host) }}true{{ end -}}
+{{- end -}}
+
+{{- /* True where a canary Rollout renders the canary source routes and the canary/stable pod labels they match
+       (DEVOPS-326): where its steps render (helm.canary.stepsRendered), coordinator.enabled is true and the steps move
+       in lock-step. Lock-step comes from the canary-coordinator barriers between weights: every Rollout of the release
+       reaches a barrier before any passes it, so a callee's canary is sized for the weight its canary callers are at.
+       A preset puts a barrier after each weight's analysis and pause; an explicit steps list gets the routes only when
+       it has a canary-coordinator barrier between every two setWeight steps, as a preset does. Without that a caller
+       can be at 50% while its callee is at 10%, and the source routes would send the caller canary's whole share to a
+       callee canary sized for 10%; so with the coordinator off, or an explicit list without those barriers, canary
+       callers keep reaching stable. After a Rollout aborts, Argo Rollouts v1.10.0 (dynamicStableScale false)
+       points its -preview Service back at its stable ReplicaSet on every reconcile (rollout/trafficrouting.go), after
+       pointing it at the aborted canary ReplicaSet while that still has available pods
+       (reconcileStableAndCanaryService, rollout/service.go), so for up to abortScaleDownDelaySeconds (30 s) the
+       siblings' canary callers reach its aborted canary pods or its stable pods, then stable. */ -}}
+{{- define "helm.canary.sourceRoutesRendered" -}}
+{{- $cfg := include "helm.canary.config" . | fromJson -}}
+{{- $lockstep := true -}}
+{{- $unsynced := false -}}
+{{- range ($cfg.steps | default list) -}}
+  {{- $plugin := dig "plugin" dict . -}}
+  {{- if hasKey . "setWeight" -}}
+    {{- if $unsynced }}{{ $lockstep = false }}{{ end -}}
+    {{- $unsynced = true -}}
+  {{- else if and (eq (toString (dig "name" "" $plugin)) "mycarrier/canary-coordinator") (eq (toString (dig "config" "kind" "" $plugin)) "barrier") -}}
+    {{- $unsynced = false -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (eq (include "helm.canary.stepsRendered" .) "true") $cfg.coordinator.enabled $lockstep }}true{{ else }}false{{ end -}}
+{{- end -}}
+
 {{- /* Names of the HTTP routes in a rendered VirtualService spec that send traffic to the app's Service, as JSON.
        A destination counts when its host is the Service's short name or <fullName>.<namespace>.svc[.cluster.local];
        other hosts that share the prefix, such as the <app>.dev.internal ServiceEntry, are not the Service. */ -}}
@@ -624,8 +717,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- range ($route.route | default list) -}}
     {{- $host := toString .destination.host -}}
     {{- if or (eq $host $.fullName) (eq $host $serviceDomain) (hasPrefix (printf "%s." $serviceDomain) $host) }}{{ $hit = true }}{{ end -}}
-    {{- $previewName := printf "%s-preview" $.fullName -}}
-    {{- if or (eq $host $previewName) (hasPrefix (printf "%s.%s.svc" $previewName $.namespace) $host) }}{{ $preview = true }}{{ end -}}
+    {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" $.fullName "namespace" $.namespace) }}{{ $preview = true }}{{ end -}}
   {{- end -}}
   {{- if and $hit (not $preview) -}}
     {{- fail (printf "VirtualService route '%s' sends traffic to %s without its -preview destination, so it would bypass the canary. A custom route with an explicit destination to the app's own Service gets no -preview destination; leave destination unset." $route.name $.fullName) -}}
@@ -642,6 +734,52 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- end -}}
 {{- end -}}
 {{- toJson $names -}}
+{{- end -}}
+
+{{- /* The http routes of an app's VirtualService with a canary source route before each route that has the app's
+       -preview destination and no fault or redirect, as JSON (DEVOPS-326 spec A3). Takes http (the parsed routes) and
+       context (the app context) and ctx (its helm.context); helm.specs.virtualservice calls it where
+       helm.canary.sourceRoutesRendered is true.
+       A source route, <name>-canary-source, takes every match of its original that can match in the mesh with two
+       more conditions in each (a route without a match gets one match of just these). A match whose own gateways leave
+       out mesh (an ingress-only custom route under networking.istio.routes) never matches an in-mesh caller, so it is
+       dropped, and a route left with no match gets no source route: a canary caller falls through it as a stable
+       caller does. The two conditions: the caller is in the mesh (gateways: [mesh], in place of a match's own
+       gateways) and its pod is a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by the
+       Rollout's canaryMetadata and carrying this release's mycarrier.tech/correlationId as the pod label renders it
+       (helm.labels.correlationId; Istio compares sourceLabels exactly). It sends the request to the original's first
+       -preview destination and keeps every other field of the original (headers, timeout, retries, rewrite, CORS), so
+       a canary caller gets the answer a stable caller gets, served by the canary. A route with a fault (-forbidden) answers the same whatever
+       its destination, and a redirect has none, so they get no source route: a canary caller falls through to them as
+       a stable caller does. Argo Rollouts puts its managed routes (canary-header) above all others and leaves the rest
+       in this order. */ -}}
+{{- define "helm.canary.sourceRoutes" -}}
+{{- $fullName := include "helm.fullname" .context -}}
+{{- $namespace := include "helm.namespace" .context -}}
+{{- $sourceLabels := dict "mycarrier.tech/rollout-role" "canary" "mycarrier.tech/correlationId" (include "helm.labels.correlationId" .ctx) -}}
+{{- $caller := dict "gateways" (list "mesh") "sourceLabels" $sourceLabels -}}
+{{- $routes := list -}}
+{{- range (.http | default list) -}}
+  {{- $preview := dict -}}
+  {{- range (.route | default list) -}}
+    {{- if and (not $preview) (include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $fullName "namespace" $namespace)) }}{{ $preview = .destination }}{{ end -}}
+  {{- end -}}
+  {{- $matches := list -}}
+  {{- if and $preview (not .fault) (not .redirect) -}}
+    {{- range (.match | default (list dict)) -}}
+      {{- if or (not (hasKey . "gateways")) (has "mesh" .gateways) }}{{ $matches = append $matches (merge (deepCopy $caller) .) }}{{ end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if $matches -}}
+    {{- $twin := omit . "name" "match" "route" -}}
+    {{- $_ := set $twin "name" (printf "%s-canary-source" .name) -}}
+    {{- $_ := set $twin "match" $matches -}}
+    {{- $_ := set $twin "route" (list (dict "destination" $preview)) -}}
+    {{- $routes = append $routes $twin -}}
+  {{- end -}}
+  {{- $routes = append $routes . -}}
+{{- end -}}
+{{- toJson $routes -}}
 {{- end -}}
 
 {{- /* trafficRouting.istio.virtualServices for the app: its own VirtualService and, for a frontend in a
@@ -702,6 +840,21 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- toJson $names -}}
 {{- end -}}
 
+{{- /* global.correlationId as a string, in its own case: a numeric id renders as its digits (12345, not 1.2345e+04);
+       unset, empty or 0 renders "". helm.canary.tests.request sends it as the request's CorrelationId. */ -}}
+{{- define "helm.canary.correlationIdString" -}}
+{{- $id := dig "correlationId" "" (.Values.global | default dict) -}}
+{{- if and (kindIs "float64" $id) (eq $id (float64 (int64 $id))) }}{{ $id = int64 $id }}{{ end -}}
+{{- toString ($id | default "") -}}
+{{- end -}}
+
+{{- /* global.correlationId lower-cased (helm.canary.correlationIdString), the one form every value that routes on it
+       uses (DEVOPS-326): the dark stage's header route and the tests-dark X-MyCarrier-Canary header. TestEngine
+       requires the header lower case; slip ids are minted lower case. */ -}}
+{{- define "helm.canary.correlationId" -}}
+{{- lower (include "helm.canary.correlationIdString" .) -}}
+{{- end -}}
+
 {{- /* The leader of the release, which alone runs the dark-stage suite (D20): global.strategy.canary.leader, which must
        name one of the canary Rollouts, or the only canary Rollout when there is one; "" otherwise
        (helm.canary.configuredSteps fails, in every environment, when the dark stage needs a leader and there is none).
@@ -732,6 +885,31 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- if and $name (not (has $name $names)) }}{{ $names = append $names $name }}{{ end -}}
 {{- end -}}
 {{- toJson $names -}}
+{{- end -}}
+
+{{- /* The fewest pods a canary Rollout runs, as JSON {replicas, source, fix}: with KEDA, keda.idleReplicaCount when it
+       is set (KEDA scales the Rollout to it, below minReplicaCount, while its triggers are idle; Argo Rollouts v1.10.0
+       caps minPodsPerReplicaSet at spec.replicas and keeps a count of 0 at 0, CheckMinPodsPerReplicaSet in
+       utils/replicaset/canary.go, so the canary drops to 0 pods), else keda.minReplicaCount; autoscaling.minReplicas
+       with the HPA (helm.kedaCondition, helm.hpaCondition, as helm.specs.rollout decides); 1 with the top-level scaling
+       value (helm.specs.rollout then renders no replicas and Argo Rollouts runs 1); else the Rollout's replicas
+       (helm.specs.replicas). fix is the remedy the canary-floor check prints. */ -}}
+{{- define "helm.canary.minReplicas" -}}
+{{- $set := printf "Set applications.%s.%%s to 2 or more." .appName -}}
+{{- if eq "true" (include "helm.kedaCondition" . | trim) -}}
+  {{- $idle := dig "idleReplicaCount" nil (.application.keda | default dict) -}}
+  {{- if not (kindIs "invalid" $idle) -}}
+    {{- toJson (dict "replicas" ($idle | int) "source" "keda.idleReplicaCount: KEDA scales the Rollout to it while its triggers are idle" "fix" (printf "Remove applications.%s.keda.idleReplicaCount." .appName)) -}}
+  {{- else -}}
+    {{- toJson (dict "replicas" (include "helm.keda.minReplicaCount" . | int) "source" "keda.minReplicaCount" "fix" (printf $set "keda.minReplicaCount")) -}}
+  {{- end -}}
+{{- else if eq "true" (include "helm.hpaCondition" . | trim) -}}
+  {{- toJson (dict "replicas" (include "helm.hpa.minReplicas" . | int) "source" "autoscaling.minReplicas" "fix" (printf $set "autoscaling.minReplicas")) -}}
+{{- else if .Values.scaling -}}
+  {{- toJson (dict "replicas" 1 "source" "top-level scaling: the Rollout renders no replicas, and Argo Rollouts runs 1" "fix" "Remove the top-level scaling value, or scale the application with an HPA or KEDA whose minimum is 2 or more.") -}}
+{{- else -}}
+  {{- toJson (dict "replicas" ((include "helm.specs.replicas" . | fromYaml).replicas | int) "source" "replicas" "fix" (printf $set "replicas")) -}}
+{{- end -}}
 {{- end -}}
 
 {{- /* Number of Rollouts in the release that run canary steps (mycarrier.tech/rolloutGroupSize), counted as in

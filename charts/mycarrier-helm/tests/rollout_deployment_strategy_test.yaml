@@ -32,6 +32,13 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - exists:
           path: spec.strategy.canary.steps
@@ -176,6 +183,13 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts:
       - equal:
           path: spec.strategy.canary.steps
@@ -298,7 +312,9 @@ tests:
           path: metadata.name
           value: mycarrier-api-trigger
 
-  # The same values with the property flipped: the Services, the VirtualService and trafficRouting are identical.
+  # The same values with the property flipped: the Services, the VirtualService and trafficRouting are identical. The
+  # canary floor (minPodsPerReplicaSet) is not traffic topology: the canary Rollout's is 2 (DEVOPS-326), the rolling
+  # Rollout's stays 1 (the flip floor tests below).
   - it: flip keeps the traffic topology (canary)
     set:
       global: &topologyGlobal
@@ -318,6 +334,13 @@ tests:
             tag: "1.0.0"
           ports:
             http: 8080
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
     asserts: &topologyAsserts
       - template: rollout.yaml
         equal:
@@ -337,7 +360,6 @@ tests:
             canaryService: test-stack-api-preview
             dynamicStableScale: false
             abortScaleDownDelaySeconds: 30
-            minPodsPerReplicaSet: 1
       - template: service.yaml
         hasDocuments:
           count: 2
@@ -418,6 +440,30 @@ tests:
       environment: *preprod
       applications: *topologyApps
     asserts: *topologyAsserts
+
+  - it: flip floor (canary)
+    template: rollout.yaml
+    set:
+      global: *topologyGlobal
+      environment: *preprod
+      applications: *topologyApps
+    asserts:
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 2
+
+  - it: flip floor (rolling)
+    template: rollout.yaml
+    set:
+      global:
+        <<: *topologyGlobal
+        deploymentStrategy: rolling
+      environment: *preprod
+      applications: *topologyApps
+    asserts:
+      - equal:
+          path: spec.strategy.canary.minPodsPerReplicaSet
+          value: 1
 
   # The multi-frontend VirtualService check reads the managed routes, which come from the steps; a rolling frontend
   # Rollout has neither, so it renders without the steps' inputs (correlationId, a health path).

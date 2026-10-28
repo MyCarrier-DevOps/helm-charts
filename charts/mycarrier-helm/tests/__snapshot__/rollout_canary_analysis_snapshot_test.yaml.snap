@@ -2,12 +2,18 @@ references the default template set from the canary strategy:
   1: |
     abortScaleDownDelaySeconds: 30
     analysis:
-      startingStep: 1
+      startingStep: 8
       templates:
         - templateName: prod-mycarrier-api-alerts
+    canaryMetadata:
+      labels:
+        mycarrier.tech/rollout-role: canary
     canaryService: mycarrier-api-preview
     dynamicStableScale: false
-    minPodsPerReplicaSet: 1
+    minPodsPerReplicaSet: 2
+    stableMetadata:
+      labels:
+        mycarrier.tech/rollout-role: stable
     stableService: mycarrier-api
     steps:
       - plugin:
@@ -16,7 +22,36 @@ references the default template set from the canary strategy:
             name: start
             timeout: 9m
           name: mycarrier/canary-coordinator
+      - setCanaryScale:
+          replicas: 2
+      - setHeaderRoute:
+          match:
+            - headerName: X-MyCarrier-Canary
+              headerValue:
+                exact: corr-1
+          name: canary-header
+      - plugin:
+          config:
+            kind: barrier
+            name: dark-ready
+            timeout: 9m
+          name: mycarrier/canary-coordinator
+      - analysis:
+          templates:
+            - templateName: prod-mycarrier-api-tests-dark
+      - plugin:
+          config:
+            kind: barrier
+            name: dark-passed
+            timeout: 15m
+          name: mycarrier/canary-coordinator
+      - setHeaderRoute:
+          name: canary-header
+      - setCanaryScale:
+          weight: 10
       - setWeight: 10
+      - setCanaryScale:
+          matchTrafficWeight: true
       - analysis:
           templates:
             - templateName: prod-mycarrier-api-health
@@ -63,6 +98,8 @@ references the default template set from the canary strategy:
               - mycarrier-api-allowed-health
               - mycarrier-api-allowed-api
               - mycarrier-api-forbidden
+      managedRoutes:
+        - name: canary-header
 renders the default analysis template set:
   1: |
     metrics:
@@ -287,3 +324,402 @@ renders the default analysis template set:
             jsonPath: '{$}'
             timeoutSeconds: 15
             url: https://grafana.mycarrier.tech/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=true&filter=service%3D%22mycarrier%22&filter=environment%3D~%22prod%7C%22&filter=grafana_folder%21%3D%22Platform%22
+  4: |
+    metrics:
+      - count: 1
+        failureLimit: 0
+        inconclusiveLimit: 0
+        name: tests-dark
+        provider:
+          job:
+            spec:
+              activeDeadlineSeconds: 540
+              backoffLimit: 0
+              template:
+                metadata:
+                  annotations:
+                    sidecar.istio.io/inject: "false"
+                  labels:
+                    app.kubernetes.io/component: canary-analysis
+                    app.kubernetes.io/name: mycarrier-api-tests-dark
+                spec:
+                  containers:
+                    - command:
+                        - python3
+                        - -I
+                        - -B
+                        - -c
+                        - |
+                          import http.client, json, os, re, signal, ssl, sys, time, urllib.parse
+
+                          TERMINAL = ("passed", "failed", "no_results", "infra_failed")
+                          RUN_ID = re.compile(r"^[0-9a-f]{32}$")
+                          USER_AGENT = "mycarrier-helm-canary-tests/1"
+                          MAX_BODY = 1024 * 1024
+                          STARTED = time.monotonic()
+                          BUDGET = INTERVAL = NOT_FOUND_GRACE = RESUBMIT_FLOOR = 0.0
+                          REMEDY = ""
+                          WATCHDOG = {"armed": False}
+
+
+                          class Fail(Exception):
+                              """Ends the run with exit 1 and this reason."""
+
+
+                          class NoAnswer(Exception):
+                              """No HTTP answer in time: a DNS, connection, TLS or read error, or the end of the call's time."""
+
+
+                          def log(message):
+                              print("[%4ds] %s" % (time.monotonic() - STARTED, message), flush=True)
+
+
+                          def api_base(url):
+                              """The API root of the trigger URL: a trailing /v1/trigger or /trigger is removed, so the URL may name the v1
+                              trigger (as the hook's does), the legacy trigger or the API root."""
+                              url = url.strip().rstrip("/")
+                              for suffix in ("/v1/trigger", "/trigger"):
+                                  if url.endswith(suffix):
+                                      return url[: -len(suffix)]
+                              return url
+
+
+                          def detail(document, text):
+                              if isinstance(document, dict):
+                                  text = str(document.get("detail") or document.get("title") or text)
+                              return " ".join(text.split())[:500] or "(empty body)"
+
+
+                          def time_left(stop):
+                              left = stop - time.monotonic()
+                              if left <= 0:
+                                  raise TimeoutError()
+                              return left
+
+
+                          def on_alarm(signum, frame):
+                              if WATCHDOG["armed"]:
+                                  raise TimeoutError()  # interrupts a connect, send or read that would run past the call's end
+
+
+                          def read_body(response, sock, stop):
+                              """The body, read one chunk at a time with the socket timeout set to the time left, so a slow answer cannot run
+                              past the call's end. A body shorter than its Content-Length raises IncompleteRead."""
+                              chunks, size = [], 0
+                              while not response.isclosed():  # the response closes the socket once the whole body is read
+                                  sock.settimeout(time_left(stop))
+                                  chunk = response.read1(65536)
+                                  if not chunk:
+                                      break
+                                  size += len(chunk)
+                                  if size > MAX_BODY:
+                                      raise http.client.HTTPException("body too large")
+                                  chunks.append(chunk)
+                              if response.length:
+                                  raise http.client.IncompleteRead(b"", response.length)
+                              return b"".join(chunks)
+
+
+                          def call(method, url, key, deadline, body=None, limit=15):
+                              """(HTTP status, JSON document or None, body text); NoAnswer when there is no HTTP answer by the earlier of limit
+                              seconds and the poll budget. NoAnswer carries the error's type (gaierror, ConnectionRefusedError,
+                              SSLCertVerificationError, TimeoutError...), never its message: some messages name the host."""
+                              stop = min(time.monotonic() + limit, deadline)
+                              parts = urllib.parse.urlsplit(url)
+                              target = (parts.path or "/") + ("?" + parts.query if parts.query else "")
+                              headers = {"Authorization": key, "Accept": "application/json", "User-Agent": USER_AGENT}
+                              data = None
+                              if body is not None:
+                                  data = body.encode("utf-8")
+                                  headers["Content-Type"] = "application/json"
+                              connection = None
+                              try:
+                                  WATCHDOG["armed"] = True
+                                  signal.setitimer(signal.ITIMER_REAL, time_left(stop))
+                                  try:
+                                      if parts.scheme == "https":
+                                          connection = http.client.HTTPSConnection(parts.hostname, parts.port, timeout=time_left(stop),
+                                                                                   context=ssl.create_default_context())
+                                      else:
+                                          connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=time_left(stop))
+                                      connection.request(method, target, body=data, headers=headers)
+                                      sock = connection.sock
+                                      sock.settimeout(time_left(stop))
+                                      response = connection.getresponse()
+                                  except (http.client.HTTPException, OSError) as e:
+                                      raise NoAnswer(type(e).__name__)
+                                  try:
+                                      raw = read_body(response, sock, stop)
+                                  except (http.client.HTTPException, OSError) as e:
+                                      if 200 <= response.status < 300:
+                                          raise NoAnswer(type(e).__name__)
+                                      raw = b""  # an error answer counts by its status, also when its body cannot be read
+                              except TimeoutError:  # the time was up before the call, or the watchdog fired outside the guarded steps
+                                  raise NoAnswer("TimeoutError")
+                              finally:
+                                  WATCHDOG["armed"] = False
+                                  signal.setitimer(signal.ITIMER_REAL, 0)
+                                  if connection is not None:
+                                      connection.close()
+                              text = raw.decode("utf-8", "replace")
+                              try:
+                                  document = json.loads(text) if text.strip() else None
+                              except ValueError:
+                                  document = None
+                              return response.status, document, text
+
+
+                          def wait(deadline, reason):
+                              """Sleeps one poll interval, or fails when the poll budget is spent."""
+                              remaining = deadline - time.monotonic()
+                              if remaining <= 0:
+                                  raise Fail("%s; the poll budget of %g s (global.strategy.canary.analysis.tests.timeout) is spent" % (reason, BUDGET))
+                              time.sleep(min(INTERVAL, remaining))
+
+
+                          def preflight(base, key, kind, deadline):
+                              while True:
+                                  try:
+                                      status, document, text = call("GET", base + "/v1/capabilities", key, deadline)
+                                  except NoAnswer as e:
+                                      log("GET /v1/capabilities: no answer (%s)" % e)
+                                      wait(deadline, "GET /v1/capabilities never answered")
+                                      continue
+                                  if status == 404:
+                                      raise Fail("GET /v1/capabilities answered 404: this TestEngine has no run kinds (a build before MC.TestEngine#95,"
+                                                 " or the route is missing), so no tests were started. The canary tests need TestEngine with"
+                                                 " RUN_KINDS_ENABLED=true.")
+                                  if status == 401:
+                                      raise Fail("GET /v1/capabilities answered 401: TestEngine refused the key in TESTENGINE_APIKEY")
+                                  if status != 200 or not isinstance(document, dict):
+                                      raise Fail("GET /v1/capabilities answered HTTP %d: %s" % (status, detail(document, text)))
+                                  if document.get("run_kinds_enabled") is not True:
+                                      raise Fail("TestEngine has RUN_KINDS_ENABLED off (run_kinds_enabled: %s), so it refuses canary runs and no"
+                                                 " tests were started. Turn RUN_KINDS_ENABLED on in TestEngine, or %s."
+                                                 % (json.dumps(document.get("run_kinds_enabled")), REMEDY))
+                                  kinds = document.get("run_kinds")
+                                  if isinstance(kinds, list) and kind not in kinds:
+                                      raise Fail("TestEngine offers the run kinds %s, not %s; no tests were started" % (json.dumps(kinds), kind))
+                                  log("TestEngine %s: run kinds enabled" % (document.get("api_version") or "(no api_version)"))
+                                  return
+
+
+                          def submit(base, key, body, kind, step, deadline):
+                              """POSTs the request and returns (run id, time of the answer)."""
+                              while True:
+                                  if time.monotonic() >= deadline:
+                                      raise Fail("POST /v1/trigger was not sent: the poll budget of %g s"
+                                                 " (global.strategy.canary.analysis.tests.timeout) is spent" % BUDGET)
+                                  try:
+                                      status, document, text = call("POST", base + "/v1/trigger", key, deadline, body=body, limit=60)
+                                  except NoAnswer as e:
+                                      raise Fail("POST /v1/trigger: no answer (%s); it may have started a run, so it is not sent again" % e)
+                                  answered = time.monotonic()
+                                  if status == 425:
+                                      log("POST /v1/trigger answered 425 (%s): nothing was dispatched; the same request goes again"
+                                          % detail(document, text))
+                                      wait(deadline, "POST /v1/trigger kept answering 425")
+                                      continue
+                                  if status == 422 and "run kinds disabled" in text.lower():
+                                      raise Fail("POST /v1/trigger answered 422 run kinds disabled: TestEngine has RUN_KINDS_ENABLED off, so the"
+                                                 " platform paused canary runs; not retried. Turn RUN_KINDS_ENABLED on in TestEngine, or %s."
+                                                 % REMEDY)
+                                  if status == 401:
+                                      raise Fail("POST /v1/trigger answered 401: TestEngine refused the key in TESTENGINE_APIKEY")
+                                  if not 200 <= status < 300:
+                                      raise Fail("POST /v1/trigger answered HTTP %d: %s" % (status, detail(document, text)))
+                                  run_id = document.get("slip_aggregate_id") if isinstance(document, dict) else None
+                                  if not isinstance(run_id, str) or not RUN_ID.match(run_id):
+                                      raise Fail("POST /v1/trigger answered HTTP %d without a slip_aggregate_id to poll" % status)
+                                  members = document.get("test_batches")
+                                  if not isinstance(members, list) or not members or any(
+                                          not isinstance(m, dict) or m.get("run_kind") != kind or m.get("slip_step") != step for m in members):
+                                      raise Fail("run %s: TestEngine did not echo run_kind %s and slip_step %s for every member, so it treats the"
+                                                 " request as a default run; the run is not polled" % (run_id, kind, step))
+                                  log("POST /v1/trigger: run %s started (%d members, run_kind %s, slip_step %s)" % (run_id, len(members), kind, step))
+                                  return run_id, answered
+
+
+                          def poll(base, key, run_id, posted, deadline):
+                              last = "no answer yet"
+                              while True:
+                                  if time.monotonic() >= deadline:  # no call without time left, so the reason keeps the last status
+                                      wait(deadline, "run %s did not end in time (last status: %s)" % (run_id, last))
+                                  try:
+                                      status, document, text = call("GET", base + "/v1/runs/" + run_id, key, deadline)
+                                  except NoAnswer as e:
+                                      log("GET /v1/runs/%s: no answer (%s)" % (run_id, e))
+                                      if time.monotonic() < deadline:  # a call the end of the budget cut short keeps the last status
+                                          last = "no answer (%s)" % e
+                                  else:
+                                      if status == 200 and isinstance(document, dict) and isinstance(document.get("status"), str):
+                                          state = document["status"]
+                                          if state in TERMINAL:
+                                              message = " ".join(str(document.get("message") or "").split())[:500]
+                                              log("run %s: %s%s" % (run_id, state, " (%s)" % message if message else ""))
+                                              return state
+                                          if state != last:
+                                              log("run %s: %s" % (run_id, state))
+                                          last = state
+                                      elif status == 404:
+                                          waited = time.monotonic() - posted
+                                          if waited >= NOT_FOUND_GRACE:
+                                              raise Fail("GET /v1/runs/%s still answered 404 %d s after the POST: TestEngine has no record of the"
+                                                         " run (lost or expired), so its outcome is unknown" % (run_id, waited))
+                                          last = "404 (no record yet)"
+                                      elif status >= 500:
+                                          raise Fail("GET /v1/runs/%s answered HTTP %d%s: %s" % (
+                                              run_id, status, " (the run status store is unavailable)" if status == 503 else "",
+                                              detail(document, text)))
+                                      else:
+                                          raise Fail("GET /v1/runs/%s answered HTTP %d: %s" % (run_id, status, detail(document, text)))
+                                  wait(deadline, "run %s did not end in time (last status: %s)" % (run_id, last))
+
+
+                          def run():
+                              global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR, REMEDY
+                              BUDGET = float(os.environ.get("TESTS_BUDGET_SECONDS") or 420)
+                              INTERVAL = float(os.environ.get("TESTS_POLL_INTERVAL_SECONDS") or 10)
+                              REMEDY = os.environ.get("TESTS_REMEDY") or ""
+                              NOT_FOUND_GRACE = float(os.environ.get("TESTS_NOT_FOUND_GRACE_SECONDS") or 60)
+                              RESUBMIT_FLOOR = float(os.environ.get("TESTS_RESUBMIT_FLOOR_SECONDS") or 60)
+                              signal.signal(signal.SIGALRM, on_alarm)
+                              deadline = STARTED + BUDGET
+                              url = os.environ.get("TESTENGINE_URL") or ""
+                              key = (os.environ.get("TESTENGINE_APIKEY") or "").strip()
+                              if url.startswith("vault:") or key.startswith("vault:"):
+                                  raise Fail("TESTENGINE_URL or TESTENGINE_APIKEY is still a vault: reference: the Vault webhook did not inject"
+                                             " it into the pod")
+                              if not key:
+                                  raise Fail("TESTENGINE_APIKEY is empty (check the Vault property)")
+                              if any(not 32 <= ord(c) < 127 for c in key):
+                                  raise Fail("TESTENGINE_APIKEY holds characters that cannot go in an HTTP header (only printable ASCII can);"
+                                             " check the Vault property")
+                              parts = urllib.parse.urlsplit(url.strip())
+                              try:
+                                  valid_url = parts.scheme in ("http", "https") and bool(parts.hostname) and (parts.port or 1) > 0
+                              except ValueError:
+                                  valid_url = False
+                              if not valid_url:
+                                  raise Fail("TESTENGINE_URL is not an http(s) URL with a host")
+                              body = os.environ.get("TESTS_REQUEST") or ""
+                              try:
+                                  environment = json.loads(body)["Tests"][0]["TestEnvironmentVariables"]
+                                  kind, step = environment["RunKind"], environment["SlipStep"]
+                              except (ValueError, LookupError, TypeError):
+                                  raise Fail("TESTS_REQUEST is not a v1 request with RunKind and SlipStep in its first test")
+                              base = api_base(url)
+                              preflight(base, key, kind, deadline)
+                              for attempt in (1, 2):
+                                  run_id, posted = submit(base, key, body, kind, step, deadline)
+                                  state = poll(base, key, run_id, posted, deadline)
+                                  if state == "passed":
+                                      log("PASS: run %s passed" % run_id)
+                                      return 0
+                                  if state == "failed":
+                                      raise Fail("run %s failed: the tests failed or timed out in TestEngine" % run_id)
+                                  if attempt == 1:
+                                      left = deadline - time.monotonic()
+                                      if left < RESUBMIT_FLOOR:
+                                          raise Fail("run %s ended %s, and the resubmit was skipped: %d s of the poll budget is left, less than"
+                                                     " the %g s a new run needs at least" % (run_id, state, max(left, 0), RESUBMIT_FLOOR))
+                                      log("run %s ended %s; the request goes once more as a new run" % (run_id, state))
+                                      continue
+                                  raise Fail("run %s ended %s again after one resubmit. no_results: the filters matched no test, or the test"
+                                             " container could not write its results (check its log); infra_failed: TestEngine could not run"
+                                             " the tests" % (run_id, state))
+
+
+                          def main():
+                              try:
+                                  return run()
+                              except Fail as e:
+                                  log("FAIL: %s" % e)
+                              except Exception as e:  # never the message or a traceback: they can hold the URL or the key
+                                  log("FAIL: unexpected %s" % type(e).__name__)
+                              return 1
+
+
+                          sys.exit(main())
+                      env:
+                        - name: TESTENGINE_URL
+                          value: vault:DevOps/data/testengine/api/v1#url
+                        - name: TESTENGINE_APIKEY
+                          value: vault:DevOps/data/testengine/api#encoded_header
+                        - name: TESTS_BUDGET_SECONDS
+                          value: "420"
+                        - name: TESTS_REQUEST
+                          value: |-
+                            {
+                              "Tests": [
+                                {
+                                  "ContainerImage": "testing/mycarrier/api/tests",
+                                  "ContainerTag": "1.0.0",
+                                  "HardenedSecurityContext": true,
+                                  "IsMonolith": false,
+                                  "NodeAffinity": [],
+                                  "PodResources": {
+                                    "limits": {
+                                      "cpu": "2000m",
+                                      "memory": "4Gi"
+                                    },
+                                    "requests": {
+                                      "cpu": "250m",
+                                      "memory": "1Gi"
+                                    }
+                                  },
+                                  "SpreadAcrossNodes": "true",
+                                  "StackName": "mycarrier",
+                                  "TestEnvironmentVariables": {
+                                    "AdditionalEnvVars": "",
+                                    "BranchName": "",
+                                    "CorrelationId": "corr-1",
+                                    "EnvironmentName": "prod",
+                                    "LegacyMode": "false",
+                                    "ReleaseDefinitionName": "mycarrier-api",
+                                    "ReleaseId": "1.0.0",
+                                    "RequestHeaders": {
+                                      "X-MyCarrier-Canary": "corr-1"
+                                    },
+                                    "RunKind": "canary",
+                                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                                    "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080",
+                                    "SlipStep": "none"
+                                  },
+                                  "TestFilters": [
+                                    "TestCategory=CoreAPI"
+                                  ],
+                                  "TestName": "apitests",
+                                  "Tolerations": [],
+                                  "UseDefaultNodeAffinity": "false"
+                                }
+                              ]
+                            }
+                        - name: TESTS_REMEDY
+                          value: 'set global.strategy.canary.dark: false'
+                      image: python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516
+                      name: tests-dark
+                      resources:
+                        limits:
+                          cpu: 500m
+                          memory: 256Mi
+                        requests:
+                          cpu: 50m
+                          memory: 64Mi
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities:
+                          drop:
+                            - ALL
+                        privileged: false
+                        readOnlyRootFilesystem: true
+                        runAsGroup: 3000
+                        runAsNonRoot: true
+                        runAsUser: 1000
+                      terminationMessagePolicy: FallbackToLogsOnError
+                  restartPolicy: Never
+                  securityContext:
+                    runAsGroup: 3000
+                    runAsNonRoot: true
+                    runAsUser: 1000
+                  tolerations: []

@@ -1,0 +1,7 @@
+# The dark stage (global.strategy.canary.dark, on by default since DEVOPS-326) turned off, for suites whose canary
+# Rollouts are not about it: with it on, the leader needs testtrigger.testdefinitions for its tests-dark, and the
+# steps start with the dark stage. A test's own set overrides it.
+global:
+  strategy:
+    canary:
+      dark: false

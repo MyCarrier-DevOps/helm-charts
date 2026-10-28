@@ -84,13 +84,16 @@ coordinator on:
 | A frontend Rollout in a multi-frontend release | Set `global.strategy.canary.dark: false`: the header route would also go into the shared `-multifrontend` VirtualService, where it matches every path. |
 | `coordinator.barrierTimeouts` at or above `progressDeadlineSeconds` (the 4.6.0 defaults were 10m, 15m and 30m) | The defaults are now 9m. Keep a custom timeout below `progressDeadlineSeconds`, or raise the deadline: Argo Rollouts counts the wait at a barrier toward it, so a longer barrier timeout never fires. |
 
-Since 4.7.9, `dark` defaults to `false` and `coordinator.enabled` defaults to `true` (see below).
+From 4.7.9 to 4.7.12, `dark` defaulted to `false`, and `coordinator.enabled` defaults to `true` since 4.7.9 (see below).
+Since the release after 4.7.12, `dark` defaults to `true` again, with `darkReplicas` 2 and a chart-rendered `tests-dark`
+(see [The dark stage on by default](#the-dark-stage-on-by-default-in-the-release-after-4712-canary-rollouts)).
 
 ## Upgrading to 4.7.9 (Rollouts)
 
 4.7.9 makes canary analysis mandatory for every Rollout (DEVOPS-312). Each analysis step runs the
 chart's `health` check, and in prod the Rollout runs the chart's `alerts` check as background analysis, unless a stack
-opts out of one of them. The coordinator is on by default, and the dark stage is off by default. Deployment and
+opts out of one of them. The coordinator is on by default, and the dark stage was off by default (on since the release
+after 4.7.12). Deployment and
 StatefulSet apps render unchanged, except where the values below fail the whole render.
 
 `testtrigger.enableV1` now defaults to `true` for every application, because TestEngine's legacy API is retired. A test
@@ -101,7 +104,8 @@ It also renders the contract the release's rollout-watch reads (DEVOPS-319). Eve
 carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100) and
 `mycarrier.tech/canaryBudgetSeconds`, the worst-case length of its steps (Tech Spec D22). rollout-watch times out at the
 largest budget of the release plus 15 minutes. The chart computes the budget for a preset: 3330 s for `standard`, 1170 s
-for `fast` and 4770 s for `manual`, whose pause counts as `manualTimeout` (default `1h`). With the coordinator off,
+for `fast` and 4770 s for `manual`, whose pause counts as `manualTimeout` (default `1h` then; 40m since the release after
+4.7.12, which also changes these budgets). With the coordinator off,
 each weight step above 0 counts `progressDeadlineSeconds` instead of the barriers: 3570 s, 1290 s and 4890 s. An explicit `steps` list
 states it in `budgetSeconds`. A budget above 5700 s fails the render. In prod, a
 canary Rollout's test trigger no longer renders the `<fullName>-trigger` PostSync hook (Tech Spec D7): with
@@ -121,8 +125,8 @@ TestEngine v1 request, labelled `mycarrier.tech/correlationId`), and rollout-wat
 | Relied on the dark stage (`coordinator.enabled: true` with the old `dark` default) | Set `dark: true`; a `tests-dark` AnalysisTemplate must then render for the leader. |
 | `global.strategy.canary.bakeMinutes` above 100 | Set it to 100 or less: alert-gate's run has a 7200 s deadline and spends about 750 s outside its window. Above 100 fails every render. |
 | An explicit `global.strategy.canary.steps` list | Set `global.strategy.canary.budgetSeconds` to the steps' worst-case length in seconds (1 to 5700): the pause durations, each analysis step's longest template (`count` x max(`interval`, a Job's `activeDeadlineSeconds`)) and each barrier timeout, or without barriers `progressDeadlineSeconds` for each weight step above 0. Without it, every Rollout fails to render. |
-| The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h`) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
-| A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (at 45m, the manual preset with the dark stage leaves 750 s for the leader's `tests-dark`), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
+| The `manual` preset | Nothing to set: its pause counts as `manualTimeout` (default `1h` on 4.7.9 to 4.7.12, `40m` since) in the budget, and the pause itself still has no time limit. Set `manualTimeout` to the time a person needs to promote or abort. With the manual preset, a zero `manualTimeout` fails the render. |
+| A preset whose steps add up to more than 5700 s: the `manual` preset with `dark: true` (at least 5850 s with the defaults on 4.7.9 to 4.7.12; since the release after 4.7.12 the defaults fit, 5583 s for the manual leader with `manualTimeout` 40m), or raised `coordinator.barrierTimeouts`, `analysis.health` or extra templates | Lower `manualTimeout` (on 4.7.9 to 4.7.12, 45m left 750 s for the leader's `tests-dark`; since the release after 4.7.12, with `dark-passed` at 15m, the default 40m fits and 45m fails at 5883 s), the barrier timeouts, or the templates' `count` or `interval`. rollout-watch's release workflow has a 10800 s deadline and spends about 70 minutes before the canary and 15 minutes after the budget. |
 | A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: false` | Remove it (`true` is the default). The chart renders no PostSync hook for it, and rollout-watch starts only v1 requests, so `false` fails the render. |
 | A stack that switches to Rollouts while its repository's `deployment-strategy` is `rolling` or unset | Nothing is required. Since the release after 4.7.10 the chart reads the property (`global.deploymentStrategy`): a Rollout renders canary steps, and drops its prod PostSync hook, only when it is `canary`. Otherwise it renders without steps and keeps its hook. |
 | A prod canary Rollout app (property `canary`) with `testtrigger.enableV1: true` and an `apikey` other than `vault:DevOps/data/testengine/api#encoded_header` | Remove `apikey` or set the shared key: rollout-watch posts with it, and another key fails the render. |
@@ -148,7 +152,9 @@ extra template that does not render, a barrier timeout at or above `progressDead
 leader's `tests-dark`, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s and a zero `manualTimeout`
 with the manual preset fail the render outside prod too. A stack moves to canary as a whole, so the same Rollouts exist
 in every environment, and it sees these failures on its first render, not at its first prod canary. Only
-`global.correlationId` for the coordinator is required just where the steps render.
+`global.correlationId` for the coordinator is required just where the steps render. Since the release after 4.7.12 the
+canary pod floor (a minimum of 2 replicas) is checked there too, and the dark stage adds its own checks (see
+[The dark stage on by default](#the-dark-stage-on-by-default-in-the-release-after-4712-canary-rollouts)).
 
 | 4.7.9 values | Edit |
 |---|---|
@@ -213,13 +219,13 @@ mirror.
 | Values | Effect |
 |---|---|
 | `analysis.templates: [tests]` | Every canary Rollout application needs `testtrigger.testdefinitions` in that environment, or the render fails. The template renders in every environment where it is listed, like `health`. To roll back, remove `tests` from the list. |
-| `analysis.tests.timeout` (default `7m`) | The poll budget. The Job's `activeDeadlineSeconds` is the timeout + `startupSeconds` (540 s by default), and the canary budget counts it, with the 33 s Argo Rollouts can take to see the Job end, for each analysis step: 4779 s for `standard`, 1653 s for `fast` and 5253 s for `manual` with the defaults. With the coordinator on and more than one canary Rollout, one Rollout's longest run of an analysis step (its longest template; a Job adds ceil(sqrt(2 x `activeDeadlineSeconds`)) for Argo to see it end) minus another's shortest ((count - 1) x interval of its templates) must stay below the next barrier's timeout (9m), or the render fails: two Rollouts with the defaults wait 513 s. Several analysis steps between two barriers add up; each Rollout's own `analysisTemplates` replacements count; at `dark-passed` only the leader's `tests-dark` counts. A release with one canary Rollout has no barrier wait. |
+| `analysis.tests.timeout` (default `7m`) | The poll budget. The Job's `activeDeadlineSeconds` is the timeout + `startupSeconds` (540 s by default), and the canary budget counts it, with the 33 s Argo Rollouts can take to see the Job end, for each analysis step: 4779 s for `standard`, 1653 s for `fast` and 4053 s for `manual` with `dark: false` (which `tests` needs since the release after 4.7.12) and the other defaults. With the coordinator on and more than one canary Rollout, one Rollout's longest run of an analysis step (its longest template; a Job adds ceil(sqrt(2 x `activeDeadlineSeconds`)) for Argo to see it end) minus another's shortest ((count - 1) x interval of its templates) must stay below the next barrier's timeout (9m), or the render fails: two Rollouts with the defaults wait 513 s. Several analysis steps between two barriers add up; each Rollout's own `analysisTemplates` replacements count; at `dark-passed` only the leader's `tests-dark` counts. A release with one canary Rollout has no barrier wait. |
 | `analysis.tests.startupSeconds` (default `120`, 30 to 600) | Slack for the Job's pod to start (scheduling, an on-demand node, the image pull, Vault injection): Kubernetes counts `activeDeadlineSeconds` from the Job's creation. A pod still Pending past it ends `DeadlineExceeded`, with no `FAIL:` line, and a TestEngine run already started is left running. |
 | `analysis.tests.image` | The Job's Python image; the default is the pinned image of the alerts check. |
 | A prod filter whose first `TestCategory` starts with `preprod` | Fails the render: TestEngine refuses it in a prod canary. |
 | A test definition's `serviceAddress` | Must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port; the canary run keeps its path on the `-preview` Service. Another host or port fails the render, and so does a `-preview` Service with no `http` port. |
 | `testtrigger.apikey` | Unset (the shared `vault:DevOps/data/testengine/api#encoded_header`) or a `vault:` reference; a literal key fails the render. |
-| Managed routes (`dark: true` with the coordinator on, or a `setHeaderRoute` or `setMirrorRoute` step in explicit `steps`), `coordinator.enabled: false` with more than one canary Rollout, or no `global.correlationId` where the steps render | Fails the render: TestEngine's DeployVerifier fails a canary run without the canary header on a Rollout with managed routes, and checks every Rollout of the correlation group; TestEngine refuses a run without a CorrelationId. With the coordinator off, `dark: true` adds no route. |
+| Managed routes (`dark: true`, the default since the release after 4.7.12, with the coordinator on and a preset, or a `setHeaderRoute` or `setMirrorRoute` step in explicit `steps`), `coordinator.enabled: false` with more than one canary Rollout, or no `global.correlationId` where the steps render | Fails the render: TestEngine's DeployVerifier fails a canary run without the canary header on a Rollout with managed routes, and checks every Rollout of the correlation group; TestEngine refuses a run without a CorrelationId. With the coordinator off, `dark: true` adds no route. With the dark stage on, set `dark: false` with `tests` until Q54 (a DeployVerifier check of header-less canary runs per Rollout) is resolved; `tests-dark` runs the suite in the dark stage. |
 
 **Breaking (canary budget).** `mycarrier.tech/canaryBudgetSeconds` now counts a `job` analysis template at its longest:
 `activeDeadlineSeconds` + ceil(sqrt(2 x `activeDeadlineSeconds`)) (the time Argo Rollouts v1.10.0 can take to see a Job
@@ -233,6 +239,63 @@ an explicit `steps` list.
 The prod TestEngine runs with `RUN_KINDS_ENABLED=false` until the DEVOPS-321 pilot; until then, a prod canary with
 `tests` fails at its first analysis step. The 4.7.11 schema refuses `analysis.tests`, and 4.7.11 fails the render of a
 canary Rollout that lists `tests`.
+
+## The dark stage on by default in the release after 4.7.12 (canary Rollouts)
+
+The release after 4.7.12 turns the Tech Spec's header-gated dark stage on by default and renders its `tests-dark`
+AnalysisTemplate (DEVOPS-326). It changes canary Rollouts only (`deploymentType: rollout`, without
+`migratingToRollouts`, in a repository whose `deployment-strategy` property is `canary`). Deployments, StatefulSets,
+migrating Rollouts and Rollouts whose property is not `canary` render unchanged.
+
+With the coordinator on and a preset, each canary Rollout of the release runs the dark stage after its `start` barrier,
+where its steps render (prod, or `stepsOutsideProd`): `darkReplicas` canary pods (default 2, at least 2) at weight 0, a
+`canary-header` route that sends `X-MyCarrier-Canary: <global.correlationId, lower-cased>` to the canary, the
+`dark-ready` barrier, the leader's `<environment>-<fullName>-tests-dark` analysis, the `dark-passed` barrier (15m), and
+the removal of the route. `tests-dark` is the chart's `tests` Job sent to the leader's stable Service with that header,
+`RunKind: canary` and `SlipStep: none`; a failing suite aborts the release before any customer HTTP request reaches a
+canary through the routes. Queue-driven work is not gated: the canary pods of a Rollout that consumes a queue (a KEDA
+or Service Bus worker) do real work through the whole dark window, and their HTTP calls to the release's other canary
+Rollouts reach those Rollouts' canaries, still untested, through the source routes. The first weight W is then wrapped in `setCanaryScale {weight: W}`, `setWeight W` and
+`setCanaryScale {matchTrafficWeight: true}`, so the canary is sized for W% before traffic moves and never drops to 0.
+
+Every canary Rollout renders `minPodsPerReplicaSet: 2`: the canary has at least 2 pods at every weight and otherwise
+follows the weight. Where the steps render, the coordinator is on and the steps move in lock-step (a preset, or an
+explicit `steps` list with a canary-coordinator barrier between every two `setWeight` steps), canary pods are labelled
+`mycarrier.tech/rollout-role: canary` (`canaryMetadata`; stable pods `stable`), and each application's VirtualService
+gets a `<route>-canary-source` route before each route with the `-preview` destination and no `fault` or `redirect`.
+It matches in-mesh callers (`gateways: [mesh]`; a match of the original whose own `gateways` leave out `mesh` is left
+out, and a route with no match left gets no source route) whose pods carry that label and the release's
+`mycarrier.tech/correlationId` (as the pod renders it), and sends them to the `-preview` destination, so a release's
+canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
+host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, so a public
+request with the release's correlation id in the header reaches the canary during the dark stage (an accepted risk). After
+one Rollout of the release aborts, for up to about 30 s (`abortScaleDownDelaySeconds`) the others' canary pods that call
+it reach its aborted canary pods or its stable pods, then stable. The source routes render only with the coordinator
+and its barriers between weights, for load proportionality: the barriers move the release's Rollouts through the same
+weights in lock-step, while without them a caller can be at 50% and its callee at 10%, and the caller canary's whole
+share would go to a callee canary sized for 10%. A preset has a barrier after each weight; an explicit `steps` list
+gets the source routes only when it has a canary-coordinator barrier between every two `setWeight` steps, as a preset
+does. Even in lock-step, at weight W a callee's canary receives about W x (2 - W) of its callers' traffic (the caller
+canary's share plus W of the caller stable's share) on pods sized for W, at least 2: about 1.9 times its weight's share
+at 10%, 1.75 times at 25%, 1.5 times at 50%. It compounds down a call chain, an HPA averaging over all pods does not
+correct it, and the 2-pod floor absorbs it at small replica counts; the DEVOPS-321 pilot watches canary pod CPU and
+latency against stable on callees that take most of their traffic from a sibling.
+
+| Before | Edit |
+|---|---|
+| A release with two or more canary Rollouts and no `global.strategy.canary.leader` | Set `leader` to the application that runs the dark suite, or set `dark: false`. The render fails in every environment. |
+| A leader without `testtrigger.testdefinitions` in an environment | Add test definitions to it in every environment, define a `tests-dark` entry under its `analysisTemplates`, or set `dark: false` there. The render fails in every environment, also where the steps do not render. |
+| `tests` in `analysis.templates` | Set `dark: false` with it until Q54 is resolved, or remove `tests`: the dark stage runs the suite once at weight 0. |
+| A frontend Rollout in a multi-frontend release | Set `dark: false`: the header route would also go into the shared `-multifrontend` VirtualService. |
+| `darkReplicas: 1` | Remove it, or set 2 or more. |
+| `progressDeadlineSeconds` (global or per application) at or below 900 | Remove it (default 1200 with the dark stage; 600 with `dark: false`, explicit `steps`, the coordinator off and on other Rollouts) or raise it above every barrier timeout, `dark-passed`'s 15m included. |
+| `coordinator.barrierTimeouts.dark-passed` (default 15m, was 9m) at or below the leader's `tests-dark` (573 s with the defaults), with two or more canary Rollouts | Raise it, or lower `analysis.tests.timeout`. |
+| A canary Rollout whose minimum replicas (`autoscaling.minReplicas`, `keda.idleReplicaCount` when set, else `keda.minReplicaCount`, else `replicas`; 1 with the top-level `scaling` value and no autoscaler) is below 2 where the steps render | Set it to 2 or more, and remove `keda.idleReplicaCount`: KEDA scales the Rollout to it while its triggers are idle, and the canary then drops to 0 pods. `dev` and `feature<N>` default to 1 replica, so a drill there with `stepsOutsideProd` sets `replicas: 2`. |
+| A budget near 5700 s | The budgets with the defaults are, leader / follower: `standard` 5343 s / 4770 s, `fast` 3183 s / 2610 s, `manual` 5583 s / 5010 s (`manualTimeout` now defaults to 40m, was 1h). Lower raised barrier timeouts, `tests.timeout` or `manualTimeout`, or set `dark: false`. |
+| A prod canary before the DEVOPS-321 pilot | Set `dark: false`: the prod TestEngine runs with `RUN_KINDS_ENABLED=false`, so `tests-dark` fails and the release aborts. |
+
+To roll back, set `global.strategy.canary.dark: false`. The canary pod floor and the canary source routes stay; they
+go only with the chart version.
 
 ## Chart Structure
 
