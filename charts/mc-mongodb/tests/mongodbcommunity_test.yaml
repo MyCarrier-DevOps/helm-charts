@@ -1,0 +1,67 @@
+suite: MongoDBCommunity
+templates:
+  - templates/mongodbcommunity.yaml
+release:
+  name: mydb
+  namespace: tools
+tests:
+  - it: renders a single-member SCRAM replica set by default
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: MongoDBCommunity}
+      - equal: {path: apiVersion, value: mongodbcommunity.mongodb.com/v1}
+      - equal: {path: metadata.name, value: mydb-mc-mongodb}
+      - equal: {path: metadata.namespace, value: tools}
+      - equal: {path: spec.type, value: ReplicaSet}
+      - equal: {path: spec.members, value: 1}
+      - equal: {path: spec.version, value: "8.0.34"}
+      - equal: {path: spec.featureCompatibilityVersion, value: "8.0"}
+      - equal: {path: spec.security.authentication.modes, value: [SCRAM]}
+
+  - it: sets the member count
+    set:
+      members: 3
+    asserts:
+      - equal: {path: spec.members, value: 3}
+
+  - it: gives the app user access to any database, with its password from the generated secret
+    asserts:
+      - equal: {path: "spec.users[0].name", value: app}
+      - equal: {path: "spec.users[0].db", value: admin}
+      - equal: {path: "spec.users[0].passwordSecretRef", value: {name: mydb-mc-mongodb-connection, key: password}}
+      - equal: {path: "spec.users[0].scramCredentialsSecretName", value: mydb-mc-mongodb-app}
+      - contains: {path: "spec.users[0].roles", content: {name: readWriteAnyDatabase, db: admin}}
+      - contains: {path: "spec.users[0].roles", content: {name: dbAdminAnyDatabase, db: admin}}
+
+  - it: gives the backup user the backup and restore roles
+    asserts:
+      - equal: {path: "spec.users[1].name", value: backup}
+      - equal: {path: "spec.users[1].db", value: admin}
+      - equal: {path: "spec.users[1].passwordSecretRef", value: {name: mydb-mc-mongodb-backup-connection, key: password}}
+      - equal: {path: "spec.users[1].scramCredentialsSecretName", value: mydb-mc-mongodb-backup}
+      - equal: {path: "spec.users[1].roles", value: [{name: backup, db: admin}, {name: restore, db: admin}]}
+
+  - it: keeps pods out of the mesh with the runtime default seccomp profile
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "false"}
+      - equal: {path: spec.statefulSet.spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault}
+
+  - it: sets mongod resources
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].name", value: mongod}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].resources.requests.memory", value: 512Mi}
+
+  - it: sizes the data volume and leaves the storage class to the cluster by default
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].metadata.name", value: data-volume}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 10Gi}
+      - notExists: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName"}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.accessModes", value: [ReadWriteOnce]}
+
+  - it: honours storage size and class
+    set:
+      storage.size: 50Gi
+      storage.storageClassName: managed-csi-premium
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 50Gi}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName", value: managed-csi-premium}
