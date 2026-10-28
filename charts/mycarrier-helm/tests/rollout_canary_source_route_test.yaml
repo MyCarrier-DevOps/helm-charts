@@ -2,9 +2,9 @@ suite: Rollout canary source routes (canary pods of a release call its canaries,
 # Where a canary Rollout's steps render with the coordinator's barriers between weights (a preset, or an explicit steps
 # list with a barrier between every two setWeight steps), its VirtualService gets a <route>-canary-source twin
 # immediately before every route that has the app's -preview destination and no fault or redirect. The twin matches
-# only callers in the mesh whose pods carry the release's canary labels (Argo Rollouts' canaryMetadata,
-# mycarrier.tech/rollout-role: canary, and the pod's own mycarrier.tech/correlationId label) and sends them to the
-# -preview Service; everything else of the original route (headers, timeout, retries, rewrite, CORS) carries over, so a
+# only callers whose pods carry the release's canary labels (sourceLabels: Argo Rollouts' canaryMetadata,
+# mycarrier.tech/rollout-role: canary, and the pod's own mycarrier.tech/correlationId label; no gateways) and sends
+# them to the -preview Service; everything else of the original route (headers, timeout, retries, rewrite, CORS) carries over, so a
 # canary caller gets the outcome a stable caller gets, served by the canary. Routes without a twin (-forbidden,
 # redirects, routes to other hosts) answer canary callers exactly as they answer stable ones. The dark stage is off
 # here; the twins do not depend on it.
@@ -96,7 +96,7 @@ tests:
             name: test-stack-api-forbidden-canary-source
           any: true
 
-  - it: twin matches canary pods of this release in the mesh only
+  - it: twin matches canary pods of this release by source labels only
     set:
       applications:
         api:
@@ -126,14 +126,13 @@ tests:
                 sourceLabels:
                   mycarrier.tech/rollout-role: canary
                   mycarrier.tech/correlationId: ABC-12
-                gateways: [mesh]
             route:
               - destination:
                   host: test-stack-api-preview.prod.svc.cluster.local
                   port:
                     number: 8080
       - equal: {path: "spec.http[1].name", value: test-stack-api}
-      # The catch-all canary route has no match: its twin gets one match of just the caller conditions.
+      # The catch-all canary route has no match: its twin gets one match of just the source labels.
       - equal:
           path: spec.http[2]
           value:
@@ -142,7 +141,6 @@ tests:
               - sourceLabels:
                   mycarrier.tech/rollout-role: canary
                   mycarrier.tech/correlationId: ABC-12
-                gateways: [mesh]
             route:
               - destination:
                   host: test-stack-api-preview.prod.svc.cluster.local
@@ -158,6 +156,67 @@ tests:
               attempts: 3
               perTryTimeout: 50s
       - equal: {path: "spec.http[3].name", value: canary}
+
+  # Istio skips sourceLabels on a match that sets gateways: a sidecar keeps the match when its gateway set (which always
+  # holds mesh) contains one of them, whatever its pod labels (pilot/pkg/networking/core/route/route.go,
+  # sourceMatchHTTP, Istio 1.27.1 lines 443-460). A twin match with gateways: [mesh] sent every in-mesh caller to the
+  # canary, so no twin match carries gateways, whichever route it comes from.
+  - it: no twin match carries gateways (allowlist and custom routes)
+    set:
+      global.language: csharp
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+          networking:
+            istio:
+              routes:
+                both:
+                  match: [{uri: {prefix: /both}, gateways: [mesh, istio-system/ingress]}]
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[0].name", value: test-stack-api-canary-source}
+      - notExists: {path: "spec.http[0].match[0].gateways"}
+      - equal: {path: "spec.http[2].name", value: both-canary-source}
+      - equal:
+          path: spec.http[2].match
+          value:
+            - uri:
+                prefix: /both
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+      - equal: {path: "spec.http[4].name", value: test-stack-api-allowed-liveness-canary-source}
+      - equal:
+          path: spec.http[4].match
+          value:
+            - uri:
+                exact: /liveness
+              sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+      - notExists: {path: "spec.http[?(@.name =~ /-canary-source$/)].match[*].gateways"}
+
+  - it: no twin match carries gateways (route without a match)
+    set:
+      applications:
+        api:
+          deploymentType: rollout
+          replicas: 2
+          image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+          ports: {http: 8080}
+    template: virtualService.yaml
+    asserts:
+      - equal: {path: "spec.http[2].name", value: canary-canary-source}
+      - equal:
+          path: spec.http[2].match
+          value:
+            - sourceLabels:
+                mycarrier.tech/rollout-role: canary
+                mycarrier.tech/correlationId: ABC-12
+      - notExists: {path: "spec.http[?(@.name =~ /-canary-source$/)].match[*].gateways"}
 
   # Istio sourceLabels compare exactly, so the twin carries the pod label's value as the pod template renders it (the
   # id's own case, cut to 63 characters, numbers as their digits), not the lower-cased form the header values use.
@@ -256,7 +315,6 @@ tests:
             sourceLabels:
               mycarrier.tech/rollout-role: canary
               mycarrier.tech/correlationId: ABC-12
-            gateways: [mesh]
       - equal: {path: "spec.http[2].name", value: grpc-canary-source}
       - equal:
           path: spec.http[2].route[0].destination.port.number
@@ -269,7 +327,6 @@ tests:
               sourceLabels:
                 mycarrier.tech/rollout-role: canary
                 mycarrier.tech/correlationId: ABC-12
-              gateways: [mesh]
       - equal: {path: "spec.http[10].name", value: test-stack-api-allowed-v1-thing-canary-source}
       - equal:
           path: spec.http[10].route
@@ -286,7 +343,6 @@ tests:
               sourceLabels:
                 mycarrier.tech/rollout-role: canary
                 mycarrier.tech/correlationId: ABC-12
-              gateways: [mesh]
 
   - it: twins keep port and matches with enforceAllowlistOnEnvironmentHeader false
     set:
@@ -313,7 +369,6 @@ tests:
                 sourceLabels:
                   mycarrier.tech/rollout-role: canary
                   mycarrier.tech/correlationId: ABC-12
-                gateways: [mesh]
             route:
               - destination:
                   host: test-stack-api-preview.prod.svc.cluster.local
@@ -357,7 +412,6 @@ tests:
                 sourceLabels:
                   mycarrier.tech/rollout-role: canary
                   mycarrier.tech/correlationId: ABC-12
-                gateways: [mesh]
             route:
               - destination:
                   host: test-stack-api-preview.prod.svc.cluster.local
@@ -744,8 +798,8 @@ tests:
             name: external-canary-source
           any: true
 
-  # Entries without gateways, or with mesh among them, keep their twin entry; an entry bound to the mesh and a gateway
-  # keeps only mesh in its twin, as the caller conditions require.
+  # Entries without gateways, or with mesh among them, keep their twin entry; the twin entry drops the gateways, since
+  # Istio skips sourceLabels on a match that sets them.
   - it: twin keeps only the match entries that can match in the mesh
     set:
       applications:
@@ -773,13 +827,11 @@ tests:
               sourceLabels:
                 mycarrier.tech/rollout-role: canary
                 mycarrier.tech/correlationId: ABC-12
-              gateways: [mesh]
             - uri:
                 prefix: /any
               sourceLabels:
                 mycarrier.tech/rollout-role: canary
                 mycarrier.tech/correlationId: ABC-12
-              gateways: [mesh]
       - equal: {path: "spec.http[3].name", value: mixed}
       - lengthEqual:
           path: spec.http[3].match

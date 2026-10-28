@@ -740,14 +740,20 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
        -preview destination and no fault or redirect, as JSON (DEVOPS-326 spec A3). Takes http (the parsed routes) and
        context (the app context) and ctx (its helm.context); helm.specs.virtualservice calls it where
        helm.canary.sourceRoutesRendered is true.
-       A source route, <name>-canary-source, takes every match of its original that can match in the mesh with two
-       more conditions in each (a route without a match gets one match of just these). A match whose own gateways leave
-       out mesh (an ingress-only custom route under networking.istio.routes) never matches an in-mesh caller, so it is
-       dropped, and a route left with no match gets no source route: a canary caller falls through it as a stable
-       caller does. The two conditions: the caller is in the mesh (gateways: [mesh], in place of a match's own
-       gateways) and its pod is a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by the
-       Rollout's canaryMetadata and carrying this release's mycarrier.tech/correlationId as the pod label renders it
-       (helm.labels.correlationId; Istio compares sourceLabels exactly). It sends the request to the original's first
+       A source route, <name>-canary-source, takes every match of its original that can match in the mesh with
+       sourceLabels added to each (a route without a match gets one match of just these). A match whose own gateways
+       leave out mesh (an ingress-only custom route under networking.istio.routes) never matches an in-mesh caller, so
+       it is dropped, and a route left with no match gets no source route: a canary caller falls through it as a stable
+       caller does. The sourceLabels pick a canary pod of this release, labelled mycarrier.tech/rollout-role: canary by
+       the Rollout's canaryMetadata and carrying this release's mycarrier.tech/correlationId as the pod label renders
+       it (helm.labels.correlationId; Istio compares sourceLabels exactly).
+       The source route's matches carry no gateways: the gateways key of every copied match is removed. Istio skips
+       sourceLabels on a match that sets gateways; a proxy keeps such a match when its gateway set contains one of
+       them, and every sidecar's set holds mesh (sourceMatchHTTP, pilot/pkg/networking/core/route/route.go, Istio
+       1.27.1 lines 443-460). With gateways: [mesh] every in-mesh caller took the source route to the canary, whatever
+       its labels. A match without gateways binds to the VirtualService's gateways (mesh and the ingress gateway), and
+       Istio trims it by the proxy's pod labels on each: an ingress gateway pod is never a canary pod of this release,
+       so it never keeps a source route. Do not add gateways back. It sends the request to the original's first
        -preview destination and keeps every other field of the original (headers, timeout, retries, rewrite, CORS), so
        a canary caller gets the answer a stable caller gets, served by the canary. A route with a fault (-forbidden) answers the same whatever
        its destination, and a redirect has none, so they get no source route: a canary caller falls through to them as
@@ -757,7 +763,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
 {{- $fullName := include "helm.fullname" .context -}}
 {{- $namespace := include "helm.namespace" .context -}}
 {{- $sourceLabels := dict "mycarrier.tech/rollout-role" "canary" "mycarrier.tech/correlationId" (include "helm.labels.correlationId" .ctx) -}}
-{{- $caller := dict "gateways" (list "mesh") "sourceLabels" $sourceLabels -}}
+{{- $caller := dict "sourceLabels" $sourceLabels -}}
 {{- $routes := list -}}
 {{- range (.http | default list) -}}
   {{- $preview := dict -}}
@@ -767,7 +773,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- $matches := list -}}
   {{- if and $preview (not .fault) (not .redirect) -}}
     {{- range (.match | default (list dict)) -}}
-      {{- if or (not (hasKey . "gateways")) (has "mesh" .gateways) }}{{ $matches = append $matches (merge (deepCopy $caller) .) }}{{ end -}}
+      {{- if or (not (hasKey . "gateways")) (has "mesh" .gateways) }}{{ $matches = append $matches (merge (deepCopy $caller) (omit . "gateways")) }}{{ end -}}
     {{- end -}}
   {{- end -}}
   {{- if $matches -}}
