@@ -1,0 +1,52 @@
+suite: render context
+templates:
+  - templates/context-debug.yaml
+release:
+  name: mydb
+  namespace: tools
+set:
+  debugContext: true
+tests:
+  - it: derives names and defaults from the release
+    asserts:
+      - equal: {path: data.name, value: mydb-mc-mongodb}
+      - equal: {path: data.namespace, value: tools}
+      - equal: {path: data.appUserDatabase, value: mydb-mc-mongodb}
+      - equal: {path: data.backupPath, value: tools/mydb-mc-mongodb}
+      - equal: {path: data.members, value: "1"}
+      - equal: {path: data.version, value: "8.0.34"}
+      - equal: {path: data.backupEnabled, value: "false"}
+      - equal: {path: data.retentionDays, value: "7"}
+
+  - it: honours fullnameOverride
+    set:
+      fullnameOverride: inventory
+    asserts:
+      - equal: {path: data.name, value: inventory}
+      - equal: {path: data.backupPath, value: tools/inventory}
+
+  - it: uses the release name alone when it already contains the chart name
+    release:
+      name: tools-mc-mongodb
+    asserts:
+      - equal: {path: data.name, value: tools-mc-mongodb}
+
+  - it: keeps a long release name within 45 characters without a trailing dash
+    release:
+      name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbb
+    asserts:
+      - equal: {path: data.name, value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+
+  - it: lets the backup path and database be overridden
+    set:
+      backup.path: custom/dir
+      appUser.database: primary
+    asserts:
+      - equal: {path: data.backupPath, value: custom/dir}
+      - equal: {path: data.appUserDatabase, value: primary}
+
+  - it: renders nothing unless debugContext is set
+    set:
+      debugContext: false
+    asserts:
+      - hasDocuments: {count: 0}
