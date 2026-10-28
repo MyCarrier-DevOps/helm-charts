@@ -218,7 +218,7 @@ Each `environments[]` entry supports these fields:
 | `name` | Environment name (required). Becomes `environment.name`, the namespace the Application deploys to, and the Application name `<appStack>-<name>` | — |
 | `global` | Merged over the root-level `global` | `{}` |
 | `environment` | mycarrier-helm `environment` block (`name` is always the entry's `name`) | `{}` |
-| `applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `extraObjects` | Passed to mycarrier-helm unchanged | — |
+| `applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `dependencyDeployments`, `extraObjects` | Passed to mycarrier-helm unchanged | — |
 | `enableVaultCA`, `manualOtelConfig`, `deployment` | Passed to mycarrier-helm | `false`, `false`, `deployment` |
 | `disableOtelAutoinstrumentation` | Passed to mycarrier-helm; **defaults to `false` here** (auto-instrumentation on), the opposite of direct mycarrier-helm | `false` |
 
@@ -334,6 +334,90 @@ Other environment names (`qa`, `uat`, `preprod-saia`, …) get the common and de
 
 ### Supported Dependencies
 Set to `true` in `global.dependencies`: `mongodb`, `redis`, `azureservicebus`, `elasticsearch`, `postgres`, `sqlserver`, `clickhouse`, `redpanda`, `loadsure`, `chargify`. For a csharp stack with language secrets on, `mongodb`, `redis`, `azureservicebus`, `elasticsearch`, `redpanda`, `loadsure` and `chargify` inject that dependency's connection settings from Vault; the other flags inject nothing.
+
+`global.dependencies` says which shared services the app uses. To run a dependency in the stack's own namespace instead, see [Dependency deployments](#dependency-deployments).
+
+### Dependency deployments
+
+`dependencyDeployments` deploys a dependency in-cluster alongside the stack. It is for internal tools only: product applications use the shared services, such as MongoDB Atlas, and their data is never moved into an in-cluster instance. Off by default; a stack that leaves it out renders exactly as before.
+
+#### `dependencyDeployments.mongodb`
+
+```yaml
+dependencyDeployments:
+  mongodb:
+    enabled: true
+```
+
+This deploys a MongoDB replica set named `<appStack>-mongodb` (cut to 45 characters) in the environment's namespace, run by the MongoDB operator, with a password generated in the cluster. Secret `<appStack>-mongodb-connection`, key `connectionString`, holds:
+
+```
+mongodb://app:<password>@<appStack>-mongodb-svc.<namespace>.svc.cluster.local:27017/<appStack>?replicaSet=<appStack>-mongodb&authSource=admin
+```
+
+The database in the string is `appStack` in every environment. The `app` user can create and use any number of further databases and collections.
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Deploy MongoDB with the stack | `false` |
+| `members` | Replica set members | `3` in production, `1` elsewhere |
+| `version` | MongoDB server version (exact) | `8.0.34` |
+| `storage.size` | Data volume per member | `10Gi` |
+| `storage.storageClassName` | Storage class for the data volume | cluster default |
+| `resources` | Resources for the `mongod` container; replaces the default as a whole | requests `250m` / `512Mi`, limit `1Gi` memory |
+| `backup.schedule` | Cron schedule for backups | `0 2 * * *` |
+| `backup.timeZone` | Time zone for the schedule | `Etc/UTC` |
+| `backup.retentionDays` | Days to keep backups | `7` |
+
+The schema rejects any other key, including `backup.enabled`: the environment decides backups, not the stack.
+
+**Environments.** In production (an environment whose meta environment starts with `prod`), MongoDB backs up daily (by default) to the `production` container of the `mycarriermongobackups` storage account, folder `<environment.name>/<appStack>`, and the chart renders a suspended `<appStack>-mongodb-restore` CronJob for restores. Dev, preprod, `qa`, `uat` and feature environments get no backups. Each feature environment gets its own empty MongoDB.
+
+**Connection string.** For a csharp stack with `global.dependencies.mongodb: true` and language secrets on, `MongoConnection_<env>` reads the connection Secret instead of Vault; `KeyVault_MongoConnection` and `KeyVaultMongoConnection` still name it. Without `global.dependencies.mongodb`, or for other languages, nothing is injected: reference the Secret yourself, for example through an application's `env` in your own manifests or `extraObjects`.
+
+**Turning it off** removes the replica set; its data disks are kept and reattach when it is turned back on. Removing a feature environment deletes its data.
+
+**Restoring** (production): in Argo CD, run **Create Job** on the `<appStack>-mongodb-restore` CronJob to restore the newest backup, or follow the mc-mongodb [README](https://github.com/MyCarrier-DevOps/helm-charts/tree/main/charts/mc-mongodb#restoring) to restore a specific one.
+
+Where it goes: `helm/values.yaml` to deploy it in every environment, or `helm/values.{env}.yaml` for some. In mc-environment, set it on each `environments[]` entry.
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: toolbox
+  language: csharp
+  dependencies:
+    mongodb: true
+dependencyDeployments:
+  mongodb:
+    enabled: true
+
+# helm/values.prod.yaml
+environment:
+  name: prod
+dependencyDeployments:
+  mongodb:
+    storage:
+      size: 50Gi
+    backup:
+      retentionDays: 14
+
+# helm/deployment/values.yaml
+applications:
+  api:
+    deploymentType: deployment
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/toolbox/api
+    ports:
+      http: 8080
+
+# helm/deployment/values.prod.yaml
+applications:
+  api:
+    image:
+      tag: 1.0.0
+```
 
 ---
 

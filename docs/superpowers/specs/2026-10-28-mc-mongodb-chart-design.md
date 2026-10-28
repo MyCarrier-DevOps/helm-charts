@@ -1,7 +1,7 @@
 # Design: `mc-mongodb` chart (in-cluster MongoDB with production backups)
 
 **Date:** 2026-10-28
-**Charts:** new `charts/mc-mongodb`; later `charts/mycarrier-helm`, `charts/mc-environment`
+**Charts:** new `charts/mc-mongodb`, `charts/mycarrier-helm`, `charts/mc-environment` (one PR)
 **Status:** Draft
 
 ## Intent
@@ -9,11 +9,11 @@
 A service team should be able to run its own MongoDB next to its application instead of sharing the central
 instance, and in production that MongoDB must be backed up without anyone remembering to set it up.
 
-The work ships in two phases, in order:
+The work ships in two phases, in one PR:
 
 1. **Standalone chart.** `charts/mc-mongodb` deploys one MongoDB replica set through the MongoDB operator and, when
    asked, a daily backup CronJob writing to Azure Blob storage plus a restore CronJob that only runs on demand.
-2. **Embedded in mycarrier-helm.** A stack sets `mongodb.enabled: true`. mycarrier-helm renders the chart's
+2. **Embedded in mycarrier-helm.** A stack sets `dependencyDeployments.mongodb.enabled: true`. mycarrier-helm renders the chart's
    resources, turns backups on in production only, and points the service's injected Mongo connection string at the
    in-cluster instance instead of the shared one.
 
@@ -223,17 +223,20 @@ The release workflow picks up a new chart folder automatically; the unit-test wo
 
 ## Embedding in mycarrier-helm (phase 2)
 
-Phase 2 starts once phase 1 is released to `charts.mycarrier.dev`, because mycarrier-helm depends on a published
-version of it.
+Both phases ship together: mycarrier-helm depends on `mc-mongodb` from this repository (`file://../mc-mongodb`), so a
+mycarrier-helm release packages the `mc-mongodb` of the same commit. chart-releaser's `cr package` updates
+dependencies before packaging (`DependencyUpdate = true`), which resolves a local dependency without a repository;
+`unit-tests.yaml` runs `helm dependency update` before the unit tests and the guidance examples. The version
+constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s version.
 
-- **Dependency:** `mc-mongodb` in mycarrier-helm's `Chart.yaml` with `alias: mongodb` and no `condition`. The
-  release and unit-test workflows don't run `helm dependency build` today. **Builder checks** whether
-  chart-releaser's packaging fetches dependencies and adds a `helm dependency build` step to `main.yml`,
-  `manual-helm-release.yml` and `unit-tests.yaml` as needed. mycarrier-helm's `values.yaml` sets
-  `mongodb.standalone: false` so the subchart's own templates never render.
-- **Values a stack sets:** `mongodb.enabled` (default `false`), plus optional `mongodb.members`, `mongodb.version`,
-  `mongodb.storage.*`, `mongodb.resources`, `mongodb.backup.schedule`, `mongodb.backup.timeZone` and
-  `mongodb.backup.retentionDays`.
+- **Dependency:** `mc-mongodb` in mycarrier-helm's `Chart.yaml`, without an alias and without a `condition`.
+  mycarrier-helm's `values.yaml` sets `mc-mongodb.standalone: false` so the subchart's own templates never render.
+  The subchart's values key stays `mc-mongodb`, which reads as the chart rather than as a switch; stacks don't set it.
+- **Values a stack sets:** all under `dependencyDeployments.mongodb`, so deploying a database reads differently from
+  using one (`global.dependencies.mongodb`): `enabled` (default `false`), plus optional `members`, `version`,
+  `storage.*`, `resources`, `backup.schedule`, `backup.timeZone` and `backup.retentionDays`. mycarrier-helm's schema
+  defines them and rejects anything else (`backup.enabled` included). mycarrier-helm reads the remaining defaults
+  from the subchart's values (`.Values.mc-mongodb`) and layers the stack's settings over them.
 - **What mycarrier-helm computes:**
   - Production means `hasPrefix "prod" $metaenv`. This covers plain `prod` (what `_lang.tpl` checks) and any
     `prod-*` environment, which the chart's domain and affinity helpers already treat as production. It errs toward
@@ -245,29 +248,31 @@ version of it.
   - Backup container: `production` (backups only run in production).
   - Database: `appStack`, the same in every environment, so a production backup restores into a matching database
     elsewhere.
-  - Members: `mongodb.members` if set, otherwise 3 in production and 1 elsewhere.
-- **Data on removal:** Argo prunes the `MongoDBCommunity` when a stack turns `mongodb.enabled` off or an
+  - Members: `dependencyDeployments.mongodb.members` if set, otherwise 3 in production and 1 elsewhere.
+- **Data on removal:** Argo prunes the `MongoDBCommunity` when a stack turns `dependencyDeployments.mongodb.enabled` off or an
   environment is removed. The StatefulSet's data claims keep the default PVC retention (`Retain`), so the disks
   survive the resource being pruned and can be reattached by turning it back on. Deleting a feature namespace
   deletes its claims, so feature environments leave nothing behind. **Builder verifies** MCK doesn't set
   `persistentVolumeClaimRetentionPolicy.whenDeleted: Delete` or owner references on the claims.
 - **Feature environments:** each feature namespace gets its own empty MongoDB when the stack enables it, without
   backups (feature environments' meta environment is dev).
-- **Connection string swap:** in `_lang.tpl`, when `mongodb.enabled`, `MongoConnection_<metaenv>` becomes
+- **Connection string swap:** in `_lang.tpl`, when `dependencyDeployments.mongodb.enabled`, `MongoConnection_<metaenv>` becomes
   `valueFrom.secretKeyRef` (Secret `<appStack>-mongodb-connection`, key `connectionString`) instead of the
   Vault reference. This is a new env shape there: the block emits only `value:` today. `KeyVault_MongoConnection`
-  and `KeyVaultMongoConnection` keep naming that variable. When `mongodb.enabled` is false, nothing in the rendered
+  and `KeyVaultMongoConnection` keep naming that variable. When it is false, nothing in the rendered
   output changes (a test pins this).
   - That block only renders for `global.language: csharp` stacks without `disableLanguageSecrets`. Other stacks
     reference `<appStack>-mongodb-connection` themselves; the guidance documents the Secret name and key.
 - **Labels:** `dependency.mongo` keeps following `global.dependencies.mongodb`, unchanged.
-- **mc-environment:** add `mongodb` to the per-environment values forwarding list in `appset.yaml` and to its schema
-  (environment items are `additionalProperties: false`).
+- **mc-environment:** add `dependencyDeployments` to the per-environment values forwarding list in `appset.yaml` and
+  to its schema (environment items are `additionalProperties: false`). The schema types it as an object that
+  mycarrier-helm validates, as it does `alerts`: a `$ref` to mycarrier-helm's schema on `main` can't resolve until this
+  merges, and an unresolvable remote pointer fails every mc-environment render.
 - **Guidance:** update `agent-guidance/helm/.apm/instructions/helm.instructions.md` with the values, defaults,
   production behaviour, Secret names and restore procedure, with a renderable example. Not a breaking change: the
   default is off and the off output is unchanged.
 - **Tests:** production enables backup and gives 3 members; dev, preprod and feature environments render no backup
-  resources; the connection-string swap appears only when enabled; a stack with `mongodb.enabled: false` renders
+  resources; the connection-string swap appears only when enabled; a stack without `dependencyDeployments` renders
   exactly what it renders today.
 
 ## Answered during review
@@ -280,7 +285,7 @@ version of it.
 
 ## Decisions taken here (not discussed explicitly)
 
-- Chart name `mc-mongodb` (matches `mc-environment`), aliased `mongodb` inside mycarrier-helm.
+- Chart name `mc-mongodb` (matches `mc-environment`); stacks reach it through `dependencyDeployments.mongodb`.
 - Named templates with a computed context so mycarrier-helm can drive environment-dependent values.
 - External Secrets `Password` generator for credentials, with the regeneration caveat above.
 - A separate backup user with `backup` + `restore` roles; the app user can't run `mongodump --oplog`.

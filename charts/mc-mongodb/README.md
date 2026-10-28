@@ -107,6 +107,9 @@ The resources are named templates that take one context dict (`mc-mongodb.contex
 `standalone: false` the chart's own templates render nothing, so a parent chart can call `mc-mongodb.credentials`,
 `mc-mongodb.mongodbcommunity`, `mc-mongodb.backup` and `mc-mongodb.restore` with a context it computes.
 
+mycarrier-helm does this for `dependencyDeployments.mongodb` (`templates/_mongodb.tpl` there): it takes defaults from
+this chart's values, applies the stack's overrides, and decides members and backups from the environment.
+
 ## Parameters
 
 ### Rendering

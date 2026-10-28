@@ -81,6 +81,11 @@ jobs:
         run: |
           helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.0
 
+      # Builds charts/<chart>/charts from Chart.yaml dependencies (mycarrier-helm's local mc-mongodb); a chart
+      # without dependencies is left as it is.
+      - name: Build chart dependencies
+        run: helm dependency update "${{ matrix.chart }}"
+
       - name: Run unit tests
         id: runtests
         env:
@@ -218,7 +223,9 @@ jobs:
       - name: sync-rules tests
         run: bash agent-guidance/tests/sync-rules_test.sh
       - name: Guidance examples render with these charts
-        run: bash agent-guidance/tests/render-examples.sh
+        run: |
+          helm dependency update charts/mycarrier-helm
+          bash agent-guidance/tests/render-examples.sh
       - name: Publishing helper tests
         working-directory: .github/scripts
         run: python -m unittest -v test_sync_helm_guidance

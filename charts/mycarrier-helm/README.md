@@ -1354,6 +1354,35 @@ cronjobs:
 - `"0 0 1 * *"` - Monthly on the 1st
 - `"0 9 * * 1-5"` - Weekdays at 9 AM
 
+### Deploying an In-Cluster MongoDB (internal tools)
+
+`dependencyDeployments.mongodb.enabled: true` deploys a MongoDB replica set, `<appStack>-mongodb`, in the stack's
+namespace, rendered from the [mc-mongodb](../mc-mongodb) subchart's named templates. It needs the MongoDB operator
+and External Secrets in the cluster. Product applications keep using MongoDB Atlas (`global.dependencies.mongodb`).
+
+```yaml
+global:
+  appStack: toolbox
+  language: csharp
+  dependencies:
+    mongodb: true
+dependencyDeployments:
+  mongodb:
+    enabled: true
+    # members: 3                  # default: 3 in production, 1 elsewhere
+    # version: "8.0.34"
+    # storage: { size: 10Gi, storageClassName: "" }
+    # resources: {...}
+    # backup: { schedule: "0 2 * * *", timeZone: Etc/UTC, retentionDays: 7 }
+```
+
+- The connection string is in Secret `<appStack>-mongodb-connection`, key `connectionString`; its database is
+  `appStack`. For a csharp stack with `global.dependencies.mongodb`, `MongoConnection_<env>` reads it instead of Vault.
+- Production (meta environment starting with `prod`) backs up to the `production` container of
+  `mycarriermongobackups`, folder `<environment.name>/<appStack>`, and gets a suspended `<appStack>-mongodb-restore`
+  CronJob. Other environments have no backups. A stack cannot change this.
+- The subchart's own values live under `mc-mongodb` and are not for stacks to set.
+
 ## KrakenD AutoConfig
 
 The chart can render a `gateway.krakend.io/v1alpha1` **`KrakenDAutoConfig`** CR

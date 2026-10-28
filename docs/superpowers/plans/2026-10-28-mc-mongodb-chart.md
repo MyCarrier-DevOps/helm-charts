@@ -290,4 +290,4 @@ If any finding contradicts the spec (for example, MCK deletes data claims), stop
 - Open one PR for the spec, this plan and the chart. The release workflow publishes `mc-mongodb` on merge.
 - Before any stack depends on it: install MCK 1.14.0 in the app clusters, create the `production` container, grant the production cluster's kubelet identity Storage Blob Data Contributor on it, and confirm the app clusters' ESO serves `refreshPolicy` and the `Password` generator.
 - **Verify on a dev cluster after the operator is installed:** password reconciliation on Secret change (Task 1 may only find documentation), and an app pod with a sidecar connecting to the sidecar-less replica set.
-- Phase 2 (mycarrier-helm embedding, mc-environment forwarding, guidance) gets its own plan once `mc-mongodb` is published.
+- Phase 2 (mycarrier-helm embedding, mc-environment forwarding, guidance) shipped in the same PR, from a local dependency; see the spec's phase 2 section.
