@@ -622,6 +622,36 @@ tests:
             - pause: {duration: 5m}
         template: rollout.yaml
 
+  # A barrier somewhere in the list is not enough: here 25 and 50 have none between them, so one Rollout can be at 50%
+  # while another is still at 25%.
+  - it: no twins and no rollout-role metadata when one pair of weights has no barrier between them
+    set:
+      global.strategy.canary.budgetSeconds: 540
+      global.strategy.canary.steps:
+        - setWeight: 10
+        - plugin:
+            name: mycarrier/canary-coordinator
+            config: {kind: barrier, name: w10, timeout: 9m}
+        - setWeight: 25
+        - setWeight: 50
+      applications:
+        api: *sourceLabelApp
+        web: *sourceLabelApp
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: virtualService.yaml
+      - lengthEqual:
+          path: spec.http
+          count: 2
+        template: virtualService.yaml
+      - notExists:
+          path: spec.strategy.canary.canaryMetadata
+        template: rollout.yaml
+      - notExists:
+          path: spec.strategy.canary.stableMetadata
+        template: rollout.yaml
+
   - it: twins and rollout-role metadata with explicit steps that have a barrier between every two weights
     set:
       global.strategy.canary.budgetSeconds: 1140
