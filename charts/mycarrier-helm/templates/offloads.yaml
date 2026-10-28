@@ -56,6 +56,10 @@ spec:
                     secrets: {{- with .Values.secrets }}
                     {{- . | toYaml | nindent 22 }}
                     {{- end }}
+                    {{- if include "helm.mongodb.enabled" . }}
+                    dependencyDeployments:
+                      {{- .Values.dependencyDeployments | toYaml | nindent 22 }}
+                    {{- end }}
   template:
     metadata:
       name: "{{ $fullName }}-offload-{{`{{`}} .name {{`}}`}}"
