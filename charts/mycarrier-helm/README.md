@@ -263,9 +263,10 @@ follows the weight. Where the steps render, the coordinator is on and the steps 
 explicit `steps` list with a canary-coordinator barrier between every two `setWeight` steps), canary pods are labelled
 `mycarrier.tech/rollout-role: canary` (`canaryMetadata`; stable pods `stable`), and each application's VirtualService
 gets a `<route>-canary-source` route before each route with the `-preview` destination and no `fault` or `redirect`.
-It matches in-mesh callers (`gateways: [mesh]`; a match of the original whose own `gateways` leave out `mesh` is left
-out, and a route with no match left gets no source route) whose pods carry that label and the release's
-`mycarrier.tech/correlationId` (as the pod renders it), and sends them to the `-preview` destination, so a release's
+It matches callers whose pods carry that label and the release's `mycarrier.tech/correlationId` (as the pod renders
+it), on `sourceLabels` only: its matches carry no `gateways`, because Istio skips `sourceLabels` on a match that sets
+`gateways` (a match of the original whose own `gateways` leave out `mesh` is left out, and a route with no match left
+gets no source route). It sends them to the `-preview` destination, so a release's
 canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
 host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, so a public
 request with the release's correlation id in the header reaches the canary during the dark stage (an accepted risk). After
