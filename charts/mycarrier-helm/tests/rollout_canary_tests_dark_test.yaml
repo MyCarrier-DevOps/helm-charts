@@ -647,3 +647,49 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "barrier 'dark-passed' has timeout 15m \\(900 s\\), and Rollout 'worker' can wait there 943 s for Rollout 'api'"
+
+  # With the dark stage on, the barrier window also runs at w10, w25 and w50 without tests listed, so a sibling's long
+  # analysis step fails the render where it did not before: worker's health Job (activeDeadlineSeconds 600) runs up to
+  # 600 + ceil(sqrt(1200)) = 635 s at w10, and api's chart health can end after 60 s, a 575 s wait against 9m (540 s).
+  - it: fails a weight barrier shorter than a sibling's analysis step without tests listed
+    template: rollout.yaml
+    set: &slowHealth
+      <<: *followers
+      applications:
+        api: *api
+        worker:
+          deploymentType: rollout
+          image: *image
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: health
+              count: 1
+              provider:
+                job:
+                  spec:
+                    activeDeadlineSeconds: 600
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        containers:
+                          - name: health
+                            image: registry.example.com/health:1.0.0
+    asserts:
+      - failedTemplate:
+          errorPattern: "barrier 'w10' has timeout 9m \\(540 s\\), and Rollout 'api' can wait there 575 s for Rollout 'worker'"
+
+  - it: does not check the weight barriers without tests listed when dark is false
+    template: rollout.yaml
+    set:
+      <<: *slowHealth
+      global:
+        <<: *global
+        strategy:
+          canary:
+            coordinator:
+              enabled: true
+            dark: false
+            leader: api
+    asserts:
+      - notFailedTemplate: {}
