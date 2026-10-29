@@ -2931,6 +2931,18 @@
         }
       }
     },
+    "mc-mongodb": {
+      "type": "object",
+      "description": "Defaults of the mc-mongodb subchart, internal to the chart. Stacks configure MongoDB through dependencyDeployments.mongodb.",
+      "properties": {
+        "standalone": {
+          "const": false
+        },
+        "debugContext": {
+          "const": false
+        }
+      }
+    },
     "dependencyDeployments": {
       "type": "object",
       "description": "Dependencies deployed in-cluster alongside the stack, for internal tools. Product applications use the shared services (global.dependencies).",
@@ -2953,7 +2965,8 @@
             },
             "version": {
               "type": "string",
-              "description": "MongoDB server version (exact)."
+              "pattern": "^8\\.[0-9]+\\.[0-9]+$",
+              "description": "MongoDB server version (exact), an 8.x release: the chart pins featureCompatibilityVersion 8.0, which an older server cannot run."
             },
             "storage": {
               "type": "object",

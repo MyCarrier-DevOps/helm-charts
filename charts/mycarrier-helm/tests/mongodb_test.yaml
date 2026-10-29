@@ -33,10 +33,10 @@ tests:
           value: prod/tools
 
   - it: renders the on-demand restore in production
-    documentSelector: {path: metadata.name, value: tools-mongodb-restore}
+    documentSelector: {path: spec.suspend, value: true}
     asserts:
       - isKind: {of: CronJob}
-      - equal: {path: spec.suspend, value: true}
+      - equal: {path: metadata.name, value: tools-mongodb-restore}
 
   - it: uses the stack name as the connection string's database
     documentSelector: {path: spec.target.name, value: tools-mongodb-connection}
@@ -70,7 +70,26 @@ tests:
     set:
       environment: { name: prod-eu }
     asserts:
-      - hasDocuments: {count: 11}
+      - hasDocuments: {count: 13}
+
+  # Kubernetes rejects a CronJob name over 52 characters, which would fail the stack's whole production sync.
+  - it: keeps the restore CronJob name within 52 characters for a long appStack
+    set:
+      global.appStack: an-internal-tool-with-a-very-long-stack
+    documentSelector: {path: spec.suspend, value: true}
+    asserts:
+      - equal: {path: metadata.name, value: an-internal-tool-with-a-very-long-stack-mong-restore}
+
+  - it: keeps production's three members on separate nodes, one voluntary disruption at a time
+    set:
+      environment: { name: prod }
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
+          value: kubernetes.io/hostname
+        documentSelector: {path: kind, value: MongoDBCommunity}
+      - equal: {path: spec.maxUnavailable, value: 1}
+        documentSelector: {path: kind, value: PodDisruptionBudget}
 
   - it: takes the stack's members over the environment default
     set:
@@ -113,6 +132,29 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "enabled"
+
+  # The chart pins featureCompatibilityVersion 8.0, which an older server cannot run.
+  - it: rejects a server version older than the pinned feature compatibility version
+    set:
+      dependencyDeployments.mongodb.version: "7.0.12"
+    asserts:
+      - failedTemplate:
+          errorPattern: "version"
+
+  - it: accepts a later 8.x server version
+    set:
+      dependencyDeployments.mongodb.version: "8.2.1"
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.version, value: "8.2.1"}
+
+  # mc-mongodb is the subchart's defaults; mycarrier-helm renders its templates itself.
+  - it: rejects a stack switching the subchart to render on its own
+    set:
+      mc-mongodb.standalone: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "standalone"
 
   - it: rejects settings dependencyDeployments.mongodb does not expose
     set:

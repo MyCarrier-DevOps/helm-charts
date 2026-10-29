@@ -6,9 +6,10 @@ In-cluster MongoDB (dependencyDeployments.mongodb), rendered from the mc-mongodb
 {{- if dig "mongodb" "enabled" false (.Values.dependencyDeployments | default dict) }}true{{ end -}}
 {{- end -}}
 
-{{/* <appStack>-mongodb, cut to the 45 characters mc-mongodb allows so <name>-backup-connection stays within 63. */}}
+{{/* <appStack>-mongodb, cut to the 44 characters mc-mongodb allows so <name>-restore stays within the 52 Kubernetes
+allows a CronJob. */}}
 {{- define "helm.mongodb.name" -}}
-{{- printf "%s-mongodb" (.Values.global.appStack | lower) | trunc 45 | trimSuffix "-" -}}
+{{- printf "%s-mongodb" (.Values.global.appStack | lower) | trunc 44 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
