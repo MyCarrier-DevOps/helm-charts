@@ -128,6 +128,9 @@ spec:
       # Lowercase: the driver fills in the kubelet identity's client ID only for exactly "msi". The volume source is
       # immutable, so changing this later means recreating the volume and its claim by hand.
       AzureStorageAuthType: msi
+      # The driver reads any Secret for this volume from here, so it is a namespace only cluster administrators write
+      # Secrets in. msi needs none. Also part of the immutable volume source.
+      secretNamespace: kube-system
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -166,10 +169,11 @@ spec:
         metadata:
           labels:
             {{- toYaml .labels | nindent 12 }}
-          # Connects to the database over the mesh's mutual TLS. The clusters run Istio's native sidecars, so the Job
-          # still completes.
+          # Connects to the database over the mesh's mutual TLS. nativeSidecar asks for a native sidecar on this pod,
+          # whatever istiod detects for the cluster, so the Job completes when mongo exits.
           annotations:
             sidecar.istio.io/inject: "true"
+            sidecar.istio.io/nativeSidecar: "true"
             proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
         spec:
           {{- include "mc-mongodb.backupPodSpec" (dict "ctx" . "secret" (printf "%s-backup-connection" .name) "script" (include "mc-mongodb.backupScript" .)) | nindent 10 }}

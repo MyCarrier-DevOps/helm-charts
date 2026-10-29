@@ -44,10 +44,11 @@ spec:
         metadata:
           labels:
             {{- toYaml .labels | nindent 12 }}
-          # Connects to the database over the mesh's mutual TLS. The clusters run Istio's native sidecars, so the Job
-          # still completes.
+          # Connects to the database over the mesh's mutual TLS. nativeSidecar asks for a native sidecar on this pod,
+          # whatever istiod detects for the cluster, so the Job completes when mongo exits.
           annotations:
             sidecar.istio.io/inject: "true"
+            sidecar.istio.io/nativeSidecar: "true"
             proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
         spec:
           {{- $env := list (dict "name" "RESTORE_FILE" "value" "") }}

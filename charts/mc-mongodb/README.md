@@ -31,8 +31,8 @@ instance.
   - a suspended restore `CronJob`.
 
 MongoDB, backup and restore pods run with an Istio sidecar, so traffic between members and from clients with
-sidecars is encrypted by Istio's automatic mutual TLS. The clusters run Istio's native sidecars, so the backup and
-restore Jobs still complete. Clients without a sidecar can still connect in plaintext: the chart adds no STRICT
+sidecars is encrypted by Istio's automatic mutual TLS. The backup and restore pods ask for a native sidecar
+(`sidecar.istio.io/nativeSidecar`, Istio 1.24 or later), so the Jobs complete when mongo exits. Clients without a sidecar can still connect in plaintext: the chart adds no STRICT
 `PeerAuthentication`, and no allowlist of clients. A NetworkPolicy would not be enforced on the app clusters, which run
 no network policy engine (AKS `networkPolicy: none`); one can be added if they move to Cilium. Every connection needs a
 SCRAM login with the release's generated passwords.
@@ -56,8 +56,9 @@ The pods meet the clusters' Kyverno policies:
     blob CSI driver v1.27.0 or later (or v1.26.7 / v1.25.10), which fills in the kubelet identity's client ID;
   - network access from the cluster to the account.
 
-  Choose the auth mode before the first backup deploys: a PersistentVolume's source is immutable, so changing it later
-  means deleting and recreating the volume and its claim by hand.
+  The volume also sets `secretNamespace: kube-system`, so the driver only reads a Secret that cluster administrators
+  wrote (msi needs none). Choose both before the first backup deploys: a PersistentVolume's source is immutable, so
+  changing either later means deleting and recreating the volume and its claim by hand.
 
 ## Connecting
 

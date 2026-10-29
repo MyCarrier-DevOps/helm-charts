@@ -25,6 +25,7 @@ tests:
       - equal: {path: spec.jobTemplate.spec.backoffLimit, value: 0}
       # Connects to the database over the mesh's mutual TLS; native sidecars let the Job complete.
       - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "true"}
+      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/nativeSidecar\"]", value: "true"}
 
   - it: ignores the backup schedule
     set:
