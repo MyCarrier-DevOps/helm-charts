@@ -85,7 +85,8 @@ spec:
               type: RuntimeDefault
           # Cluster policy requires liveness and readiness probes on every container; the operator sets only the
           # agent's readiness probe. mongod opens its port once the agent has written its configuration, which the
-          # startup probe allows up to 10 minutes for. The agent serves its status on 5000.
+          # startup probe allows up to 10 minutes for. The agent serves its status on 127.0.0.1:5000 only, out of
+          # reach of a tcpSocket probe, so its liveness check runs inside the container.
           containers:
             - name: mongod
               resources:
@@ -106,8 +107,8 @@ spec:
                 periodSeconds: 10
             - name: mongodb-agent
               livenessProbe:
-                tcpSocket:
-                  port: 5000
+                exec:
+                  command: ["/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000"]
                 initialDelaySeconds: 30
                 periodSeconds: 30
                 failureThreshold: 6

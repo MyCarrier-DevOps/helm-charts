@@ -158,9 +158,11 @@ tests:
       - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].livenessProbe.tcpSocket.port", value: 27017}
       - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].readinessProbe.tcpSocket.port", value: 27017}
 
-  - it: probes the agent's liveness on its status port and keeps the operator's readiness probe
+  - it: checks the agent's local status port for liveness and keeps the operator's readiness probe
     documentIndex: 0
     asserts:
       - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].name", value: mongodb-agent}
-      - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].livenessProbe.tcpSocket.port", value: 5000}
+      # The status server listens on 127.0.0.1 only, so a probe from outside the container cannot reach it.
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].livenessProbe.exec.command", value: ["/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000"]}
+      - notExists: {path: "spec.statefulSet.spec.template.spec.containers[1].livenessProbe.tcpSocket"}
       - notExists: {path: "spec.statefulSet.spec.template.spec.containers[1].readinessProbe"}
