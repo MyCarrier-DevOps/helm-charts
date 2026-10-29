@@ -44,10 +44,13 @@ spec:
         metadata:
           labels:
             {{- toYaml .labels | nindent 12 }}
+          # Connects to the database over the mesh's mutual TLS. The clusters run Istio's native sidecars, so the Job
+          # still completes.
           annotations:
-            sidecar.istio.io/inject: "false"
+            sidecar.istio.io/inject: "true"
+            proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
         spec:
           {{- $env := list (dict "name" "RESTORE_FILE" "value" "") }}
-          {{- include "mc-mongodb.backupPodSpec" (dict "ctx" . "script" (include "mc-mongodb.restoreScript" .) "env" $env) | nindent 10 }}
+          {{- include "mc-mongodb.backupPodSpec" (dict "ctx" . "secret" (printf "%s-restore-connection" .name) "script" (include "mc-mongodb.restoreScript" .) "env" $env) | nindent 10 }}
 {{- end }}
 {{- end }}

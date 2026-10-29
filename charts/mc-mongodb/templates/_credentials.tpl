@@ -1,5 +1,5 @@
 {{/*
-Generated credentials: one Password generator and an ExternalSecret per user. Each ExternalSecret writes a Secret
+Generated credentials: one Password generator and an ExternalSecret per user (the restore user only with backups). Each ExternalSecret writes a Secret
 holding the generated password (read by the operator) and the connection string consumers use. CreatedOnce keeps
 the password stable across syncs; deleting and recreating an ExternalSecret regenerates it (its Secret is owned and
 goes with it), and the operator then updates the user to match.
@@ -21,9 +21,13 @@ spec:
   symbols: 0
   noUpper: false
   allowRepeat: true
-{{- range $user := list
+{{- $users := list
   (dict "suffix" "app" "secret" (printf "%s-connection" .name) "username" .appUser.name "database" .appUser.database)
   (dict "suffix" "backup" "secret" (printf "%s-backup-connection" .name) "username" "backup" "database" "") }}
+{{- if .backup.enabled }}
+{{- $users = append $users (dict "suffix" "restore" "secret" (printf "%s-restore-connection" .name) "username" "restore" "database" "") }}
+{{- end }}
+{{- range $user := $users }}
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret

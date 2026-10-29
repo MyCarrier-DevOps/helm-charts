@@ -17,14 +17,21 @@ tests:
       - equal: {path: metadata.name, value: mydb-mc-mongodb-database}
       - equal: {path: metadata.namespace, value: tools}
 
-  - it: lets the MongoDB agent read Secrets and get, patch and delete its pods (the operator's database role)
+  # The namespace is shared with every other stack in the environment, so the Role names what the agent touches.
+  - it: lets the database pods read only the automation config Secret
     documentIndex: 1
     asserts:
-      - equal:
-          path: rules
-          value:
-            - {apiGroups: [""], resources: [secrets], verbs: [get]}
-            - {apiGroups: [""], resources: [pods], verbs: [patch, delete, get]}
+      - equal: {path: "rules[0]", value: {apiGroups: [""], resources: [secrets], resourceNames: [mydb-mc-mongodb-config], verbs: [get]}}
+
+  - it: lets the database pods get, patch and delete only the replica set's own pods, up to MongoDB's 50 members
+    documentIndex: 1
+    asserts:
+      - equal: {path: "rules[1].resources", value: [pods]}
+      - equal: {path: "rules[1].verbs", value: [patch, delete, get]}
+      - lengthEqual: {path: "rules[1].resourceNames", count: 50}
+      - contains: {path: "rules[1].resourceNames", content: mydb-mc-mongodb-0}
+      - contains: {path: "rules[1].resourceNames", content: mydb-mc-mongodb-49}
+      - lengthEqual: {path: rules, count: 2}
 
   - it: binds the Role to the ServiceAccount
     documentIndex: 2

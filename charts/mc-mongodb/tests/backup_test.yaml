@@ -42,6 +42,8 @@ tests:
       - equal: {path: spec.csi.volumeAttributes.resourceGroup, value: rg_management_controlplane}
       - equal: {path: spec.csi.volumeAttributes.subscriptionID, value: 99b54c45-a73d-4d40-915e-c0392b589e8c}
       - notExists: {path: spec.csi.nodeStageSecretRef}
+      # Blobfuse signs in as the kubelet identity; the driver fetches no account key.
+      - equal: {path: spec.csi.volumeAttributes.AzureStorageAuthType, value: msi}
       - equal: {path: spec.persistentVolumeReclaimPolicy, value: Retain}
       - equal: {path: spec.storageClassName, value: azureblob-fuse-premium}
       - equal: {path: spec.accessModes, value: [ReadWriteMany]}
@@ -53,6 +55,11 @@ tests:
     asserts:
       - equal: {path: metadata.name, value: other-mydb-mc-mongodb-backup}
       - equal: {path: spec.csi.volumeHandle, value: other-mydb-mc-mongodb-backup}
+
+  - it: reserves the volume for this release's claim
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.claimRef, value: {namespace: tools, name: tools-mydb-mc-mongodb-backup}}
 
   - it: binds the claim to that volume
     documentIndex: 1
@@ -72,10 +79,11 @@ tests:
       - equal: {path: spec.concurrencyPolicy, value: Forbid}
       - equal: {path: spec.jobTemplate.spec.backoffLimit, value: 2}
       - equal: {path: spec.jobTemplate.spec.activeDeadlineSeconds, value: 21600}
-      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "false"}
+      # Connects to the database over the mesh's mutual TLS; native sidecars let the Job complete.
+      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "true"}
       - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault}
       - equal: {path: spec.jobTemplate.spec.template.spec.restartPolicy, value: Never}
-      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].image", value: mongo:8.0.34}
+      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].image", value: "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"}
       - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0]", value: {name: backups, mountPath: /backups, subPath: tools/mydb-mc-mongodb}}
       - equal: {path: "spec.jobTemplate.spec.template.spec.volumes[0]", value: {name: backups, persistentVolumeClaim: {claimName: tools-mydb-mc-mongodb-backup}}}
       - contains:
@@ -119,11 +127,11 @@ tests:
       name: inventory-service-mongodb-aaaa-one
       namespace: feature14-some-really-long-application-stack-namespace-xx
     asserts:
-      - equal: {path: metadata.name, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
+      - equal: {path: metadata.name, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongod-backup}
         documentIndex: 0
-      - equal: {path: spec.csi.volumeHandle, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
+      - equal: {path: spec.csi.volumeHandle, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongod-backup}
         documentIndex: 0
-      - equal: {path: spec.volumeName, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongodb-backup}
+      - equal: {path: spec.volumeName, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongod-backup}
         documentIndex: 1
 
   # Cluster policy (require-run-as-non-root, require-ro-rootfs) rejects the pod otherwise.
@@ -142,3 +150,13 @@ tests:
       - contains:
           path: spec.jobTemplate.spec.template.spec.containers[0].env
           content: {name: HOME, value: /tmp}
+
+  - it: mounts no ServiceAccount token, since the backup makes no Kubernetes API calls
+    documentIndex: 2
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken, value: false}
+
+  - it: runs an image pinned by digest
+    documentIndex: 2
+    asserts:
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].image", pattern: "^mongo:8\\.0\\.34@sha256:[0-9a-f]{64}$"}

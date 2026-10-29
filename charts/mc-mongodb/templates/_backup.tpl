@@ -10,10 +10,11 @@ Usage: include "mc-mongodb.backupVolumeName" $ctx
 
 {{/*
 Pod spec shared by the backup and restore CronJobs.
-Usage: include "mc-mongodb.backupPodSpec" (dict "ctx" $ctx "script" $script "env" $extraEnv)
+Usage: include "mc-mongodb.backupPodSpec" (dict "ctx" $ctx "secret" $connectionSecret "script" $script "env" $extraEnv)
 */}}
 {{- define "mc-mongodb.backupPodSpec" -}}
 restartPolicy: Never
+automountServiceAccountToken: false
 # The mongo image's mongodb user, on a read-only root filesystem (cluster policy); /tmp is the only scratch space.
 securityContext:
   runAsNonRoot: true
@@ -37,7 +38,7 @@ containers:
       - name: MONGODB_URI
         valueFrom:
           secretKeyRef:
-            name: {{ .ctx.name }}-backup-connection
+            name: {{ .secret }}
             key: connectionString
       - name: RETENTION_DAYS
         value: {{ .ctx.backup.retentionDays | toString | quote }}
@@ -108,6 +109,10 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: azureblob-fuse-premium
+  # Reserves the volume for this release's claim, so no other claim of the class can bind to it first.
+  claimRef:
+    namespace: {{ .namespace }}
+    name: {{ $volume }}
   mountOptions:
     - -o allow_other
     - --file-cache-timeout-in-seconds=120
@@ -119,6 +124,10 @@ spec:
       storageAccount: {{ .backup.storageAccount }}
       resourceGroup: {{ .backup.resourceGroup }}
       subscriptionID: {{ .backup.subscriptionId }}
+      # Blobfuse signs in as the kubelet identity, which needs a data role on the container, not the account key.
+      # Lowercase: the driver fills in the kubelet identity's client ID only for exactly "msi". The volume source is
+      # immutable, so changing this later means recreating the volume and its claim by hand.
+      AzureStorageAuthType: msi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -157,9 +166,12 @@ spec:
         metadata:
           labels:
             {{- toYaml .labels | nindent 12 }}
+          # Connects to the database over the mesh's mutual TLS. The clusters run Istio's native sidecars, so the Job
+          # still completes.
           annotations:
-            sidecar.istio.io/inject: "false"
+            sidecar.istio.io/inject: "true"
+            proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
         spec:
-          {{- include "mc-mongodb.backupPodSpec" (dict "ctx" . "script" (include "mc-mongodb.backupScript" .)) | nindent 10 }}
+          {{- include "mc-mongodb.backupPodSpec" (dict "ctx" . "secret" (printf "%s-backup-connection" .name) "script" (include "mc-mongodb.backupScript" .)) | nindent 10 }}
 {{- end }}
 {{- end }}

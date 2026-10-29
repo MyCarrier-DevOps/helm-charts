@@ -31,11 +31,11 @@ tests:
     asserts:
       - equal: {path: data.name, value: tools-mc-mongodb}
 
-  - it: keeps a long release name within 45 characters without a trailing dash
+  - it: keeps a long release name within 44 characters without a trailing dash
     release:
-      name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbb
+      name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbb
     asserts:
-      - equal: {path: data.name, value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+      - equal: {path: data.name, value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
 
   - it: lets the backup path and database be overridden
     set:

@@ -6,7 +6,8 @@ Chart name.
 {{- end }}
 
 {{/*
-Full name. Truncated to 45 so the longest derived name, <fullname>-backup-connection, stays within 63.
+Full name. Truncated to 44 so <fullname>-restore stays within the 52 characters Kubernetes allows a CronJob, and the
+longest derived name, <fullname>-restore-connection, within 63.
 */}}
 {{- define "mc-mongodb.fullname" -}}
 {{- $name := "" }}
@@ -20,7 +21,7 @@ Full name. Truncated to 45 so the longest derived name, <fullname>-backup-connec
 {{- $name = printf "%s-%s" .Release.Name $chart }}
 {{- end }}
 {{- end }}
-{{- $name | trunc 45 | trimSuffix "-" }}
+{{- $name | trunc 44 | trimSuffix "-" }}
 {{- end }}
 
 {{- define "mc-mongodb.labels" -}}
