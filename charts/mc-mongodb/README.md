@@ -49,7 +49,8 @@ The pods meet the clusters' Kyverno policies:
 - External Secrets Operator with the `Password` generator (`passwords.generators.external-secrets.io`) and
   `refreshPolicy` support on `ExternalSecret`.
 - For backups:
-  - a container per cluster in the `mycarriermongobackups` storage account (production's is `production`);
+  - a container per cluster in the `mycarriermongobackups` storage account (`production`, `development`,
+    `management`);
   - `Storage Blob Data Contributor` on that container for the cluster's kubelet identity. Blobfuse signs in as that
     identity (`AzureStorageAuthType: msi`); no account key is fetched, so the identity needs no `listKeys`. This needs
     blob CSI driver v1.27.0 or later (or v1.26.7 / v1.25.10), which fills in the kubelet identity's client ID;
