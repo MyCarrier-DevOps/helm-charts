@@ -1374,13 +1374,16 @@ dependencyDeployments:
     # storage: { size: 10Gi, storageClassName: "" }
     # resources: {...}
     # backup: { schedule: "0 2 * * *", timeZone: Etc/UTC, retentionDays: 7 }
+    # backup: { enabled: true, container: <cluster's container> }   # outside production
 ```
 
 - The connection string is in Secret `<appStack>-mongodb-connection`, key `connectionString`; its database is
   `appStack`. For a csharp stack with `global.dependencies.mongodb`, `MongoConnection_<env>` reads it instead of Vault.
-- Production (meta environment starting with `prod`) backs up to the `production` container of
-  `mycarriermongobackups`, folder `<meta environment>/<appStack>/<namespace>`, and gets a suspended
-  `<appStack>-mongodb-restore` CronJob. Other environments have no backups. A stack cannot change this.
+- Production (meta environment starting with `prod`) always backs up, to the `production` container of
+  `mycarriermongobackups` unless `backup.container` names another, folder `<meta environment>/<appStack>/<namespace>`,
+  and gets a suspended `<appStack>-mongodb-restore` CronJob. Any other environment backs up only with
+  `backup.enabled: true` and its cluster's `backup.container`. Each container and its role for the cluster's kubelet
+  identity are set up in ManagementInfra.
 - The subchart's own values live under `mc-mongodb` and are not for stacks to set.
 
 ## KrakenD AutoConfig

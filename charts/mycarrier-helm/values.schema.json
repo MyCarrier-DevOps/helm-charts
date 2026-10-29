@@ -2990,6 +2990,15 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Back up outside production (off by default). Production always backs up; false there fails the render."
+                },
+                "container": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$",
+                  "description": "Blob container in mycarriermongobackups for the cluster the stack runs on (one per cluster). Defaults to production in production; required wherever else backups are enabled."
+                },
                 "schedule": {
                   "type": "string",
                   "description": "Cron schedule for backups."

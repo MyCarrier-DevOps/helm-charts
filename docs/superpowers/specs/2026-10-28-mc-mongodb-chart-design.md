@@ -14,7 +14,7 @@ The work ships in two phases, in one PR:
 1. **Standalone chart.** `charts/mc-mongodb` deploys one MongoDB replica set through the MongoDB operator and, when
    asked, a daily backup CronJob writing to Azure Blob storage plus a restore CronJob that only runs on demand.
 2. **Embedded in mycarrier-helm.** A stack sets `dependencyDeployments.mongodb.enabled: true`. mycarrier-helm renders the chart's
-   resources, turns backups on in production only, and points the service's injected Mongo connection string at the
+   resources, turns backups on in production (and elsewhere when the stack asks), and points the service's injected Mongo connection string at the
    in-cluster instance instead of the shared one.
 
 The chart serves one application user per release. Several services can share a release by using that user's
@@ -29,7 +29,8 @@ consumer needs them.
 - Backups land in the `mycarriermongobackups` storage account: one container per cluster (production's is
   `production`), a folder per environment and service.
 - Restore is one action in the Argo CD UI, and a sync can never trigger it.
-- In mycarrier-helm: backups on in production, off everywhere else, with no per-stack setting needed.
+- In mycarrier-helm: backups on in production with no per-stack setting needed; off everywhere else unless the stack
+  turns them on and names its cluster's container (for example a tool on the management cluster).
 - In mycarrier-helm: the injected connection string switches to the in-cluster instance **if and only if** the stack
   deploys it. Stacks that don't are unchanged.
 
@@ -57,7 +58,7 @@ off-by-default switch is the safeguard.
 ## Anti-goals (failure even if it renders)
 
 - **A sync restores data.** Any design where an Argo sync, self-heal, prune or re-add can start a restore is wrong.
-- **A non-production environment writes backups**, or production silently has none.
+- **A non-production environment writes backups without the stack asking**, or production silently has none.
 - **A stack that doesn't deploy MongoDB sees any change** in its rendered output.
 - **Passwords rotate on their own.** A re-render or re-sync must not produce a new password.
 
@@ -264,8 +265,8 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
   The subchart's values key stays `mc-mongodb`, which reads as the chart rather than as a switch; stacks don't set it.
 - **Values a stack sets:** all under `dependencyDeployments.mongodb`, so deploying a database reads differently from
   using one (`global.dependencies.mongodb`): `enabled` (default `false`), plus optional `members`, `version`,
-  `storage.*`, `resources`, `backup.schedule`, `backup.timeZone` and `backup.retentionDays`. mycarrier-helm's schema
-  defines them and rejects anything else (`backup.enabled` included). mycarrier-helm reads the remaining defaults
+  `storage.*`, `resources`, `backup.enabled`, `backup.container`, `backup.schedule`, `backup.timeZone` and
+  `backup.retentionDays`. mycarrier-helm's schema defines them and rejects anything else. mycarrier-helm reads the remaining defaults
   from the subchart's values (`.Values.mc-mongodb`) and layers the stack's settings over them.
 - **What mycarrier-helm computes:**
   - Production means `hasPrefix "prod" $metaenv`. This covers plain `prod` (what `_lang.tpl` checks) and any
@@ -273,9 +274,12 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
     backing up: a production-like environment that gets backups costs storage, while a production environment
     without backups is an anti-goal.
   - Name: `<appStack>-mongodb`.
-  - Backup: enabled exactly when production. A stack cannot turn it on outside production or off in production.
+  - Backup: always enabled in production (`backup.enabled: false` there fails the render); elsewhere enabled when the
+    stack sets `backup.enabled: true`. Backups are optional in any environment because the chart can run outside the
+    app clusters (the management cluster), where a tool may well need them.
   - Backup path: `<meta environment>/<appStack>/<namespace>` (appStack lowercased), so releases of one stack in different namespaces of an environment back up to separate folders.
-  - Backup container: `production` (backups only run in production).
+  - Backup container: the stack's `backup.container`, defaulting to `production` in production. The chart cannot tell
+    which cluster it renders on, so enabling backups outside production without a container fails the render.
   - Database: `appStack`, the same in every environment, so a production backup restores into a matching database
     elsewhere.
   - Members: `dependencyDeployments.mongodb.members` if set, otherwise 3 in production and 1 elsewhere.
@@ -285,7 +289,7 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
   deletes its claims, so feature environments leave nothing behind. **Builder verifies** MCK doesn't set
   `persistentVolumeClaimRetentionPolicy.whenDeleted: Delete` or owner references on the claims.
 - **Feature environments:** each feature namespace gets its own empty MongoDB when the stack enables it, without
-  backups (feature environments' meta environment is dev).
+  backups unless the stack turns them on (feature environments' meta environment is dev).
 - **Connection string swap:** in `_lang.tpl`, when `dependencyDeployments.mongodb.enabled`, `MongoConnection_<metaenv>` becomes
   `valueFrom.secretKeyRef` (Secret `<appStack>-mongodb-connection`, key `connectionString`) instead of the
   Vault reference. This is a new env shape there: the block emits only `value:` today. `KeyVault_MongoConnection`

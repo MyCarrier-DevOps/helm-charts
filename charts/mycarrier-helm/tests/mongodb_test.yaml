@@ -24,6 +24,15 @@ tests:
     asserts:
       - equal: {path: spec.csi.volumeAttributes.containerName, value: production}
 
+  # A production-like environment on another cluster (prod-eu) writes to that cluster's container.
+  - it: backs production up to the stack's container when it names one
+    set:
+      environment: { name: prod-eu }
+      dependencyDeployments.mongodb.backup.container: production-eu
+    documentSelector: {path: kind, value: PersistentVolume}
+    asserts:
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: production-eu}
+
   - it: mounts the backup folder <meta environment>/<appStack>/<namespace>
     documentSelector: {path: spec.schedule, value: "0 2 * * *"}
     asserts:
@@ -61,6 +70,28 @@ tests:
       environment: { name: preprod }
     asserts:
       - hasDocuments: {count: 7}
+
+  # Outside production, backups are the stack's choice; it names the container of the cluster it runs on.
+  - it: backs up any environment that turns backups on, to the stack's container
+    set:
+      environment: { name: preprod }
+      dependencyDeployments.mongodb.backup: { enabled: true, container: development }
+    asserts:
+      - hasDocuments: {count: 12}
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: development}
+        documentSelector: {path: kind, value: PersistentVolume}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: preprod/tools/preprod
+        documentSelector: {path: spec.schedule, value: "0 2 * * *"}
+
+  - it: rejects backups outside production without a container
+    set:
+      environment: { name: preprod }
+      dependencyDeployments.mongodb.backup.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencyDeployments.mongodb.backup.container"
 
   - it: deploys one member outside production
     set:
@@ -136,7 +167,7 @@ tests:
           path: spec.jobTemplate.spec.template.spec.containers[0].env
           content: { name: RETENTION_DAYS, value: "14" }
 
-  - it: rejects a stack turning backups on or off (production decides)
+  - it: rejects a stack turning production backups off
     set:
       dependencyDeployments.mongodb.backup.enabled: false
     asserts:
@@ -168,10 +199,10 @@ tests:
 
   - it: rejects settings dependencyDeployments.mongodb does not expose
     set:
-      dependencyDeployments.mongodb.backup.container: other
+      dependencyDeployments.mongodb.backup.path: other
     asserts:
       - failedTemplate:
-          errorPattern: "container"
+          errorPattern: "path"
 
   - it: gives the database pods the stack's own ServiceAccount and Role
     documentSelector: {path: kind, value: ServiceAccount}

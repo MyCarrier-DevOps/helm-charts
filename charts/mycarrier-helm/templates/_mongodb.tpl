@@ -15,7 +15,8 @@ allows a CronJob. */}}
 {{/*
 The mc-mongodb render context. The subchart's values (.Values.mc-mongodb) supply the defaults; the stack's
 dependencyDeployments.mongodb overrides the settings it exposes; the environment decides the rest. Production (a meta
-environment starting with prod) always backs up and never otherwise.
+environment starting with prod) always backs up, to the production container unless the stack names another; any other
+environment backs up when the stack turns it on and names its cluster's container.
 Usage: include "helm.mongodb.context" . | fromJson
 */}}
 {{- define "helm.mongodb.context" -}}
@@ -26,9 +27,16 @@ Usage: include "helm.mongodb.context" . | fromJson
 {{- $metaEnv := include "helm.metaEnvironment" . }}
 {{- $namespace := include "helm.namespace" . }}
 {{- $isProd := hasPrefix "prod" $metaEnv }}
-{{- $backup := mergeOverwrite (deepCopy $defaults.backup) (pick ($stack.backup | default dict) "schedule" "timeZone" "retentionDays") }}
-{{- $_ := set $backup "enabled" $isProd }}
-{{- $_ := set $backup "container" "production" }}
+{{- $stackBackup := $stack.backup | default dict }}
+{{- if and $isProd (eq (toString $stackBackup.enabled) "false") }}
+{{- fail "dependencyDeployments.mongodb.backup.enabled: production always backs up" }}
+{{- end }}
+{{- $backup := mergeOverwrite (deepCopy $defaults.backup) (pick $stackBackup "schedule" "timeZone" "retentionDays") }}
+{{- $_ := set $backup "enabled" (or $isProd (eq (toString $stackBackup.enabled) "true")) }}
+{{- $_ := set $backup "container" (default (ternary "production" "" $isProd) $stackBackup.container) }}
+{{- if and $backup.enabled (not $backup.container) }}
+{{- fail "dependencyDeployments.mongodb.backup.container: name the backup container of the cluster this environment runs on" }}
+{{- end }}
 {{- $_ := set $backup "path" (printf "%s/%s/%s" $metaEnv $appStack $namespace) }}
 {{- dict
   "name" $name
