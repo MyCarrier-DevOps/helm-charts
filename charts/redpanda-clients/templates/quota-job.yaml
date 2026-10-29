@@ -1,0 +1,68 @@
+{{- $cmds := list -}}
+{{- range $c := .Values.clients -}}
+  {{- with $c.quota -}}
+    {{- $cmds = append $cmds (printf "rpk cluster quotas alter --name client-id-prefix=%s. --add producer_byte_rate=%d --add consumer_byte_rate=%d" $c.id (int64 .producerByteRate) (int64 .consumerByteRate)) -}}
+  {{- end -}}
+{{- end -}}
+{{- if $cmds }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-quotas
+  labels:
+    {{- include "redpanda-clients.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: rpk
+          image: {{ .Values.quotaJob.image }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              {{- range $cmds }}
+              {{ . }}
+              {{- end }}
+          env:
+            - name: RPK_BROKERS
+              value: {{ .Values.quotaJob.brokers | quote }}
+            - name: RPK_TLS_ENABLED
+              value: "true"
+            - name: RPK_TLS_CA
+              value: /etc/redpanda-ca/ca.crt
+            - name: RPK_SASL_MECHANISM
+              value: SCRAM-SHA-512
+            - name: RPK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.quotaJob.credentialsSecret }}
+                  key: username
+            - name: RPK_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.quotaJob.credentialsSecret }}
+                  key: password
+          resources:
+            {{- toYaml .Values.quotaJob.resources | nindent 12 }}
+          securityContext:
+            # uid of the redpanda user in the Redpanda image
+            runAsUser: 101
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: redpanda-ca
+              mountPath: /etc/redpanda-ca
+              readOnly: true
+      volumes:
+        - name: redpanda-ca
+          secret:
+            secretName: {{ .Values.quotaJob.caSecret }}
+            items:
+              - key: ca.crt
+                path: ca.crt
+{{- end }}

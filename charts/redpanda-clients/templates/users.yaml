@@ -1,0 +1,43 @@
+{{- include "redpanda-clients.validate" . -}}
+{{- range $c := .Values.clients }}
+---
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: User
+metadata:
+  name: {{ $c.id }}
+  labels:
+    {{- include "redpanda-clients.labels" $ | nindent 4 }}
+spec:
+  cluster:
+    clusterRef:
+      name: {{ $.Values.cluster.name }}
+  authentication:
+    type: scram-sha-512
+    password:
+      valueFrom:
+        secretKeyRef:
+          name: redpanda-client-{{ $c.id }}
+          key: password
+  authorization:
+    acls:
+      - type: allow
+        resource:
+          type: topic
+          name: {{ printf "%s." $c.id | quote }}
+          patternType: prefixed
+        operations: [Read, Write, Describe]
+      - type: allow
+        resource:
+          type: group
+          name: {{ printf "%s." $c.id | quote }}
+          patternType: prefixed
+        operations: [Read, Describe]
+      {{- if $c.transactions }}
+      - type: allow
+        resource:
+          type: transactionalId
+          name: {{ printf "%s." $c.id | quote }}
+          patternType: prefixed
+        operations: [Write, Describe]
+      {{- end }}
+{{- end }}

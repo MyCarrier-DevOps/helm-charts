@@ -1,0 +1,46 @@
+suite: client validation
+templates:
+  - templates/users.yaml
+tests:
+  - it: rejects a client id containing a dot
+    set:
+      clients:
+        - id: sa.ia
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid client id \"sa.ia\""
+
+  - it: rejects an uppercase client id
+    set:
+      clients:
+        - id: Alpha
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid client id \"Alpha\""
+
+  - it: rejects a missing client id
+    set:
+      clients:
+        - topics: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid client id"
+
+  - it: rejects duplicate client ids
+    set:
+      clients:
+        - id: alpha
+        - id: alpha
+    asserts:
+      - failedTemplate:
+          errorPattern: "duplicate client id \"alpha\""
+
+  - it: rejects a topic name with characters outside lowercase, digits and dashes
+    set:
+      clients:
+        - id: alpha
+          topics:
+            - name: ship_ments
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid topic name \"ship_ments\" for client \"alpha\""

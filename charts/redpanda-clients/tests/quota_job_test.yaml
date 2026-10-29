@@ -1,0 +1,64 @@
+suite: quota job
+templates:
+  - templates/quota-job.yaml
+values:
+  - ./values/two-clients.yaml
+tests:
+  - it: sets a client-id-prefix quota for each client that has one
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "rpk cluster quotas alter --name client-id-prefix=alpha\\. --add producer_byte_rate=5242880 --add consumer_byte_rate=10485760"
+
+  - it: skips clients without a quota
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "bravo"
+
+  - it: renders nothing when no client has a quota
+    set:
+      clients:
+        - id: solo
+          topics: []
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: carries the standard chart labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: redpanda-clients
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: runs as the image's non-root redpanda user
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 101
+
+  - it: sets resource requests and limits from values
+    set:
+      quotaJob.resources:
+        requests:
+          cpu: 20m
+          memory: 48Mi
+        limits:
+          memory: 96Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 96Mi
