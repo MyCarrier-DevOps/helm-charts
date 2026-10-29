@@ -1382,8 +1382,9 @@ dependencyDeployments:
 - Production (meta environment starting with `prod`) always backs up, to the `production` container of
   `mycarriermongobackups` unless `backup.container` names another, folder `<meta environment>/<appStack>/<namespace>`,
   and gets a suspended `<appStack>-mongodb-restore` CronJob. Any other environment backs up only with
-  `backup.enabled: true` and its cluster's `backup.container`. Each container and its role for the cluster's kubelet
-  identity are set up in ManagementInfra.
+  `backup.enabled: true` and its cluster's `backup.container`; offloaded feature environments never back up.
+  Production containers are named `production*` and only production uses them; a mismatch fails the render. Each
+  cluster's kubelet identity needs `Storage Blob Data Contributor` on its container.
 - The subchart's own values live under `mc-mongodb` and are not for stacks to set.
 
 ## KrakenD AutoConfig

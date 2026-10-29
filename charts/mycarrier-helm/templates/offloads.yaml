@@ -57,8 +57,10 @@ spec:
                     {{- . | toYaml | nindent 22 }}
                     {{- end }}
                     {{- if include "helm.mongodb.enabled" . }}
+                    {{- /* Each feature environment gets its own MongoDB but no backups: it copies dev's settings and cannot choose for itself. */}}
                     dependencyDeployments:
-                      {{- .Values.dependencyDeployments | toYaml | nindent 22 }}
+                      mongodb:
+                        {{- omit .Values.dependencyDeployments.mongodb "backup" | toYaml | nindent 24 }}
                     {{- end }}
   template:
     metadata:

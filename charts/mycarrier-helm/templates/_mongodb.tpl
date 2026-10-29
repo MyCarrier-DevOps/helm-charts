@@ -37,6 +37,11 @@ Usage: include "helm.mongodb.context" . | fromJson
 {{- if and $backup.enabled (not $backup.container) }}
 {{- fail "dependencyDeployments.mongodb.backup.container: name the backup container of the cluster this environment runs on" }}
 {{- end }}
+{{- /* Production containers are named production*, and only production uses them: a container set for every environment
+in helm/values.yaml fails here instead of silently stopping production backups. */}}
+{{- if and $backup.enabled (ne $isProd (hasPrefix "production" $backup.container)) }}
+{{- fail (printf "dependencyDeployments.mongodb.backup.container: %q does not match this environment; production backs up to a production* container, and no other environment does. Set it in helm/values.{env}.yaml" $backup.container) }}
+{{- end }}
 {{- $_ := set $backup "path" (printf "%s/%s/%s" $metaEnv $appStack $namespace) }}
 {{- dict
   "name" $name

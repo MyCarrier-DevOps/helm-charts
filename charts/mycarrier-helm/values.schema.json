@@ -2950,7 +2950,7 @@
       "properties": {
         "mongodb": {
           "type": "object",
-          "description": "A MongoDB replica set for the stack (mc-mongodb). Backups run in production only; the environment decides, not the stack.",
+          "description": "A MongoDB replica set for the stack (mc-mongodb). Production always backs up; other environments back up when backup.enabled is true and backup.container names the cluster's container.",
           "additionalProperties": false,
           "properties": {
             "enabled": {
@@ -2997,7 +2997,7 @@
                 "container": {
                   "type": "string",
                   "pattern": "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$",
-                  "description": "Blob container in mycarriermongobackups for the cluster the stack runs on (one per cluster). Defaults to production in production; required wherever else backups are enabled."
+                  "description": "Blob container in mycarriermongobackups for the cluster the stack runs on (one per cluster). Defaults to production in production; required wherever else backups are enabled. Production containers are named production* and only production uses them; a mismatch fails the render."
                 },
                 "schedule": {
                   "type": "string",

@@ -20,3 +20,13 @@ tests:
     asserts:
       - notExists:
           path: spec.generators[0].matrix.generators[1].list.elements[0].Values.dependencyDeployments
+
+  # Feature environments run branch code on test data and copy dev's settings, so they cannot choose backups apart
+  # from dev; their archives would also outlive the offload.
+  - it: gives offloads no backups when dev backs up
+    set:
+      dependencyDeployments.mongodb: { enabled: true, backup: { enabled: true, container: development } }
+    asserts:
+      - equal:
+          path: spec.generators[0].matrix.generators[1].list.elements[0].Values.dependencyDeployments
+          value: { mongodb: { enabled: true } }

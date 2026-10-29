@@ -280,6 +280,8 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
   - Backup path: `<meta environment>/<appStack>/<namespace>` (appStack lowercased), so releases of one stack in different namespaces of an environment back up to separate folders.
   - Backup container: the stack's `backup.container`, defaulting to `production` in production. The chart cannot tell
     which cluster it renders on, so enabling backups outside production without a container fails the render.
+    Production containers are named `production*` and only production uses them, so a container set for every
+    environment fails the render rather than silently stopping production backups.
   - Database: `appStack`, the same in every environment, so a production backup restores into a matching database
     elsewhere.
   - Members: `dependencyDeployments.mongodb.members` if set, otherwise 3 in production and 1 elsewhere.
@@ -288,8 +290,9 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
   survive the resource being pruned and can be reattached by turning it back on. Deleting a feature namespace
   deletes its claims, so feature environments leave nothing behind. **Builder verifies** MCK doesn't set
   `persistentVolumeClaimRetentionPolicy.whenDeleted: Delete` or owner references on the claims.
-- **Feature environments:** each feature namespace gets its own empty MongoDB when the stack enables it, without
-  backups unless the stack turns them on (feature environments' meta environment is dev).
+- **Feature environments:** each offloaded feature namespace gets its own empty MongoDB when the stack enables it, and
+  never backs up: the offload copies dev's settings without `backup`, since a feature environment cannot choose apart
+  from dev and its archives would outlive the offload.
 - **Connection string swap:** in `_lang.tpl`, when `dependencyDeployments.mongodb.enabled`, `MongoConnection_<metaenv>` becomes
   `valueFrom.secretKeyRef` (Secret `<appStack>-mongodb-connection`, key `connectionString`) instead of the
   Vault reference. This is a new env shape there: the block emits only `value:` today. `KeyVault_MongoConnection`

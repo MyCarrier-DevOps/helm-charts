@@ -93,6 +93,30 @@ tests:
       - failedTemplate:
           errorPattern: "dependencyDeployments.mongodb.backup.container"
 
+  # Production containers are named production* and only production uses them, so a container set for every
+  # environment in helm/values.yaml fails the render instead of silently stopping production backups.
+  - it: fails when production names a non-production container
+    set:
+      dependencyDeployments.mongodb.backup.container: development
+    asserts:
+      - failedTemplate:
+          errorPattern: "does not match this environment"
+
+  - it: fails when another environment backs up to a production container
+    set:
+      environment: { name: dev }
+      dependencyDeployments.mongodb.backup: { enabled: true, container: production }
+    asserts:
+      - failedTemplate:
+          errorPattern: "does not match this environment"
+
+  - it: ignores a production container where backups are off
+    set:
+      environment: { name: dev }
+      dependencyDeployments.mongodb.backup.container: production
+    asserts:
+      - hasDocuments: {count: 7}
+
   - it: deploys one member outside production
     set:
       environment: { name: feature14 }
