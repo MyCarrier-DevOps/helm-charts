@@ -20,4 +20,8 @@ chart and version, what broke, and what a stack's values must change. Mark the c
 A push hook (`.claude/hooks/check-helm-guidance.sh`) enforces this for Claude Code sessions: a push of chart changes
 without a guidance change is denied with the reason. Update the guidance, commit, and push again.
 
+mycarrier-helm renders mc-mongodb from `charts/mycarrier-helm/charts/`, which is built, not committed. After cloning, and
+after any change under `charts/mc-mongodb/`, run `helm dependency update charts/mycarrier-helm` before rendering or
+testing mycarrier-helm locally (`render-examples.sh` does this itself).
+
 Never edit `version:` in a `Chart.yaml`; the release workflow bumps it.

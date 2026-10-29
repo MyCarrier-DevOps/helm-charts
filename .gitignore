@@ -58,5 +58,5 @@ __snapshot__
 !charts/mycarrier-helm/tests/__snapshot__/
 .vscode
 .debug
-# Dependencies fetched by helm dependency update
-charts/*/charts/
+# mycarrier-helm's local mc-mongodb, fetched by helm dependency update. Other charts commit the subcharts they vendor.
+charts/mycarrier-helm/charts/

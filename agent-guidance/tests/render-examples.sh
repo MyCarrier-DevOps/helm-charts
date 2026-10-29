@@ -9,6 +9,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GUIDE="${1:-$ROOT/agent-guidance/helm/.apm/instructions/helm.instructions.md}"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+# mycarrier-helm renders mc-mongodb from charts/, which is built, not committed: build it from the current source.
+helm dependency update "$ROOT/charts/mycarrier-helm" >/dev/null
 
 python3 - "$GUIDE" "$WORK" <<'PY'
 import os, re, sys
