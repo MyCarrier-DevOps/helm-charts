@@ -43,8 +43,11 @@ off-by-default switch is the safeguard.
 
 - Installing the operator. The operator is installed once per cluster, separately (see Prerequisites).
 - Bitnami charts or images in any form.
-- Sharding, arbiters, TLS between members, X.509 auth, Prometheus wiring. The CRD supports them; nothing here needs
-  them yet.
+- Sharding, arbiters, MongoDB's own TLS, X.509 auth, Prometheus wiring. The CRD supports them; nothing here needs
+  them yet. Traffic is encrypted by the Istio sidecars instead (see Istio).
+- An allowlist of clients. A NetworkPolicy is not enforced on the app clusters (AKS `networkPolicy: none`); add one if
+  they move to Cilium. An Istio `AuthorizationPolicy` identifies callers only by ServiceAccount, and stacks' pods all
+  run as `default`.
 - Point-in-time recovery beyond what a nightly `mongodump --oplog` gives.
 - Alerting on failed backups. A failed backup shows as a failed Job; alerting can come later through the chart's
   alerts feature.
@@ -68,10 +71,10 @@ off-by-default switch is the safeguard.
 - A blob container per cluster in `mycarriermongobackups` (`rg_management_controlplane`, subscription
   `99b54c45-a73d-4d40-915e-c0392b589e8c`); production's container is `production`. The account's network rules allow
   the app clusters.
-- Each cluster's AKS kubelet identity can read the storage account's keys (`listKeys`, e.g. Storage Account Key
-  Operator Service Role). With no secret on the PV, the blob CSI driver uses the kubelet identity to fetch the account
-  key at mount time. This is Azure RBAC on the cluster; the chart carries no keys or secrets. (Blobfuse authenticating
-  as the identity itself, `AzureStorageAuthType: MSI`, needs a per-cluster client ID today, so it isn't used.)
+- Each cluster's AKS kubelet identity has `Storage Blob Data Contributor` on its container. Blobfuse signs in as that
+  identity (`AzureStorageAuthType: msi`, lowercase); blob CSI driver v1.27.0 or later (v1.26.7 / v1.25.10) fills in the
+  kubelet identity's client ID, and both app clusters run v1.27.11. No account key is fetched, so the identity needs no
+  `listKeys`. The PV source is immutable, so the auth mode is fixed before the first backup deploys.
 
 ## The standalone chart (phase 1)
 
@@ -151,10 +154,14 @@ All names derive from `<fullname>`; `<ns>` is the release namespace.
        `scramCredentialsSecretName`, and roles `readWriteAnyDatabase` and `dbAdminAnyDatabase` on `admin`. Apps rely
        on a primary database (the connection string's) plus any number of secondary databases and collections they
        create themselves.
-     - backup user, `db: admin`, roles `backup` and `restore` on `admin`.
+     - backup user, `db: admin`, role `backup` on `admin`.
+     - with backups, a restore user, `db: admin`, role `restore` on `admin`, with its own generated Secret
+       (`<fullname>-restore-connection`) that only the restore Job reads. `restore` can rewrite users and grant roles.
+   - `security.authentication.ignoreUnknownUsers: false`, so the agent removes users the chart does not declare.
      - `connectionStringSecretName` is left to the operator's default; nothing consumes that Secret.
    - `statefulSet.metadata` / `statefulSet.spec` overrides: data volume claim size and storage class, mongod
-     resources, and pod annotation `sidecar.istio.io/inject: "false"`. **Builder verifies** the override paths
+     resources, the Istio sidecar annotations, the ServiceAccount, probes and, with more than one member, required pod
+     anti-affinity on `kubernetes.io/hostname`. A multi-member set also gets a PodDisruptionBudget (`maxUnavailable: 1`). **Builder verifies** the override paths
      against the MCK samples (the CRD leaves `statefulSet.spec` free-form).
 3. **When `backup.enabled`:**
    - **Static `PersistentVolume`** (cluster-scoped, so the name must be unique per cluster: `<ns>-<fullname>-backup`):
@@ -162,8 +169,8 @@ All names derive from `<fullname>`; `<ns>` is the release namespace.
        `ReadWriteMany`, `persistentVolumeReclaimPolicy: Retain`.
      - `volumeHandle: <ns>-<fullname>-backup`.
      - `volumeAttributes`: `containerName: <backup.container>`, `storageAccount`, `resourceGroup`,
-       `subscriptionID` from values, and managed-identity auth (`AzureStorageAuthType: MSI`), which uses the kubelet
-       identity. No `nodeStageSecretRef`. **Builder verifies** the attribute names against the blob CSI driver's
+       `subscriptionID` from values, and managed-identity auth (`AzureStorageAuthType: msi`), which uses the kubelet
+       identity. `claimRef` reserves the PV for its claim. No `nodeStageSecretRef`. **Builder verifies** the attribute names against the blob CSI driver's
        static-provisioning docs, including that it doesn't try to fetch an account key cross-subscription.
    - **`PersistentVolumeClaim`** in `<ns>`, bound to that PV by `volumeName`.
    - **Backup `CronJob`** `<fullname>-backup`:
@@ -173,10 +180,10 @@ All names derive from `<fullname>`; `<ns>` is the release namespace.
        `members > 1`.
      - After a successful dump only, deletes `*.archive.gz` older than `backup.retentionDays`. A failed dump never
        prunes.
-     - `concurrencyPolicy: Forbid`, a few history entries, `sidecar.istio.io/inject: "false"`.
+     - `concurrencyPolicy: Forbid`, a few history entries, an Istio sidecar, no ServiceAccount token.
    - **Restore `CronJob`** `<fullname>-restore`:
      - `suspend: true`, so the schedule never fires.
-     - Same mount and secret as the backup CronJob.
+     - Same mount as the backup CronJob; reads the restore user's Secret.
      - Restores the newest archive, or the file named in env `RESTORE_FILE` when set (empty by default).
      - `mongorestore --drop --gzip --archive=<file> --nsExclude 'admin.*' --nsExclude 'config.*'`, plus
        `--oplogReplay` if it can be combined with `--nsExclude`. Excluding `admin.*` stops the restore from
@@ -196,14 +203,14 @@ how to list the available archives (exec into a Job from the restore CronJob, or
 
 ### Istio
 
-MongoDB pods and the backup and restore pods run without sidecars:
+MongoDB pods and the backup and restore pods run with Istio sidecars, so traffic between members and from clients
+with sidecars is encrypted by Istio's automatic mutual TLS. The app clusters run Istio 1.27 with native sidecars
+(istio-proxy as an init container that always restarts), so a Job's sidecar does not keep it from completing. Istio
+rewrites the TCP probes to its agent, which still checks the container's port.
 
-- A sidecar in a Job's pod keeps the Job from ever completing.
-- Replica-set member traffic through sidecars adds failure modes for no benefit.
-
-App pods with sidecars reach a non-mesh destination in plaintext, and no `PeerAuthentication` exists on the
-management cluster. **Builder confirms** there is no STRICT mTLS policy on the app clusters that would block app
-pods from connecting.
+No STRICT `PeerAuthentication`: a client without a sidecar can still connect in plaintext, with a SCRAM login. The
+clusters' STRICT policy (`mtls-strict` in `istio-system`, selector `mtls: strict`) does not take effect outside
+`istio-system`; a labelled pod still reports PERMISSIVE.
 
 ### Tests
 
@@ -237,8 +244,9 @@ StatefulSet container, a read-only root filesystem, non-root users, and images o
 few named upstream paths. Checked with the Kyverno CLI against both clusters' policies, using the StatefulSet MCK
 1.14.0 actually builds (on a local cluster):
 - `mongod` gets TCP startup, liveness and readiness probes on 27017 (the startup probe allows 10 minutes for the
-  agent's first configuration); the agent gets a TCP liveness probe on its status port, 5000, and keeps the
-  operator's readiness probe.
+  agent's first configuration); the agent's liveness probe opens its status port, 127.0.0.1:5000, from inside
+  the container (the port is not bound to the pod IP, so a tcpSocket probe fails), and it keeps the operator's
+  readiness probe.
 - Backup and restore pods run as uid/gid 999 (the `mongo` image's user), read-only root, `/tmp` as an emptyDir.
 - `mongo:8.0.34` is rewritten to `harbor.mycarrier.tech/proxy-cache` by the clusters' harbor-container-webhook. The
   operator's images come through a Harbor quay.io proxy project, set in the operator's values.
@@ -310,15 +318,17 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
 - Chart name `mc-mongodb` (matches `mc-environment`); stacks reach it through `dependencyDeployments.mongodb`.
 - Named templates with a computed context so mycarrier-helm can drive environment-dependent values.
 - External Secrets `Password` generator for credentials, with the regeneration caveat above.
-- A separate backup user with `backup` + `restore` roles; the app user can't run `mongodump --oplog`.
+- A backup user with only `backup`, and a restore user with only `restore`, read only by the restore Job.
 - The chart builds the connection string itself (ExternalSecret template) so it carries the database name.
 - Database name under mycarrier-helm is `appStack`.
 - Restore of a specific file uses `kubectl create job --from … --dry-run` with `RESTORE_FILE`; no values key.
-- No sidecars on MongoDB, backup or restore pods.
+- Istio sidecars on MongoDB, backup and restore pods, with automatic mutual TLS; no STRICT policy and no client
+  allowlist.
 - MongoDB 8.0, pinned, with `featureCompatibilityVersion` pinned.
 - Members default 1, and 3 in production under mycarrier-helm.
 - Feature environments get their own MongoDB when enabled.
 - The swap only touches the existing injection path; non-csharp stacks wire the Secret themselves.
 - Production is `hasPrefix "prod"` on the meta environment, erring toward backups.
-- Pruning the resource keeps the data disks (default PVC retention); feature namespaces take theirs with them.
+- Pruning the resource keeps the data disks (default PVC retention). Feature namespaces outlive offloads, so a stack's
+  disks there are kept too, and its next MongoDB in that environment reattaches them.
 - One app user per release; per-consumer users wait for a consumer that needs them.
