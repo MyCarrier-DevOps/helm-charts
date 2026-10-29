@@ -24,13 +24,23 @@ tests:
     asserts:
       - equal: {path: spec.csi.volumeAttributes.containerName, value: production}
 
-  - it: mounts the backup folder <environment>/<appStack>
+  - it: mounts the backup folder <meta environment>/<appStack>/<namespace>
     documentSelector: {path: spec.schedule, value: "0 2 * * *"}
     asserts:
       - equal: {path: metadata.name, value: tools-mongodb-backup}
       - equal:
           path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
-          value: prod/tools
+          value: prod/tools/prod
+
+  # Releases of one stack in different namespaces of an environment keep separate backups.
+  - it: names the backup folder after an overridden namespace
+    set:
+      environment: { name: prod, namespaceOverride: prod-saia }
+    documentSelector: {path: spec.schedule, value: "0 2 * * *"}
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: prod/tools/prod-saia
 
   - it: renders the on-demand restore in production
     documentSelector: {path: spec.suspend, value: true}

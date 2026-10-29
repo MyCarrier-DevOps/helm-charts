@@ -274,7 +274,7 @@ constraint is `>=0.1.0`, because the release workflow bumps `mc-mongodb`'s versi
     without backups is an anti-goal.
   - Name: `<appStack>-mongodb`.
   - Backup: enabled exactly when production. A stack cannot turn it on outside production or off in production.
-  - Backup path: `<environment.name>/<appStack>`.
+  - Backup path: `<meta environment>/<appStack>/<namespace>` (appStack lowercased), so releases of one stack in different namespaces of an environment back up to separate folders.
   - Backup container: `production` (backups only run in production).
   - Database: `appStack`, the same in every environment, so a production backup restores into a matching database
     elsewhere.

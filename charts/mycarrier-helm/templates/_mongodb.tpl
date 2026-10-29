@@ -23,14 +23,16 @@ Usage: include "helm.mongodb.context" . | fromJson
 {{- $stack := .Values.dependencyDeployments.mongodb }}
 {{- $name := include "helm.mongodb.name" . }}
 {{- $appStack := .Values.global.appStack | lower }}
-{{- $isProd := hasPrefix "prod" (include "helm.metaEnvironment" .) }}
+{{- $metaEnv := include "helm.metaEnvironment" . }}
+{{- $namespace := include "helm.namespace" . }}
+{{- $isProd := hasPrefix "prod" $metaEnv }}
 {{- $backup := mergeOverwrite (deepCopy $defaults.backup) (pick ($stack.backup | default dict) "schedule" "timeZone" "retentionDays") }}
 {{- $_ := set $backup "enabled" $isProd }}
 {{- $_ := set $backup "container" "production" }}
-{{- $_ := set $backup "path" (printf "%s/%s" .Values.environment.name $appStack) }}
+{{- $_ := set $backup "path" (printf "%s/%s/%s" $metaEnv $appStack $namespace) }}
 {{- dict
   "name" $name
-  "namespace" (include "helm.namespace" .)
+  "namespace" $namespace
   "labels" (dict
     "app.kubernetes.io/name" $name
     "app.kubernetes.io/part-of" .Values.global.appStack

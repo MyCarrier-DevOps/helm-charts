@@ -1379,8 +1379,8 @@ dependencyDeployments:
 - The connection string is in Secret `<appStack>-mongodb-connection`, key `connectionString`; its database is
   `appStack`. For a csharp stack with `global.dependencies.mongodb`, `MongoConnection_<env>` reads it instead of Vault.
 - Production (meta environment starting with `prod`) backs up to the `production` container of
-  `mycarriermongobackups`, folder `<environment.name>/<appStack>`, and gets a suspended `<appStack>-mongodb-restore`
-  CronJob. Other environments have no backups. A stack cannot change this.
+  `mycarriermongobackups`, folder `<meta environment>/<appStack>/<namespace>`, and gets a suspended
+  `<appStack>-mongodb-restore` CronJob. Other environments have no backups. A stack cannot change this.
 - The subchart's own values live under `mc-mongodb` and are not for stacks to set.
 
 ## KrakenD AutoConfig
