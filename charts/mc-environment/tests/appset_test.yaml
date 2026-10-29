@@ -129,6 +129,19 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "environments\\[prod\\]\\.global\\.deploymentStrategy: remove it"
+  # The first mycarrier-helm release with dependencyDeployments; the pipeline sets mycarrierChartVersion on every render.
+  - it: deploys mycarrier-helm 4.7.16 when no chart version is set
+    values:
+      - fixtures/basic-environments.yaml
+    set:
+      mycarrierChartVersion: null
+    documentSelector:
+      path: metadata.name
+      value: carriers-dev
+    asserts:
+      - equal:
+          path: spec.template.spec.source.targetRevision
+          value: "4.7.16"
   - it: configures template with chart source and sync policies
     values:
       - fixtures/basic-environments.yaml
