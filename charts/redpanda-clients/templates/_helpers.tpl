@@ -13,6 +13,14 @@ or produce invalid resource names.
     {{- fail (printf "duplicate client id %q" $id) -}}
   {{- end -}}
   {{- $_ := set $seen $id true -}}
+  {{- range $k, $v := ($c.quota | default dict) -}}
+    {{- if not (has $k (list "producerByteRate" "consumerByteRate")) -}}
+      {{- fail (printf "unknown quota key %q for client %q: use producerByteRate or consumerByteRate" $k $id) -}}
+    {{- end -}}
+    {{- if or (not (or (kindIs "float64" $v) (kindIs "int64" $v) (kindIs "int" $v))) (le (float64 $v) 0.0) -}}
+      {{- fail (printf "invalid %s %v for client %q: use a positive number of bytes per second, or leave it out for unlimited" $k $v $id) -}}
+    {{- end -}}
+  {{- end -}}
   {{- $seenTopics := dict -}}
   {{- range $t := $c.topics -}}
     {{- $name := toString (default "" $t.name) -}}

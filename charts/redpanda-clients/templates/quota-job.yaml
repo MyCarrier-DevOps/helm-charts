@@ -1,11 +1,10 @@
 {{- $cmds := list -}}
 {{- range $c := .Values.clients -}}
-  {{- with $c.quota -}}
-    {{- $cmd := printf "rpk cluster quotas alter --name client-id-prefix=%s." $c.id -}}
-    {{- with .producerByteRate }}{{ $cmd = printf "%s --add producer_byte_rate=%d" $cmd (int64 .) }}{{ end -}}
-    {{- with .consumerByteRate }}{{ $cmd = printf "%s --add consumer_byte_rate=%d" $cmd (int64 .) }}{{ end -}}
-    {{- $cmds = append $cmds $cmd -}}
-  {{- end -}}
+  {{- $q := $c.quota | default dict -}}
+  {{- $cmd := printf "alter --name user=%s" $c.id -}}
+  {{- with $q.producerByteRate }}{{ $cmd = printf "%s --add producer_byte_rate=%d" $cmd (int64 .) }}{{ else }}{{ $cmd = printf "%s --delete producer_byte_rate" $cmd }}{{ end -}}
+  {{- with $q.consumerByteRate }}{{ $cmd = printf "%s --add consumer_byte_rate=%d" $cmd (int64 .) }}{{ else }}{{ $cmd = printf "%s --delete consumer_byte_rate" $cmd }}{{ end -}}
+  {{- $cmds = append $cmds $cmd -}}
 {{- end -}}
 {{- if $cmds }}
 apiVersion: batch/v1
@@ -28,6 +27,12 @@ spec:
           command: ["/bin/sh", "-ec"]
           args:
             - |
+              # rpk exits 0 when the broker rejects a change and only reports it in the status
+              alter() {
+                out=$(rpk cluster quotas alter --format json "$@")
+                echo "$out"
+                case "$out" in *'"status":"OK"'*) ;; *) echo "quota change rejected" >&2; exit 1 ;; esac
+              }
               {{- range $cmds }}
               {{ . }}
               {{- end }}

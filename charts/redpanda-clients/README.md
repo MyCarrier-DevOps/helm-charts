@@ -11,8 +11,9 @@ For each client the chart renders:
   - consumer groups: Read, Describe
   - transactional IDs: Write, Describe, only when `transactions: true`
 - A `Topic` per listed topic, created in Redpanda as `<id>.<name>`.
-- When the client sets a `quota`, produce and/or fetch byte-rate quotas on the client ID prefix `<id>.`, applied by a
-  post-install/upgrade Job with `rpk`. A rate the client doesn't set stays unlimited.
+- Produce and fetch byte-rate quotas on the client's user, applied by a post-install/upgrade Job with `rpk`. The quota
+  follows the authenticated user, so a client can't avoid it or use another client's by choosing its `client.id`. A rate
+  the client doesn't set is removed, so it's unlimited even if it was set before.
 
 Clients get no cluster-level permissions and can't create topics.
 
@@ -23,7 +24,9 @@ Clients get no cluster-level permissions and can't create topics.
 - On the cluster: SASL with SCRAM, authorization enabled (`kafka_enable_authorization: true`) and topic auto-creation
   off (`auto_create_topics_enabled: false`). Without authorization the ACLs aren't enforced.
 - A secret `redpanda-client-<id>` (key `password`) for every client, created outside this chart.
-- For quotas: an admin user's credentials in `quotaJob.credentialsSecret` and the brokers' CA in `quotaJob.caSecret`.
+- Redpanda v26.1.1 or later on the brokers, for user-based quotas. Older brokers reject them and the quota Job fails.
+- An admin user's credentials in `quotaJob.credentialsSecret` and the brokers' CA in `quotaJob.caSecret`. The quota Job
+  runs on every install and upgrade that has clients.
 
 ## Example
 
@@ -45,17 +48,18 @@ clients:
 ```
 
 Clients connect with `security.protocol=SASL_SSL`, `sasl.mechanism=SCRAM-SHA-512` and their client ID as the
-username. Consumer groups and transactional IDs must start with `<id>.`, and `client.id` should be `<id>.<app>` so the
-quota applies.
+username. Consumer groups and transactional IDs must start with `<id>.`.
 
 ## Naming rules
 
 The render fails when:
 
-- a client ID isn't lowercase letters and digits. Dots aren't allowed, so no client's `<id>.` prefix can overlap
-  another's.
+- a client ID isn't a string of lowercase letters and digits starting with a letter. Dots aren't allowed, so no
+  client's `<id>.` prefix can overlap another's.
 - two clients share an ID.
-- a topic name isn't lowercase letters, digits and dashes.
+- a topic name isn't lowercase letters, digits and dashes, or a client lists the same topic twice.
+- a quota has a key other than `producerByteRate` and `consumerByteRate`, or a rate that isn't a positive number. Leave
+  a rate out for unlimited.
 
 ## Removing a client
 
@@ -65,9 +69,10 @@ Delete them deliberately:
 
 ```bash
 rpk topic delete '<id>.<name>'
-rpk cluster quotas alter --name client-id-prefix=<id>. --delete producer_byte_rate --delete consumer_byte_rate
+rpk cluster quotas alter --name user=<id> --delete producer_byte_rate --delete consumer_byte_rate
 ```
 
-Then delete the leftover `Topic` resources.
+Then delete the leftover `Topic` resources. Never give a removed client's ID to a different client while its topics
+exist: the new client's ACLs on `<id>.` would give it the old client's data.
 
 ## Parameters

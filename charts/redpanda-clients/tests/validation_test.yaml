@@ -72,3 +72,23 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "duplicate topic name \"shipments\" for client \"alpha\""
+
+  - it: rejects a quota rate of zero instead of treating it as unlimited
+    set:
+      clients:
+        - id: alpha
+          quota:
+            producerByteRate: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid producerByteRate 0 for client \"alpha\""
+
+  - it: rejects a misspelled quota key instead of treating the rate as unset
+    set:
+      clients:
+        - id: alpha
+          quota:
+            producerBytesRate: 1048576
+    asserts:
+      - failedTemplate:
+          errorPattern: "unknown quota key \"producerBytesRate\" for client \"alpha\""

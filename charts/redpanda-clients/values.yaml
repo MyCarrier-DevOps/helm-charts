@@ -16,8 +16,8 @@ topicDefaults:
   retentionMs: 604800000
 
 ## @section Quota job
-## Applies per-client quotas with rpk after each install or upgrade. The operator has no quota resource.
-## Renders only when at least one client sets a quota.
+## Sets or clears each client's quota with rpk after each install or upgrade. The operator has no quota resource.
+## Renders whenever there is at least one client.
 
 ## @param quotaJob.image Image that provides rpk
 ## @param quotaJob.brokers Kafka API address of the cluster, reachable from the job
@@ -38,14 +38,14 @@ quotaJob:
 
 ## @section Clients
 
-## @param clients List of clients. Each client gets a SCRAM-SHA-512 user limited to resources prefixed `<id>.`, its topics and an optional quota
+## @param clients List of clients. Each client gets a SCRAM-SHA-512 user limited to resources prefixed `<id>.`, its topics and a quota on that user
 ## Each client's password is read from the secret `redpanda-client-<id>` (key `password`).
 ## Create it outside this chart and never commit it.
 ##
 ## clients:
-##   - id: alpha                    # lowercase letters and digits only
+##   - id: alpha                    # a lowercase letter, then lowercase letters and digits
 ##     transactions: false          # true adds Write/Describe on transactional IDs prefixed "alpha."
-##     quota:                       # optional, bytes per second, applied to client.id prefix "alpha.". An unset rate is unlimited
+##     quota:                       # optional, positive bytes per second on user "alpha". A rate left out is unlimited
 ##       producerByteRate: 5242880
 ##       consumerByteRate: 10485760
 ##     topics:
