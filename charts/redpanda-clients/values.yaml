@@ -26,6 +26,7 @@ topicDefaults:
 ## @param quotaJob.credentialsSecret Secret with the SCRAM-SHA-512 credentials (keys `username`, `password`) of a user whose only ACL is ALTER_CONFIGS on the cluster
 ## @param quotaJob.caSecret Secret with the CA that signed the brokers' certificate (key `ca.crt`)
 ## @param quotaJob.resources Resource requests and limits for the job container
+## @param quotaJob.podLabels Extra labels on the job's pod, e.g. `sidecar.istio.io/inject: "true"` where Job pods are only meshed on request
 quotaJob:
   image: docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96
   brokers: redpanda.redpanda.svc.cluster.local:9093
@@ -37,6 +38,7 @@ quotaJob:
       memory: 32Mi
     limits:
       memory: 128Mi
+  podLabels: {}
 
 ## @section Clients
 
