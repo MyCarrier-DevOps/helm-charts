@@ -4621,6 +4621,16 @@ entries:
     version: 0.6.1
   redpanda-clients:
   - apiVersion: v2
+    created: "2026-10-30T22:23:00.71112686Z"
+    description: Per-client users, prefixed ACLs, topics and quotas on a shared Redpanda
+      cluster, managed through the Redpanda Operator
+    digest: c693c0761e9f62fa161a12c11cdda981e8862880a9f0f55cf951fef8ba40c891
+    name: redpanda-clients
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/redpanda-clients-0.1.2/redpanda-clients-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
     created: "2026-10-30T20:50:28.045530019Z"
     description: Per-client users, prefixed ACLs, topics and quotas on a shared Redpanda
       cluster, managed through the Redpanda Operator
@@ -4977,4 +4987,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-10-30T20:50:28.046146227Z"
+generated: "2026-10-30T22:23:00.711492411Z"
