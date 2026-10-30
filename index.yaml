@@ -4619,6 +4619,17 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/redis-commander-0.6.1/redis-commander-0.6.1.tgz
     version: 0.6.1
+  redpanda-clients:
+  - apiVersion: v2
+    created: "2026-10-30T20:50:28.045530019Z"
+    description: Per-client users, prefixed ACLs, topics and quotas on a shared Redpanda
+      cluster, managed through the Redpanda Operator
+    digest: 46cb8db00db634f913d20ec8d0075f3e28933e69033475217a936930b41586e0
+    name: redpanda-clients
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/redpanda-clients-0.1.1/redpanda-clients-0.1.1.tgz
+    version: 0.1.1
   redpanda-connect:
   - apiVersion: v2
     appVersion: 4.37.0
@@ -4966,4 +4977,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-10-30T20:49:57.318327701Z"
+generated: "2026-10-30T20:50:28.046146227Z"
