@@ -21,6 +21,7 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false
       containers:
         - name: rpk
           image: {{ .Values.quotaJob.image }}
@@ -62,6 +63,11 @@ spec:
             runAsUser: 101
             runAsNonRoot: true
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: redpanda-ca
               mountPath: /etc/redpanda-ca

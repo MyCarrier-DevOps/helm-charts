@@ -92,3 +92,12 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "unknown quota key \"producerBytesRate\" for client \"alpha\""
+
+  - it: rejects a client id that names a user the chart doesn't own, like a superuser or the quota job's user
+    set:
+      cluster.reservedUsers: [admin]
+      clients:
+        - id: admin
+    asserts:
+      - failedTemplate:
+          errorPattern: "client id \"admin\" is reserved"

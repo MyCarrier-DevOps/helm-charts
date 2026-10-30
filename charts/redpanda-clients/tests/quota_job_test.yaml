@@ -83,3 +83,27 @@ tests:
               memory: 48Mi
             limits:
               memory: 96Mi
+
+  - it: doesn't mount a service account token, since the job never calls the Kubernetes API
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: meets the restricted pod security standard with a read-only root filesystem
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: [ALL]
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: pins the default image by digest, since the job holds admin credentials
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "@sha256:[0-9a-f]{64}$"

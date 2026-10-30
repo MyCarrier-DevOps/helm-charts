@@ -1,8 +1,10 @@
 ## @section Cluster
 
 ## @param cluster.name Name of the Redpanda cluster resource the User and Topic resources point at (`clusterRef`)
+## @param cluster.reservedUsers Usernames this chart must never manage: the cluster's superusers and the quota job's user. A client id matching one fails the render
 cluster:
   name: redpanda
+  reservedUsers: []
 
 ## @section Topic defaults
 ## Used for any topic that doesn't set its own value
@@ -21,13 +23,13 @@ topicDefaults:
 
 ## @param quotaJob.image Image that provides rpk
 ## @param quotaJob.brokers Kafka API address of the cluster, reachable from the job
-## @param quotaJob.credentialsSecret Secret with the admin user's SCRAM-SHA-512 credentials (keys `username`, `password`)
+## @param quotaJob.credentialsSecret Secret with the SCRAM-SHA-512 credentials (keys `username`, `password`) of a user whose only ACL is ALTER_CONFIGS on the cluster
 ## @param quotaJob.caSecret Secret with the CA that signed the brokers' certificate (key `ca.crt`)
 ## @param quotaJob.resources Resource requests and limits for the job container
 quotaJob:
-  image: docker.redpanda.com/redpandadata/redpanda:v26.2.2
+  image: docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96
   brokers: redpanda.redpanda.svc.cluster.local:9093
-  credentialsSecret: redpanda-rpk-admin
+  credentialsSecret: redpanda-quota-manager
   caSecret: redpanda-default-cert
   resources:
     requests:

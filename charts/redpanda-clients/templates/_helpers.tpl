@@ -12,6 +12,9 @@ or produce invalid resource names.
   {{- if hasKey $seen $id -}}
     {{- fail (printf "duplicate client id %q" $id) -}}
   {{- end -}}
+  {{- if has $id $.Values.cluster.reservedUsers -}}
+    {{- fail (printf "client id %q is reserved: its User would take over that existing user and set its password from the client's secret" $id) -}}
+  {{- end -}}
   {{- $_ := set $seen $id true -}}
   {{- range $k, $v := ($c.quota | default dict) -}}
     {{- if not (has $k (list "producerByteRate" "consumerByteRate")) -}}

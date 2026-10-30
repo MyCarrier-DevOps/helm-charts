@@ -25,8 +25,18 @@ Clients get no cluster-level permissions and can't create topics.
   off (`auto_create_topics_enabled: false`). Without authorization the ACLs aren't enforced.
 - A secret `redpanda-client-<id>` (key `password`) for every client, created outside this chart.
 - Redpanda v26.1.1 or later on the brokers, for user-based quotas. Older brokers reject them and the quota Job fails.
-- An admin user's credentials in `quotaJob.credentialsSecret` and the brokers' CA in `quotaJob.caSecret`. The quota Job
-  runs on every install and upgrade that has clients.
+- A dedicated user for the quota Job, not a superuser. Its only grant is ALTER_CONFIGS on the cluster, which is all
+  `rpk cluster quotas alter` needs:
+
+  ```bash
+  rpk security user create quota-manager --mechanism SCRAM-SHA-512
+  rpk security acl create --allow-principal User:quota-manager --cluster --operation alter_configs
+  ```
+
+  Its credentials go in `quotaJob.credentialsSecret` (keys `username`, `password`) and the brokers' CA in
+  `quotaJob.caSecret`. The quota Job runs on every install and upgrade that has clients.
+- The cluster's superusers and the quota Job's user listed in `cluster.reservedUsers`. A client with one of those IDs
+  would take over that user and set its password from the client's secret.
 
 ## Example
 
@@ -56,7 +66,7 @@ The render fails when:
 
 - a client ID isn't a string of lowercase letters and digits starting with a letter. Dots aren't allowed, so no
   client's `<id>.` prefix can overlap another's.
-- two clients share an ID.
+- two clients share an ID, or an ID is in `cluster.reservedUsers`.
 - a topic name isn't lowercase letters, digits and dashes, or a client lists the same topic twice.
 - a quota has a key other than `producerByteRate` and `consumerByteRate`, or a rate that isn't a positive number. Leave
   a rate out for unlimited.
