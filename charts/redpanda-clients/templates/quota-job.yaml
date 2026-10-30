@@ -19,6 +19,11 @@ metadata:
 spec:
   backoffLimit: 3
   template:
+    {{- with .Values.quotaJob.podLabels }}
+    metadata:
+      labels:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false

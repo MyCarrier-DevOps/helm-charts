@@ -48,6 +48,16 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: adds podLabels to the job's pod, e.g. to opt it into a service mesh
+    set:
+      quotaJob:
+        podLabels:
+          sidecar.istio.io/inject: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"
+
   - it: carries the standard chart labels
     asserts:
       - equal:
