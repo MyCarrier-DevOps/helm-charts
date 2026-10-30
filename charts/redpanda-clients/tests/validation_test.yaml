@@ -5,10 +5,10 @@ tests:
   - it: rejects a client id containing a dot
     set:
       clients:
-        - id: sa.ia
+        - id: al.pha
     asserts:
       - failedTemplate:
-          errorPattern: "invalid client id \"sa.ia\""
+          errorPattern: "invalid client id \"al.pha\""
 
   - it: rejects an uppercase client id
     set:
@@ -44,3 +44,31 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "invalid topic name \"ship_ments\" for client \"alpha\""
+
+  - it: rejects a client id that doesn't start with a letter
+    set:
+      clients:
+        - id: "123"
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid client id \"123\""
+
+  - it: rejects a client id that isn't a string
+    set:
+      clients:
+        - id: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid client id \"true\""
+
+  - it: rejects a topic listed twice for the same client
+    set:
+      clients:
+        - id: alpha
+          topics:
+            - name: shipments
+            - name: shipments
+              partitions: 12
+    asserts:
+      - failedTemplate:
+          errorPattern: "duplicate topic name \"shipments\" for client \"alpha\""
