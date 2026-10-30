@@ -18,6 +18,20 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: "bravo"
 
+  - it: leaves a rate the client didn't set unlimited instead of zero
+    set:
+      clients:
+        - id: solo
+          quota:
+            producerByteRate: 1048576
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "(?m)client-id-prefix=solo\\. --add producer_byte_rate=1048576$"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "consumer_byte_rate"
+
   - it: renders nothing when no client has a quota
     set:
       clients:

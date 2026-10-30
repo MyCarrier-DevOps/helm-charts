@@ -45,7 +45,7 @@ quotaJob:
 ## clients:
 ##   - id: alpha                    # lowercase letters and digits only
 ##     transactions: false          # true adds Write/Describe on transactional IDs prefixed "alpha."
-##     quota:                       # optional, bytes per second, applied to client.id prefix "alpha."
+##     quota:                       # optional, bytes per second, applied to client.id prefix "alpha.". An unset rate is unlimited
 ##       producerByteRate: 5242880
 ##       consumerByteRate: 10485760
 ##     topics:

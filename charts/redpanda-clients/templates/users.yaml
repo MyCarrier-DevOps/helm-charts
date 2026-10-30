@@ -1,5 +1,6 @@
 {{- include "redpanda-clients.validate" . -}}
 {{- range $c := .Values.clients }}
+{{- $prefix := printf "%s." $c.id | quote }}
 ---
 apiVersion: cluster.redpanda.com/v1alpha2
 kind: User
@@ -23,20 +24,20 @@ spec:
       - type: allow
         resource:
           type: topic
-          name: {{ printf "%s." $c.id | quote }}
+          name: {{ $prefix }}
           patternType: prefixed
         operations: [Read, Write, Describe]
       - type: allow
         resource:
           type: group
-          name: {{ printf "%s." $c.id | quote }}
+          name: {{ $prefix }}
           patternType: prefixed
         operations: [Read, Describe]
       {{- if $c.transactions }}
       - type: allow
         resource:
           type: transactionalId
-          name: {{ printf "%s." $c.id | quote }}
+          name: {{ $prefix }}
           patternType: prefixed
         operations: [Write, Describe]
       {{- end }}

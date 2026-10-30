@@ -1,7 +1,10 @@
 {{- $cmds := list -}}
 {{- range $c := .Values.clients -}}
   {{- with $c.quota -}}
-    {{- $cmds = append $cmds (printf "rpk cluster quotas alter --name client-id-prefix=%s. --add producer_byte_rate=%d --add consumer_byte_rate=%d" $c.id (int64 .producerByteRate) (int64 .consumerByteRate)) -}}
+    {{- $cmd := printf "rpk cluster quotas alter --name client-id-prefix=%s." $c.id -}}
+    {{- with .producerByteRate }}{{ $cmd = printf "%s --add producer_byte_rate=%d" $cmd (int64 .) }}{{ end -}}
+    {{- with .consumerByteRate }}{{ $cmd = printf "%s --add consumer_byte_rate=%d" $cmd (int64 .) }}{{ end -}}
+    {{- $cmds = append $cmds $cmd -}}
   {{- end -}}
 {{- end -}}
 {{- if $cmds }}

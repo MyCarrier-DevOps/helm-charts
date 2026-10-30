@@ -1,4 +1,3 @@
-{{- include "redpanda-clients.validate" . -}}
 {{- range $c := .Values.clients }}
 {{- range $t := $c.topics }}
 ---
@@ -21,6 +20,6 @@ spec:
   partitions: {{ $t.partitions | default $.Values.topicDefaults.partitions | int }}
   replicationFactor: {{ $.Values.topicDefaults.replicationFactor | int }}
   additionalConfig:
-    retention.ms: {{ $t.retentionMs | default $.Values.topicDefaults.retentionMs | int64 | toString | quote }}
+    retention.ms: {{ $t.retentionMs | default $.Values.topicDefaults.retentionMs | int64 | quote }}
 {{- end }}
 {{- end }}

@@ -11,8 +11,8 @@ For each client the chart renders:
   - consumer groups: Read, Describe
   - transactional IDs: Write, Describe, only when `transactions: true`
 - A `Topic` per listed topic, created in Redpanda as `<id>.<name>`.
-- When the client sets a `quota`, a produce/fetch byte-rate quota on the client ID prefix `<id>.`, applied by a
-  post-install/upgrade Job with `rpk`.
+- When the client sets a `quota`, produce and/or fetch byte-rate quotas on the client ID prefix `<id>.`, applied by a
+  post-install/upgrade Job with `rpk`. A rate the client doesn't set stays unlimited.
 
 Clients get no cluster-level permissions and can't create topics.
 
