@@ -1,0 +1,82 @@
+{{- $cmds := list -}}
+{{- range $c := .Values.clients -}}
+  {{- $q := $c.quota | default dict -}}
+  {{- $cmd := printf "alter --name user=%s" $c.id -}}
+  {{- with $q.producerByteRate }}{{ $cmd = printf "%s --add producer_byte_rate=%d" $cmd (int64 .) }}{{ else }}{{ $cmd = printf "%s --delete producer_byte_rate" $cmd }}{{ end -}}
+  {{- with $q.consumerByteRate }}{{ $cmd = printf "%s --add consumer_byte_rate=%d" $cmd (int64 .) }}{{ else }}{{ $cmd = printf "%s --delete consumer_byte_rate" $cmd }}{{ end -}}
+  {{- $cmds = append $cmds $cmd -}}
+{{- end -}}
+{{- if $cmds }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-quotas
+  labels:
+    {{- include "redpanda-clients.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: rpk
+          image: {{ .Values.quotaJob.image }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              # rpk exits 0 when the broker rejects a change and only reports it in the status
+              alter() {
+                out=$(rpk cluster quotas alter --format json "$@")
+                echo "$out"
+                case "$out" in *'"status":"OK"'*) ;; *) echo "quota change rejected" >&2; exit 1 ;; esac
+              }
+              {{- range $cmds }}
+              {{ . }}
+              {{- end }}
+          env:
+            - name: RPK_BROKERS
+              value: {{ .Values.quotaJob.brokers | quote }}
+            - name: RPK_TLS_ENABLED
+              value: "true"
+            - name: RPK_TLS_CA
+              value: /etc/redpanda-ca/ca.crt
+            - name: RPK_SASL_MECHANISM
+              value: SCRAM-SHA-512
+            - name: RPK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.quotaJob.credentialsSecret }}
+                  key: username
+            - name: RPK_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.quotaJob.credentialsSecret }}
+                  key: password
+          resources:
+            {{- toYaml .Values.quotaJob.resources | nindent 12 }}
+          securityContext:
+            # uid of the redpanda user in the Redpanda image
+            runAsUser: 101
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: redpanda-ca
+              mountPath: /etc/redpanda-ca
+              readOnly: true
+      volumes:
+        - name: redpanda-ca
+          secret:
+            secretName: {{ .Values.quotaJob.caSecret }}
+            items:
+              - key: ca.crt
+                path: ca.crt
+{{- end }}

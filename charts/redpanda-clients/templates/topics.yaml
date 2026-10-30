@@ -1,0 +1,25 @@
+{{- range $c := .Values.clients }}
+{{- range $t := $c.topics }}
+---
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: {{ printf "%s-%s" $c.id $t.name }}
+  labels:
+    {{- include "redpanda-clients.labels" $ | nindent 4 }}
+  annotations:
+    # Removing a client or topic from values must not delete the topic or its data,
+    # whether Helm or Argo CD applies the chart
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  cluster:
+    clusterRef:
+      name: {{ $.Values.cluster.name }}
+  overwriteTopicName: {{ printf "%s.%s" $c.id $t.name | quote }}
+  partitions: {{ $t.partitions | default $.Values.topicDefaults.partitions | int }}
+  replicationFactor: {{ $.Values.topicDefaults.replicationFactor | int }}
+  additionalConfig:
+    retention.ms: {{ $t.retentionMs | default $.Values.topicDefaults.retentionMs | int64 | quote }}
+{{- end }}
+{{- end }}

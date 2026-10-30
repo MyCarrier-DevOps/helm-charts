@@ -1,0 +1,109 @@
+suite: quota job
+templates:
+  - templates/quota-job.yaml
+values:
+  - ./values/two-clients.yaml
+tests:
+  - it: sets a quota on each client's own user, which the client can't choose
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "(?m)^alter --name user=alpha --add producer_byte_rate=5242880 --add consumer_byte_rate=10485760$"
+
+  - it: clears any quota left on a client that no longer sets one
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "(?m)--name user=bravo --delete producer_byte_rate --delete consumer_byte_rate$"
+
+  - it: deletes a rate the client doesn't set, so it's unlimited even if it was set before
+    set:
+      clients:
+        - id: solo
+          quota:
+            producerByteRate: 1048576
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "(?m)--name user=solo --add producer_byte_rate=1048576 --delete consumer_byte_rate$"
+
+  - it: fails the job when Redpanda rejects a quota change, since rpk exits 0 on a per-entity error
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "out=\\$\\(rpk cluster quotas alter --format json \"\\$@\"\\)"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "case \"\\$out\" in \\*'\"status\":\"OK\"'\\*\\) ;; \\*\\) .*exit 1"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "(?m)^alter --name user=alpha "
+
+  - it: renders nothing when there are no clients
+    set:
+      clients: []
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: carries the standard chart labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: redpanda-clients
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: runs as the image's non-root redpanda user
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 101
+
+  - it: sets resource requests and limits from values
+    set:
+      quotaJob.resources:
+        requests:
+          cpu: 20m
+          memory: 48Mi
+        limits:
+          memory: 96Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 96Mi
+
+  - it: doesn't mount a service account token, since the job never calls the Kubernetes API
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: meets the restricted pod security standard with a read-only root filesystem
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: [ALL]
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: pins the default image by digest, since the job holds admin credentials
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "@sha256:[0-9a-f]{64}$"

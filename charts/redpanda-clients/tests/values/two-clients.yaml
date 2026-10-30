@@ -1,0 +1,14 @@
+clients:
+  - id: alpha
+    quota:
+      producerByteRate: 5242880
+      consumerByteRate: 10485760
+    topics:
+      - name: shipments
+        partitions: 6
+        retentionMs: 1209600000
+      - name: quotes
+  - id: bravo
+    transactions: true
+    topics:
+      - name: orders

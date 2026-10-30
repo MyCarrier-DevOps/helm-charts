@@ -1,0 +1,5 @@
+apiVersion: v2
+name: redpanda-clients
+description: Per-client users, prefixed ACLs, topics and quotas on a shared Redpanda cluster, managed through the Redpanda Operator
+type: application
+version: 0.1.0
