@@ -1,0 +1,168 @@
+suite: MongoDBCommunity
+templates:
+  - templates/mongodbcommunity.yaml
+release:
+  name: mydb
+  namespace: tools
+tests:
+  - it: renders a single-member SCRAM replica set by default
+    documentIndex: 0
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: MongoDBCommunity}
+      - equal: {path: apiVersion, value: mongodbcommunity.mongodb.com/v1}
+      - equal: {path: metadata.name, value: mydb-mc-mongodb}
+      - equal: {path: metadata.namespace, value: tools}
+      - equal: {path: spec.type, value: ReplicaSet}
+      - equal: {path: spec.members, value: 1}
+      - equal: {path: spec.version, value: "8.0.34"}
+      - equal: {path: spec.featureCompatibilityVersion, value: "8.0"}
+      - equal: {path: spec.security.authentication.modes, value: [SCRAM]}
+
+  - it: sets the member count
+    set:
+      members: 3
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.members, value: 3}
+
+  # A node loss or drain then takes at most one member, and the set keeps its majority.
+  - it: places each member of a multi-member set on its own node
+    set:
+      members: 3
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution
+          value:
+            - labelSelector:
+                matchLabels:
+                  app: mydb-mc-mongodb-svc
+              topologyKey: kubernetes.io/hostname
+
+  - it: lets voluntary disruptions take one member of a multi-member set at a time
+    set:
+      members: 3
+    documentSelector: {path: kind, value: PodDisruptionBudget}
+    asserts:
+      - equal: {path: metadata.name, value: mydb-mc-mongodb}
+      - equal: {path: spec.maxUnavailable, value: 1}
+      - equal: {path: spec.selector.matchLabels, value: {app: mydb-mc-mongodb-svc}}
+
+  - it: sets no anti-affinity and no disruption budget for a single member
+    documentIndex: 0
+    asserts:
+      - notExists: {path: spec.statefulSet.spec.template.spec.affinity}
+        documentIndex: 0
+      - containsDocument: {kind: PodDisruptionBudget, apiVersion: policy/v1}
+        not: true
+
+  - it: gives the app user access to any database, with its password from the generated secret
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.users[0].name", value: app}
+      - equal: {path: "spec.users[0].db", value: admin}
+      - equal: {path: "spec.users[0].passwordSecretRef", value: {name: mydb-mc-mongodb-connection, key: password}}
+      - equal: {path: "spec.users[0].scramCredentialsSecretName", value: mydb-mc-mongodb-app}
+      - contains: {path: "spec.users[0].roles", content: {name: readWriteAnyDatabase, db: admin}}
+      - contains: {path: "spec.users[0].roles", content: {name: dbAdminAnyDatabase, db: admin}}
+
+  - it: gives the backup user only the backup role
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.users[1].name", value: backup}
+      - equal: {path: "spec.users[1].db", value: admin}
+      - equal: {path: "spec.users[1].passwordSecretRef", value: {name: mydb-mc-mongodb-backup-connection, key: password}}
+      - equal: {path: "spec.users[1].scramCredentialsSecretName", value: mydb-mc-mongodb-backup}
+      - equal: {path: "spec.users[1].roles", value: [{name: backup, db: admin}]}
+      - lengthEqual: {path: spec.users, count: 2}
+
+  # restore can rewrite users and grant roles, so it is a separate credential that only the restore Job reads.
+  - it: adds a restore user with only the restore role when backups are enabled
+    set:
+      backup.enabled: true
+      backup.container: production
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: "spec.users[2]"
+          value:
+            name: restore
+            db: admin
+            passwordSecretRef: {name: mydb-mc-mongodb-restore-connection, key: password}
+            scramCredentialsSecretName: mydb-mc-mongodb-restore
+            roles: [{name: restore, db: admin}]
+
+  - it: removes database users the chart does not declare
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.security.authentication.ignoreUnknownUsers, value: false}
+
+  # Istio's automatic mutual TLS encrypts traffic between members and from clients with sidecars.
+  - it: puts the database pods in the mesh with the runtime default seccomp profile
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "true"}
+      - equal: {path: "spec.statefulSet.spec.template.metadata.annotations[\"proxy.istio.io/config\"]", value: '{ "holdApplicationUntilProxyStarts": true }'}
+      - equal: {path: spec.statefulSet.spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault}
+
+  - it: sets mongod resources
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].name", value: mongod}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].resources.requests.memory", value: 512Mi}
+
+  - it: sizes the data volume and leaves the storage class to the cluster by default
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].metadata.name", value: data-volume}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 10Gi}
+      - notExists: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName"}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.accessModes", value: [ReadWriteOnce]}
+
+  - it: honours storage size and class
+    set:
+      storage.size: 50Gi
+      storage.storageClassName: managed-csi-premium
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 50Gi}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName", value: managed-csi-premium}
+
+  - it: sets the operator's full default pod security context, since an override replaces it whole
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.securityContext
+          value:
+            runAsUser: 2000
+            runAsNonRoot: true
+            fsGroup: 2000
+            seccompProfile:
+              type: RuntimeDefault
+
+  # The operator names the pods' ServiceAccount mongodb-kubernetes-appdb and creates it only in its own namespace;
+  # each release brings its own (templates/rbac.yaml), so stacks sharing a namespace don't share one.
+  - it: runs the pods under the release's own ServiceAccount
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.statefulSet.spec.template.spec.serviceAccountName, value: mydb-mc-mongodb-database}
+
+  # Cluster policy requires a liveness and a readiness probe on every StatefulSet container; the operator gives the
+  # agent only a readiness probe and mongod none, so admission would reject the StatefulSet it creates.
+  - it: probes mongod on its port, with a startup allowance for the first configuration
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].name", value: mongod}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].startupProbe.tcpSocket.port", value: 27017}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].livenessProbe.tcpSocket.port", value: 27017}
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].readinessProbe.tcpSocket.port", value: 27017}
+
+  - it: checks the agent's local status port for liveness and keeps the operator's readiness probe
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].name", value: mongodb-agent}
+      # The status server listens on 127.0.0.1 only, so a probe from outside the container cannot reach it.
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[1].livenessProbe.exec.command", value: ["/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000"]}
+      - notExists: {path: "spec.statefulSet.spec.template.spec.containers[1].livenessProbe.tcpSocket"}
+      - notExists: {path: "spec.statefulSet.spec.template.spec.containers[1].readinessProbe"}

@@ -1,0 +1,3 @@
+{{- if .Values.standalone }}
+{{ include "mc-mongodb.backup" (include "mc-mongodb.context" . | fromJson) }}
+{{- end }}

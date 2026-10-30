@@ -47,6 +47,9 @@ spec:
                 {{ with $env.infrastructure }}infrastructure:
                   {{- toYaml . | nindent 18 }}
                   {{- end }}
+                {{ with $env.dependencyDeployments }}dependencyDeployments:
+                  {{- toYaml . | nindent 18 }}
+                  {{- end }}
                 {{- with $.Values.alerts }}
                 alerts:
                   {{- toYaml . | nindent 18 }}
@@ -73,7 +76,7 @@ spec:
       source:
         repoURL: https://charts.mycarrier.dev
         chart: mycarrier-helm
-        targetRevision: "{{ $.Values.mycarrierChartVersion | default "3.4.0" }}"
+        targetRevision: "{{ $.Values.mycarrierChartVersion | default "4.7.16" }}"
         helm:
           values: |2+
             {{`{{`}} .Values | toYaml {{`}}`}}

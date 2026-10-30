@@ -2930,6 +2930,93 @@
           }
         }
       }
+    },
+    "mc-mongodb": {
+      "type": "object",
+      "description": "Defaults of the mc-mongodb subchart, internal to the chart. Stacks configure MongoDB through dependencyDeployments.mongodb.",
+      "properties": {
+        "standalone": {
+          "const": false
+        },
+        "debugContext": {
+          "const": false
+        }
+      }
+    },
+    "dependencyDeployments": {
+      "type": "object",
+      "description": "Dependencies deployed in-cluster alongside the stack, for internal tools. Product applications use the shared services (global.dependencies).",
+      "additionalProperties": false,
+      "properties": {
+        "mongodb": {
+          "type": "object",
+          "description": "A MongoDB replica set for the stack (mc-mongodb). Production always backs up; other environments back up when backup.enabled is true and backup.container names the cluster's container.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Deploy MongoDB with the stack. MongoConnection_<env> then points at it."
+            },
+            "members": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Replica set members. Defaults to 3 in production and 1 elsewhere."
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^8\\.[0-9]+\\.[0-9]+$",
+              "description": "MongoDB server version (exact), an 8.x release: the chart pins featureCompatibilityVersion 8.0, which an older server cannot run."
+            },
+            "storage": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "size": {
+                  "type": "string",
+                  "description": "Data volume size per member."
+                },
+                "storageClassName": {
+                  "type": "string",
+                  "description": "Storage class for the data volume (empty uses the cluster default)."
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "description": "Resources for the mongod container. Replaces the default as a whole."
+            },
+            "backup": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Back up outside production (off by default). Production always backs up; false there fails the render."
+                },
+                "container": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$",
+                  "description": "Blob container in mycarriermongobackups for the cluster the stack runs on (one per cluster). Defaults to production in production; required wherever else backups are enabled. Production containers are named production* and only production uses them; a mismatch fails the render."
+                },
+                "schedule": {
+                  "type": "string",
+                  "description": "Cron schedule for backups."
+                },
+                "timeZone": {
+                  "type": "string",
+                  "description": "Time zone for the backup schedule."
+                },
+                "retentionDays": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Backups older than this many days are deleted after each successful backup."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {

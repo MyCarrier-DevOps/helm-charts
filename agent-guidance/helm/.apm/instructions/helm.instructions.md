@@ -218,7 +218,7 @@ Each `environments[]` entry supports these fields:
 | `name` | Environment name (required). Becomes `environment.name`, the namespace the Application deploys to, and the Application name `<appStack>-<name>` | — |
 | `global` | Merged over the root-level `global` | `{}` |
 | `environment` | mycarrier-helm `environment` block (`name` is always the entry's `name`) | `{}` |
-| `applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `extraObjects` | Passed to mycarrier-helm unchanged | — |
+| `applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `dependencyDeployments`, `extraObjects` | Passed to mycarrier-helm unchanged | — |
 | `enableVaultCA`, `manualOtelConfig`, `deployment` | Passed to mycarrier-helm | `false`, `false`, `deployment` |
 | `disableOtelAutoinstrumentation` | Passed to mycarrier-helm; **defaults to `false` here** (auto-instrumentation on), the opposite of direct mycarrier-helm | `false` |
 
@@ -334,6 +334,94 @@ Other environment names (`qa`, `uat`, `preprod-saia`, …) get the common and de
 
 ### Supported Dependencies
 Set to `true` in `global.dependencies`: `mongodb`, `redis`, `azureservicebus`, `elasticsearch`, `postgres`, `sqlserver`, `clickhouse`, `redpanda`, `loadsure`, `chargify`. For a csharp stack with language secrets on, `mongodb`, `redis`, `azureservicebus`, `elasticsearch`, `redpanda`, `loadsure` and `chargify` inject that dependency's connection settings from Vault; the other flags inject nothing.
+
+`global.dependencies` says which shared services the app uses. To run a dependency in the stack's own namespace instead, see [Dependency deployments](#dependency-deployments).
+
+### Dependency deployments
+
+`dependencyDeployments` deploys a dependency in-cluster alongside the stack. It is for internal tools only: product applications use the shared services, such as MongoDB Atlas, and their data is never moved into an in-cluster instance. Off by default; a stack that leaves it out renders exactly as before. It needs mycarrier-helm 4.7.16 or later: an older version ignores the key without an error. The pipeline chooses the mycarrier-helm version on every render, for both charts (see [Chart version](#chart-version)), so a stack gets the dependency only once the pipeline renders 4.7.16 or later; until then, a `global.env` reference to the connection Secret leaves the pods waiting for a Secret that never appears.
+
+#### `dependencyDeployments.mongodb`
+
+```yaml
+dependencyDeployments:
+  mongodb:
+    enabled: true
+```
+
+This deploys a MongoDB replica set named `<appStack>-mongodb` (cut to 44 characters) in the environment's namespace, run by the MongoDB operator, with a password generated in the cluster. Secret `<appStack>-mongodb-connection`, key `connectionString`, holds:
+
+```
+mongodb://app:<password>@<appStack>-mongodb-svc.<namespace>.svc.cluster.local:27017/<appStack>?replicaSet=<appStack>-mongodb&authSource=admin
+```
+
+The database in the string is `appStack` in every environment. The `app` user can create and use any number of further databases and collections.
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Deploy MongoDB with the stack | `false` |
+| `members` | Replica set members | `3` in production, `1` elsewhere |
+| `version` | MongoDB server version (exact), an 8.x release: the chart pins feature compatibility version 8.0, and the schema rejects older servers | `8.0.34` |
+| `storage.size` | Data volume per member. Set it before the first deploy: the operator cannot resize the volumes, so a later change leaves the replica set failing to reconcile until they are resized by hand | `10Gi` |
+| `storage.storageClassName` | Storage class for the data volume. Set it before the first deploy, as for `storage.size` | cluster default |
+| `resources` | Resources for the `mongod` container; replaces the default as a whole | requests `250m` / `512Mi`, limit `1Gi` memory |
+| `backup.enabled` | Back up outside production. Production always backs up, and `false` there fails the render | `false` (production: always on) |
+| `backup.container` | Blob container in the `mycarriermongobackups` storage account for the cluster the environment runs on, one per cluster. Production containers are named `production*` and only production uses them: a production environment naming another container, or another environment backing up to a `production*` one, fails the render. Required wherever `backup.enabled` is `true` outside production | `production` in production, otherwise none |
+| `backup.schedule` | Cron schedule for backups | `0 2 * * *` |
+| `backup.timeZone` | Time zone for the schedule | `Etc/UTC` |
+| `backup.retentionDays` | Days to keep backups | `7` |
+
+The schema rejects any other key. Set `backup.enabled` and `backup.container` in the environment's `helm/values.{env}.yaml`, not in `helm/values.yaml`: each cluster has its own container, and a container named in `helm/values.yaml` also reaches production, where a non-`production*` container fails the render. Each cluster needs its container, and `Storage Blob Data Contributor` on it for the cluster's kubelet identity; without them the backup Job cannot mount the container and never starts. The containers are `production`, `development` (the Development cluster: dev, preprod, `qa`, `uat` and feature environments) and `management`; any other cluster needs one set up before it enables backups. The root `mc-mongodb` key holds the subchart's defaults and is internal to the chart: leave it out of a stack's values.
+
+**Environments.** In production (an environment whose meta environment starts with `prod`), MongoDB backs up daily (by default) to the `production` container of the `mycarriermongobackups` storage account, folder `<meta environment>/<appStack>/<namespace>` (for example `prod/tools/prod`; a stack released into several namespaces keeps each one's backups apart), and the chart renders a suspended `<appStack>-mongodb-restore` CronJob for restores. A replica set of more than one member places each member on its own node (so production needs at least three schedulable nodes) and lets voluntary disruptions, such as a node drain, take one member at a time. The MongoDB pods run with an Istio sidecar, so application pods (which have sidecars) connect over mutual TLS. Any other environment (dev, preprod, `qa`, `uat`, or a cluster such as management) backs up only when the stack sets `backup.enabled: true` and its cluster's `backup.container`; it then gets the same daily backup, folder and restore CronJob. Each feature environment from an offload gets its own MongoDB, empty on its first deploy there, and never backs up, even when dev does.
+
+**Connection string.** For a csharp stack with `global.dependencies.mongodb: true` and language secrets on, `MongoConnection_<env>` in every application container and init container reads the connection Secret instead of Vault; `KeyVault_MongoConnection` and `KeyVaultMongoConnection` still name it. Jobs and CronJobs get no language secrets: set `secretName: <appStack>-mongodb-connection` on the job, which loads the Secret's keys as env vars `connectionString` and `password`. Without `global.dependencies.mongodb`, or for other languages, nothing is injected: add the variable in `global.env`, for example `MONGODB_URI: { valueFrom: { secretKeyRef: { name: <appStack>-mongodb-connection, key: connectionString } } }`. Use `global.env`, not an application's `env`: feature environments from the legacy offload generator do not get the applications' `env`.
+
+A `pre-deploy` job runs before the replica set and its Secret exist on an environment's first sync, including each new feature environment. If it reads the Secret, it waits for it and blocks that sync. Give such a job `runAsHook: false`, or run the migration from an application.
+
+**Turning it off** removes the replica set and its password Secrets; its data disks are kept. Turning it back on reattaches the disks with the data, and generates new passwords, which the operator applies to the users: restart the application pods so they read the new connection string. Feature namespaces outlive offloads, so removing a feature environment keeps the stack's disks there too, and the stack's next MongoDB in that environment starts with the old data; delete the `data-volume-<appStack>-mongodb-*` and `logs-volume-<appStack>-mongodb-*` claims in that namespace to start empty.
+
+**Restoring** (any environment with backups): in Argo CD, run **Create Job** on the `<appStack>-mongodb-restore` CronJob to restore the newest backup, or follow the mc-mongodb [README](https://github.com/MyCarrier-DevOps/helm-charts/tree/main/charts/mc-mongodb#restoring) to restore a specific one. A restore drops and reloads every collection in the backup, so writes made since that backup are lost: only the people who own the stack's data should run it.
+
+Where it goes: `helm/values.yaml` to deploy it in every environment, or `helm/values.{env}.yaml` for some. In mc-environment, set it on each `environments[]` entry.
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: toolbox
+  language: csharp
+  dependencies:
+    mongodb: true
+dependencyDeployments:
+  mongodb:
+    enabled: true
+
+# helm/values.prod.yaml
+environment:
+  name: prod
+dependencyDeployments:
+  mongodb:
+    storage:
+      size: 50Gi
+    backup:
+      retentionDays: 14
+
+# helm/deployment/values.yaml
+applications:
+  api:
+    deploymentType: deployment
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/toolbox/api
+    ports:
+      http: 8080
+
+# helm/deployment/values.prod.yaml
+applications:
+  api:
+    image:
+      tag: 1.0.0
+```
 
 ---
 

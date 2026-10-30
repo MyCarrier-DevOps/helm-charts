@@ -68,7 +68,14 @@
 - name: KeyVaultMongoConnection
   value: "MongoConnection_{{ $metaenv }}"
 - name: MongoConnection_{{ $metaenv }}
+{{- if include "helm.mongodb.enabled" . }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "helm.mongodb.name" . }}-connection
+      key: connectionString
+{{- else }}
   value: "vault:secrets/data/{{ $metaenv }}/{{ .Values.global.appStack | lower }}/shared/mongodb-{{ .Values.global.appStack | lower }}-{{ $metaenv }}#value"
+{{- end }}
 {{- end }}
 {{- if .Values.global.dependencies.redpanda }}
 - name: redpanda_bootstrapservers

@@ -1,0 +1,16 @@
+{{- if .Values.debugContext }}
+{{- $ctx := include "mc-mongodb.context" . | fromJson }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $ctx.name }}-context
+data:
+  name: {{ $ctx.name | quote }}
+  namespace: {{ $ctx.namespace | quote }}
+  appUserDatabase: {{ $ctx.appUser.database | quote }}
+  backupPath: {{ $ctx.backup.path | quote }}
+  members: {{ $ctx.members | toString | quote }}
+  version: {{ $ctx.version | quote }}
+  backupEnabled: {{ $ctx.backup.enabled | toString | quote }}
+  retentionDays: {{ $ctx.backup.retentionDays | toString | quote }}
+{{- end }}

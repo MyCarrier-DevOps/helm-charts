@@ -1,0 +1,63 @@
+suite: standalone switch and values schema
+templates:
+  - templates/credentials.yaml
+  - templates/mongodbcommunity.yaml
+  - templates/backup.yaml
+  - templates/restore.yaml
+release:
+  name: mydb
+  namespace: tools
+tests:
+  - it: renders nothing from any template when embedded (standalone false)
+    set:
+      standalone: false
+      backup.enabled: true
+      backup.container: production
+    asserts:
+      - hasDocuments: {count: 0}
+        template: templates/credentials.yaml
+      - hasDocuments: {count: 0}
+        template: templates/mongodbcommunity.yaml
+      - hasDocuments: {count: 0}
+        template: templates/backup.yaml
+      - hasDocuments: {count: 0}
+        template: templates/restore.yaml
+
+  - it: rejects zero members
+    set:
+      members: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "members"
+        template: templates/mongodbcommunity.yaml
+
+  - it: rejects zero retention days
+    set:
+      backup.retentionDays: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "retentionDays"
+        template: templates/mongodbcommunity.yaml
+
+  - it: rejects passwords shorter than 16 characters
+    set:
+      password.length: 8
+    asserts:
+      - failedTemplate:
+          errorPattern: "length"
+        template: templates/credentials.yaml
+
+  - it: rejects unknown top-level keys
+    set:
+      foo: bar
+    asserts:
+      - failedTemplate:
+          errorPattern: "foo"
+        template: templates/mongodbcommunity.yaml
+
+  - it: accepts global values, which a parent chart always passes to its subcharts
+    set:
+      global.appStack: tools
+    asserts:
+      - hasDocuments: {count: 1}
+        template: templates/mongodbcommunity.yaml

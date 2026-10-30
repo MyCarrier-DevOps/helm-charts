@@ -83,6 +83,14 @@ jobs:
               fi
               done
           done
+          # mycarrier-helm renders mc-mongodb's templates, so a change to mc-mongodb alone also releases mycarrier-helm.
+          for file in ${{ steps.file-list.outputs.all_changed_files }}; do
+              if [[ $file == charts/mc-mongodb/* ]]; then
+                  [[ $first_loop ]] && var=mycarrier-helm || var="$var\nmycarrier-helm"
+                  unset first_loop
+                  break
+              fi
+          done
           echo "matrix=$(printf "%s" "$var" | jq -Rrsc 'split("\\n") | unique')" >> "$GITHUB_OUTPUT"
 
       - name: get all charts & create package.json if it does not exist

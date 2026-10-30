@@ -1,0 +1,235 @@
+suite: dependencyDeployments.mongodb (in-cluster MongoDB)
+templates:
+  - mongodb.yaml
+set:
+  global: { appStack: tools, language: csharp }
+  environment: { name: prod }
+  dependencyDeployments.mongodb.enabled: true
+tests:
+  - it: renders nothing when not enabled
+    set:
+      dependencyDeployments.mongodb.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: deploys a 3-member replica set named after the stack in production
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: metadata.name, value: tools-mongodb}
+      - equal: {path: metadata.namespace, value: prod}
+      - equal: {path: spec.members, value: 3}
+
+  - it: backs up production to the production container
+    documentSelector: {path: kind, value: PersistentVolume}
+    asserts:
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: production}
+
+  # A production-like environment on another cluster (prod-eu) writes to that cluster's container.
+  - it: backs production up to the stack's container when it names one
+    set:
+      environment: { name: prod-eu }
+      dependencyDeployments.mongodb.backup.container: production-eu
+    documentSelector: {path: kind, value: PersistentVolume}
+    asserts:
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: production-eu}
+
+  - it: mounts the backup folder <meta environment>/<appStack>/<namespace>
+    documentSelector: {path: spec.schedule, value: "0 2 * * *"}
+    asserts:
+      - equal: {path: metadata.name, value: tools-mongodb-backup}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: prod/tools/prod
+
+  # Releases of one stack in different namespaces of an environment keep separate backups.
+  - it: names the backup folder after an overridden namespace
+    set:
+      environment: { name: prod, namespaceOverride: prod-saia }
+    documentSelector: {path: spec.schedule, value: "0 2 * * *"}
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: prod/tools/prod-saia
+
+  - it: renders the on-demand restore in production
+    documentSelector: {path: spec.suspend, value: true}
+    asserts:
+      - isKind: {of: CronJob}
+      - equal: {path: metadata.name, value: tools-mongodb-restore}
+
+  - it: uses the stack name as the connection string's database
+    documentSelector: {path: spec.target.name, value: tools-mongodb-connection}
+    asserts:
+      - isKind: {of: ExternalSecret}
+      - matchRegex:
+          path: spec.target.template.data.connectionString
+          pattern: '@tools-mongodb-svc\.prod\.svc\.cluster\.local:27017/tools\?replicaSet=tools-mongodb&'
+
+  - it: renders no backup or restore outside production (dev, preprod, feature environments)
+    set:
+      environment: { name: preprod }
+    asserts:
+      - hasDocuments: {count: 7}
+
+  # Outside production, backups are the stack's choice; it names the container of the cluster it runs on.
+  - it: backs up any environment that turns backups on, to the stack's container
+    set:
+      environment: { name: preprod }
+      dependencyDeployments.mongodb.backup: { enabled: true, container: development }
+    asserts:
+      - hasDocuments: {count: 12}
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: development}
+        documentSelector: {path: kind, value: PersistentVolume}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: preprod/tools/preprod
+        documentSelector: {path: spec.schedule, value: "0 2 * * *"}
+
+  - it: rejects backups outside production without a container
+    set:
+      environment: { name: preprod }
+      dependencyDeployments.mongodb.backup.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencyDeployments.mongodb.backup.container"
+
+  # Production containers are named production* and only production uses them, so a container set for every
+  # environment in helm/values.yaml fails the render instead of silently stopping production backups.
+  - it: fails when production names a non-production container
+    set:
+      dependencyDeployments.mongodb.backup.container: development
+    asserts:
+      - failedTemplate:
+          errorPattern: "does not match this environment"
+
+  - it: fails when another environment backs up to a production container
+    set:
+      environment: { name: dev }
+      dependencyDeployments.mongodb.backup: { enabled: true, container: production }
+    asserts:
+      - failedTemplate:
+          errorPattern: "does not match this environment"
+
+  - it: ignores a production container where backups are off
+    set:
+      environment: { name: dev }
+      dependencyDeployments.mongodb.backup.container: production
+    asserts:
+      - hasDocuments: {count: 7}
+
+  - it: deploys one member outside production
+    set:
+      environment: { name: feature14 }
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.members, value: 1}
+      - equal: {path: metadata.namespace, value: feature14}
+
+  - it: deploys no backup in dev
+    set:
+      environment: { name: dev }
+    asserts:
+      - hasDocuments: {count: 7}
+
+  - it: backs up any production-like environment (prod-*)
+    set:
+      environment: { name: prod-eu }
+    asserts:
+      - hasDocuments: {count: 13}
+
+  # Kubernetes rejects a CronJob name over 52 characters, which would fail the stack's whole production sync.
+  - it: keeps the restore CronJob name within 52 characters for a long appStack
+    set:
+      global.appStack: an-internal-tool-with-a-very-long-stack
+    documentSelector: {path: spec.suspend, value: true}
+    asserts:
+      - equal: {path: metadata.name, value: an-internal-tool-with-a-very-long-stack-mong-restore}
+
+  - it: keeps production's three members on separate nodes, one voluntary disruption at a time
+    set:
+      environment: { name: prod }
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
+          value: kubernetes.io/hostname
+        documentSelector: {path: kind, value: MongoDBCommunity}
+      - equal: {path: spec.maxUnavailable, value: 1}
+        documentSelector: {path: kind, value: PodDisruptionBudget}
+
+  - it: takes the stack's members over the environment default
+    set:
+      dependencyDeployments.mongodb.members: 5
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.members, value: 5}
+
+  - it: takes the stack's server version, storage and resources
+    set:
+      dependencyDeployments.mongodb:
+        enabled: true
+        version: "8.0.35"
+        storage: { size: 50Gi }
+        resources: { requests: { cpu: "1" } }
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.version, value: "8.0.35"}
+      - equal: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 50Gi}
+      - notExists: {path: "spec.statefulSet.spec.volumeClaimTemplates[0].spec.storageClassName"}
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].resources
+          value: { requests: { cpu: "1" } }
+
+  - it: takes the stack's backup schedule, time zone and retention
+    set:
+      dependencyDeployments.mongodb:
+        enabled: true
+        backup: { schedule: "30 4 * * *", timeZone: America/Chicago, retentionDays: 14 }
+    documentSelector: {path: spec.schedule, value: "30 4 * * *"}
+    asserts:
+      - equal: {path: spec.timeZone, value: America/Chicago}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content: { name: RETENTION_DAYS, value: "14" }
+
+  - it: rejects a stack turning production backups off
+    set:
+      dependencyDeployments.mongodb.backup.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "enabled"
+
+  # The chart pins featureCompatibilityVersion 8.0, which an older server cannot run.
+  - it: rejects a server version older than the pinned feature compatibility version
+    set:
+      dependencyDeployments.mongodb.version: "7.0.12"
+    asserts:
+      - failedTemplate:
+          errorPattern: "version"
+
+  - it: accepts a later 8.x server version
+    set:
+      dependencyDeployments.mongodb.version: "8.2.1"
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.version, value: "8.2.1"}
+
+  # mc-mongodb is the subchart's defaults; mycarrier-helm renders its templates itself.
+  - it: rejects a stack switching the subchart to render on its own
+    set:
+      mc-mongodb.standalone: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "standalone"
+
+  - it: rejects settings dependencyDeployments.mongodb does not expose
+    set:
+      dependencyDeployments.mongodb.backup.path: other
+    asserts:
+      - failedTemplate:
+          errorPattern: "path"
+
+  - it: gives the database pods the stack's own ServiceAccount and Role
+    documentSelector: {path: kind, value: ServiceAccount}
+    asserts:
+      - equal: {path: metadata.name, value: tools-mongodb-database}
+      - equal: {path: metadata.namespace, value: prod}

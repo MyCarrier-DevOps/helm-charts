@@ -1,0 +1,15 @@
+apiVersion: v2
+name: mc-mongodb
+description: MongoDB replica set via the MongoDB operator, with generated credentials and optional Azure Blob backups
+type: application
+version: 0.1.0
+appVersion: "8.0.34"
+keywords:
+  - mongodb
+  - database
+  - backup
+maintainers:
+  - name: MyCarrier DevOps
+    email: devops@mycarrier.io
+annotations:
+  category: Database

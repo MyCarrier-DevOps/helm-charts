@@ -1,0 +1,46 @@
+suite: database pod ServiceAccount and Role
+templates:
+  - templates/rbac.yaml
+release:
+  name: mydb
+  namespace: tools
+tests:
+  - it: renders a ServiceAccount, a Role and a RoleBinding in the release namespace
+    asserts:
+      - hasDocuments: {count: 3}
+      - isKind: {of: ServiceAccount}
+        documentIndex: 0
+      - isKind: {of: Role}
+        documentIndex: 1
+      - isKind: {of: RoleBinding}
+        documentIndex: 2
+      - equal: {path: metadata.name, value: mydb-mc-mongodb-database}
+      - equal: {path: metadata.namespace, value: tools}
+
+  # The namespace is shared with every other stack in the environment, so the Role names what the agent touches.
+  - it: lets the database pods read only the automation config Secret
+    documentIndex: 1
+    asserts:
+      - equal: {path: "rules[0]", value: {apiGroups: [""], resources: [secrets], resourceNames: [mydb-mc-mongodb-config], verbs: [get]}}
+
+  - it: lets the database pods get, patch and delete only the replica set's own pods, up to MongoDB's 50 members
+    documentIndex: 1
+    asserts:
+      - equal: {path: "rules[1].resources", value: [pods]}
+      - equal: {path: "rules[1].verbs", value: [patch, delete, get]}
+      - lengthEqual: {path: "rules[1].resourceNames", count: 50}
+      - contains: {path: "rules[1].resourceNames", content: mydb-mc-mongodb-0}
+      - contains: {path: "rules[1].resourceNames", content: mydb-mc-mongodb-49}
+      - lengthEqual: {path: rules, count: 2}
+
+  - it: binds the Role to the ServiceAccount
+    documentIndex: 2
+    asserts:
+      - equal: {path: roleRef, value: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: mydb-mc-mongodb-database}}
+      - equal: {path: subjects, value: [{kind: ServiceAccount, name: mydb-mc-mongodb-database, namespace: tools}]}
+
+  - it: renders nothing when embedded (standalone false)
+    set:
+      standalone: false
+    asserts:
+      - hasDocuments: {count: 0}

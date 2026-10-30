@@ -1,0 +1,32 @@
+suite: dependencyDeployments in feature-environment offloads
+templates:
+  - offloads.yaml
+set:
+  environment.name: dev
+  global: { appStack: tools, language: csharp }
+  applications.api:
+    deploymentType: deployment
+    image: { registry: r, repository: api, tag: "1.0.0" }
+tests:
+  - it: gives each offload its own MongoDB when the stack deploys one in dev
+    set:
+      dependencyDeployments.mongodb: { enabled: true, storage: { size: 5Gi } }
+    asserts:
+      - equal:
+          path: spec.generators[0].matrix.generators[1].list.elements[0].Values.dependencyDeployments
+          value: { mongodb: { enabled: true, storage: { size: 5Gi } } }
+
+  - it: forwards no MongoDB when the stack does not deploy one
+    asserts:
+      - notExists:
+          path: spec.generators[0].matrix.generators[1].list.elements[0].Values.dependencyDeployments
+
+  # Feature environments run branch code on test data and copy dev's settings, so they cannot choose backups apart
+  # from dev; their archives would also outlive the offload.
+  - it: gives offloads no backups when dev backs up
+    set:
+      dependencyDeployments.mongodb: { enabled: true, backup: { enabled: true, container: development } }
+    asserts:
+      - equal:
+          path: spec.generators[0].matrix.generators[1].list.elements[0].Values.dependencyDeployments
+          value: { mongodb: { enabled: true } }

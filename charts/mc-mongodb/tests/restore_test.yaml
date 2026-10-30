@@ -1,0 +1,67 @@
+suite: restore CronJob
+templates:
+  - templates/restore.yaml
+release:
+  name: mydb
+  namespace: tools
+set:
+  backup.enabled: true
+  backup.container: production
+tests:
+  - it: renders nothing when backups are disabled
+    set:
+      backup.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: is a suspended CronJob that only runs when triggered by hand
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: CronJob}
+      - equal: {path: metadata.name, value: mydb-mc-mongodb-restore}
+      - equal: {path: spec.suspend, value: true}
+      - equal: {path: spec.schedule, value: "0 0 31 2 *"}
+      - equal: {path: spec.concurrencyPolicy, value: Forbid}
+      - equal: {path: spec.jobTemplate.spec.backoffLimit, value: 0}
+      # Connects to the database over the mesh's mutual TLS; native sidecars let the Job complete.
+      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "true"}
+      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/nativeSidecar\"]", value: "true"}
+
+  - it: ignores the backup schedule
+    set:
+      backup.schedule: "*/5 * * * *"
+    asserts:
+      - equal: {path: spec.schedule, value: "0 0 31 2 *"}
+      - equal: {path: spec.suspend, value: true}
+
+  - it: mounts the same folder as the backup CronJob and takes an optional file name
+    asserts:
+      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0]", value: {name: backups, mountPath: /backups, subPath: tools/mydb-mc-mongodb}}
+      - equal: {path: "spec.jobTemplate.spec.template.spec.volumes[0].persistentVolumeClaim.claimName", value: tools-mydb-mc-mongodb-backup}
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: {name: RESTORE_FILE, value: ""}
+
+  - it: connects as the restore user, not the backup user
+    asserts:
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: {name: MONGODB_URI, valueFrom: {secretKeyRef: {name: mydb-mc-mongodb-restore-connection, key: connectionString}}}
+
+  - it: restores over existing data without touching the operator's users
+    asserts:
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "mongorestore [^\\n]*--drop"}
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "--nsExclude='admin\\.\\*'"}
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "--nsExclude='config\\.\\*'"}
+      - notMatchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "--oplogReplay"}
+
+  - it: fails when there is nothing to restore
+    asserts:
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "no backup to restore[^\\n]*\\n\\s*exit 1"}
+
+  # Kubernetes rejects a CronJob name over 52 characters.
+  - it: keeps the restore CronJob name within 52 characters for the longest full name
+    release:
+      name: inventory-service-with-a-very-long-release-name-x
+    asserts:
+      - matchRegex: {path: metadata.name, pattern: "^.{1,52}$"}

@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Values a parent chart shares with its subcharts; unused by this chart"
+    },
+    "standalone": {
+      "type": "boolean",
+      "default": true,
+      "description": "Render from this chart's own templates. mycarrier-helm sets false and renders the named templates itself."
+    },
+    "debugContext": {
+      "type": "boolean",
+      "default": false,
+      "description": "Render a ConfigMap holding the computed render context (used by the chart's tests only)"
+    },
+    "nameOverride": {
+      "type": "string",
+      "default": "",
+      "description": "Override the chart name used in resource names"
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "default": "",
+      "description": "Override the full resource name"
+    },
+    "members": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Number of replica set members"
+    },
+    "version": {
+      "type": "string",
+      "default": "8.0.34",
+      "description": "MongoDB server version (exact)"
+    },
+    "featureCompatibilityVersion": {
+      "type": "string",
+      "default": "8.0",
+      "description": "Pinned feature compatibility version"
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "type": "string",
+          "default": "10Gi",
+          "description": "Data volume size per member"
+        },
+        "storageClassName": {
+          "type": "string",
+          "default": "",
+          "description": "Storage class for the data volume (empty uses the cluster default)"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "Resources for the mongod container"
+    },
+    "appUser": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "default": "app",
+          "description": "Application user name"
+        },
+        "database": {
+          "type": "string",
+          "default": "",
+          "description": "Primary database: the path of the generated connection string (defaults to the full name)"
+        }
+      }
+    },
+    "password": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "length": {
+          "type": "integer",
+          "minimum": 16,
+          "default": 32,
+          "description": "Length of each generated password"
+        }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the backup and restore CronJobs and their blob storage volume"
+        },
+        "schedule": {
+          "type": "string",
+          "default": "0 2 * * *",
+          "description": "Cron schedule for backups"
+        },
+        "timeZone": {
+          "type": "string",
+          "default": "Etc/UTC",
+          "description": "Time zone for the backup schedule"
+        },
+        "retentionDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 7,
+          "description": "Backups older than this many days are deleted after each successful backup"
+        },
+        "container": {
+          "type": "string",
+          "default": "",
+          "description": "Blob container to write to, one per cluster (e.g. production). Required when backups are enabled."
+        },
+        "path": {
+          "type": "string",
+          "default": "",
+          "description": "Folder inside the container (defaults to <namespace>/<full name>)"
+        },
+        "storageAccount": {
+          "type": "string",
+          "default": "mycarriermongobackups",
+          "description": "Storage account holding the backup containers"
+        },
+        "resourceGroup": {
+          "type": "string",
+          "default": "rg_management_controlplane",
+          "description": "Resource group of the storage account"
+        },
+        "subscriptionId": {
+          "type": "string",
+          "default": "99b54c45-a73d-4d40-915e-c0392b589e8c",
+          "description": "Subscription of the storage account"
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 60,
+          "default": 21600,
+          "description": "Longest a backup Job may run before it is failed, so a hung dump can't block later backups"
+        },
+        "image": {
+          "type": "string",
+          "default": "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142",
+          "description": "Image providing mongodump and mongorestore"
+        },
+        "resources": {
+          "type": "object",
+          "description": "Resources for the backup and restore containers"
+        }
+      }
+    }
+  }
+}

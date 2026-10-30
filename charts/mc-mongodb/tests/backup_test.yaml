@@ -1,0 +1,165 @@
+suite: backup storage and CronJob
+templates:
+  - templates/backup.yaml
+release:
+  name: mydb
+  namespace: tools
+set:
+  backup.enabled: true
+  backup.container: production
+tests:
+  - it: renders nothing when backups are disabled
+    set:
+      backup.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: refuses to render without a container
+    set:
+      backup.container: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "backup.container is required when backup.enabled is true"
+
+  - it: renders a volume, a claim and a CronJob
+    asserts:
+      - hasDocuments: {count: 3}
+      - isKind: {of: PersistentVolume}
+        documentIndex: 0
+      - isKind: {of: PersistentVolumeClaim}
+        documentIndex: 1
+      - isKind: {of: CronJob}
+        documentIndex: 2
+
+  - it: points a static blob volume at the cluster's container using the kubelet identity
+    documentIndex: 0
+    asserts:
+      - equal: {path: metadata.name, value: tools-mydb-mc-mongodb-backup}
+      - equal: {path: spec.csi.driver, value: blob.csi.azure.com}
+      - equal: {path: spec.csi.volumeHandle, value: tools-mydb-mc-mongodb-backup}
+      - equal: {path: spec.csi.volumeAttributes.containerName, value: production}
+      - equal: {path: spec.csi.volumeAttributes.storageAccount, value: mycarriermongobackups}
+      - equal: {path: spec.csi.volumeAttributes.resourceGroup, value: rg_management_controlplane}
+      - equal: {path: spec.csi.volumeAttributes.subscriptionID, value: 99b54c45-a73d-4d40-915e-c0392b589e8c}
+      - notExists: {path: spec.csi.nodeStageSecretRef}
+      # Blobfuse signs in as the kubelet identity; the driver fetches no account key.
+      - equal: {path: spec.csi.volumeAttributes.AzureStorageAuthType, value: msi}
+      # The driver reads any Secret for the volume from here; only cluster administrators write Secrets in kube-system.
+      - equal: {path: spec.csi.volumeAttributes.secretNamespace, value: kube-system}
+      - equal: {path: spec.persistentVolumeReclaimPolicy, value: Retain}
+      - equal: {path: spec.storageClassName, value: azureblob-fuse-premium}
+      - equal: {path: spec.accessModes, value: [ReadWriteMany]}
+
+  - it: names the cluster-scoped volume per namespace
+    release:
+      namespace: other
+    documentIndex: 0
+    asserts:
+      - equal: {path: metadata.name, value: other-mydb-mc-mongodb-backup}
+      - equal: {path: spec.csi.volumeHandle, value: other-mydb-mc-mongodb-backup}
+
+  - it: reserves the volume for this release's claim
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.claimRef, value: {namespace: tools, name: tools-mydb-mc-mongodb-backup}}
+
+  - it: binds the claim to that volume
+    documentIndex: 1
+    asserts:
+      - equal: {path: metadata.name, value: tools-mydb-mc-mongodb-backup}
+      - equal: {path: metadata.namespace, value: tools}
+      - equal: {path: spec.volumeName, value: tools-mydb-mc-mongodb-backup}
+      - equal: {path: spec.storageClassName, value: azureblob-fuse-premium}
+      - equal: {path: spec.accessModes, value: [ReadWriteMany]}
+
+  - it: schedules a daily backup into the service's folder
+    documentIndex: 2
+    asserts:
+      - equal: {path: metadata.name, value: mydb-mc-mongodb-backup}
+      - equal: {path: spec.schedule, value: "0 2 * * *"}
+      - equal: {path: spec.timeZone, value: Etc/UTC}
+      - equal: {path: spec.concurrencyPolicy, value: Forbid}
+      - equal: {path: spec.jobTemplate.spec.backoffLimit, value: 2}
+      - equal: {path: spec.jobTemplate.spec.activeDeadlineSeconds, value: 21600}
+      # Connects to the database over the mesh's mutual TLS; native sidecars let the Job complete.
+      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/inject\"]", value: "true"}
+      - equal: {path: "spec.jobTemplate.spec.template.metadata.annotations[\"sidecar.istio.io/nativeSidecar\"]", value: "true"}
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault}
+      - equal: {path: spec.jobTemplate.spec.template.spec.restartPolicy, value: Never}
+      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].image", value: "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"}
+      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0]", value: {name: backups, mountPath: /backups, subPath: tools/mydb-mc-mongodb}}
+      - equal: {path: "spec.jobTemplate.spec.template.spec.volumes[0]", value: {name: backups, persistentVolumeClaim: {claimName: tools-mydb-mc-mongodb-backup}}}
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: {name: RETENTION_DAYS, value: "7"}
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: {name: MONGODB_URI, valueFrom: {secretKeyRef: {name: mydb-mc-mongodb-backup-connection, key: connectionString}}}
+
+  - it: follows the configured schedule, retention and path
+    documentIndex: 2
+    set:
+      backup.schedule: "30 3 * * *"
+      backup.retentionDays: 14
+      backup.path: prod/inventory
+    asserts:
+      - equal: {path: spec.schedule, value: "30 3 * * *"}
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: {name: RETENTION_DAYS, value: "14"}
+      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].volumeMounts[0].subPath", value: prod/inventory}
+
+  - it: writes to a temporary file and only publishes and prunes after a successful dump
+    documentIndex: 2
+    asserts:
+      - equal: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[0]", value: /bin/bash}
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "set -euo pipefail"}
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "mongodump [^\\n]*--archive=\"/backups/\\$ts.archive.gz.partial\""}
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "(?s)mongodump.*mv .*cutoff"}
+      - notMatchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].command[2]", pattern: "--oplog"}
+
+  - it: lets the backup deadline be configured
+    documentIndex: 2
+    set:
+      backup.activeDeadlineSeconds: 3600
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.activeDeadlineSeconds, value: 3600}
+
+  - it: keeps the full release name in the volume name under a long namespace
+    release:
+      name: inventory-service-mongodb-aaaa-one
+      namespace: feature14-some-really-long-application-stack-namespace-xx
+    asserts:
+      - equal: {path: metadata.name, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongod-backup}
+        documentIndex: 0
+      - equal: {path: spec.csi.volumeHandle, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongod-backup}
+        documentIndex: 0
+      - equal: {path: spec.volumeName, value: feature14-some-really-long-application-stack-namespace-xx-inventory-service-mongodb-aaaa-one-mc-mongod-backup}
+        documentIndex: 1
+
+  # Cluster policy (require-run-as-non-root, require-ro-rootfs) rejects the pod otherwise.
+  - it: runs the backup as the mongo image's non-root user on a read-only root filesystem
+    documentIndex: 2
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot, value: true}
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser, value: 999}
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.runAsGroup, value: 999}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext
+          value: {readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content: {name: tmp, mountPath: /tmp}
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content: {name: HOME, value: /tmp}
+
+  - it: mounts no ServiceAccount token, since the backup makes no Kubernetes API calls
+    documentIndex: 2
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken, value: false}
+
+  - it: runs an image pinned by digest
+    documentIndex: 2
+    asserts:
+      - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].image", pattern: "^mongo:8\\.0\\.34@sha256:[0-9a-f]{64}$"}

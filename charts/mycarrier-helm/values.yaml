@@ -1472,3 +1472,20 @@ alerts:
 
 ## @param isEnvironmentDeploy Whether this is an environment-level deployment (affects resource naming and behavior)
 isEnvironmentDeploy: false
+
+# ============================================================================
+# DEPENDENCY DEPLOYMENTS
+# ============================================================================
+
+## @section Dependency deployments
+## Dependencies deployed in-cluster alongside the stack, for internal tools. Product applications use the shared
+## services (global.dependencies), e.g. MongoDB Atlas.
+
+## @param dependencyDeployments.mongodb.enabled Deploy a MongoDB replica set with the stack; MongoConnection_<env> then points at it
+dependencyDeployments:
+  mongodb:
+    enabled: false
+
+## @skip mc-mongodb Defaults of the mc-mongodb subchart. mycarrier-helm renders its resources itself.
+mc-mongodb:
+  standalone: false

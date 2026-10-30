@@ -1354,6 +1354,39 @@ cronjobs:
 - `"0 0 1 * *"` - Monthly on the 1st
 - `"0 9 * * 1-5"` - Weekdays at 9 AM
 
+### Deploying an In-Cluster MongoDB (internal tools)
+
+`dependencyDeployments.mongodb.enabled: true` deploys a MongoDB replica set, `<appStack>-mongodb`, in the stack's
+namespace, rendered from the [mc-mongodb](../mc-mongodb) subchart's named templates. It needs the MongoDB operator
+and External Secrets in the cluster. Product applications keep using MongoDB Atlas (`global.dependencies.mongodb`).
+
+```yaml
+global:
+  appStack: toolbox
+  language: csharp
+  dependencies:
+    mongodb: true
+dependencyDeployments:
+  mongodb:
+    enabled: true
+    # members: 3                  # default: 3 in production, 1 elsewhere
+    # version: "8.0.34"
+    # storage: { size: 10Gi, storageClassName: "" }
+    # resources: {...}
+    # backup: { schedule: "0 2 * * *", timeZone: Etc/UTC, retentionDays: 7 }
+    # backup: { enabled: true, container: <cluster's container> }   # outside production
+```
+
+- The connection string is in Secret `<appStack>-mongodb-connection`, key `connectionString`; its database is
+  `appStack`. For a csharp stack with `global.dependencies.mongodb`, `MongoConnection_<env>` reads it instead of Vault.
+- Production (meta environment starting with `prod`) always backs up, to the `production` container of
+  `mycarriermongobackups` unless `backup.container` names another, folder `<meta environment>/<appStack>/<namespace>`,
+  and gets a suspended `<appStack>-mongodb-restore` CronJob. Any other environment backs up only with
+  `backup.enabled: true` and its cluster's `backup.container`; offloaded feature environments never back up.
+  Production containers are named `production*` and only production uses them; a mismatch fails the render. Each
+  cluster's kubelet identity needs `Storage Blob Data Contributor` on its container.
+- The subchart's own values live under `mc-mongodb` and are not for stacks to set.
+
 ## KrakenD AutoConfig
 
 The chart can render a `gateway.krakend.io/v1alpha1` **`KrakenDAutoConfig`** CR

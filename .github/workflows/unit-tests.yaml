@@ -49,6 +49,10 @@ jobs:
           fi
 
           charts=$(echo "$changed_files" | grep '^charts/[^/]\+/[^/]\+' | cut -d/ -f1-2 | sort -u || true)
+          # mycarrier-helm renders mc-mongodb's templates, so a change to mc-mongodb also runs mycarrier-helm's tests.
+          if grep -qx 'charts/mc-mongodb' <<<"$charts"; then
+            charts=$(printf '%s\ncharts/mycarrier-helm\n' "$charts" | sort -u)
+          fi
           if [[ -z "$charts" ]]; then
             echo "charts=[]" >> "$GITHUB_OUTPUT"
             exit 0
@@ -80,6 +84,14 @@ jobs:
       - name: Install helm-unittest plugin
         run: |
           helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.0
+
+      # Builds charts/<chart>/charts for a chart with a local (file://) dependency, such as mycarrier-helm's
+      # mc-mongodb. A chart with remote dependencies keeps the subcharts it vendors, so the job fetches no remote charts.
+      - name: Build chart dependencies
+        run: |
+          if grep -q 'file://' "${{ matrix.chart }}/Chart.yaml"; then
+            helm dependency update "${{ matrix.chart }}"
+          fi
 
       - name: Run unit tests
         id: runtests

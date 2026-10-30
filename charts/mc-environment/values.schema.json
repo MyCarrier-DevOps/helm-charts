@@ -323,6 +323,10 @@
     "manualOtelConfig": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/manualOtelConfig"
     },
+    "dependencyDeployments": {
+      "type": "object",
+      "description": "Dependencies deployed in-cluster with the environment, e.g. mongodb.enabled (see mycarrier-helm's dependencyDeployments). mycarrier-helm validates them."
+    },
     "disableOtelAutoinstrumentation": {
       "$ref": "https://raw.githubusercontent.com/MyCarrier-DevOps/helm-charts/refs/heads/main/charts/mycarrier-helm/values.schema.json#/properties/disableOtelAutoinstrumentation"
     },
@@ -505,6 +509,12 @@
           },
           "manualOtelConfig": {
             "$ref": "#/definitions/manualOtelConfig"
+          },
+          "dependencyDeployments": {
+            "oneOf": [
+              { "$ref": "#/definitions/dependencyDeployments" },
+              { "type": "null" }
+            ]
           },
           "disableOtelAutoinstrumentation": {
             "$ref": "#/definitions/disableOtelAutoinstrumentation"
