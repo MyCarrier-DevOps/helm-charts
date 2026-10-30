@@ -3010,7 +3010,7 @@
                 "retentionDays": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "Backups older than this many days are deleted after each successful backup."
+                  "description": "Backups older than this many days are deleted after each successful backup. The backup containers delete archives 30 days after they are written, so values above 30 have no effect."
                 }
               }
             }
