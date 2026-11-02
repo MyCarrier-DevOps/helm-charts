@@ -1,0 +1,168 @@
+suite: A Rollout app's Services and HPA skip kube-linter's dangling checks (DEVOPS-534)
+# kube-linter, chart-renderer's render check, models only built-in workloads, not the Argo Rollouts Rollout CRD. Its
+# dangling-service check finds no pods behind a Rollout app's stable and -preview Services, and in prod its
+# dangling-horizontalpodautoscaler check finds no target for the HPA (scaleTargetRef kind Rollout); either refuses the
+# render. Only those objects carry the per-object ignore annotations; every other Service and HPA stays linted.
+# .github/scripts/test_rollout_services_kubelinter.sh runs kube-linter itself on rendered Rollout apps.
+templates:
+  - service.yaml
+  - autoscaler.yaml
+tests:
+  - it: annotates the stable Service of a Rollout app
+    template: service.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: selects the pods of an Argo Rollout, which kube-linter does not model
+
+  - it: annotates the -preview Service of a Rollout app
+    template: service.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api-preview
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: selects the pods of an Argo Rollout, which kube-linter does not model
+
+  - it: leaves the Service of a Deployment app linted
+    template: service.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api
+    asserts:
+      - notExists:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+
+  - it: keeps an app's own value for the key on both Rollout Services, with no duplicate key
+    template: service.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          service:
+            annotations:
+              ignore-check.kube-linter.io/dangling-service: set by the app
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: set by the app
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: set by the app
+        documentIndex: 1
+
+  - it: annotates the prod HPA of a Rollout app (its scaleTargetRef is the Rollout)
+    template: autoscaler.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Rollout
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-horizontalpodautoscaler"]
+          value: targets an Argo Rollout, which kube-linter does not model
+
+  - it: leaves the prod HPA of a Deployment app linted
+    template: autoscaler.yaml
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Deployment
+      - notExists:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-horizontalpodautoscaler"]

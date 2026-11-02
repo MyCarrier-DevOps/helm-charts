@@ -5,6 +5,12 @@
 {{- $appContext := (merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $) }}
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
+{{- /* kube-linter, chart-renderer's render check, models only built-in workloads, not the Argo Rollouts Rollout CRD:
+       its dangling-service check finds no pods behind a Rollout app's stable and -preview Services and refuses the
+       render, although their selector is on the Rollout's pod template (DEVOPS-534). Only these two Services skip the
+       check; Deployment and StatefulSet Services stay linted. An app that sets the same key in service.annotations
+       keeps its own value (no duplicate key). */}}
+{{- $lintIgnoreDangling := and (eq $appValues.deploymentType "rollout") (not (hasKey (dig "service" "annotations" (dict) $appValues) "ignore-check.kube-linter.io/dangling-service")) }}
 ---
 apiVersion: v1
 kind: Service
@@ -20,6 +26,9 @@ metadata:
            the replace path before it reads per-resource sync options. The legacy offload generator (offloads.yaml)
            still sets Replace=true. */}}
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true{{ if eq $appValues.deploymentType "rollout" }},ServerSideApply=false{{ end }}
+    {{- if $lintIgnoreDangling }}
+    ignore-check.kube-linter.io/dangling-service: "selects the pods of an Argo Rollout, which kube-linter does not model"
+    {{- end }}
     {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
     {{ toYaml $appValues.service.annotations | indent 4 | trim }}
     {{- end }}
@@ -38,6 +47,9 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,ServerSideApply=false
+    {{- if $lintIgnoreDangling }}
+    ignore-check.kube-linter.io/dangling-service: "selects the pods of an Argo Rollout, which kube-linter does not model"
+    {{- end }}
     {{- if and (hasKey $appValues "service") (hasKey $appValues.service "annotations") }}
     {{ toYaml $appValues.service.annotations | indent 4 | trim }}
     {{- end }}

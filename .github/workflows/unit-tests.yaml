@@ -198,6 +198,18 @@ jobs:
         if: ${{ matrix.chart == 'charts/mycarrier-helm' }}
         run: python3 -I .github/scripts/test_canary_tests_check.py
 
+      # chart-renderer lints every rendered mycarrier-helm package with kube-linter. A Rollout app's Services and prod
+      # HPA must pass its dangling checks, and a Service that selects no workload must still fail them (DEVOPS-534).
+      # The binary is the version chart-renderer runs, checked against the release asset's sha256.
+      - name: kube-linter on a Rollout app
+        if: ${{ matrix.chart == 'charts/mycarrier-helm' }}
+        run: |
+          curl --retry 3 --retry-all-errors -fsSLo "$RUNNER_TEMP/kube-linter.tar.gz" \
+            https://github.com/stackrox/kube-linter/releases/download/v0.8.3/kube-linter-linux.tar.gz
+          echo "1a6d8419b11971372971fdbc22682b684ebfb7cf1c39591662d1b6ca736c41df  $RUNNER_TEMP/kube-linter.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/kube-linter.tar.gz" -C "$RUNNER_TEMP" kube-linter
+          KUBE_LINTER="$RUNNER_TEMP/kube-linter" bash .github/scripts/test_rollout_services_kubelinter.sh
+
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
