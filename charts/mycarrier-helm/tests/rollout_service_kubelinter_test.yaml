@@ -1,0 +1,109 @@
+suite: Rollout Services skip kube-linter's dangling-service check (DEVOPS-534)
+# kube-linter, chart-renderer's render check, models only built-in workloads, not the Argo Rollouts Rollout CRD, so its
+# dangling-service check finds no pods behind a Rollout app's stable and -preview Services and refuses the render.
+# Only those two Services carry the per-object ignore annotation; every other Service stays linted.
+# .github/scripts/test_rollout_services_kubelinter.sh runs kube-linter itself on a rendered Rollout app.
+templates:
+  - service.yaml
+tests:
+  - it: annotates the stable Service of a Rollout app
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: selects the pods of an Argo Rollout, which kube-linter does not model
+
+  - it: annotates the -preview Service of a Rollout app
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api-preview
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: selects the pods of an Argo Rollout, which kube-linter does not model
+
+  - it: leaves the Service of a Deployment app linted
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    documentSelector:
+      path: metadata.name
+      value: test-stack-api
+    asserts:
+      - notExists:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+
+  - it: keeps an app's own value for the key on both Rollout Services, with no duplicate key
+    set:
+      global:
+        appStack: test-stack
+        language: nodejs
+      environment:
+        name: preprod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          service:
+            annotations:
+              ignore-check.kube-linter.io/dangling-service: set by the app
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: set by the app
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/dangling-service"]
+          value: set by the app
+        documentIndex: 1
