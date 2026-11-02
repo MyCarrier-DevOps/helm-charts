@@ -18,6 +18,12 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "11"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+    {{- /* A Rollout app's HPA targets the Rollout (helm.specs.hpa). kube-linter, chart-renderer's render check, models
+           only built-in workloads, so its dangling-horizontalpodautoscaler check finds no such target and refuses the
+           render (DEVOPS-534). An HPA of a Deployment or StatefulSet stays linted. */}}
+    {{- if eq $appValues.deploymentType "rollout" }}
+    ignore-check.kube-linter.io/dangling-horizontalpodautoscaler: "targets an Argo Rollout, which kube-linter does not model"
+    {{- end }}
 spec:
   {{ include "helm.specs.hpa" $appContext | indent 2 | trim }}
 {{- end -}}
