@@ -270,9 +270,11 @@ gets no source route). It sends them to the `-preview` destination, so a release
 canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
 host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, but every
 Istio ingress gateway of the Development and Production clusters removes `X-MyCarrier-Canary` from a request before it
-routes it (`istio-system/strip-canary-header` in AppCluster-Infrastructure, DEVOPS-524), so a public request with the
-release's correlation id in the header reaches stable pods; only in-mesh callers, such as `tests-dark`, reach the canary
-through the route. After
+routes it (`istio-system/strip-canary-header`, DEVOPS-524), so a public request with the
+release's correlation id in the header reaches stable pods; only in-mesh callers reach the canary through the route.
+`tests-dark` gets there through TestEngine: its Job runs without an Istio sidecar and only sends TestEngine the request,
+and TestEngine's test pods, which run with a sidecar, send the header to the leader's in-cluster address. From a pod
+without a sidecar, a request with the header to the in-cluster address reaches stable pods. After
 one Rollout of the release aborts, for up to about 30 s (`abortScaleDownDelaySeconds`) the others' canary pods that call
 it reach its aborted canary pods or its stable pods, then stable. The source routes render only with the coordinator
 and its barriers between weights, for load proportionality: the barriers move the release's Rollouts through the same
