@@ -95,8 +95,10 @@
        (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
        when one is missing. alerts and compare are not in these steps: they run as background analysis
        (helm.canary.backgroundAnalysis), and outside prod alerts is left out.
-       Analysis is mandatory: with health, alerts and compare all opted out and no extra templates the render fails, for preset
-       and explicit steps alike, in every environment. The check reads the configured set, not what renders here.
+       Analysis is mandatory: with health, alerts and compare all opted out (compare release-wide, or for the app with
+       applications.<app>.canaryCompare: false) and no extra templates the render fails, for preset and explicit steps
+       alike, in every environment; with the fast preset compare does not count, because the preset usually promotes
+       before compare's first measurement. The check reads the configured set, not what renders here.
        With coordinator.enabled (default true; release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator
        step plugin) a preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the
        whole group has been applied, and gets a barrier named w<weight> after each weight's analysis and pause, so every
@@ -126,17 +128,30 @@
 {{- define "helm.canary.configuredSteps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $rendered := eq (include "helm.canary.stepsRendered" .) "true" -}}
-{{- if not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $cfg.analysis.compare.enabled $cfg.analysis.templates) -}}
-  {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: global.strategy.canary.analysis.health.enabled, analysis.alerts.enabled and analysis.compare.enabled are all false and analysis.templates lists no extra template. Remove one of the opt-outs, or list an AnalysisTemplate defined under applications.%s.analysisTemplates in analysis.templates." .appName .appName) -}}
+{{- $compareOn := eq (include "helm.canary.compare.enabled" .) "true" -}}
+{{- if not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $compareOn $cfg.analysis.templates) -}}
+  {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are false, compare is off for it (global.strategy.canary.analysis.compare.enabled or applications.%s.canaryCompare is false) and analysis.templates lists no extra template. Remove one of the opt-outs, or list an AnalysisTemplate defined under applications.%s.analysisTemplates in analysis.templates." .appName .appName .appName) -}}
+{{- end -}}
+{{- /* compare runs in the background and first measures initialDelay (3m) after the first weight. The fast preset has
+       no pause, so it promotes once the canary is available at 25% and then at 100%, usually before that: with
+       health and alerts off and no extra template, nothing would measure the canary. */ -}}
+{{- if and (not $cfg.steps) (eq (toString $cfg.preset) "fast") (not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $cfg.analysis.templates)) -}}
+  {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: the fast preset promotes before compare's first measurement (analysis.compare.initialDelay), and global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are false with no extra template in analysis.templates. Remove one of the opt-outs, list an extra template, or use the standard or manual preset." .appName) -}}
 {{- end -}}
 {{- /* The compare check (DEVOPS-322) finds pods by the pod-template hash in their names, <fullName>-<hash>-<suffix>.
        Kubernetes cuts a generated pod name at 58 characters before the 5-character suffix, so a ReplicaSet name
        (<fullName>-<hash of up to 10>) above 57 loses part of the hash and the check matches no pod. Checked in every
-       environment while the chart's compare is on, like the other checks here. */ -}}
+       environment while the chart's compare is on for the application (helm.canary.compare.enabled), like the other
+       checks here. In a feature environment the full name ends in -feature<N> (helm.fullname); where the steps do not
+       render there, neither does compare, so the check measures the name without that suffix, the name prod renders,
+       and keeps the early warning. A feature-environment drill (stepsOutsideProd) runs compare on the -feature<N>
+       pods, so it measures that name. */ -}}
 {{- $hasCustomCompare := false -}}
 {{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "compare" }}{{ $hasCustomCompare = true }}{{ end }}{{ end -}}
-{{- if and $cfg.analysis.compare.enabled (not $hasCustomCompare) (gt (len (include "helm.fullname" .)) 46) -}}
-  {{- fail (printf "application '%s': the canary compare check finds the canary's and the stable pods by the pod-template hash in their names, and its full name '%s' (%d characters) is too long for them to keep it: Kubernetes cuts a generated pod name at 58 characters, so the name must be 46 characters or fewer. Shorten global.appStack or the application's name, or opt out with global.strategy.canary.analysis.compare.enabled: false." .appName (include "helm.fullname" .) (len (include "helm.fullname" .))) -}}
+{{- $compareName := include "helm.fullname" . -}}
+{{- if and (not $rendered) (hasPrefix "feature" (toString .Values.environment.name)) }}{{ $compareName = trimSuffix (printf "-%s" (lower (toString .Values.environment.name))) $compareName }}{{ end -}}
+{{- if and $compareOn (not $hasCustomCompare) (gt (len $compareName) 46) -}}
+  {{- fail (printf "application '%s': the canary compare check finds the canary's and the stable pods by the pod-template hash in their names, and its full name '%s' (%d characters) is too long for them to keep it: Kubernetes cuts a generated pod name at 58 characters, so the name must be 46 characters or fewer. Shorten global.appStack or the application's name, or opt out with applications.%s.canaryCompare: false (global.strategy.canary.analysis.compare.enabled: false turns compare off for the whole release)." .appName $compareName (len $compareName) .appName) -}}
 {{- end -}}
 {{- $coordinator := $cfg.coordinator -}}
 {{- if and $rendered $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
@@ -564,8 +579,8 @@
 {{- end -}}
 
 {{- /* The Rollout's background analysis, as JSON, or "" when it has none: the alerts template unless
-       analysis.alerts.enabled is false, then the compare template (DEVOPS-322) unless analysis.compare.enabled is
-       false; each the chart's, or an applications.<app>.analysisTemplates entry of that name. It starts at the first
+       analysis.alerts.enabled is false, then the compare template (DEVOPS-322) unless compare is off for the app
+       (helm.canary.compare.enabled); each the chart's, or an applications.<app>.analysisTemplates entry of that name. It starts at the first
        step that sends the canary traffic (setWeight above 0, after the dark stage) and runs until the Rollout is
        promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
        standard rules) run out and where compare sees most of the canary's traffic; a step-by-step check would sample
@@ -586,7 +601,7 @@
 {{- if and (eq (include "helm.canary.enabled" .) "true") (eq (include "helm.canary.stepsRendered" .) "true") -}}
   {{- $available := include "helm.canary.analysis.available" . | fromJsonArray -}}
   {{- if and $cfg.analysis.alerts.enabled (has "alerts" $available) }}{{ $names = append $names "alerts" }}{{ end -}}
-  {{- if and $cfg.analysis.compare.enabled (has "compare" $available) }}{{ $names = append $names "compare" }}{{ end -}}
+  {{- if and (eq (include "helm.canary.compare.enabled" .) "true") (has "compare" $available) }}{{ $names = append $names "compare" }}{{ end -}}
 {{- end -}}
 {{- if $names -}}
   {{- $templates := list -}}

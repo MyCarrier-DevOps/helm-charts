@@ -2,13 +2,20 @@
        and the p95 of http.server.request.duration in ClickStack's ClickHouse. Rendered by analysistemplate.yaml and run
        by the Rollout as background analysis (helm.canary.backgroundAnalysis) from its first weight until promotion. */ -}}
 
+{{- /* True when compare is on for this application: global.strategy.canary.analysis.compare.enabled (release-wide)
+       and applications.<app>.canaryCompare (per application, default true; compared as the string "false", so a
+       false given past the schema still counts). It covers the chart's template and a replacement entry alike. */ -}}
+{{- define "helm.canary.compare.enabled" -}}
+{{- if and (include "helm.canary.config" . | fromJson).analysis.compare.enabled (ne (toString (dig "canaryCompare" true (.application | default dict))) "false") }}true{{ else }}false{{ end -}}
+{{- end -}}
+
 {{- /* True when the chart's compare template renders for this application: a canary Rollout whose steps render
-       (helm.canary.stepsRendered; nothing else would run it), analysis.compare.enabled, and no
+       (helm.canary.stepsRendered; nothing else would run it), compare on for it (helm.canary.compare.enabled), and no
        applications.<app>.analysisTemplates entry named compare, which replaces it. */ -}}
 {{- define "helm.canary.compare.wanted" -}}
 {{- $custom := false -}}
 {{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "compare" }}{{ $custom = true }}{{ end }}{{ end -}}
-{{- if and (eq (include "helm.canary.stepsRendered" .) "true") (include "helm.canary.config" . | fromJson).analysis.compare.enabled (not $custom) }}true{{ else }}false{{ end -}}
+{{- if and (eq (include "helm.canary.stepsRendered" .) "true") (eq (include "helm.canary.compare.enabled" .) "true") (not $custom) }}true{{ else }}false{{ end -}}
 {{- end -}}
 
 {{- /* The histogram table the environment's metrics land in. The OTel collector routes them by namespace and
@@ -84,17 +91,33 @@ FROM sides
 FORMAT JSONEachRow
 {{- end -}}
 
-{{- /* The metric's failureCondition. Only it is set, so a measurement that does not fail is Successful (Argo Rollouts):
-       - no stable data at all fails: stable pods export their cumulative series every minute, so none means the
-         metric is not emitted or the pods are not matched, and the check could never fire;
-       - with at least minRequests on each side, a canary 5xx ratio above stable's by more than max5xxDelta fails, and
-         so does a canary p95 above maxP95Ratio x stable's that is also more than minP95DeltaSeconds slower (the
-         histogram's lowest buckets are 5 to 25 ms wide, so a ratio alone flags fast endpoints);
-       - fewer requests pass: too little traffic to judge, and the dark stage's tests, health and alerts still
-         gate the canary. */ -}}
+{{- /* The compare metric's failureCondition. Only it is set, so a measurement that does not fail is Successful (Argo
+       Rollouts). With at least minRequests on each side, a canary 5xx ratio above stable's by more than max5xxDelta
+       fails, and so does a canary p95 above maxP95Ratio x stable's that is also more than minP95DeltaSeconds slower
+       (the histogram's lowest buckets are 5 to 25 ms wide, so a ratio alone flags fast endpoints). Fewer requests on
+       either side pass: too little traffic to judge. With the defaults in prod, only health and the alert-rules check
+       then gate the canary (the alerts metric runs in dry run until dryRun: false, and the dark stage is off in prod
+       until DEVOPS-321). Do not lower minRequests alone: the thresholds come from a baseline with 100 or more
+       requests, so a lower value needs wider max5xxDelta and maxP95Ratio from the service's own A/A baseline, or an
+       extra template that checks the error rate. The metric fails the run on its first failed measurement
+       (failureLimit 0). */ -}}
 {{- define "helm.canary.compare.failureCondition" -}}
 {{- $c := (include "helm.canary.config" . | fromJson).analysis.compare -}}
-{{- printf "result.stable_series == 0 || (result.canary_requests >= %v && result.stable_requests >= %v && (result.canary_5xx_ratio - result.stable_5xx_ratio > %v || (result.canary_p95 > result.stable_p95 * %v && result.canary_p95 - result.stable_p95 > %v)))" $c.minRequests $c.minRequests $c.max5xxDelta $c.maxP95Ratio $c.minP95DeltaSeconds -}}
+{{- printf "result.canary_requests >= %v && result.stable_requests >= %v && (result.canary_5xx_ratio - result.stable_5xx_ratio > %v || (result.canary_p95 > result.stable_p95 * %v && result.canary_p95 - result.stable_p95 > %v))" $c.minRequests $c.minRequests $c.max5xxDelta $c.maxP95Ratio $c.minP95DeltaSeconds -}}
+{{- end -}}
+
+{{- /* The data metric's failureCondition, on the same query, interval and initialDelay as compare:
+       - no stable series: the application does not emit http.server.request.duration, its pods are not matched, or
+         telemetry (the OTel collector or ClickStack ingestion) has delivered no point for the whole window, so compare
+         could never fire;
+       - no canary series while stable has minRequests: the canary does not emit the metric (an SDK or middleware
+         change), or is not yet available. Without this, such a version would pass, become stable, and then fail
+         every later canary on no stable data.
+       The metric tolerates one failed measurement over the run (failureLimit 1, counted over the run, not in a row),
+       so one empty window (a stall longer than the window, or a canary that takes longer than initialDelay to become
+       available) does not abort the canary; a second one anywhere in the run does. */ -}}
+{{- define "helm.canary.compare.dataFailureCondition" -}}
+{{- printf "result.stable_series == 0 || (result.canary_series == 0 && result.stable_requests >= %v)" (include "helm.canary.config" . | fromJson).analysis.compare.minRequests -}}
 {{- end -}}
 
 {{- /* The query window in seconds: analysis.compare.interval plus one 60 s metric export, so consecutive windows

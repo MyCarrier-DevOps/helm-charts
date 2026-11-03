@@ -948,7 +948,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none: global.strategy.canary.analysis.health.enabled, analysis.alerts.enabled and analysis.compare.enabled are all false and analysis.templates lists no extra template"
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are false, compare is off for it"
 
   - it: fails the render outside prod too when health and alerts are both opted out
     template: rollout.yaml

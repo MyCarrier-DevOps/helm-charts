@@ -309,14 +309,16 @@ behaviour.
 
 | Values | Effect |
 |---|---|
-| `analysis.compare.enabled` (default `true`) | `false` drops the template, its ExternalSecret and the background entry. Set it for an application that does not export `http.server.request.duration`: with no stable data, every measurement fails. |
+| `analysis.compare.enabled` (default `true`) | `false` turns compare off for every application of the release: no template, ExternalSecret or background entry. |
+| `applications.<app>.canaryCompare` (default `true`) | `false` turns compare off for that application only. Set it for an application that does not export `http.server.request.duration`: with no stable data, its canary fails at the second measurement. |
 | `analysis.compare.interval` / `initialDelay` (`2m` / `3m`) | The measurement interval and the wait before the first one. Each query covers the last `interval` + 60 s. |
-| `analysis.compare.minRequests` (`100`) | Fewer requests on either side pass the measurement. |
+| `analysis.compare.minRequests` (`100`) | Fewer requests on either side pass the measurement. A second metric, on the same query, fails on no stable data, or on no canary data while stable has `minRequests`; it tolerates one such measurement over the run, and a second aborts the canary. |
 | `analysis.compare.max5xxDelta` (`0.02`) | Fails when the canary's 5xx ratio is above the stable pods' by more. |
 | `analysis.compare.maxP95Ratio` / `minP95DeltaSeconds` (`2.5` / `0.1`) | Fails when the canary's p95 is above the ratio times the stable pods' and also slower by more than the delta. |
 | `analysis.compare.consecutiveErrorLimit` (`4`) | Errors in a row (non-2xx, timeout) the check tolerates. |
-| A `fullName` above 46 characters | Fails the render in every environment: the pod names would lose part of the hash. Shorten it, or set `enabled: false`. |
-| `compare` in `analysis.templates` | Fails the render: it always runs unless opted out. A `compare` entry under `applications.<app>.analysisTemplates` replaces the chart's. |
+| A `fullName` above 46 characters | Fails the render in every environment while compare is on for the application: the pod names would lose part of the hash. In a `feature<N>` environment without `stepsOutsideProd`, the name is measured without its `-feature<N>` suffix; a feature-environment drill with `stepsOutsideProd` needs the `-feature<N>` name to be 46 characters or fewer. Shorten it, or set `applications.<app>.canaryCompare: false`. |
+| `compare` in `analysis.templates` | Fails the render: it always runs unless opted out. A `compare` entry under `applications.<app>.analysisTemplates` replaces the chart's: the chart declares the args `canary-hash` and `stable-hash` on it, and it runs as background analysis, so set `count: 0` and an `interval` on it to run until promotion. |
+| The `fast` preset with `analysis.health.enabled` and `analysis.alerts.enabled` false and no extra template | Fails the render: the preset usually promotes before compare's first measurement (`initialDelay`), so compare does not count as the mandatory analysis there. |
 
 The template reads Vault DevOps `clickhouse/cloud/users/canary-analysis` (`address`, `username`, `password`) through
 the ExternalSecret `<environment>-<fullName>-compare`, a read-only ClickHouse user limited to the histogram tables.

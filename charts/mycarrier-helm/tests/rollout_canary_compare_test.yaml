@@ -105,8 +105,8 @@ tests:
                   key: password
 
   # Only failureCondition is set, so a measurement is Successful unless it fails: low traffic (either side under
-  # minRequests) passes, and no stable data at all (the metric not emitted, or the pods not matched) fails.
-  - it: polls every 2m from 3m after the first weight and fails on a worse canary or on no stable data
+  # minRequests) passes. The no-data cases are a second metric (below), which tolerates one empty measurement.
+  - it: polls every 2m from 3m after the first weight and fails on a worse canary
     template: analysistemplate.yaml
     documentIndex: 4
     set: *prod
@@ -138,9 +138,49 @@ tests:
       - equal:
           path: spec.metrics[0].failureCondition
           value: >-
-            result.stable_series == 0 || (result.canary_requests >= 100 && result.stable_requests >= 100
+            result.canary_requests >= 100 && result.stable_requests >= 100
             && (result.canary_5xx_ratio - result.stable_5xx_ratio > 0.02 || (result.canary_p95 > result.stable_p95 * 2.5
-            && result.canary_p95 - result.stable_p95 > 0.1)))
+            && result.canary_p95 - result.stable_p95 > 0.1))
+
+  # No stable series means the metric is not emitted, the pods are not matched, or telemetry has stalled; no canary
+  # series while stable has minRequests means the canary stopped emitting it, or is not yet available. One such
+  # measurement is tolerated over the run (failureLimit 1), so a short stall or a slow canary start does not abort.
+  - it: fails on no data in a second metric with the same query, which tolerates one empty measurement
+    template: analysistemplate.yaml
+    documentIndex: 4
+    set: *prod
+    asserts:
+      - lengthEqual:
+          path: spec.metrics
+          count: 2
+      - equal:
+          path: spec.metrics[1].name
+          value: data
+      - equal:
+          path: spec.metrics[1].interval
+          value: 2m
+      - equal:
+          path: spec.metrics[1].initialDelay
+          value: 3m
+      - notExists:
+          path: spec.metrics[1].count
+      - equal:
+          path: spec.metrics[1].failureLimit
+          value: 1
+      - equal:
+          path: spec.metrics[1].consecutiveErrorLimit
+          value: 4
+      - notExists:
+          path: spec.metrics[1].successCondition
+      - equal:
+          path: spec.metrics[1].failureCondition
+          value: result.stable_series == 0 || (result.canary_series == 0 && result.stable_requests >= 100)
+      - equal:
+          path: spec.metrics[1].provider.web.url
+          value: https://{{args.clickhouse-host}}:8443/?wait_end_of_query=1&param_window=180&param_namespace=prod&param_prefix=mycarrier-api-&param_canary={{args.canary-hash}}&param_stable={{args.stable-hash}}
+      - matchRegex:
+          path: spec.metrics[1].provider.web.body
+          pattern: FROM hyperdx\.prod_otel_metrics_histogram
 
   - it: posts the query to ClickHouse's HTTP interface with the window, namespace, pod prefix and hashes as parameters
     template: analysistemplate.yaml
@@ -382,9 +422,21 @@ tests:
       - equal:
           path: spec.metrics[0].failureCondition
           value: >-
-            result.stable_series == 0 || (result.canary_requests >= 50 && result.stable_requests >= 50
+            result.canary_requests >= 50 && result.stable_requests >= 50
             && (result.canary_5xx_ratio - result.stable_5xx_ratio > 0.05 || (result.canary_p95 > result.stable_p95 * 3
-            && result.canary_p95 - result.stable_p95 > 0.25)))
+            && result.canary_p95 - result.stable_p95 > 0.25))
+      - equal:
+          path: spec.metrics[1].interval
+          value: 3m
+      - equal:
+          path: spec.metrics[1].initialDelay
+          value: 4m
+      - equal:
+          path: spec.metrics[1].consecutiveErrorLimit
+          value: 2
+      - equal:
+          path: spec.metrics[1].failureCondition
+          value: result.stable_series == 0 || (result.canary_series == 0 && result.stable_requests >= 50)
       # The window is the interval plus one 60 s metric export, so consecutive windows overlap and miss nothing.
       - matchRegex:
           path: spec.metrics[0].provider.web.url
@@ -479,6 +531,47 @@ tests:
           value:
             - templateName: prod-mycarrier-api-compare
 
+  # The fast preset has no pause: it promotes as soon as the canary is available at 25% and then at 100%, usually
+  # before compare's first measurement (initialDelay 3m), so compare alone does not count as its analysis.
+  - it: fails the fast preset with compare as the only analysis
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api' would run none: the fast preset promotes before compare's first measurement"
+
+  - it: accepts the fast preset with health and compare
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            preset: fast
+            analysis:
+              alerts:
+                enabled: false
+    asserts:
+      - notFailedTemplate: {}
+
   - it: replaces the chart's compare with an analysisTemplates entry named compare, still in the background
     templates:
       - analysistemplate.yaml
@@ -517,6 +610,199 @@ tests:
             - templateName: prod-mycarrier-api-compare
         template: rollout.yaml
 
+  # The Rollout passes canary-hash and stable-hash to its compare template, and Argo Rollouts drops args a template
+  # does not declare, so a replacement declares them for its metric to read {{args.canary-hash}}.
+  - it: declares the canary-hash and stable-hash args on a replacement compare entry
+    template: analysistemplate.yaml
+    documentIndex: 3
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: compare
+              interval: 1m
+              count: 0
+              provider:
+                web:
+                  url: "http://compare.example/check?canary={{args.canary-hash}}&stable={{args.stable-hash}}"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: prod-mycarrier-api-compare
+      - equal:
+          path: spec.args
+          value:
+            - name: canary-hash
+            - name: stable-hash
+
+  - it: declares no args on a replacement entry of another name
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: prod-mycarrier-api-health
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: health
+              provider:
+                web:
+                  url: http://health.example/check
+    asserts:
+      - notExists:
+          path: spec.args
+
+  # A stack can mix HTTP applications with ones that export no http.server.request.duration, so the opt-out is also
+  # per application.
+  - it: leaves compare out for an application with canaryCompare false, and keeps it for its sibling
+    templates:
+      - analysistemplate.yaml
+      - rollout.yaml
+    set: &oneOptedOut
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+        worker:
+          deploymentType: rollout
+          canaryCompare: false
+          image:
+            registry: registry.example.com
+            repository: worker
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.analysis
+          value:
+            startingStep: 1
+            templates:
+              - templateName: prod-mycarrier-worker-alerts
+        documentSelector:
+          path: metadata.name
+          value: mycarrier-worker
+        template: rollout.yaml
+      - equal:
+          path: spec.strategy.canary.analysis.templates
+          value:
+            - templateName: prod-mycarrier-api-alerts
+            - templateName: prod-mycarrier-api-compare
+        documentSelector:
+          path: metadata.name
+          value: mycarrier-api
+        template: rollout.yaml
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-api-compare
+          any: true
+        template: analysistemplate.yaml
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-mycarrier-worker-compare
+          any: true
+        not: true
+        template: analysistemplate.yaml
+      - containsDocument:
+          kind: ExternalSecret
+          apiVersion: external-secrets.io/v1
+          name: prod-mycarrier-worker-compare
+          any: true
+        not: true
+        template: analysistemplate.yaml
+
+  # Analysis is mandatory per application: one whose own compare is off runs nothing with health and alerts off.
+  - it: fails an application with canaryCompare false when health and alerts are off too
+    template: rollout.yaml
+    set:
+      <<: *oneOptedOut
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            analysis:
+              health:
+                enabled: false
+              alerts:
+                enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis is mandatory for every Rollout, and application 'worker' would run none"
+
+  - it: keeps a replacement compare entry out of the background analysis with canaryCompare false
+    template: rollout.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          canaryCompare: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: compare
+              interval: 1m
+              count: 0
+              provider:
+                web:
+                  url: http://compare.example/check
+    asserts:
+      - equal:
+          path: spec.strategy.canary.analysis
+          value:
+            startingStep: 1
+            templates:
+              - templateName: prod-mycarrier-api-alerts
+
+  - it: refuses a canaryCompare that is not a boolean
+    template: rollout.yaml
+    set:
+      <<: *oneOptedOut
+      applications:
+        api:
+          deploymentType: rollout
+          canaryCompare: "no"
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "at '/applications/api/canaryCompare'"
+
   - it: refuses compare in analysis.templates, because it always runs unless opted out
     template: rollout.yaml
     set:
@@ -550,3 +836,93 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'api': the canary compare check finds the canary's and the stable pods by the pod-template hash in their names"
+
+  - it: renders a full name too long for compare when the application's own compare is off
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier-a-rather-long-application-stack-name
+        language: csharp
+        correlationId: corr-1
+      alerts:
+        serviceName: mycarrier
+      applications:
+        api:
+          deploymentType: rollout
+          canaryCompare: false
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - notFailedTemplate: {}
+
+  # In a feature environment the full name carries -feature<N>. Where the steps do not render there, compare does not
+  # either, so the check measures the name without the suffix: the prod name, which keeps the early warning.
+  - it: measures the name without the -feature<N> suffix in a feature environment without the steps
+    template: rollout.yaml
+    set: &feature
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+      environment:
+        name: feature12
+      applications:
+        shipment-tracking-notification-api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: still fails a feature environment whose name without the suffix is too long
+    template: rollout.yaml
+    set:
+      <<: *feature
+      applications:
+        shipment-tracking-notification-api-v2:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          networking:
+            istio:
+              offloadOperatorEnabled: false
+              offloadVSEnabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "full name 'mycarrier-shipment-tracking-notification-api-v2' \\(47 characters\\) is too long"
+
+  # A drill renders the steps and compare there, so the pods carry the -feature<N> name and it must fit.
+  - it: measures the -feature<N> name in a feature environment drill with stepsOutsideProd
+    template: rollout.yaml
+    set:
+      <<: *feature
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "full name 'mycarrier-shipment-tracking-notification-api-feature12' \\(54 characters\\) is too long"

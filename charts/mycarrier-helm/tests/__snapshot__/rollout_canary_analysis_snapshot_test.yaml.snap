@@ -772,11 +772,76 @@ renders the default analysis template set:
             name: prod-mycarrier-api-compare
     metrics:
       - consecutiveErrorLimit: 4
-        failureCondition: result.stable_series == 0 || (result.canary_requests >= 100 && result.stable_requests >= 100 && (result.canary_5xx_ratio - result.stable_5xx_ratio > 0.02 || (result.canary_p95 > result.stable_p95 * 2.5 && result.canary_p95 - result.stable_p95 > 0.1)))
+        failureCondition: result.canary_requests >= 100 && result.stable_requests >= 100 && (result.canary_5xx_ratio - result.stable_5xx_ratio > 0.02 || (result.canary_p95 > result.stable_p95 * 2.5 && result.canary_p95 - result.stable_p95 > 0.1))
         failureLimit: 0
         initialDelay: 3m
         interval: 2m
         name: compare
+        provider:
+          web:
+            body: |
+              WITH
+                series AS (
+                  SELECT
+                    splitByChar('-', ResourceAttributes['k8s.pod.name'])[-2] AS hash,
+                    toInt32OrZero(Attributes['http.response.status_code']) >= 500 AS server_error,
+                    toInt64(argMax(Count, TimeUnix)) - toInt64(argMin(Count, TimeUnix)) AS delta,
+                    arrayMap((last, first) -> toInt64(last) - toInt64(first), argMax(BucketCounts, TimeUnix), argMin(BucketCounts, TimeUnix)) AS buckets,
+                    any(ExplicitBounds) AS bounds
+                  FROM hyperdx.prod_otel_metrics_histogram
+                  WHERE MetricName = 'http.server.request.duration'
+                    AND TimeUnix >= now64(9) - toIntervalSecond({window:UInt32})
+                    AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
+                    AND startsWith(ResourceAttributes['k8s.pod.name'], {prefix:String})
+                    AND Attributes['http.route'] != ''
+                  GROUP BY ResourceAttributes['k8s.pod.name'], Attributes, StartTimeUnix
+                  HAVING hash IN ({canary:String}, {stable:String})
+                ),
+                sides AS (
+                  SELECT
+                    hash,
+                    count() AS series,
+                    sum(delta) AS requests,
+                    sumIf(delta, server_error) AS errors,
+                    arrayCumSum(sumForEach(buckets)) AS cumulative,
+                    any(bounds) AS bounds,
+                    0.95 * requests AS target,
+                    arrayFirstIndex(c -> c >= target, cumulative) AS i,
+                    if(i = 0, 0,
+                      if(i = 1, 0, bounds[i - 1])
+                      + (if(i <= length(bounds), bounds[i], bounds[length(bounds)]) - if(i = 1, 0, bounds[i - 1]))
+                        * (target - if(i = 1, 0, cumulative[i - 1])) / greatest(cumulative[i] - if(i = 1, 0, cumulative[i - 1]), 1)) AS p95
+                  FROM series
+                  GROUP BY hash
+                )
+              SELECT
+                toFloat64(sumIf(series, hash = {canary:String})) AS canary_series,
+                toFloat64(sumIf(series, hash = {stable:String})) AS stable_series,
+                toFloat64(sumIf(requests, hash = {canary:String})) AS canary_requests,
+                toFloat64(sumIf(requests, hash = {stable:String})) AS stable_requests,
+                toFloat64(sumIf(if(requests > 0, errors / requests, 0), hash = {canary:String})) AS canary_5xx_ratio,
+                toFloat64(sumIf(if(requests > 0, errors / requests, 0), hash = {stable:String})) AS stable_5xx_ratio,
+                toFloat64(sumIf(p95, hash = {canary:String})) AS canary_p95,
+                toFloat64(sumIf(p95, hash = {stable:String})) AS stable_p95
+              FROM sides
+              FORMAT JSONEachRow
+            headers:
+              - key: X-ClickHouse-User
+                value: '{{args.clickhouse-user}}'
+              - key: X-ClickHouse-Key
+                value: '{{args.clickhouse-password}}'
+              - key: Content-Type
+                value: text/plain
+            jsonPath: '{$}'
+            method: POST
+            timeoutSeconds: 10
+            url: https://{{args.clickhouse-host}}:8443/?wait_end_of_query=1&param_window=180&param_namespace=prod&param_prefix=mycarrier-api-&param_canary={{args.canary-hash}}&param_stable={{args.stable-hash}}
+      - consecutiveErrorLimit: 4
+        failureCondition: result.stable_series == 0 || (result.canary_series == 0 && result.stable_requests >= 100)
+        failureLimit: 1
+        initialDelay: 3m
+        interval: 2m
+        name: data
         provider:
           web:
             body: |

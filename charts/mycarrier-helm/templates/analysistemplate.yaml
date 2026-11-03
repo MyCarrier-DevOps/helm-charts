@@ -288,6 +288,14 @@ metadata:
     argocd.argoproj.io/sync-wave: "9"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
 spec:
+  {{- /* The Rollout passes the canary's and the stable pod-template hashes to its compare template
+         (helm.canary.backgroundAnalysis), and Argo Rollouts drops args a template does not declare, so a replacement
+         compare declares them for its metric to read as {{args.canary-hash}} and {{args.stable-hash}}. */}}
+  {{- if eq (toString $template.name) "compare" }}
+  args:
+  - name: canary-hash
+  - name: stable-hash
+  {{- end }}
   metrics:
   - name: {{ $environment }}-{{ $template.name }}
     {{- /* An explicit count is kept as written: count 0 (with an interval) is how a background analysis, such as a
@@ -329,16 +337,18 @@ spec:
     {{- end }}
 {{- end }}
 {{- /* The chart's compare template (DEVOPS-322, Tech Spec D4) where helm.canary.compare.wanted: a canary Rollout whose
-       steps render (prod, or stepsOutsideProd), analysis.compare.enabled (default true) and no
-       applications.<app>.analysisTemplates entry named compare, which replaces it. The Rollout runs it as background
-       analysis with alerts (helm.canary.backgroundAnalysis), passing the canary's and the stable pod-template hashes.
-       One web metric POSTs the query (helm.canary.compare.query) to ClickHouse's HTTP interface as svc_canary_analysis,
-       a user that can only read the three metrics histogram tables, every interval from initialDelay after the first
-       weight until promotion, and fails on helm.canary.compare.failureCondition. A non-2xx answer (a query error,
-       wait_end_of_query=1 included, a 403, the user's 5 s limit) is an error; one more than consecutiveErrorLimit in a
-       row fails the run and aborts the canary (D15, fail closed). The query always answers one JSON object, so the
-       v1.10.1 behaviour of passing a 2xx body that is not JSON cannot apply. The host, user and password come from one
-       ExternalSecret (vault-backend-devops reads the DevOps mount), so the chart carries no ClickHouse address. */}}
+       steps render (prod, or stepsOutsideProd), compare on for the app (analysis.compare.enabled, default true, and
+       applications.<app>.canaryCompare not false) and no applications.<app>.analysisTemplates entry named compare,
+       which replaces it. The Rollout runs it as background analysis with alerts (helm.canary.backgroundAnalysis),
+       passing the canary's and the stable pod-template hashes. Two web metrics POST the same query
+       (helm.canary.compare.query) to ClickHouse's HTTP interface as svc_canary_analysis, a user that can only read the
+       three metrics histogram tables, every interval from initialDelay after the first weight until promotion:
+       compare fails on helm.canary.compare.failureCondition, and data on helm.canary.compare.dataFailureCondition.
+       A non-2xx answer (a query error, wait_end_of_query=1 included, a 403, the user's 5 s limit) is an error; one
+       more than consecutiveErrorLimit in a row fails the run and aborts the canary (D15, fail closed). The query
+       always answers one JSON object, so the v1.10.1 behaviour of passing a 2xx body that is not JSON cannot apply.
+       The host, user and password come from one ExternalSecret (vault-backend-devops reads the DevOps mount), so the
+       chart carries no ClickHouse address. */}}
 {{- if eq (include "helm.canary.compare.wanted" $appContext) "true" }}
 {{- $compare := $cfg.analysis.compare }}
 {{- $compareName := printf "%s-%s-compare" $environment $fullName }}
@@ -408,13 +418,16 @@ spec:
       secretKeyRef:
         name: {{ $compareName }}
         key: password
+  {{- /* Two metrics on the same query: compare fails on a worse canary at once (failureLimit 0); data fails on no
+         data (helm.canary.compare.dataFailureCondition) and tolerates one such measurement over the run. */}}
   metrics:
-  - name: compare
+  {{- range (list (dict "name" "compare" "failureLimit" 0 "condition" (include "helm.canary.compare.failureCondition" $appContext)) (dict "name" "data" "failureLimit" 1 "condition" (include "helm.canary.compare.dataFailureCondition" $appContext))) }}
+  - name: {{ .name }}
     interval: {{ $compare.interval }}
     initialDelay: {{ $compare.initialDelay }}
-    failureLimit: 0
+    failureLimit: {{ .failureLimit }}
     consecutiveErrorLimit: {{ int $compare.consecutiveErrorLimit }}
-    failureCondition: {{ include "helm.canary.compare.failureCondition" $appContext | quote }}
+    failureCondition: {{ .condition | quote }}
     provider:
       web:
         method: POST
@@ -430,6 +443,7 @@ spec:
           {{- include "helm.canary.compare.query" $appContext | nindent 10 }}
         jsonPath: "{$}"
         timeoutSeconds: 10
+  {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

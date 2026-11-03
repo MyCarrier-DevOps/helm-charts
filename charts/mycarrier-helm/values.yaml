@@ -123,11 +123,16 @@ global:
   #                 max5xxDelta: 0.02, maxP95Ratio: 2.5, minP95DeltaSeconds: 0.1}   # canary against stable pods
   #                               # (DEVOPS-322), background analysis where the steps render: the 5xx ratio and p95
   #                               # of http.server.request.duration in ClickStack, over the last interval + 60 s.
-  #                               # Fails on no stable data, or with minRequests on each side on a 5xx ratio above
-  #                               # stable's by max5xxDelta, or a p95 above maxP95Ratio x stable's and
-  #                               # minP95DeltaSeconds slower; less traffic passes. Reads Vault DevOps
-  #                               # clickhouse/cloud/users/canary-analysis through an ExternalSecret. fullName above
-  #                               # 46 characters fails the render. enabled: false for an app without the metric
+  #                               # Fails with minRequests on each side on a 5xx ratio above stable's by
+  #                               # max5xxDelta, or a p95 above maxP95Ratio x stable's and minP95DeltaSeconds
+  #                               # slower; less traffic passes. A second metric fails on a second measurement with
+  #                               # no stable data, or no canary data while stable has minRequests. Reads Vault
+  #                               # DevOps clickhouse/cloud/users/canary-analysis through an ExternalSecret. fullName
+  #                               # above 46 characters fails the render (in a feature environment without the
+  #                               # steps, the name without -feature<N>). With the fast preset compare does not
+  #                               # count as the mandatory analysis. applications.<app>.canaryCompare: false turns
+  #                               # it off for an app without the metric; enabled: false turns it off for every app
+  #                               # of the release
   #     progressDeadlineSeconds: 1200  # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start and above every barrier
   #                               # timeout. applications.<app>.progressDeadlineSeconds overrides it for one
