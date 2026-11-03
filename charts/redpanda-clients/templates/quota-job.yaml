@@ -1,5 +1,5 @@
 {{- $cmds := list -}}
-{{- range $c := .Values.clients -}}
+{{- range $c := include "redpanda-clients.clients" . | fromJsonArray -}}
   {{- $q := $c.quota | default dict -}}
   {{- $cmd := printf "alter --name user=%s" $c.id -}}
   {{- with $q.producerByteRate }}{{ $cmd = printf "%s --add producer_byte_rate=%d" $cmd (int64 .) }}{{ else }}{{ $cmd = printf "%s --delete producer_byte_rate" $cmd }}{{ end -}}

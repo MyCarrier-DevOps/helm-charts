@@ -1,0 +1,52 @@
+{{- $ranges := list -}}
+{{- range $w := .Values.whitelist -}}
+  {{- range $ip := $w.ips -}}
+    {{- $ranges = append $ranges (ternary $ip (printf "%s/32" $ip) (contains "/" $ip)) -}}
+  {{- end -}}
+{{- end -}}
+{{- $ranges = $ranges | uniq | sortAlpha -}}
+{{- /* A load balancer without source ranges accepts every address, so nothing is exposed until the whitelist has one */ -}}
+{{- if $ranges }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ingress
+  namespace: {{ .Values.ingress.namespace }}
+  labels:
+    {{- include "redpanda-clients.labels" . | nindent 4 }}
+  {{- with .Values.ingress.serviceAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: LoadBalancer
+  # Keeps the client's source address so the AuthorizationPolicy below can match it
+  externalTrafficPolicy: Local
+  selector:
+    {{- toYaml .Values.ingress.selector | nindent 4 }}
+  loadBalancerSourceRanges:
+    {{- toYaml $ranges | nindent 4 }}
+  ports:
+    - name: tls-kafka
+      port: {{ .Values.ingress.port }}
+      targetPort: {{ .Values.ingress.port }}
+      protocol: TCP
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .Release.Name }}-ip-whitelist
+  namespace: {{ .Values.ingress.namespace }}
+  labels:
+    {{- include "redpanda-clients.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- toYaml .Values.ingress.selector | nindent 6 }}
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            ipBlocks:
+              {{- toYaml $ranges | nindent 14 }}
+{{- end }}

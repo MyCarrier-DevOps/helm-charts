@@ -1,0 +1,136 @@
+suite: values schema
+set:
+  passwords.vaultKey: redpanda/client_messaging/dev
+templates:
+  - templates/users.yaml
+tests:
+  - it: rejects clients when the release has no environment, since none of them could be placed
+    set:
+      environment: ""
+      clients:
+        - id: alpha
+          environments: [dev]
+    asserts:
+      - failedTemplate:
+          errorPattern: "environment must be set"
+
+  - it: rejects a client that lists no environments
+    set:
+      environment: dev
+      clients:
+        - id: alpha
+    asserts:
+      - failedTemplate:
+          errorPattern: "environments"
+
+  - it: rejects an empty environments list
+    set:
+      environment: dev
+      clients:
+        - id: alpha
+          environments: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "environments"
+
+  - it: rejects a misspelled client key instead of ignoring it
+    set:
+      environment: dev
+      clients:
+        - id: alpha
+          environments: [dev]
+          topic:
+            - name: shipments
+    asserts:
+      - failedTemplate:
+          errorPattern: "topic"
+
+  - it: rejects a misspelled topic key instead of falling back to the default
+    set:
+      environment: dev
+      clients:
+        - id: alpha
+          environments: [dev]
+          topics:
+            - name: shipments
+              partition: 12
+    asserts:
+      - failedTemplate:
+          errorPattern: "partition"
+
+  - it: rejects a whitelist address that isn't IPv4
+    set:
+      whitelist:
+        - name: Saia
+          ips: [saia.example.com]
+    asserts:
+      - failedTemplate:
+          errorPattern: "whitelist"
+
+  - it: rejects a /0 whitelist range, which would open the listener to the internet
+    set:
+      whitelist:
+        - name: Saia
+          ips: [0.0.0.0/0]
+    asserts:
+      - failedTemplate:
+          errorPattern: "whitelist"
+
+  - it: rejects a whitelist entry without a name, so every address can be traced to who it belongs to
+    set:
+      whitelist:
+        - ips: [20.51.224.101]
+    asserts:
+      - failedTemplate:
+          errorPattern: "name"
+
+  - it: rejects a whitelist entry with no addresses
+    set:
+      whitelist:
+        - name: Saia
+          ips: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "ips"
+
+  - it: rejects a misspelled whitelist key instead of ignoring the addresses
+    set:
+      whitelist:
+        - name: Saia
+          ip: [20.51.224.101]
+    asserts:
+      - failedTemplate:
+          errorPattern: "ip"
+
+  - it: rejects unlimited retention, which would let one client fill the shared disk
+    set:
+      environment: dev
+      clients:
+        - id: alpha
+          environments: [dev]
+          topics:
+            - name: shipments
+              retentionMs: -1
+    asserts:
+      - failedTemplate:
+          errorPattern: "retentionMs"
+
+  - it: accepts a complete client and a whitelist of bare addresses and ranges
+    set:
+      environment: dev
+      whitelist:
+        - name: Saia
+          ips: [20.51.224.101, 74.235.92.224/28]
+      clients:
+        - id: alpha
+          environments: [dev, prod]
+          transactions: true
+          quota:
+            producerByteRate: 1048576
+          topics:
+            - name: shipments
+              partitions: 6
+              retentionMs: 1209600000
+    asserts:
+      - hasDocuments:
+          count: 1

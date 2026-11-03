@@ -22,6 +22,7 @@ tests:
     set:
       clients:
         - id: solo
+          environments: [dev]
           quota:
             producerByteRate: 1048576
     asserts:

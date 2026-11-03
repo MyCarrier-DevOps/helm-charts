@@ -1,5 +1,7 @@
+environment: dev
 clients:
   - id: alpha
+    environments: [dev]
     quota:
       producerByteRate: 5242880
       consumerByteRate: 10485760
@@ -9,6 +11,9 @@ clients:
         retentionMs: 1209600000
       - name: quotes
   - id: bravo
+    environments: [dev]
     transactions: true
     topics:
       - name: orders
+passwords:
+  vaultKey: redpanda/client_messaging/dev

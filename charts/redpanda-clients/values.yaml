@@ -6,6 +6,43 @@ cluster:
   name: redpanda
   reservedUsers: []
 
+## @param environment Environment this release serves, e.g. `dev` or `prod`. Only clients that list it under `environments` are rendered
+environment: ""
+
+## @section Client passwords
+## Each client's password is read from Vault through External Secrets into the secret `redpanda-client-<id>` (key `password`)
+
+## @param passwords.secretStore ClusterSecretStore that reads the passwords
+## @param passwords.vaultKey Key holding every client's password for this environment, as property `client_<id>_pw`
+passwords:
+  secretStore: vault-backend-devops
+  vaultKey: ""
+
+## @section Ingress
+## The chart exposes the external Kafka listener through the dedicated Istio ingress gateway: a LoadBalancer Service
+## that only accepts whitelisted addresses, and an AuthorizationPolicy on the gateway that allows only the same addresses.
+## Neither renders while the whitelist is empty.
+
+## @param ingress.namespace Namespace of the ingress gateway's pods
+## @param ingress.selector Labels that select the ingress gateway's pods
+## @param ingress.port Port of the external Kafka listener on the gateway
+## @param ingress.serviceAnnotations Annotations on the LoadBalancer Service, e.g. external-dns hostnames for the bootstrap and broker names
+ingress:
+  namespace: istio-system
+  selector:
+    istio: client-messaging
+  port: 9094
+  serviceAnnotations: {}
+
+## @param whitelist Addresses allowed to reach the external listener, grouped under a name for whoever owns them. Each address is an IPv4 address or CIDR range; a bare address means /32. The same list applies in every environment
+##
+## whitelist:
+##   - name: Saia
+##     ips:
+##       - 20.51.224.101
+##       - 74.235.92.224/28
+whitelist: []
+
 ## @section Topic defaults
 ## Used for any topic that doesn't set its own value
 
@@ -42,12 +79,14 @@ quotaJob:
 
 ## @section Clients
 
-## @param clients List of clients. Each client gets a SCRAM-SHA-512 user limited to resources prefixed `<id>.`, its topics and a quota on that user
-## Each client's password is read from the secret `redpanda-client-<id>` (key `password`).
-## Create it outside this chart and never commit it.
+## @param clients List of clients. Each client gets a SCRAM-SHA-512 user limited to resources prefixed `<id>.`, its topics, a quota on that user and an ExternalSecret for its password
+## Only clients whose `environments` include `environment` are rendered.
+## Each client's password is read from Vault (`passwords.vaultKey`, property `client_<id>_pw`); write it there before
+## adding the environment to the client, and never commit it.
 ##
 ## clients:
 ##   - id: alpha                    # a lowercase letter, then lowercase letters and digits
+##     environments: [dev, prod]    # required; the client exists only in these environments
 ##     transactions: false          # true adds Write/Describe on transactional IDs prefixed "alpha."
 ##     quota:                       # optional, positive bytes per second on user "alpha". A rate left out is unlimited
 ##       producerByteRate: 5242880
