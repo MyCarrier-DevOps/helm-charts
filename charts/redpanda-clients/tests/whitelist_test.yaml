@@ -58,6 +58,22 @@ tests:
           path: metadata.namespace
           value: istio-system
 
+  - it: adds the cluster's annotations to the load balancer, e.g. for external-dns
+    template: templates/whitelist.yaml
+    documentSelector:
+      path: kind
+      value: Service
+    set:
+      ingress.serviceAnnotations:
+        external-dns.alpha.kubernetes.io/hostname: dev.example.com,broker-0.dev.example.com
+        external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            external-dns.alpha.kubernetes.io/hostname: dev.example.com,broker-0.dev.example.com
+            external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+
   - it: enforces the same addresses again at the gateway
     template: templates/whitelist.yaml
     documentSelector:

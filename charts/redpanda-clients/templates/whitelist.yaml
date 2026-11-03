@@ -14,6 +14,10 @@ metadata:
   namespace: {{ .Values.ingress.namespace }}
   labels:
     {{- include "redpanda-clients.labels" . | nindent 4 }}
+  {{- with .Values.ingress.serviceAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: LoadBalancer
   # Keeps the client's source address so the AuthorizationPolicy below can match it

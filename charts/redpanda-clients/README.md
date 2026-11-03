@@ -26,7 +26,9 @@ For the whole release, from `whitelist`, the chart renders the external access t
   whitelisted addresses, so the Azure load balancer drops everything else.
 - An `ipBlocks` `AuthorizationPolicy` on the gateway that allows only the same addresses.
 
-Neither renders while the whitelist is empty: a load balancer without source ranges accepts every address.
+Neither renders while the whitelist is empty: a load balancer without source ranges accepts every address. Put
+anything else the Service needs, such as external-dns hostnames for the bootstrap and broker names, in
+`ingress.serviceAnnotations`.
 
 ## Prerequisites
 

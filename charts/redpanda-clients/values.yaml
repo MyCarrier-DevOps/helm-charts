@@ -26,11 +26,13 @@ passwords:
 ## @param ingress.namespace Namespace of the ingress gateway's pods
 ## @param ingress.selector Labels that select the ingress gateway's pods
 ## @param ingress.port Port of the external Kafka listener on the gateway
+## @param ingress.serviceAnnotations Annotations on the LoadBalancer Service, e.g. external-dns hostnames for the bootstrap and broker names
 ingress:
   namespace: istio-system
   selector:
     istio: client-messaging
   port: 9094
+  serviceAnnotations: {}
 
 ## @param whitelist Addresses allowed to reach the external listener, grouped under a name for whoever owns them. Each address is an IPv4 address or CIDR range; a bare address means /32. The same list applies in every environment
 ##
