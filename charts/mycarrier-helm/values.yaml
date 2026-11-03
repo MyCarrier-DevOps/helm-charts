@@ -119,6 +119,15 @@ global:
   #         # service: mycarrier    # the rules' service label; default alerts.serviceName, else global.appStack
   #                               # (not the default app), lower-cased. In prod none fails the render: set one,
   #                               # or enabled: false
+  #       compare: {enabled: true, interval: 2m, initialDelay: 3m, consecutiveErrorLimit: 4, minRequests: 100,
+  #                 max5xxDelta: 0.02, maxP95Ratio: 2.5, minP95DeltaSeconds: 0.1}   # canary against stable pods
+  #                               # (DEVOPS-322), background analysis where the steps render: the 5xx ratio and p95
+  #                               # of http.server.request.duration in ClickStack, over the last interval + 60 s.
+  #                               # Fails on no stable data, or with minRequests on each side on a 5xx ratio above
+  #                               # stable's by max5xxDelta, or a p95 above maxP95Ratio x stable's and
+  #                               # minP95DeltaSeconds slower; less traffic passes. Reads Vault DevOps
+  #                               # clickhouse/cloud/users/canary-analysis through an ExternalSecret. fullName above
+  #                               # 46 characters fails the render. enabled: false for an app without the metric
   #     progressDeadlineSeconds: 1200  # time without progress (e.g. a canary pod Pending or not Ready) before the
   #                               # canary aborts; size it above the slowest pod start and above every barrier
   #                               # timeout. applications.<app>.progressDeadlineSeconds overrides it for one

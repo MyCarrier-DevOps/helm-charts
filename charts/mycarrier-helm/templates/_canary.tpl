@@ -38,7 +38,7 @@
 
 {{- /* global.strategy.canary merged over the defaults, as JSON. It configures the steps of a canary Rollout
        (helm.canary.enabled); a routed Rollout without steps reads only progressDeadlineSeconds from it. Analysis is
-       mandatory for every canary Rollout (DEVOPS-312): health and alerts are on unless opted out, and templates lists
+       mandatory for every canary Rollout (DEVOPS-312): health, alerts and compare are on unless opted out, and templates lists
        only extra templates. analysis.enabled is deprecated and has no default; rollout.yaml refuses false.
        bakeMinutes is rendered as the mycarrier.tech/bakeMinutes annotation (helm.canary.bakeMinutes). manualTimeout
        and budgetSeconds (no default) feed the mycarrier.tech/canaryBudgetSeconds annotation (helm.canary.budgetSeconds).
@@ -72,7 +72,9 @@
         "health" (dict "enabled" true "count" 3 "interval" "30s" "consecutiveErrorLimit" 1 "successCondition" "result == \"Healthy\"")
         "alerts" (dict "enabled" true "service" "" "interval" "30s" "consecutiveErrorLimit" 4 "dryRun" true "tokenKey" "ci-alert-gate"
           "image" $python)
-        "tests" (dict "timeout" "7m" "startupSeconds" 120 "image" $python))
+        "tests" (dict "timeout" "7m" "startupSeconds" 120 "image" $python)
+        "compare" (dict "enabled" true "interval" "2m" "initialDelay" "3m" "consecutiveErrorLimit" 4 "minRequests" 100
+          "max5xxDelta" 0.02 "maxP95Ratio" 2.5 "minP95DeltaSeconds" 0.1))
       "coordinator" (dict
         "enabled" true
         "barrierTimeouts" (dict "start" "9m" "dark-ready" "9m" "dark-passed" "15m" "w10" "9m" "w25" "9m" "w50" "9m")) -}}
@@ -91,9 +93,9 @@
        chart renders tests, DEVOPS-515, for an app with testtrigger.testdefinitions); each references
        <environment>-<fullName>-<template>, and every referenced template must render for the app
        (helm.canary.analysis.available), because Argo Rollouts resolves them up front and leaves the Rollout InvalidSpec
-       when one is missing. alerts is not in these steps: it runs as background analysis
-       (helm.canary.backgroundAnalysis), and outside prod it is left out.
-       Analysis is mandatory: with health and alerts both opted out and no extra templates the render fails, for preset
+       when one is missing. alerts and compare are not in these steps: they run as background analysis
+       (helm.canary.backgroundAnalysis), and outside prod alerts is left out.
+       Analysis is mandatory: with health, alerts and compare all opted out and no extra templates the render fails, for preset
        and explicit steps alike, in every environment. The check reads the configured set, not what renders here.
        With coordinator.enabled (default true; release-wide lockstep, D20: DEVOPS-325's mycarrier/canary-coordinator
        step plugin) a preset starts with a barrier named start, which arms the plugin's Abort hook and confirms the
@@ -124,8 +126,17 @@
 {{- define "helm.canary.configuredSteps" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $rendered := eq (include "helm.canary.stepsRendered" .) "true" -}}
-{{- if not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $cfg.analysis.templates) -}}
-  {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are both false and analysis.templates lists no extra template. Remove one of the opt-outs, or list an AnalysisTemplate defined under applications.%s.analysisTemplates in analysis.templates." .appName .appName) -}}
+{{- if not (or $cfg.analysis.health.enabled $cfg.analysis.alerts.enabled $cfg.analysis.compare.enabled $cfg.analysis.templates) -}}
+  {{- fail (printf "analysis is mandatory for every Rollout, and application '%s' would run none: global.strategy.canary.analysis.health.enabled, analysis.alerts.enabled and analysis.compare.enabled are all false and analysis.templates lists no extra template. Remove one of the opt-outs, or list an AnalysisTemplate defined under applications.%s.analysisTemplates in analysis.templates." .appName .appName) -}}
+{{- end -}}
+{{- /* The compare check (DEVOPS-322) finds pods by the pod-template hash in their names, <fullName>-<hash>-<suffix>.
+       Kubernetes cuts a generated pod name at 58 characters before the 5-character suffix, so a ReplicaSet name
+       (<fullName>-<hash of up to 10>) above 57 loses part of the hash and the check matches no pod. Checked in every
+       environment while the chart's compare is on, like the other checks here. */ -}}
+{{- $hasCustomCompare := false -}}
+{{- range (.application.analysisTemplates | default list) }}{{ if eq (toString .name) "compare" }}{{ $hasCustomCompare = true }}{{ end }}{{ end -}}
+{{- if and $cfg.analysis.compare.enabled (not $hasCustomCompare) (gt (len (include "helm.fullname" .)) 46) -}}
+  {{- fail (printf "application '%s': the canary compare check finds the canary's and the stable pods by the pod-template hash in their names, and its full name '%s' (%d characters) is too long for them to keep it: Kubernetes cuts a generated pod name at 58 characters, so the name must be 46 characters or fewer. Shorten global.appStack or the application's name, or opt out with global.strategy.canary.analysis.compare.enabled: false." .appName (include "helm.fullname" .) (len (include "helm.fullname" .))) -}}
 {{- end -}}
 {{- $coordinator := $cfg.coordinator -}}
 {{- if and $rendered $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
@@ -148,8 +159,9 @@
 {{- $analysisStep := dict -}}
 {{- $available := include "helm.canary.analysis.available" . | fromJsonArray -}}
 {{- $templates := list -}}
-{{- /* health, then the extra templates; alerts runs as background analysis (helm.canary.backgroundAnalysis, which also
-       checks its service label), not in these steps. rollout.yaml refuses health or alerts in analysis.templates. */ -}}
+{{- /* health, then the extra templates; alerts and compare run as background analysis (helm.canary.backgroundAnalysis,
+       which also checks the alerts service label), not in these steps. rollout.yaml refuses health, alerts or compare
+       in analysis.templates. */ -}}
 {{- $names := list -}}
 {{- if $cfg.analysis.health.enabled }}{{ $names = list "health" }}{{ end -}}
 {{- range (concat $names $cfg.analysis.templates) -}}
@@ -157,7 +169,7 @@
     {{- if eq . "health" -}}
       {{- fail (printf "application '%s': the canary health check has no HTTP path on a port its -preview Service exposes. Set applications.%s.canaryHealthPath or global.strategy.canary.analysis.health.path (called on the app's http port), give the app an httpGet liveness probe under applications.%s.probes.livenessProbe (the chart's default liveness probe is HTTP only for global.language csharp), or opt out with global.strategy.canary.analysis.health.enabled: false." $.appName $.appName $.appName) -}}
     {{- end -}}
-    {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health, alerts and tests; compare (DEVOPS-322) is not built yet. Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
+    {{- fail (printf "application '%s': global.strategy.canary.analysis.templates lists '%s', but no AnalysisTemplate of that name renders for it. The chart renders health and tests here (alerts and compare run as background analysis). Remove it, or define it under applications.%s.analysisTemplates." $.appName . $.appName) -}}
   {{- end -}}
   {{- $templates = append $templates (dict "templateName" (printf "%s-%s-%s" $.Values.environment.name $fullName .)) -}}
 {{- end -}}
@@ -405,7 +417,7 @@
          at several steps can outlast rollout-watch's timeout (budget + 15 minutes) while still inside its progress
          deadlines.
        - every other step (setHeaderRoute), and setWeight 0 and setCanaryScale with the coordinator off: 0. The
-         background alerts analysis runs alongside the steps and is not counted.
+         background alerts and compare analysis runs alongside the steps and is not counted.
        The leader runs tests-dark and its followers do not, so their budgets can differ. An explicit steps list states its
        own budget in budgetSeconds (required there); with a preset the chart computes it and budgetSeconds is ignored.
        rollout-watch's release workflow has activeDeadlineSeconds 10800, which covers about 70 minutes before the canary
@@ -535,29 +547,34 @@
 {{- /* Names of the AnalysisTemplates that render for an app, as JSON: its applications.<app>.analysisTemplates, plus the
        chart's own health template when health is on, the app has none of that name and its health URL is known, the
        chart's alerts template when alerts is on, the app has none of that name, the environment is prod and the
-       service label is known, the chart's tests template when the app runs it (helm.canary.tests.wanted, which
-       fails the render when the app has no testtrigger.testdefinitions), and the chart's tests-dark template for the
-       dark stage's leader (helm.canary.testsDark.wanted, which fails the same way). */ -}}
+       service label is known, the chart's compare template when helm.canary.compare.wanted, the chart's tests template
+       when the app runs it (helm.canary.tests.wanted, which fails the render when the app has no
+       testtrigger.testdefinitions), and the chart's tests-dark template for the dark stage's leader
+       (helm.canary.testsDark.wanted, which fails the same way). */ -}}
 {{- define "helm.canary.analysis.available" -}}
 {{- $names := list -}}
 {{- range (.application.analysisTemplates | default list) }}{{ $names = append $names (toString .name) }}{{ end -}}
 {{- $analysis := (include "helm.canary.config" . | fromJson).analysis -}}
 {{- if and (not (has "health" $names)) $analysis.health.enabled (include "helm.canary.analysis.healthUrl" .) }}{{ $names = append $names "health" }}{{ end -}}
 {{- if and (not (has "alerts" $names)) $analysis.alerts.enabled (include "helm.canary.alerts.environment" .) (include "helm.canary.alerts.service" .) }}{{ $names = append $names "alerts" }}{{ end -}}
+{{- if eq (include "helm.canary.compare.wanted" .) "true" }}{{ $names = append $names "compare" }}{{ end -}}
 {{- if eq (include "helm.canary.tests.wanted" .) "true" }}{{ $names = append $names "tests" }}{{ end -}}
 {{- if eq (include "helm.canary.testsDark.wanted" .) "true" }}{{ $names = append $names "tests-dark" }}{{ end -}}
 {{- toJson $names -}}
 {{- end -}}
 
-{{- /* The Rollout's background analysis, as JSON, or "" when it has none: the alerts template (the chart's, or an
-       applications.<app>.analysisTemplates entry named alerts) unless analysis.alerts.enabled is false. It starts at
-       the first step that sends the canary traffic (setWeight above 0, after the dark stage) and runs until the Rollout
-       is promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
-       standard rules) run out; a step-by-step check would sample only the first minute of each weight. A replacement
-       entry runs that long only with count 0 and an interval. The service-label check sits here, outside the steps,
-       so explicit global.strategy.canary.steps reach it too. The background analysis belongs to the steps, so it
-       renders only where they do (helm.canary.stepsRendered): a replacement alerts entry outside prod runs only with
-       stepsOutsideProd. */ -}}
+{{- /* The Rollout's background analysis, as JSON, or "" when it has none: the alerts template unless
+       analysis.alerts.enabled is false, then the compare template (DEVOPS-322) unless analysis.compare.enabled is
+       false; each the chart's, or an applications.<app>.analysisTemplates entry of that name. It starts at the first
+       step that sends the canary traffic (setWeight above 0, after the dark stage) and runs until the Rollout is
+       promoted or aborted, so it also checks during the pauses, where the alert rules' for windows (5m for most
+       standard rules) run out and where compare sees most of the canary's traffic; a step-by-step check would sample
+       only the first minutes of each weight, and compare in the steps would not fit the canary budget. A replacement
+       entry runs that long only with count 0 and an interval. With compare it passes the canary's and the stable
+       pod-template hashes as the args canary-hash and stable-hash (Argo Rollouts ignores args a template does not
+       declare). The service-label check sits here, outside the steps, so explicit global.strategy.canary.steps reach
+       it too. The background analysis belongs to the steps, so it renders only where they do
+       (helm.canary.stepsRendered): a replacement entry outside prod runs only with stepsOutsideProd. */ -}}
 {{- define "helm.canary.backgroundAnalysis" -}}
 {{- $cfg := include "helm.canary.config" . | fromJson -}}
 {{- $customAlerts := false -}}
@@ -565,8 +582,19 @@
 {{- if and (eq (include "helm.canary.enabled" .) "true") $cfg.analysis.alerts.enabled (not $customAlerts) (include "helm.canary.alerts.environment" .) (not (include "helm.canary.alerts.service" .)) -}}
   {{- fail (printf "application '%s': the canary alerts check filters Grafana alerts on the service label, and the chart cannot tell it. Set global.strategy.canary.analysis.alerts.service to the label the service's alert rules carry (the lower-cased repository name, or its alias, such as mycarrier for MC.MyCarrier), set alerts.serviceName or global.appStack, or opt out with global.strategy.canary.analysis.alerts.enabled: false." .appName) -}}
 {{- end -}}
-{{- if and (eq (include "helm.canary.enabled" .) "true") (eq (include "helm.canary.stepsRendered" .) "true") $cfg.analysis.alerts.enabled (has "alerts" (include "helm.canary.analysis.available" . | fromJsonArray)) -}}
-  {{- $analysis := dict "templates" (list (dict "templateName" (printf "%s-%s-alerts" .Values.environment.name (include "helm.fullname" .)))) -}}
+{{- $names := list -}}
+{{- if and (eq (include "helm.canary.enabled" .) "true") (eq (include "helm.canary.stepsRendered" .) "true") -}}
+  {{- $available := include "helm.canary.analysis.available" . | fromJsonArray -}}
+  {{- if and $cfg.analysis.alerts.enabled (has "alerts" $available) }}{{ $names = append $names "alerts" }}{{ end -}}
+  {{- if and $cfg.analysis.compare.enabled (has "compare" $available) }}{{ $names = append $names "compare" }}{{ end -}}
+{{- end -}}
+{{- if $names -}}
+  {{- $templates := list -}}
+  {{- range $names }}{{ $templates = append $templates (dict "templateName" (printf "%s-%s-%s" $.Values.environment.name (include "helm.fullname" $) .)) }}{{ end -}}
+  {{- $analysis := dict "templates" $templates -}}
+  {{- if has "compare" $names -}}
+    {{- $_ := set $analysis "args" (list (dict "name" "canary-hash" "valueFrom" (dict "podTemplateHashValue" "Latest")) (dict "name" "stable-hash" "valueFrom" (dict "podTemplateHashValue" "Stable"))) -}}
+  {{- end -}}
   {{- range $index, $step := (include "helm.canary.steps" . | fromYamlArray) -}}
     {{- if and (not (hasKey $analysis "startingStep")) (gt (int (dig "setWeight" 0 $step)) 0) }}{{ $_ := set $analysis "startingStep" $index }}{{ end -}}
   {{- end -}}

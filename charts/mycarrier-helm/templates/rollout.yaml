@@ -17,8 +17,8 @@
 {{- fail "global.strategy.canary.analysis.enabled: false is no longer supported: canary analysis is mandatory for every Rollout (analysis.enabled is deprecated; true has no effect). Remove it. To leave out one check, set global.strategy.canary.analysis.health.enabled: false or analysis.alerts.enabled: false." }}
 {{- end }}
 {{- range ($analysisValues.templates | default list) }}
-{{- if has (toString .) (list "health" "alerts") }}
-{{- fail (printf "global.strategy.canary.analysis.templates lists '%s': health and alerts always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.%s.enabled: false." (toString .) (toString .)) }}
+{{- if has (toString .) (list "health" "alerts" "compare") }}
+{{- fail (printf "global.strategy.canary.analysis.templates lists '%s': health, alerts and compare always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.%s.enabled: false." (toString .) (toString .)) }}
 {{- end }}
 {{- end }}
 {{- range $appName, $appValues := .Values.applications }}

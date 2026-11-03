@@ -298,6 +298,29 @@ latency against stable on callees that take most of their traffic from a sibling
 To roll back, set `global.strategy.canary.dark: false`. The canary pod floor and the canary source routes stay; they
 go only with the chart version.
 
+## Canary compare in the release after 4.7.19 (canary Rollouts)
+
+The release after 4.7.19 adds the chart's `compare` AnalysisTemplate (DEVOPS-322). Where a canary Rollout's steps render
+(prod, or `stepsOutsideProd`), the Rollout runs it as background analysis next to `alerts`, from its first weight until
+promotion. Every 2 minutes it reads `http.server.request.duration` from ClickStack's ClickHouse for the canary's and the
+stable pods, matched by pod-template hash, and fails the canary on a higher 5xx ratio or a much slower p95. No stack
+runs a canary Rollout yet. The stack-authoring guidance (`agent-guidance/helm`, Analysis, `compare`) has the full
+behaviour.
+
+| Values | Effect |
+|---|---|
+| `analysis.compare.enabled` (default `true`) | `false` drops the template, its ExternalSecret and the background entry. Set it for an application that does not export `http.server.request.duration`: with no stable data, every measurement fails. |
+| `analysis.compare.interval` / `initialDelay` (`2m` / `3m`) | The measurement interval and the wait before the first one. Each query covers the last `interval` + 60 s. |
+| `analysis.compare.minRequests` (`100`) | Fewer requests on either side pass the measurement. |
+| `analysis.compare.max5xxDelta` (`0.02`) | Fails when the canary's 5xx ratio is above the stable pods' by more. |
+| `analysis.compare.maxP95Ratio` / `minP95DeltaSeconds` (`2.5` / `0.1`) | Fails when the canary's p95 is above the ratio times the stable pods' and also slower by more than the delta. |
+| `analysis.compare.consecutiveErrorLimit` (`4`) | Errors in a row (non-2xx, timeout) the check tolerates. |
+| A `fullName` above 46 characters | Fails the render in every environment: the pod names would lose part of the hash. Shorten it, or set `enabled: false`. |
+| `compare` in `analysis.templates` | Fails the render: it always runs unless opted out. A `compare` entry under `applications.<app>.analysisTemplates` replaces the chart's. |
+
+The template reads Vault DevOps `clickhouse/cloud/users/canary-analysis` (`address`, `username`, `password`) through
+the ExternalSecret `<environment>-<fullName>-compare`, a read-only ClickHouse user limited to the histogram tables.
+
 ## Chart Structure
 
 ```

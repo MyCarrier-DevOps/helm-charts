@@ -5,6 +5,7 @@ templates:
   - rollout.yaml
 values:
   - values/dark-off.yaml
+  - values/compare-off.yaml
 tests:
   # R3: the chart's health template calls the -preview Service and needs "Healthy"; a non-2xx answer is an error,
   # and a second error in a row aborts the canary (consecutiveErrorLimit 1). Analysis is mandatory, so it renders with
@@ -714,7 +715,7 @@ tests:
         strategy:
           canary:
             analysis:
-              templates: [compare]
+              templates: [smoke]
       environment:
         name: preprod
       applications:
@@ -728,7 +729,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': global.strategy.canary.analysis.templates lists 'compare', but no AnalysisTemplate of that name renders for it"
+          errorPattern: "application 'api': global.strategy.canary.analysis.templates lists 'smoke', but no AnalysisTemplate of that name renders for it"
 
   # analysis.templates lists extra templates; each analysis step runs them together with health.
   - it: runs an extra template that the app defines itself together with health
@@ -794,7 +795,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "global.strategy.canary.analysis.templates lists 'health': health and alerts always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.health.enabled: false."
+          errorPattern: "global.strategy.canary.analysis.templates lists 'health': health, alerts and compare always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.health.enabled: false."
 
   - it: fails the render when analysis.templates lists alerts, in a release without Rollouts too
     template: rollout.yaml
@@ -820,7 +821,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "global.strategy.canary.analysis.templates lists 'alerts': health and alerts always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.alerts.enabled: false."
+          errorPattern: "global.strategy.canary.analysis.templates lists 'alerts': health, alerts and compare always run, so list only extra templates there. To leave one out, set global.strategy.canary.analysis.alerts.enabled: false."
 
   # analysis.enabled is deprecated: false fails the render in every environment, Rollouts or not; true has no effect.
   - it: fails the render with analysis.enabled false
@@ -947,7 +948,7 @@ tests:
             http: 8080
     asserts:
       - failedTemplate:
-          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none: global.strategy.canary.analysis.health.enabled and analysis.alerts.enabled are both false and analysis.templates lists no extra template"
+          errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none: global.strategy.canary.analysis.health.enabled, analysis.alerts.enabled and analysis.compare.enabled are all false and analysis.templates lists no extra template"
 
   - it: fails the render outside prod too when health and alerts are both opted out
     template: rollout.yaml

@@ -263,7 +263,8 @@ tests:
                 config: {kind: barrier, name: w10, timeout: 9m}
             - setWeight: 100
 
-  # Analysis is mandatory (DEVOPS-312): health runs after each weight with no analysis values; alerts is prod only.
+  # Analysis is mandatory (DEVOPS-312): health runs after each weight with no analysis values; alerts is prod only, and
+  # compare (DEVOPS-322) runs as background analysis wherever the steps render.
   - it: adds a health analysis step after each weight with no analysis values
     template: rollout.yaml
     set:
@@ -296,8 +297,10 @@ tests:
             analysis:
               templates:
                 - templateName: preprod-test-stack-api-health
-      - notExists:
-          path: spec.strategy.canary.analysis
+      - equal:
+          path: spec.strategy.canary.analysis.templates
+          value:
+            - templateName: preprod-test-stack-api-compare
       - equal:
           path: spec.strategy.canary.steps[3]
           value:
