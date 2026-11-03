@@ -34,6 +34,7 @@ tests:
     set:
       clients:
         - id: "true"
+          environments: [dev]
     asserts:
       - equal:
           path: metadata.name

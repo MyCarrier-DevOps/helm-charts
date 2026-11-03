@@ -1,0 +1,97 @@
+suite: ip whitelist
+templates:
+  - templates/whitelist.yaml
+values:
+  - ./values/two-clients.yaml
+set:
+  whitelist:
+    - name: Saia
+      ips:
+        - 20.51.224.101
+        - 74.235.92.224/28
+    - name: DevOps VPN
+      ips:
+        - 131.226.34.21/32
+        - 20.51.224.101/32
+tests:
+  - it: exposes the gateway through a load balancer that accepts only whitelisted addresses
+    template: templates/whitelist.yaml
+    documentSelector:
+      path: kind
+      value: Service
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+      - equal:
+          path: spec.loadBalancerSourceRanges
+          value: [131.226.34.21/32, 20.51.224.101/32, 74.235.92.224/28]
+
+  - it: keeps the client's source address so the gateway policy can match it
+    template: templates/whitelist.yaml
+    documentSelector:
+      path: kind
+      value: Service
+    asserts:
+      - equal:
+          path: spec.externalTrafficPolicy
+          value: Local
+
+  - it: forwards only the external Kafka port to the gateway's pods
+    template: templates/whitelist.yaml
+    documentSelector:
+      path: kind
+      value: Service
+    asserts:
+      - equal:
+          path: spec.selector
+          value:
+            istio: client-messaging
+      - equal:
+          path: spec.ports
+          value:
+            - name: tls-kafka
+              port: 9094
+              targetPort: 9094
+              protocol: TCP
+      - equal:
+          path: metadata.namespace
+          value: istio-system
+
+  - it: enforces the same addresses again at the gateway
+    template: templates/whitelist.yaml
+    documentSelector:
+      path: kind
+      value: AuthorizationPolicy
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: istio-system
+      - equal:
+          path: spec.action
+          value: ALLOW
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            istio: client-messaging
+      - equal:
+          path: spec.rules
+          value:
+            - from:
+                - source:
+                    ipBlocks: [131.226.34.21/32, 20.51.224.101/32, 74.235.92.224/28]
+
+  - it: renders nothing for an empty whitelist, since a load balancer without source ranges accepts every address
+    template: templates/whitelist.yaml
+    set:
+      whitelist: []
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: carries the standard chart labels
+    template: templates/whitelist.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: redpanda-clients

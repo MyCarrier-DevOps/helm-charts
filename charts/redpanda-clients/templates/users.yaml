@@ -1,5 +1,5 @@
 {{- include "redpanda-clients.validate" . -}}
-{{- range $c := .Values.clients }}
+{{- range $c := include "redpanda-clients.clients" . | fromJsonArray }}
 {{- $prefix := printf "%s." $c.id | quote }}
 ---
 apiVersion: cluster.redpanda.com/v1alpha2

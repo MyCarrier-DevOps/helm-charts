@@ -1,0 +1,46 @@
+suite: environments
+set:
+  passwords.vaultKey: redpanda/client_messaging/dev
+tests:
+  - it: renders a user only for clients whose environments include this release's environment
+    template: templates/users.yaml
+    set:
+      environment: prod
+      clients:
+        - id: alpha
+          environments: [dev, prod]
+        - id: bravo
+          environments: [dev]
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: alpha
+
+  - it: leaves out the topics of a client not yet in this environment
+    template: templates/topics.yaml
+    set:
+      environment: prod
+      clients:
+        - id: alpha
+          environments: [dev]
+          topics:
+            - name: shipments
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: sets no quota for a client not yet in this environment
+    template: templates/quota-job.yaml
+    set:
+      environment: prod
+      clients:
+        - id: alpha
+          environments: [dev, prod]
+        - id: bravo
+          environments: [dev]
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "user=bravo"

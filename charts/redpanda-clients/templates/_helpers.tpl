@@ -3,6 +3,9 @@ Fails the render on client ids or topic names that would break prefix isolation
 or produce invalid resource names.
 */}}
 {{- define "redpanda-clients.validate" -}}
+{{- if and .Values.clients (not .Values.environment) -}}
+  {{- fail "environment must be set: only clients that list it under environments are rendered" -}}
+{{- end -}}
 {{- $seen := dict -}}
 {{- range $c := .Values.clients -}}
   {{- $id := toString (default "" $c.id) -}}
@@ -36,6 +39,20 @@ or produce invalid resource names.
     {{- $_ := set $seenTopics $name true -}}
   {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+The clients to render in this release, as a JSON list: those whose environments include .Values.environment.
+Use with: include "redpanda-clients.clients" . | fromJsonArray
+*/}}
+{{- define "redpanda-clients.clients" -}}
+{{- $clients := list -}}
+{{- range $c := .Values.clients -}}
+  {{- if has $.Values.environment ($c.environments | default list) -}}
+    {{- $clients = append $clients $c -}}
+  {{- end -}}
+{{- end -}}
+{{- toJson $clients -}}
 {{- end -}}
 
 {{/*

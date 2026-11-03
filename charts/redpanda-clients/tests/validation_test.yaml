@@ -4,41 +4,52 @@ templates:
 tests:
   - it: rejects a client id containing a dot
     set:
+      environment: dev
       clients:
         - id: al.pha
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "invalid client id \"al.pha\""
 
   - it: rejects an uppercase client id
     set:
+      environment: dev
       clients:
         - id: Alpha
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "invalid client id \"Alpha\""
 
   - it: rejects a missing client id
     set:
+      environment: dev
       clients:
         - topics: []
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "invalid client id"
 
   - it: rejects duplicate client ids
     set:
+      environment: dev
       clients:
         - id: alpha
+          environments: [dev]
         - id: alpha
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "duplicate client id \"alpha\""
 
   - it: rejects a topic name with characters outside lowercase, digits and dashes
     set:
+      environment: dev
       clients:
         - id: alpha
+          environments: [dev]
           topics:
             - name: ship_ments
     asserts:
@@ -47,24 +58,30 @@ tests:
 
   - it: rejects a client id that doesn't start with a letter
     set:
+      environment: dev
       clients:
         - id: "123"
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "invalid client id \"123\""
 
   - it: rejects a client id that isn't a string
     set:
+      environment: dev
       clients:
         - id: true
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "invalid client id \"true\""
 
   - it: rejects a topic listed twice for the same client
     set:
+      environment: dev
       clients:
         - id: alpha
+          environments: [dev]
           topics:
             - name: shipments
             - name: shipments
@@ -75,8 +92,10 @@ tests:
 
   - it: rejects a quota rate of zero instead of treating it as unlimited
     set:
+      environment: dev
       clients:
         - id: alpha
+          environments: [dev]
           quota:
             producerByteRate: 0
     asserts:
@@ -85,8 +104,10 @@ tests:
 
   - it: rejects a misspelled quota key instead of treating the rate as unset
     set:
+      environment: dev
       clients:
         - id: alpha
+          environments: [dev]
           quota:
             producerBytesRate: 1048576
     asserts:
@@ -95,9 +116,11 @@ tests:
 
   - it: rejects a client id that names a user the chart doesn't own, like a superuser or the quota job's user
     set:
+      environment: dev
       cluster.reservedUsers: [admin]
       clients:
         - id: admin
+          environments: [dev]
     asserts:
       - failedTemplate:
           errorPattern: "client id \"admin\" is reserved"
