@@ -83,7 +83,7 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.0
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1
 
       # Builds charts/<chart>/charts for a chart with a local (file://) dependency, such as mycarrier-helm's
       # mc-mongodb. A chart with remote dependencies keeps the subcharts it vendors, so the job fetches no remote charts.

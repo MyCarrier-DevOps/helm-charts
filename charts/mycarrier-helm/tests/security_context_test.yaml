@@ -203,8 +203,8 @@ tests:
           fsGroup: 0
     asserts:
       # Loosely asserted for CI-version robustness (see the equivalent job/cronjob tests):
-      # local unittest v1.0.0 emits "Must be greater than or equal to 1"; CI pins v1.1.0 whose
-      # exact wording is unconfirmed - jsonschema's "minimum: got 0, want 1" is one known form.
+      # CI pins unittest v1.2.1, which emits "minimum: got 0, want 1"; v1.0.0 emitted
+      # "Must be greater than or equal to 1".
       - failedTemplate:
           errorPattern: "fsGroup"
       - failedTemplate:

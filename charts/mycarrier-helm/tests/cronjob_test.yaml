@@ -918,12 +918,12 @@ tests:
           securityContext:
             fsGroup: 0
     asserts:
-      # Asserted loosely on purpose: the local unittest plugin (v1.0.0) emits
-      # "cronjobs.0.securityContext.fsGroup: Must be greater than or equal to 1", but CI pins
-      # v1.1.0 whose exact wording is unconfirmed. Two independent, version-robust patterns:
-      # one anchors on the field name, the other on the numeric bound/phrase, so this survives
-      # a wording change (e.g. jsonschema's "minimum: got 0, want 1" style) without being so loose
-      # it would also pass for an unrelated failure.
+      # Asserted loosely on purpose: the unittest plugin's wording depends on its version. CI pins
+      # v1.2.1, which emits "at '/cronjobs/0/securityContext/fsGroup': minimum: got 0, want 1"; v1.0.0
+      # emitted "cronjobs.0.securityContext.fsGroup: Must be greater than or equal to 1". Two
+      # independent, version-robust patterns: one anchors on the field name, the other on the
+      # numeric bound/phrase, so this survives a wording change without being so loose it would
+      # also pass for an unrelated failure.
       - failedTemplate:
           errorPattern: "fsGroup"
       - failedTemplate:
