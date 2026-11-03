@@ -268,8 +268,11 @@ it), on `sourceLabels` only: its matches carry no `gateways`, because Istio skip
 `gateways` (a match of the original whose own `gateways` leave out `mesh` is left out, and a route with no match left
 gets no source route). It sends them to the `-preview` destination, so a release's
 canary pods call each other's canaries during the dark stage and at every weight. Calls that leave the mesh (public
-host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, so a public
-request with the release's correlation id in the header reaches the canary during the dark stage (an accepted risk). After
+host, ingress gateway, KrakenD) reach stable pods. The `canary-header` route has no gateway restriction, but every
+Istio ingress gateway of the Development and Production clusters removes `X-MyCarrier-Canary` from a request before it
+routes it (`istio-system/strip-canary-header` in AppCluster-Infrastructure, DEVOPS-524), so a public request with the
+release's correlation id in the header reaches stable pods; only in-mesh callers, such as `tests-dark`, reach the canary
+through the route. After
 one Rollout of the release aborts, for up to about 30 s (`abortScaleDownDelaySeconds`) the others' canary pods that call
 it reach its aborted canary pods or its stable pods, then stable. The source routes render only with the coordinator
 and its barriers between weights, for load proportionality: the barriers move the release's Rollouts through the same
