@@ -249,7 +249,7 @@ tests:
 
   - it: "env: DEL fails with control_character"
     # A DEL byte cannot go through helm-unittest's own `set:` (its YAML parser refuses control characters),
-    # so the value comes from a fixture whose JSON escape  Helm decodes.
+    # so the value comes from a fixture whose JSON escape \u007f Helm decodes.
     values:
       - values/env_del_value.yaml
     asserts:
