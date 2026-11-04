@@ -48,10 +48,7 @@ backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
   {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" false) | fromJson }}
   {{- $legacy = include "helm.testtrigger.legacyCurls" (dict "ctx" . "env" $env) }}
   {{- if gt (len $legacy) 101888 }}
-    {{- $last := "" }}
-    {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
-      {{- if index $env.byDefinition $index }}{{- $last = $definition.name }}{{- end }}
-    {{- end }}
+    {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
     {{- if $last }}
       {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
     {{- end }}
@@ -294,6 +291,19 @@ empty), and correlationId (CorrelationId, a string).
 {{- end }}
 
 {{/*
+helm.testtrigger.lastEnvDefinition: the name of the last test definition that has EnvVars, or "" when none has. Takes dict
+"application" <application map> "env" <the result of helm.testtrigger.envVars, decoded>. Names the definition in the
+request_too_large errors of the script and body size checks.
+*/}}
+{{- define "helm.testtrigger.lastEnvDefinition" -}}
+{{- $last := "" }}
+{{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
+  {{- if index $.env.byDefinition $index }}{{- $last = $definition.name }}{{- end }}
+{{- end }}
+{{- $last }}
+{{- end }}
+
+{{/*
 helm.testtrigger.commandSafeJson: a JSON request body made safe to paste where something other than the receiver reads it
 first: the PostSync hook's -d '...' (shell, then kubelet) and the canary Job's TESTS_REQUEST env value (kubelet, and Argo
 Rollouts for the AnalysisTemplate). The body stays valid JSON that decodes to the same request. The ConfigMap body
@@ -320,11 +330,8 @@ bounds the env value the same way).
   {{- $out = $out | replace "{{" "{\\u007b" }}
 {{- end }}
 {{- if gt (len $out) 102400 }}
-  {{- $last := "" }}
   {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
-  {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
-    {{- if index $env.byDefinition $index }}{{- $last = $definition.name }}{{- end }}
-  {{- end }}
+  {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
   {{- if $last }}
     {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
   {{- end }}

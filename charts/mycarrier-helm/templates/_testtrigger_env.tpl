@@ -48,7 +48,8 @@ Values are YAML strings only (as Helm reads the YAML); nothing is converted.
 {{- end }}
 {{- $upperCount := dict }}
 {{- range $name, $value := $merged }}
-  {{- $_ := set $upperCount (upper $name) (add1 (int (get $upperCount (upper $name)))) }}
+  {{- $upper := upper $name }}
+  {{- $_ := set $upperCount $upper (add1 (int (get $upperCount $upper))) }}
 {{- end }}
 {{- $bytes := 0 }}
 {{- range $name := keys $merged | sortAlpha }}
@@ -64,7 +65,7 @@ Values are YAML strings only (as Helm reads the YAML); nothing is converted.
   {{- if $protected }}
     {{- fail (printf "%s: variable \"%s\": protected_name" $head $name) }}
   {{- end }}
-  {{- if gt (int (get $upperCount (upper $name))) 1 }}
+  {{- if gt (int (get $upperCount $upperName)) 1 }}
     {{- fail (printf "%s: variable \"%s\": duplicate_name" $head $name) }}
   {{- end }}
   {{- if not (kindIs "string" $value) }}
