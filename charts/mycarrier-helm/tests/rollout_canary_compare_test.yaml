@@ -720,6 +720,39 @@ tests:
               valueFrom:
                 podTemplateHashValue: Stable
 
+  # The chart's compare metrics have an interval and no count, so they run until promotion, which Argo Rollouts allows
+  # only in background analysis: a step that references the chart's template leaves the Rollout InvalidSpec ("runs
+  # indefinitely"), with or without the args.
+  - it: fails an explicit analysis step on the chart's own compare, also with the canary and stable hashes
+    template: rollout.yaml
+    set:
+      <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            budgetSeconds: 600
+            steps:
+              - setWeight: 10
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-compare
+                  args:
+                    - name: canary-hash
+                      valueFrom:
+                        podTemplateHashValue: Latest
+                    - name: stable-hash
+                      valueFrom:
+                        podTemplateHashValue: Stable
+              - pause: {duration: 5m}
+              - setWeight: 100
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': global.strategy.canary.steps\\[1\\] references prod-mycarrier-api-compare, the chart's compare template"
+
   - it: declares no args on a replacement entry of another name
     template: analysistemplate.yaml
     documentSelector:
