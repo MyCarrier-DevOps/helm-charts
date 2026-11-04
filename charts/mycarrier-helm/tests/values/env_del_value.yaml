@@ -20,7 +20,7 @@
               "TestCategory=whatever"
             ],
             "env": {
-              "FOO": "a007fb"
+              "FOO": "ab"
             }
           }
         ]

@@ -248,9 +248,10 @@ tests:
           errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
 
   - it: "env: DEL fails with control_character"
-    set:
-      <<: *top
-      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\u007fb"}}}}
+    # A DEL byte cannot go through helm-unittest's own `set:` (its YAML parser refuses control characters),
+    # so the value comes from a fixture whose JSON escape  Helm decodes.
+    values:
+      - values/env_del_value.yaml
     asserts:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
