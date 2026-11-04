@@ -2061,7 +2061,6 @@ tests:
   # The canary request sits in an AnalysisTemplate metric: it is escaped like the hook body, and keeps the 100 KiB cap.
   - it: "env: an escaped canary request over 100 KiB fails"
     template: analysistemplate.yaml
-    documentSelector: *testsTemplate
     values:
       - values/dark-off.yaml
       - values/compare-off.yaml
