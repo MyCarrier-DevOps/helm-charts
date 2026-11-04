@@ -1,0 +1,394 @@
+suite: Test trigger env, merge, validation and the v1 request (AQA-81)
+# testtrigger.env (shared) and testdefinitions[].env (per definition) reach TestEngine as TestEnvironmentVariables.EnvVars
+# on the v1 request: the PostSync hook, the prod-tests ConfigMap and the canary tests request (helm.testtrigger.v1request).
+# The emission asserts are regexes on the hook script (toPrettyJson sorts keys, so TestEnvironmentVariables comes before
+# TestName). Refusals assert the contract message with a $ anchor: nothing (no value) follows it. Rules that
+# values.schema.json refuses first (a bad name, a non-string value, a non-map env, 51 entries at one level) are tested
+# on the template path from .github/scripts/test_trigger_env.py, because helm-unittest always validates the schema.
+# The first test defines the YAML anchors the others reuse.
+templates:
+  - triggertestengine.yaml
+tests:
+  - it: "env: an empty shared env renders no EnvVars key"
+    set:
+      <<: &top {fullnameOverride: app, namespace: dev, metaEnvironment: dev}
+      applications:
+        app1:
+          <<: &app1 {version: 1.0.0, enabled: true, image: {registry: myregistry.example.com, repository: mycarrier/app1, tag: "1.0.0"}}
+          testtrigger: &tt
+            ttlSecondsAfterFinished: "300"
+            env: {}
+            testdefinitions:
+              - &apitests {name: apitests, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+              - &uitests {name: uitests, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=ui"]}
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars"'
+
+  - it: "env: shared env goes to every test definition"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {RESULTS_DB: qa-results}}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars": \{\s*"RESULTS_DB": "qa-results"\s*\}[\s\S]*"TestName": "apitests"[\s\S]*"EnvVars": \{\s*"RESULTS_DB": "qa-results"\s*\}[\s\S]*"TestName": "uitests"'
+
+  - it: "env: per-definition env wins on a name clash"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: shared, KEEP: k}, testdefinitions: [{<<: *apitests, env: {FOO: def}}]}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars": \{\s*"FOO": "def",\s*"KEEP": "k"\s*\}'
+
+  - it: "env: a definition without env gets only the shared env"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {S: s}, testdefinitions: [{<<: *apitests, env: {P: p}}, {<<: *uitests}]}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars": \{\s*"P": "p",\s*"S": "s"\s*\}[\s\S]*"EnvVars": \{\s*"S": "s"\s*\}[\s\S]*"TestName": "uitests"'
+
+  - it: "env: empty env maps at both levels render no EnvVars key"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {}, testdefinitions: [{<<: *apitests, env: {}}]}}}
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars"'
+
+  - it: "env: a null env renders no EnvVars key"
+    values:
+      - values/env_null_env.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars"'
+
+  - it: "env: an empty string value is sent"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {FOO: ""}}]}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"FOO": ""'
+
+  - it: "env: a quoted number is sent as a string"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {PORT: "5", FLAG: "true"}}]}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"FLAG": "true"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"PORT": "5"'
+
+  - it: "env: a vault:QA/ reference is sent unchanged"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {SHARED_KEY: "vault:QA/data/x#y"}}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"SHARED_KEY": "vault:QA/data/x#y"'
+
+  - it: "env: vault accept row 1"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "vault:QA/data/x#../y"}}}}
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: vault accept row 2"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "vault:QA/data/x#key/../z"}}}}
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: vault accept row 3"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "${vault:QA/data/x#y}/../foo"}}}}
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: a 4096-byte multibyte value is accepted"
+    values:
+      - values/env_value_4096_bytes.yaml
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: 50 entries after the merge are accepted"
+    values:
+      - values/env_count_50.yaml
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: an overlapping name counts once"
+    values:
+      - values/env_count_overlap.yaml
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: 16384 bytes per definition and 65536 per request are accepted"
+    values:
+      - values/env_shared_16k.yaml
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - {name: t1, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t2, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t3, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t4, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+    asserts:
+      - isKind:
+          of: Job
+
+  # A11: the Worker replaces a default, so the chart accepts these names. OTEL_ and K8S_ are no longer prefixes.
+  - it: "env: a TestEngine default name is accepted"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {ENVIRONMENT: x, K8S_NAMESPACE: y, Otel_x: z}}]}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ENVIRONMENT": "x"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"K8S_NAMESPACE": "y"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Otel_x": "z"'
+
+  - it: "env: the hook script never traces or echoes the body"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {RESULTS_DB: qa-results}}}}
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'set -x|echo .*EnvVars'
+
+  - it: "env: a protected name fails"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {PATH: x}}]}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "PATH": protected_name$'
+
+  - it: "env: protected names are case-insensitive"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {batch_id: x}}]}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "batch_id": protected_name$'
+
+  - it: "env: a protected prefix fails"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {Vault_Addr: x}}]}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "Vault_Addr": protected_name$'
+
+  - it: "env: the LD_ prefix fails in any case"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {ld_preload: x}}]}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "ld_preload": protected_name$'
+
+  - it: "env: names that differ only in case fail with duplicate_name"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {foo: a}, testdefinitions: [{<<: *apitests, env: {FOO: b}}]}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": duplicate_name$'
+
+  - it: "env: duplicate_name within one level"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, testdefinitions: [{<<: *apitests, env: {Foo: a, FOO: b}}]}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": duplicate_name$'
+
+  - it: "env: duplicate_name comes before control_character"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\tb", foo: "x"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": duplicate_name$'
+
+  - it: "env: a tab fails with control_character"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\tb"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
+
+  - it: "env: DEL fails with control_character"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\u007fb"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
+
+  - it: "env: a value over 4096 bytes fails"
+    values:
+      - values/env_value_4098_bytes.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "BIG": value_too_large$'
+
+  - it: "env: vault refusal vault:QA/..vault:QA/x"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "vault:QA/..vault:QA/x"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "K": vault_prefix_not_allowed$'
+
+  - it: "env: vault refusal vault:QA/../DevOps/x#y"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "vault:QA/../DevOps/x#y"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "K": vault_prefix_not_allowed$'
+
+  - it: "env: vault refusal >>vault:DevOps/x#y"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: ">>vault:DevOps/x#y"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "K": vault_prefix_not_allowed$'
+
+  - it: "env: vault refusal vault:QAProd/x#y"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "vault:QAProd/x#y"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "K": vault_prefix_not_allowed$'
+
+  - it: "env: vault refusal pre ${vault:DevOps/data/x#y} post"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "pre ${vault:DevOps/data/x#y} post"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "K": vault_prefix_not_allowed$'
+
+  - it: "env: vault refusal vault:qa/data/x#y"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {K: "vault:qa/data/x#y"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "K": vault_prefix_not_allowed$'
+
+  - it: "env: 51 entries after the merge fail"
+    values:
+      - values/env_count_51.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": too_many$'
+
+  - it: "env: too_many is checked before a protected name"
+    values:
+      - values/env_count_51_with_path.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": too_many$'
+
+  - it: "env: a definition over 16384 bytes fails"
+    values:
+      - values/env_shared_16k.yaml
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - {name: apitests, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"], env: {B: x}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": definition_too_large$'
+
+  - it: "env: a v1 request over 65536 bytes fails"
+    values:
+      - values/env_shared_16k.yaml
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - {name: t1, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t2, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t3, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t4, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t5, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "t5": request_too_large$'
+
+  - it: "env: a broken shared env is reported for the first definition"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {PATH: x}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "PATH": protected_name$'
+
+  - it: "env: the prod-tests ConfigMap carries EnvVars"
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        gitbranch: main
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: true
+            env:
+              RESULTS_DB: qa-results
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["request.json"]
+          pattern: '"EnvVars": \{\s*"RESULTS_DB": "qa-results"\s*\}'

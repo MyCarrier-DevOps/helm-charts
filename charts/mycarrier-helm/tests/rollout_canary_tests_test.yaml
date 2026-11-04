@@ -2039,3 +2039,21 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'api': the canary tests template needs the coordinator when the release has more than one canary Rollout"
+
+  # AQA-81: testtrigger.env reaches TestEngine as EnvVars on the canary tests request too (helm.testtrigger.v1request).
+  - it: "env: the canary tests request carries EnvVars"
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            <<: *testtrigger
+            env:
+              RESULTS_DB: qa-results
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"EnvVars": \{\s*"RESULTS_DB": "qa-results"\s*\}'

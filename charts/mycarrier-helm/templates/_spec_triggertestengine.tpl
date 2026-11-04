@@ -169,7 +169,9 @@ testtrigger.testdefinitions item, with no SlipStep, so TestEngine bookends the e
 (prod_tests in prod) for the run. Two templates send it, so they cannot drift apart: the PostSync hook
 (helm.specs.testenginehook, with testtrigger.enableV1) and, for a prod canary Rollout, the <fullName>-prod-tests
 ConfigMap that the release's rollout-watch posts after promotion (DEVOPS-319, Tech Spec D7; triggertestengine.yaml).
-Takes the application context. Every test definition's results API settings are checked here.
+Takes the application context. Every test definition's results API settings are checked here, and so is its env: every
+test definition's EnvVars are merged and checked here (helm.testtrigger.envVars); the v1 request is one HTTP request,
+so the 64 KiB cap covers all definitions.
 A third caller, the canary tests template (helm.canary.tests.request, DEVOPS-515), adds .testRun to the context, a
 dict whose keys override the request and are absent for the other two callers: serviceAddresses (ServiceAddress, one
 entry per test definition, in order), tolerations (Tolerations of every definition, also when empty), and runKind,
@@ -194,6 +196,7 @@ empty), and correlationId (CorrelationId, a string).
 {{- end }}
 {{- end }}
 {{- $imageTag := .application.image.tag }}
+{{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
 {{- $tests := list }}
 {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
 {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
@@ -234,6 +237,7 @@ empty), and correlationId (CorrelationId, a string).
 {{- with $run.runKind }}{{- $_ := set $testEnv "RunKind" . }}{{- end }}
 {{- with $run.slipStep }}{{- $_ := set $testEnv "SlipStep" . }}{{- end }}
 {{- with $run.requestHeaders }}{{- $_ := set $testEnv "RequestHeaders" . }}{{- end }}
+{{- with index $env.byDefinition $index }}{{- $_ := set $testEnv "EnvVars" . }}{{- end }}
 {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
 {{- $tests = append $tests $test }}
 {{- end }}

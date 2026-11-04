@@ -1,0 +1,82 @@
+{
+  "applications": {
+    "app1": {
+      "version": "1.0.0",
+      "enabled": true,
+      "image": {
+        "registry": "myregistry.example.com",
+        "repository": "mycarrier/app1",
+        "tag": "1.0.0"
+      },
+      "testtrigger": {
+        "ttlSecondsAfterFinished": "300",
+        "testdefinitions": [
+          {
+            "name": "apitests",
+            "containerImage": "alpine/curl",
+            "containerTag": "latest",
+            "secretId": "vault:Secret/data/secret#SecretId",
+            "filters": [
+              "TestCategory=whatever"
+            ],
+            "env": {
+              "D01": "x",
+              "D02": "x",
+              "D03": "x",
+              "D04": "x",
+              "D05": "x",
+              "D06": "x",
+              "D07": "x",
+              "D08": "x",
+              "D09": "x",
+              "D10": "x",
+              "D11": "x",
+              "D12": "x",
+              "D13": "x",
+              "D14": "x",
+              "D15": "x",
+              "D16": "x",
+              "D17": "x",
+              "D18": "x",
+              "D19": "x",
+              "D20": "x",
+              "E01": "x"
+            }
+          }
+        ],
+        "env": {
+          "E01": "x",
+          "E02": "x",
+          "E03": "x",
+          "E04": "x",
+          "E05": "x",
+          "E06": "x",
+          "E07": "x",
+          "E08": "x",
+          "E09": "x",
+          "E10": "x",
+          "E11": "x",
+          "E12": "x",
+          "E13": "x",
+          "E14": "x",
+          "E15": "x",
+          "E16": "x",
+          "E17": "x",
+          "E18": "x",
+          "E19": "x",
+          "E20": "x",
+          "E21": "x",
+          "E22": "x",
+          "E23": "x",
+          "E24": "x",
+          "E25": "x",
+          "E26": "x",
+          "E27": "x",
+          "E28": "x",
+          "E29": "x",
+          "E30": "x"
+        }
+      }
+    }
+  }
+}
