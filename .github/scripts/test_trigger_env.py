@@ -273,6 +273,158 @@ class Yaml11AsHelmReads(unittest.TestCase):
         self.assertEqual(env_vars(r), MERGE_AFTER)
 
 
+# One value with every character that needs care: a single quote (ends the shell quote in -d '...'), a dollar sign and
+# $(NAME) (kubelet expands both in command and env[].value), {{...}} (Argo Rollouts resolves it over the whole metric),
+# a backslash, and non-ASCII text.
+WEIRD = "it's \"q\" $HOME \\d $(TESTENGINE_APIKEY) {{args.x}} café ✓"
+APIKEY = "vault:DevOps/data/testengine/api#encoded_header"
+CANARY_VALUES = """
+global:
+  appStack: mycarrier
+  language: csharp
+  correlationId: 62a354da-6833-4bf7-8f6d-689970865996
+  gitbranch: main
+  deploymentStrategy: canary
+  strategy:
+    canary:
+      dark: false
+      analysis:
+        templates: [tests]
+environment:
+  name: prod
+alerts:
+  serviceName: MyCarrier
+applications:
+  api:
+    deploymentType: rollout
+    image: {registry: registry.example.com, repository: api, tag: "1.0.0"}
+    ports: {http: 8080}
+    testtrigger:
+      apikey: "%(apikey)s"
+      enableV1: true
+      env: {WEIRD: %(weird)s}
+      testdefinitions:
+        - name: apitests
+          containerImage: testing/mycarrier/api/tests
+          containerTag: 1.0.0
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=CoreAPI]
+"""
+
+
+def kubelet_expand(text, env):
+    """The Kubernetes rule for command and env[].value: $$ -> $, $(NAME) -> env[NAME] when defined, else left as is."""
+    def sub(m):
+        if m.group(0) == "$$":
+            return "$"
+        return env.get(m.group(1), m.group(0))
+    return re.sub(r"\$\$|\$\(([^)]*)\)", sub, text)
+
+
+def container_env(container):
+    """A container's env as kubelet resolves it: each entry may reference the ones before it."""
+    resolved = {}
+    for entry in container.get("env", []):
+        resolved[entry["name"]] = kubelet_expand(entry["value"], resolved)
+    return resolved
+
+
+STUB_CURL = """#!/bin/sh
+i=0
+while [ -e "$CAPDIR/$i" ]; do i=$((i+1)); done
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-d" ]; then printf '%s' "$2" > "$CAPDIR/$i"; fi
+  shift
+done
+exit 0
+"""
+
+
+def run_hook(script, env):
+    """Runs the hook script under sh with a stub curl (it saves each -d argument); returns the bodies it sent."""
+    with tempfile.TemporaryDirectory() as tmp:
+        stubdir = os.path.join(tmp, "bin")
+        capdir = os.path.join(tmp, "cap")
+        os.mkdir(stubdir)
+        os.mkdir(capdir)
+        with open(os.path.join(stubdir, "curl"), "w", newline="\n") as f:
+            f.write(STUB_CURL)
+        os.chmod(os.path.join(stubdir, "curl"), 0o755)
+        base = {k: v for k, v in os.environ.items() if k.upper() in ("SYSTEMROOT", "TEMP", "TMP", "HOME", "LANG")}
+        run_env = {**base, **env, "CAPDIR": capdir, "PATH": stubdir + os.pathsep + os.environ["PATH"]}
+        # The script goes through a file, not `sh -c <script>`: on Windows the argument would be re-parsed (backslashes lost).
+        script_path = os.path.join(tmp, "hook.sh")
+        with open(script_path, "w", encoding="utf-8", newline=chr(10)) as f:
+            f.write(script)
+        done = subprocess.run(["sh", script_path], env=run_env, capture_output=True, text=True, encoding="utf-8")
+        if done.returncode != 0:
+            raise AssertionError("hook script failed: " + done.stderr[-300:])
+        bodies = []
+        for name in sorted(os.listdir(capdir), key=int):
+            with open(os.path.join(capdir, name), encoding="utf-8", newline="") as f:
+                bodies.append(f.read())
+        return bodies
+
+
+def hook_values():
+    vals = values(shared={"WEIRD": WEIRD})
+    vals["applications"]["app1"]["testtrigger"]["apikey"] = APIKEY
+    return vals
+
+
+def hook_container(result):
+    job = next(d for d in docs(result) if d["kind"] == "Job")
+    return job["spec"]["template"]["spec"]["containers"][0]
+
+
+class LiteralRequestBodies(unittest.TestCase):
+    """The v1 hook body and the canary TESTS_REQUEST stay literal: quotes, $ and {{ in a value arrive unchanged."""
+
+    def test_v1_hook_body_round_trips(self):
+        r = render(hook_values())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c = hook_container(r)
+        env = container_env(c)
+        script = kubelet_expand(c["command"][2], env)
+        bodies = run_hook(script, env)
+        self.assertEqual(len(bodies), 1)
+        body = json.loads(bodies[0])
+        self.assertEqual(body["Tests"][0]["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
+
+    def test_kubelet_does_not_expand_dollar_paren(self):
+        r = render(hook_values())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c = hook_container(r)
+        env = container_env(c)
+        self.assertEqual(env["TESTENGINE_APIKEY"], APIKEY)
+        script = kubelet_expand(c["command"][2], env)
+        self.assertNotIn("vault:DevOps", script)
+        bodies = run_hook(script, env)
+        sent = json.loads(bodies[0])["Tests"][0]["TestEnvironmentVariables"]["EnvVars"]["WEIRD"]
+        self.assertIn("$(TESTENGINE_APIKEY)", sent)
+
+    def canary_values(self):
+        return CANARY_VALUES % {"apikey": APIKEY, "weird": json.dumps(WEIRD)}
+
+    def test_canary_tests_request_round_trips(self):
+        r = render(self.canary_values(), show_only="templates/analysistemplate.yaml")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        tmpl = next(d for d in docs(r) if d["metadata"]["name"].endswith("-tests"))
+        c = tmpl["spec"]["metrics"][0]["provider"]["job"]["spec"]["template"]["spec"]["containers"][0]
+        raw = next(e["value"] for e in c["env"] if e["name"] == "TESTS_REQUEST")
+        self.assertNotIn("{{", raw)
+        env = container_env(c)
+        request = json.loads(kubelet_expand(raw, env))
+        self.assertEqual(request["Tests"][0]["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
+
+    def test_configmap_body_is_plain_json(self):
+        r = render(self.canary_values(), show_only="templates/triggertestengine.yaml")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        cm = next(d for d in docs(r) if d["kind"] == "ConfigMap")
+        request = json.loads(cm["data"]["request.json"])
+        self.assertEqual(request["Tests"][0]["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
+
+
 # Helm's verdicts, pinned. Values are filled from real runs (see the report); a different Helm version fails the row.
 DOT_VERDICT = "not a string"
 TILDE_KEY_VERDICT = "refused"

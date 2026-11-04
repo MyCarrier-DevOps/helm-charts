@@ -393,3 +393,41 @@ tests:
       - matchRegex:
           path: data["request.json"]
           pattern: '"EnvVars": \{\s*"RESULTS_DB": "qa-results"\s*\}'
+
+  # Quotes, dollars and backslashes in any string of the v1 hook body are escaped, so the value arrives literally
+  # (.github/scripts/test_trigger_env.py runs the real script under sh and kubelet's expansion rule).
+  - it: "env: quotes, dollars and backslashes are escaped in the v1 hook body"
+    set:
+      <<: *top
+      applications:
+        app1:
+          <<: *app1
+          testtrigger:
+            <<: *tt
+            env:
+              WEIRD: "it's \"q\" $HOME \\d $(TESTENGINE_APIKEY) {{args.x}} café ✓"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"WEIRD": "it\\u0027s \\"q\\" \$\$HOME \\\\d \$\$\(TESTENGINE_APIKEY\) \{\{args\.x\}\} café ✓"'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "it's"
+
+  - it: "env: one definition of 16 KiB of quotes is accepted"
+    values:
+      - values/env_quotes_16k.yaml
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "env: an escaped hook body over 100 KiB fails"
+    values:
+      - values/env_quotes_16k.yaml
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - {name: t1, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t2, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "t2": request_too_large$'
