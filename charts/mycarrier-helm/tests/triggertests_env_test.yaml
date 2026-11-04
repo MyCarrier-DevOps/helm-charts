@@ -247,15 +247,6 @@ tests:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
 
-  - it: "env: DEL fails with control_character"
-    # A DEL byte cannot go through helm-unittest's own `set:` (its YAML parser refuses control characters),
-    # so the value comes from a fixture whose JSON escape \u007f Helm decodes.
-    values:
-      - values/env_del_value.yaml
-    asserts:
-      - failedTemplate:
-          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
-
   - it: "env: a value over 4096 bytes fails"
     values:
       - values/env_value_4098_bytes.yaml

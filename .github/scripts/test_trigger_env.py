@@ -179,6 +179,12 @@ class TemplatePathRefusals(unittest.TestCase):
         self.refuse(values(shared={"BIG": "é" * 2049 + "\t"}),
                     'EnvVars: test definition "apitests": variable "BIG": control_character', secret=None)
 
+    # DEL (0x7F) cannot go through helm-unittest (its YAML parser refuses control characters, even as an escape
+    # in a fixture), so this row lives here.
+    def test_del_is_control_character(self):
+        self.refuse(values(shared={"FOO": "a" + chr(0x7F) + "b"}),
+                    'EnvVars: test definition "apitests": variable "FOO": control_character', secret=None)
+
 
 class ProtectedNames(unittest.TestCase):
     def test_every_protected_name_and_prefix_is_refused(self):
