@@ -431,6 +431,41 @@ class LiteralRequestBodies(unittest.TestCase):
         self.assertEqual(request["Tests"][0]["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
 
 
+def legacy_values(shared=None, names=("apitests", "uitests")):
+    vals = hook_values() if shared is None else values(shared=shared)
+    tt = vals["applications"]["app1"]["testtrigger"]
+    tt["enableV1"] = False
+    tt["apikey"] = APIKEY
+    tt["testdefinitions"] = [dict(DEFINITION, name=n) for n in names]
+    return vals
+
+
+class LegacyHookBody(unittest.TestCase):
+    """The legacy hook body (enableV1: false): one request per definition, each with the same literal EnvVars."""
+
+    def test_legacy_hook_body_round_trips(self):
+        r = render(legacy_values())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c = hook_container(r)
+        env = container_env(c)
+        script = kubelet_expand(c["command"][2], env)
+        self.assertNotIn("vault:DevOps", script)
+        bodies = run_hook(script, env)
+        self.assertEqual(len(bodies), 2)
+        for body in bodies:
+            self.assertEqual(json.loads(body)["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
+
+    def test_legacy_fixed_text_is_under_512_bytes(self):
+        # The legacy script check keeps 512 bytes of room for the chart's own text around the curl blocks (they hold
+        # no values); this pins that the room is enough.
+        r = render(legacy_values(shared={}, names=("apitests",)))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        script = hook_container(r)["command"][2]
+        head = script[: script.index("curl")]
+        tail = script[script.rindex('if [ "$failed"'):]
+        self.assertLess(len((head + tail).encode("utf-8")), 512, repr(head + tail))
+
+
 # Helm's verdicts, pinned. Values are filled from real runs (see the report); a different Helm version fails the row.
 DOT_VERDICT = "not a string"
 TILDE_KEY_VERDICT = "refused"

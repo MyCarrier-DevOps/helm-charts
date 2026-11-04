@@ -39,6 +39,24 @@ backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
 {{- $triggerName := printf "%s-trigger" (include "helm.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- $_ := set $podLabels "app.kubernetes.io/name" $triggerName }}
 {{- $_ := set $podLabels "app" $triggerName }}
+{{- /* Legacy path (enableV1 false): one request per definition, all in the one command[2] string. A script over 100 KiB
+       fails when some definition has EnvVars (a service without env can never newly fail). The 512 bytes are the fixed
+       text around the curl blocks (set -u, failed=0, the closing if and exit 0), which holds no values; the real
+       length is checked, so filters, tolerations, nodeAffinity and podResources count too. Nothing prints before this. */}}
+{{- $legacy := "" }}
+{{- if not $enableV1 }}
+  {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" false) | fromJson }}
+  {{- $legacy = include "helm.testtrigger.legacyCurls" (dict "ctx" . "env" $env) }}
+  {{- if gt (len $legacy) 101888 }}
+    {{- $last := "" }}
+    {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
+      {{- if index $env.byDefinition $index }}{{- $last = $definition.name }}{{- end }}
+    {{- end }}
+    {{- if $last }}
+      {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
 template:
   metadata:
     labels:
@@ -88,7 +106,44 @@ template:
               failed=$((failed+1))
             }
           {{- else }}
-          {{- range dig "testtrigger" "testdefinitions" list .application }}
+          {{- $legacy }}
+          {{- end }}
+            if [ "$failed" -gt 0 ]; then
+              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+            fi
+            exit 0
+        {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
+{{- end }}
+{{- end }}
+
+{{/*
+helm.testtrigger.legacyCurls: the curl commands of the legacy PostSync hook (testtrigger.enableV1 false), one per test
+definition, as the text that goes into the hook's script. Takes dict "ctx" <the hook's context, with .application> and
+"env" <the result of helm.testtrigger.envVars, decoded>. Each definition is its own HTTP request, so there is no cap
+across definitions; the caller checks the length of the whole script. EnvVars is the last key of
+TestEnvironmentVariables and is left out when the definition has none. Quotes and dollars in it are escaped like the v1
+hook body (helm.testtrigger.commandSafeJson); the other fields are printed as they always were.
+*/}}
+{{- define "helm.testtrigger.legacyCurls" -}}
+{{- $root := .ctx }}
+{{- $env := .env }}
+{{- $application := $root.application }}
+{{- $fullName := include "helm.fullname" $root }}
+{{- $baseName := include "helm.basename" $root }}
+{{- $namespace := include "helm.namespace" $root }}
+{{- $httpPort := 8080 }}
+{{- $gitBranch := $root.Values.global.gitbranch }}
+{{- $stackname := $root.Values.global.appStack }}
+{{- $correlationId := $root.Values.global.correlationId }}
+{{- if not (dig "service" "ports" false $application) }}
+{{- range $key, $value := $application.ports }}
+  {{- if eq ($key | lower) "http" }}
+    {{- $httpPort = $value }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- $imageTag := $application.image.tag }}
+{{- range $index, $definition := dig "testtrigger" "testdefinitions" list $application }}
           {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
           {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
           {{- $tolerations := $defaultTolerations }}
@@ -146,20 +201,14 @@ template:
                   "CorrelationId": "{{ $correlationId }}",
                   "LegacyMode": "{{ $legacyMode }}"{{- if $resultsApiUrl }},
                   "ResultsApiUrl": {{ $resultsApiUrl | quote }}{{- end }}{{- if $resultsApiKey }},
-                  "ResultsApiKey": {{ $resultsApiKey | quote }}{{- end }}
+                  "ResultsApiKey": {{ $resultsApiKey | quote }}{{- end }}{{- with index $env.byDefinition $index }},
+                  "EnvVars": {{ include "helm.testtrigger.commandSafeJson" (dict "json" (toJson .) "application" $application "argoTemplate" false) }}{{- end }}
                 }
               }' "$TESTENGINEHOOK_URL" || {
               rc=$?
               echo "ERROR: TestEngine trigger failed for "{{ .name | squote }}" (curl exit $rc)" >&2
               failed=$((failed+1))
             }
-          {{- end }}
-          {{- end }}
-            if [ "$failed" -gt 0 ]; then
-              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
-            fi
-            exit 0
-        {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
 {{- end }}
 

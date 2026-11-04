@@ -422,3 +422,79 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "t2": request_too_large$'
+
+  # The legacy hook body (enableV1: false): one request per definition, EnvVars last in TestEnvironmentVariables.
+  - it: "env: legacy body sends merged EnvVars last"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, enableV1: false, env: {S: s}, testdefinitions: [{<<: *apitests, env: {FOO: bar}}]}}}
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"LegacyMode": "false",\s*"EnvVars": \{"FOO":"bar","S":"s"\}\s*}\s*}'''
+
+  - it: "env: legacy body sends no EnvVars without env"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, enableV1: false, env: null}}}
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"EnvVars"'
+
+  - it: "env: legacy body after results API settings"
+    set:
+      <<: *top
+      applications:
+        app1:
+          <<: *app1
+          testtrigger:
+            <<: *tt
+            enableV1: false
+            testdefinitions:
+              - <<: *apitests
+                env: {FOO: bar}
+                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
+                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",\s*"EnvVars": \{"FOO":"bar"\}'
+
+  - it: "env: legacy path refuses a protected name"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, enableV1: false, env: {PATH: x}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "PATH": protected_name$'
+
+  # The legacy path sends one request per definition, so the 64 KiB cap across definitions does not apply: five
+  # definitions with 16 KiB each (80 KiB of env plus the five curl blocks) stay under the 100 KiB script cap.
+  - it: "env: legacy path has no cross-definition 64 KiB cap"
+    values:
+      - values/env_shared_16k.yaml
+    set:
+      applications.app1.testtrigger.enableV1: false
+      applications.app1.testtrigger.testdefinitions:
+        - {name: t1, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t2, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t3, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t4, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t5, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+    asserts:
+      - isKind:
+          of: Job
+
+  # The whole legacy script is one command argument, so its real length is checked, not each body.
+  - it: "env: legacy path caps the real script at 100 KiB"
+    values:
+      - values/env_quotes_16k.yaml
+    set:
+      applications.app1.testtrigger.enableV1: false
+      applications.app1.testtrigger.testdefinitions:
+        - {name: t1, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+        - {name: t2, containerImage: alpine/curl, containerTag: latest, secretId: "vault:Secret/data/secret#SecretId", filters: ["TestCategory=whatever"]}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "t2": request_too_large$'
