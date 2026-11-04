@@ -466,6 +466,13 @@
                 "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod whose repository's deployment-strategy property (global.deploymentStrategy) is canary needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it; the render fails with false.",
                 "default": true
               },
+              "env": {
+                "type": ["object", "null"],
+                "description": "Environment variables for every test definition of this application's testtrigger: quoted strings only (quote names such as ON, Y and yes too, YAML 1.1 reads them as true/false). A definition's own env wins key by key. See TestTriggersGuide.md.",
+                "maxProperties": 50,
+                "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "enum": ["true", "false"] } },
+                "additionalProperties": { "type": "string", "maxLength": 4096 }
+              },
               "testdefinitions": {
                 "type": "array",
                 "description": "Test definitions to run",
@@ -503,7 +510,14 @@
                     },
                     "additionalEnvVars": {
                       "type": "string",
-                      "description": "Additional environment variables to pass to the test container"
+                      "description": "Additional environment variables to pass to the test container. Deprecated: use env"
+                    },
+                    "env": {
+                      "type": ["object", "null"],
+                      "description": "Environment variables for the TestEngine test container: quoted strings only (quote names such as ON, Y and yes too, YAML 1.1 reads them as true/false). Merged over testtrigger.env, this definition wins. See TestTriggersGuide.md.",
+                      "maxProperties": 50,
+                      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "enum": ["true", "false"] } },
+                      "additionalProperties": { "type": "string", "maxLength": 4096 }
                     },
                     "resultsApiUrl": {
                       "type": "string",
