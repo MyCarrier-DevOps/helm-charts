@@ -12,6 +12,7 @@ templates:
   - triggertestengine.yaml
 values:
   - values/dark-off.yaml
+  - values/compare-off.yaml
 tests:
   # R5: TestEngine's caller contract rule 13 for an Argo Rollouts Job metric.
   - it: renders the tests metric with count 1, failureLimit 0 and inconclusiveLimit 0

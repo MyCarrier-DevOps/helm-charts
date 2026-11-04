@@ -684,6 +684,7 @@ tests:
           path: spec.strategy.canary.analysis.templates
           value:
             - templateName: prod-test-stack-api-alerts
+            - templateName: prod-test-stack-api-compare
 
   - it: renders the same steps and budget in prod with stepsOutsideProd true
     template: rollout.yaml
@@ -717,6 +718,7 @@ tests:
           path: spec.strategy.canary.analysis.templates
           value:
             - templateName: prod-test-stack-api-alerts
+            - templateName: prod-test-stack-api-compare
 
   # R4: the configuration checks still fail a render outside prod.
   - it: fails a preprod render when the application has no health path
@@ -753,7 +755,7 @@ tests:
       - failedTemplate:
           errorPattern: "application 'api': the canary health check has no HTTP path on a port its -preview Service exposes"
 
-  - it: fails a dev render when both analysis checks are opted out
+  - it: fails a dev render when every analysis check is opted out
     template: rollout.yaml
     set:
       global:
@@ -768,6 +770,8 @@ tests:
                 enabled: false
               alerts:
                 enabled: false
+              compare:
+                enabled: false
       environment:
         name: dev
       applications:
@@ -780,7 +784,7 @@ tests:
       - failedTemplate:
           errorPattern: "analysis is mandatory for every Rollout, and application 'api' would run none"
 
-  - it: fails a uat render when both analysis checks are opted out, with explicit steps too
+  - it: fails a uat render when every analysis check is opted out, with explicit steps too
     template: rollout.yaml
     set:
       <<: *preprod
@@ -797,6 +801,8 @@ tests:
               health:
                 enabled: false
               alerts:
+                enabled: false
+              compare:
                 enabled: false
       environment:
         name: uat

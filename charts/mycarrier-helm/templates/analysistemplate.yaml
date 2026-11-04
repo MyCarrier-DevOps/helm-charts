@@ -288,6 +288,14 @@ metadata:
     argocd.argoproj.io/sync-wave: "9"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
 spec:
+  {{- /* The Rollout passes the canary's and the stable pod-template hashes to its compare template
+         (helm.canary.backgroundAnalysis), and Argo Rollouts drops args a template does not declare, so a replacement
+         compare declares them for its metric to read as {{args.canary-hash}} and {{args.stable-hash}}. */}}
+  {{- if eq (toString $template.name) "compare" }}
+  args:
+  - name: canary-hash
+  - name: stable-hash
+  {{- end }}
   metrics:
   - name: {{ $environment }}-{{ $template.name }}
     {{- /* An explicit count is kept as written: count 0 (with an interval) is how a background analysis, such as a
@@ -327,6 +335,115 @@ spec:
     {{- else }}
     {{- fail (printf "application '%s': analysisTemplates '%s' needs provider web or job; other metric providers are not supported" $appName (toString $template.name)) }}
     {{- end }}
+{{- end }}
+{{- /* The chart's compare template (DEVOPS-322, Tech Spec D4) where helm.canary.compare.wanted: a canary Rollout whose
+       steps render (prod, or stepsOutsideProd), compare on for the app (analysis.compare.enabled, default true, and
+       applications.<app>.canaryCompare not false) and no applications.<app>.analysisTemplates entry named compare,
+       which replaces it. The Rollout runs it as background analysis with alerts (helm.canary.backgroundAnalysis),
+       passing the canary's and the stable pod-template hashes. Two web metrics POST the same query
+       (helm.canary.compare.query) to ClickHouse's HTTP interface as svc_canary_analysis, a user that can only read the
+       three metrics histogram tables, every interval from initialDelay after the first weight until promotion:
+       compare fails on helm.canary.compare.failureCondition, and data on helm.canary.compare.dataFailureCondition.
+       A non-2xx answer (a query error, wait_end_of_query=1 included, a 403, the user's 5 s limit) is an error; one
+       more than consecutiveErrorLimit in a row fails the run and aborts the canary (D15, fail closed). The query
+       always answers one JSON object, so the v1.10.1 behaviour of passing a 2xx body that is not JSON cannot apply.
+       The host, user and password come from one ExternalSecret (vault-backend-devops reads the DevOps mount), so the
+       chart carries no ClickHouse address. */}}
+{{- if eq (include "helm.canary.compare.wanted" $appContext) "true" }}
+{{- $compare := $cfg.analysis.compare }}
+{{- $compareName := printf "%s-%s-compare" $environment $fullName }}
+{{- $compareParams := list "wait_end_of_query=1" (printf "param_window=%s" (include "helm.canary.compare.windowSeconds" $appContext)) (printf "param_namespace=%s" (urlquery $namespace)) (printf "param_prefix=%s" (urlquery (printf "%s-" $fullName))) "param_canary={{args.canary-hash}}" "param_stable={{args.stable-hash}}" }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $compareName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    {{- /* Before the Rollout (wave 10), as for alerts: a Vault read that fails stops the sync here. */}}
+    argocd.argoproj.io/sync-wave: "8"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend-devops
+  target:
+    name: {{ $compareName }}
+    creationPolicy: Owner
+  data:
+  - secretKey: host
+    remoteRef:
+      key: clickhouse/cloud/users/canary-analysis
+      property: address
+  - secretKey: username
+    remoteRef:
+      key: clickhouse/cloud/users/canary-analysis
+      property: username
+  - secretKey: password
+    remoteRef:
+      key: clickhouse/cloud/users/canary-analysis
+      property: password
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $compareName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ $standardLabels | nindent 4 | trim }}
+    {{ $versionLabels | nindent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  args:
+  - name: canary-hash
+  - name: stable-hash
+  - name: clickhouse-host
+    valueFrom:
+      secretKeyRef:
+        name: {{ $compareName }}
+        key: host
+  - name: clickhouse-user
+    valueFrom:
+      secretKeyRef:
+        name: {{ $compareName }}
+        key: username
+  - name: clickhouse-password
+    valueFrom:
+      secretKeyRef:
+        name: {{ $compareName }}
+        key: password
+  {{- /* Two metrics on the same query: compare fails on a worse canary at once (failureLimit 0); data fails on no
+         data (helm.canary.compare.dataFailureCondition) and tolerates one such measurement over the run. */}}
+  metrics:
+  {{- range (list (dict "name" "compare" "failureLimit" 0 "condition" (include "helm.canary.compare.failureCondition" $appContext)) (dict "name" "data" "failureLimit" 1 "condition" (include "helm.canary.compare.dataFailureCondition" $appContext))) }}
+  - name: {{ .name }}
+    interval: {{ $compare.interval }}
+    initialDelay: {{ $compare.initialDelay }}
+    failureLimit: {{ .failureLimit }}
+    consecutiveErrorLimit: {{ int $compare.consecutiveErrorLimit }}
+    failureCondition: {{ .condition | quote }}
+    provider:
+      web:
+        method: POST
+        url: {{ printf "https://{{args.clickhouse-host}}:8443/?%s" (join "&" $compareParams) | quote }}
+        headers:
+        - key: X-ClickHouse-User
+          value: {{ "{{args.clickhouse-user}}" | quote }}
+        - key: X-ClickHouse-Key
+          value: {{ "{{args.clickhouse-password}}" | quote }}
+        - key: Content-Type
+          value: text/plain
+        body: |
+          {{- include "helm.canary.compare.query" $appContext | nindent 10 }}
+        jsonPath: "{$}"
+        timeoutSeconds: 10
+  {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

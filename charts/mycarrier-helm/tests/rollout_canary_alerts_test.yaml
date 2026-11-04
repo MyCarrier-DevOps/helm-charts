@@ -5,6 +5,7 @@ templates:
   - rollout.yaml
 values:
   - values/dark-off.yaml
+  - values/compare-off.yaml
 tests:
   # prod: an ExternalSecret for the web metric's token, and a template with the alert-rules Job and the alerts metric.
   - it: renders the token ExternalSecret from the DevOps mount in prod

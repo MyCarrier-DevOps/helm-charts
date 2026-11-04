@@ -54,13 +54,13 @@
                   "properties": {
                     "enabled": {
                       "type": "boolean",
-                      "description": "Deprecated: canary analysis is mandatory for every Rollout (DEVOPS-312). true is accepted and has no effect; false fails the render in every environment. Remove it; turn off one check with health.enabled or alerts.enabled instead."
+                      "description": "Deprecated: canary analysis is mandatory for every Rollout (DEVOPS-312). true is accepted and has no effect; false fails the render in every environment. Remove it; turn off one check with health.enabled, alerts.enabled or compare.enabled instead."
                     },
                     "templates": {
                       "type": "array",
                       "items": { "type": "string" },
                       "default": [],
-                      "description": "Extra AnalysisTemplates each analysis step runs together with health, as suffixes of <environment>-<fullName>-; each must render for every Rollout application, or the render fails. The chart renders tests (DEVOPS-515: the application's testtrigger.testdefinitions through TestEngine, see analysis.tests) for an application with testtrigger.testdefinitions; define any other under applications.<app>.analysisTemplates (compare, DEVOPS-322, is not built yet). health and alerts always run unless opted out with health.enabled or alerts.enabled: listing either here fails the render. With health.enabled and alerts.enabled both false, this list must not be empty: analysis is mandatory for every Rollout."
+                      "description": "Extra AnalysisTemplates each analysis step runs together with health, as suffixes of <environment>-<fullName>-; each must render for every Rollout application, or the render fails. The chart renders tests (DEVOPS-515: the application's testtrigger.testdefinitions through TestEngine, see analysis.tests) for an application with testtrigger.testdefinitions; define any other under applications.<app>.analysisTemplates. health, alerts and compare always run unless opted out with health.enabled, alerts.enabled or compare.enabled: listing any of them here fails the render. With health.enabled, alerts.enabled and compare.enabled all false, this list must not be empty: analysis is mandatory for every Rollout."
                     },
                     "tests": {
                       "type": "object",
@@ -97,6 +97,21 @@
                         "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 4, "description": "Errors in a row of the alerts metric (a non-2xx answer, a timeout, a connection error, or JSON that is not a list of alerts) that the check tolerates; one more fails the run. A 2xx answer that is not JSON counts as a pass on Argo Rollouts up to v1.10.1." },
                         "image": { "type": "string", "default": "python:3.13.15-alpine3.23@sha256:6438599575cca0d1df94aeee0d2ae088d4d8846eab554b2ee7784a3a6df0d516", "description": "Image of the alert-rules Job: Python 3 with its standard library. Set it to a mirror of the default image." },
                         "tokenKey": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "ci-alert-gate", "description": "Property of the Grafana token under DevOps grafana/service-accounts/api/tokens in Vault." }
+                      }
+                    },
+                    "compare": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "The chart's compare template (DEVOPS-322, Tech Spec D4), on unless enabled is false (every application of the release) or applications.<app>.canaryCompare is false (that application), rendered where the canary steps render (prod, or stepsOutsideProd). The Rollout runs it as background analysis with alerts, from its first weight until promotion. Every interval, from initialDelay on, it asks ClickHouse (ClickStack's store, as the read-only svc_canary_analysis, credentials from an ExternalSecret on vault-backend-devops, DevOps clickhouse/cloud/users/canary-analysis) for the 5xx ratio and the p95 of http.server.request.duration of the canary's and the stable pods, found by the pod-template hash in their names, over the interval plus one 60 s metric export, counting only requests with an http.route (probes and CORS preflights have none). Its compare metric fails the canary on the first measurement where both sides have at least minRequests and the canary's 5xx ratio exceeds stable's by more than max5xxDelta, or its p95 exceeds maxP95Ratio x stable's and is more than minP95DeltaSeconds slower; fewer requests pass. A second metric, data, on the same query fails a measurement with no stable data (the metric is not emitted, the pods are not matched, or telemetry stalled), or with no canary data while stable has minRequests; it tolerates one such measurement over the run. A non-2xx answer is an error; one more than consecutiveErrorLimit in a row aborts the canary. The application must emit http.server.request.duration (ASP.NET Core does): set applications.<app>.canaryCompare: false for one that does not (enabled false turns compare off for every application of the release). A full name above 46 characters fails the render, because the pod names would lose the hash. An explicit analysis step cannot reference this template: its metrics run until promotion, which Argo Rollouts allows only in background analysis, so the render fails.",
+                      "properties": {
+                        "enabled": { "type": "boolean", "default": true, "description": "Run the compare check as background analysis where the steps render. false opts every application of the release out (also of a replacement applications.<app>.analysisTemplates entry named compare); applications.<app>.canaryCompare: false opts out one application. With health.enabled and alerts.enabled false as well, analysis.templates must not be empty, because analysis is mandatory for every Rollout; with the fast preset compare does not count toward that." },
+                        "interval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "2m", "description": "Time between measurements. Each measures the interval plus one 60 s metric export." },
+                        "initialDelay": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "3m", "description": "Wait after the first weight before the first measurement, so its window holds no traffic from before the canary took a weight (the dark stage's tests)." },
+                        "consecutiveErrorLimit": { "type": "integer", "minimum": 0, "default": 4, "description": "Errors in a row (a non-2xx answer: a query error, a 403, the 5 s query limit; a timeout or a connection error) that the check tolerates; one more ends the run as Error, which aborts the canary." },
+                        "minRequests": { "type": "integer", "minimum": 1, "default": 100, "description": "Requests each side needs in a window before the thresholds apply; below it the measurement passes. From the MC.MyCarrier prod A/A baseline (Tech Spec D4): with 100 or more requests, a sixth of the pods against the rest never differed by more than 0.63% in 5xx ratio or 2.23 in p95 ratio." },
+                        "max5xxDelta": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.02, "description": "Largest tolerated canary 5xx ratio minus stable's (0.02: 2 percentage points)." },
+                        "maxP95Ratio": { "type": "number", "minimum": 1, "default": 2.5, "description": "Largest tolerated canary p95 over stable's p95; a breach fails only when the canary is also more than minP95DeltaSeconds slower." },
+                        "minP95DeltaSeconds": { "type": "number", "minimum": 0, "default": 0.1, "description": "Seconds the canary's p95 must exceed stable's before maxP95Ratio applies, so a fast endpoint is not judged on the histogram's 5 to 25 ms buckets." }
                       }
                     }
                   }
@@ -582,6 +597,7 @@
             "default": "deployment"
           },
           "canaryHealthPath": { "type": "string", "pattern": "^/", "description": "Overrides global.strategy.canary.analysis.health.path for this application: the HTTP path the canary health check calls on its http (or healthcheck) port. Set it for an application whose liveness probe is not HTTP, or one whose health path differs from the stack's or from its liveness path." },
+          "canaryCompare": { "type": "boolean", "default": true, "description": "false turns the canary compare check (global.strategy.canary.analysis.compare) off for this application only: no compare AnalysisTemplate, ExternalSecret or background analysis entry, and no fullName length check. Set it for an application that does not export http.server.request.duration. global.strategy.canary.analysis.compare.enabled: false turns compare off for every application of the release." },
           "progressDeadlineSeconds": {
             "type": "integer",
             "minimum": 1,

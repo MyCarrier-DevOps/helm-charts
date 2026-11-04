@@ -303,6 +303,33 @@ latency against stable on callees that take most of their traffic from a sibling
 To roll back, set `global.strategy.canary.dark: false`. The canary pod floor and the canary source routes stay; they
 go only with the chart version.
 
+## Canary compare in the release after 4.7.20 (canary Rollouts)
+
+The release after 4.7.20 adds the chart's `compare` AnalysisTemplate (DEVOPS-322). Where a canary Rollout's steps render
+(prod, or `stepsOutsideProd`), the Rollout runs it as background analysis next to `alerts`, from its first weight until
+promotion. Every 2 minutes it reads `http.server.request.duration` from ClickStack's ClickHouse for the canary's and the
+stable pods, matched by pod-template hash, and fails the canary on a higher 5xx ratio or a much slower p95. No stack
+runs a canary Rollout yet. The stack-authoring guidance (`agent-guidance/helm`, Analysis, `compare`) has the full
+behaviour.
+
+| Values | Effect |
+|---|---|
+| `analysis.compare.enabled` (default `true`) | `false` turns compare off for every application of the release: no template, ExternalSecret or background entry. |
+| `applications.<app>.canaryCompare` (default `true`) | `false` turns compare off for that application only. Set it for an application that does not export `http.server.request.duration`: with no stable data, its canary fails at the second measurement. |
+| `analysis.compare.interval` / `initialDelay` (`2m` / `3m`) | The measurement interval and the wait before the first one. Each query covers the last `interval` + 60 s. |
+| `analysis.compare.minRequests` (`100`) | Fewer requests on either side pass the measurement. A second metric, on the same query, fails on no stable data, or on no canary data while stable has `minRequests`; it tolerates one such measurement over the run, and a second aborts the canary. |
+| `analysis.compare.max5xxDelta` (`0.02`) | Fails when the canary's 5xx ratio is above the stable pods' by more. |
+| `analysis.compare.maxP95Ratio` / `minP95DeltaSeconds` (`2.5` / `0.1`) | Fails when the canary's p95 is above the ratio times the stable pods' and also slower by more than the delta. |
+| `analysis.compare.consecutiveErrorLimit` (`4`) | Errors in a row (non-2xx, timeout) the check tolerates. |
+| A `fullName` above 46 characters | Fails the render in every environment while compare is on for the application: the pod names would lose part of the hash. In a `feature<N>` environment without `stepsOutsideProd`, the name is measured without its `-feature<N>` suffix; a feature-environment drill with `stepsOutsideProd` needs the `-feature<N>` name to be 46 characters or fewer. Shorten it, or set `applications.<app>.canaryCompare: false`. |
+| `compare` in `analysis.templates` | Fails the render: it always runs unless opted out. A `compare` entry under `applications.<app>.analysisTemplates` replaces the chart's: the chart declares the args `canary-hash` and `stable-hash` on it, and it runs as background analysis, so set `count: 0` and an `interval` on it to run until promotion. |
+| An explicit analysis step that references the chart's `compare` (`<environment>-<fullName>-compare`, no replacement) | Fails the render, with or without args: its metrics run until promotion, which Argo Rollouts allows only in background analysis. Remove the step; the chart runs compare as background analysis unless it is opted out. |
+| An explicit analysis step that references a replacement `compare` without `analysis.args` `canary-hash` and `stable-hash` | Fails the render: the template declares them with no value, and Argo Rollouts would leave the Rollout InvalidSpec. Pass them with `valueFrom.podTemplateHashValue` `Latest` and `Stable`. |
+| The `fast` preset with `analysis.health.enabled` and `analysis.alerts.enabled` false and no extra template | Fails the render: the preset usually promotes before compare's first measurement (`initialDelay`), so compare does not count as the mandatory analysis there. |
+
+The template reads Vault DevOps `clickhouse/cloud/users/canary-analysis` (`address`, `username`, `password`) through
+the ExternalSecret `<environment>-<fullName>-compare`, a read-only ClickHouse user limited to the histogram tables.
+
 ## Chart Structure
 
 ```
@@ -1695,52 +1722,52 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Global Settings
 
-| Name                                  | Description                                                                                                     | Value         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
-| `global.appStack`                     | Application stack name, used for naming resources and grouping applications                                     | `app`         |
-| `global.gitbranch`                    | Name of the git branch (used for feature branches)                                                              | `""`          |
-| `global.branchlabel`                  | Label for the branch, used for reference label                                                                  | `""`          |
-| `global.language`                     | Default programming language for applications (can be overridden at application level)                          | `csharp`      |
-| `global.disableLanguageSecrets`       | Do not inject the language's default secrets and environment variables (the stack supplies its own)             | `false`       |
-| `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)                                | `false`       |
-| `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                                                   | `""`          |
-| `global.correlationId`                | Correlation ID for tracking deployments across systems                                                          | `""`          |
+| Name                                  | Description                                                                                                                   | Value         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `global.appStack`                     | Application stack name, used for naming resources and grouping applications                                                   | `app`         |
+| `global.gitbranch`                    | Name of the git branch (used for feature branches)                                                                            | `""`          |
+| `global.branchlabel`                  | Label for the branch, used for reference label                                                                                | `""`          |
+| `global.language`                     | Default programming language for applications (can be overridden at application level)                                        | `csharp`      |
+| `global.disableLanguageSecrets`       | Do not inject the language's default secrets and environment variables (the stack supplies its own)                           | `false`       |
+| `global.v2migration`                  | Flag to indicate if we are migrating to v2 (enables certain ArgoCD sync options)                                              | `false`       |
+| `global.commitDeployed`               | Label for the deployed commit (used for tracking deployments)                                                                 | `""`          |
+| `global.correlationId`                | Correlation ID for tracking deployments across systems                                                                        | `""`          |
 | `global.deploymentStrategy`           | The repository's deployment-strategy property, passed in by chart-renderer; only canary turns on the canary steps of Rollouts | `""`          |
-| `global.argoEventsInstance`           | Argo Events namespace the render pipeline runs in (argo-events|argo-events-test); selects TestEngine deployment | `argo-events` |
-| `global.env`                          | Global environment variables shared across all applications                                                     | `{}`          |
-| `global.dependencies`                 | Dependency flags to control infrastructure resources                                                            |               |
-| `global.dependencies.mongodb`         | Enable MongoDB dependency                                                                                       | `false`       |
-| `global.dependencies.elasticsearch`   | Enable Elasticsearch dependency                                                                                 | `false`       |
-| `global.dependencies.redis`           | Enable Redis dependency                                                                                         | `false`       |
-| `global.dependencies.postgres`        | Enable PostgreSQL dependency                                                                                    | `false`       |
-| `global.dependencies.sqlserver`       | Enable SQL Server dependency                                                                                    | `false`       |
-| `global.dependencies.clickhouse`      | Enable ClickHouse dependency                                                                                    | `false`       |
-| `global.dependencies.azureservicebus` | Enable Azure Service Bus dependency                                                                             | `false`       |
-| `global.dependencies.redpanda`        | Enable Redpanda dependency                                                                                      | `false`       |
-| `global.dependencies.loadsure`        | Enable Loadsure dependency                                                                                      | `false`       |
-| `global.dependencies.chargify`        | Enable Chargify dependency                                                                                      | `false`       |
+| `global.argoEventsInstance`           | Argo Events namespace the render pipeline runs in (argo-events|argo-events-test); selects TestEngine deployment               | `argo-events` |
+| `global.env`                          | Global environment variables shared across all applications                                                                   | `{}`          |
+| `global.dependencies`                 | Dependency flags to control infrastructure resources                                                                          |               |
+| `global.dependencies.mongodb`         | Enable MongoDB dependency                                                                                                     | `false`       |
+| `global.dependencies.elasticsearch`   | Enable Elasticsearch dependency                                                                                               | `false`       |
+| `global.dependencies.redis`           | Enable Redis dependency                                                                                                       | `false`       |
+| `global.dependencies.postgres`        | Enable PostgreSQL dependency                                                                                                  | `false`       |
+| `global.dependencies.sqlserver`       | Enable SQL Server dependency                                                                                                  | `false`       |
+| `global.dependencies.clickhouse`      | Enable ClickHouse dependency                                                                                                  | `false`       |
+| `global.dependencies.azureservicebus` | Enable Azure Service Bus dependency                                                                                           | `false`       |
+| `global.dependencies.redpanda`        | Enable Redpanda dependency                                                                                                    | `false`       |
+| `global.dependencies.loadsure`        | Enable Loadsure dependency                                                                                                    | `false`       |
+| `global.dependencies.chargify`        | Enable Chargify dependency                                                                                                    | `false`       |
 
 ### Environment Settings
 
-| Name                                 | Description                                                                                                     | Value         |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------- |
+| Name                                 | Description                                                                                                                                                                                                                                                                                                          | Value         |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | `environment.name`                   | Environment name / namespace (DNS-1123 label). Standard names (dev, preprod, prod, qa, uat, feature-*) have built-in behavior; any other name (e.g. demo) is allowed and treated as a generic environment — configure it explicitly via global.env / application.env / secrets (the same way qa/uat are configured). | `dev`         |
-| `environment.namespaceOverride`      | Override the Kubernetes namespace (defaults to environment.name if not set)                                     | `""`          |
-| `environment.dependencyenv`          | Environment name for dependencies                                                                               | `dev`         |
-| `environment.domainOverride`         | Domain override configuration                                                                                   |               |
-| `environment.domainOverride.enabled` | Whether to override the default domain (default domains: mycarrier.dev for non-prod, mycarriertms.com for prod) | `false`       |
-| `environment.domainOverride.domain`  | Domain to use when override is enabled                                                                          | `example.com` |
+| `environment.namespaceOverride`      | Override the Kubernetes namespace (defaults to environment.name if not set)                                                                                                                                                                                                                                          | `""`          |
+| `environment.dependencyenv`          | Environment name for dependencies                                                                                                                                                                                                                                                                                    | `dev`         |
+| `environment.domainOverride`         | Domain override configuration                                                                                                                                                                                                                                                                                        |               |
+| `environment.domainOverride.enabled` | Whether to override the default domain (default domains: mycarrier.dev for non-prod, mycarriertms.com for prod)                                                                                                                                                                                                      | `false`       |
+| `environment.domainOverride.domain`  | Domain to use when override is enabled                                                                                                                                                                                                                                                                               | `example.com` |
 
 ### Platform Settings
 
-| Name                             | Description                                                                            | Value        |
-| -------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
+| Name                             | Description                                                                                                                                           | Value        |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | `enableVaultCA`                  | Enable Vault CA certificate download during pod startup (no-op: its postStart hook was removed in DEVOPS-176; flag retained for values compatibility) | `false`      |
-| `disableSecurity`                | BREAK-GLASS ONLY (discouraged). When true, every pod in the release renders without runAsNonRoot/securityContext hardening — release-wide, cannot be scoped per-application. Only flag that removes the hardening block (`enableDebugMode`'s privileged sidecar is a separate route). Kyverno `require-run-as-non-root` is Enforce only on development (Audit on production-csp/data). Not settable through mc-environment `environments[]` — direct mycarrier-helm values only, by design: this keeps the blast radius limited to whoever edits mycarrier-helm values directly, and it is intentionally not plumbed through mc-environment / the ApplicationSet path. | `false`      |
-| `manualOtelConfig`               | Take over OpenTelemetry configuration from the chart (default false = chart-managed)   | `false`      |
-| `disableOtelAutoinstrumentation` | Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)      | `true`       |
-| `tolerations`                    | Default tolerations for all applications                                               | `[]`         |
-| `deployment`                     | Deployment folder name (should match the subfolder containing the specific deployment) | `deployment` |
+| `disableSecurity`                | BREAK-GLASS ONLY (discouraged): when true, every pod in the release renders without runAsNonRoot/securityContext hardening                            | `false`      |
+| `manualOtelConfig`               | Take over OpenTelemetry configuration from the chart (default false = chart-managed)                                                                  | `false`      |
+| `disableOtelAutoinstrumentation` | Disable OpenTelemetry Operator auto-instrumentation only (set to false to enable)                                                                     | `true`       |
+| `tolerations`                    | Default tolerations for all applications                                                                                                              | `[]`         |
+| `deployment`                     | Deployment folder name (should match the subfolder containing the specific deployment)                                                                | `deployment` |
 
 ### Applications
 
@@ -1771,39 +1798,45 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Infrastructure Resources
 
-| Name                                              | Description                                                            | Value |
-| ------------------------------------------------- | ---------------------------------------------------------------------- | ----- |
-| `infrastructure`                                  | Infrastructure configuration                                           |       |
-| `infrastructure.azure`                            | Azure infrastructure resources                                         |       |
-| `infrastructure.azure.defaults`                   | Default values shared across all Azure resources                       |       |
-| `infrastructure.azure.defaults.location`          | Default Azure region for all resources (empty = must set per-resource) | `""`  |
-| `infrastructure.azure.defaults.providerConfigRef` | Default Crossplane ProviderConfig name                                 | `""`  |
-| `infrastructure.azure.resourceGroup`              | Azure Resource Group configurations                                    | `[]`  |
-| `infrastructure.azure.storage`                    | Azure Storage configuration                                            |       |
-| `infrastructure.azure.storage.accounts`           | Azure storage account configurations                                   | `[]`  |
-| `infrastructure.azure.servicebus`                 | Azure Service Bus namespace configurations                             | `[]`  |
+| Name                                              | Description                                                                                                                                                         | Value |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `infrastructure`                                  | Infrastructure configuration                                                                                                                                        |       |
+| `infrastructure.azure`                            | Azure infrastructure resources                                                                                                                                      |       |
+| `infrastructure.azure.defaults`                   | Default values shared across all Azure resources                                                                                                                    |       |
+| `infrastructure.azure.defaults.location`          | Default Azure region for all resources (empty = must set per-resource)                                                                                              | `""`  |
+| `infrastructure.azure.defaults.providerConfigRef` | Default Crossplane ProviderConfig name (empty = auto: resourceGroup/storage use "default"; servicebus is environment-aware — dev="default", preprod/prod="baseitm") | `""`  |
+| `infrastructure.azure.resourceGroup`              | Azure Resource Group configurations                                                                                                                                 | `[]`  |
+| `infrastructure.azure.storage`                    | Azure Storage configuration                                                                                                                                         |       |
+| `infrastructure.azure.storage.accounts`           | Azure storage account configurations                                                                                                                                | `[]`  |
+| `infrastructure.azure.servicebus`                 | Azure Service Bus namespace configurations                                                                                                                          | `[]`  |
 
 ### Alerts
 
-| Name                              | Description                                                                                                                                                                                                                            | Value                                  |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `alerts.enabled`                  | Render the stack's alerts                                                                                                                                                                                                              | `false`                                |
-| `alerts.serviceName`              | HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled                                                                                                                                                  | `""`                                   |
-| `alerts.displayName`              | Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled                                                                                                                                    | `""`                                   |
-| `alerts.interval`                 | Rule group evaluation interval                                                                                                                                                                                                         | `60s`                                  |
-| `alerts.paused`                   | Default isPaused for standard and compact rules (raw rules keep their own isPaused)                                                                                                                                                    | `false`                                |
-| `alerts.filters.excludedPaths`    | Paths left out of the alerts on the service's own HTTP responses (serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned): url.path values, or http.route values for nodejs                                             | `[]`                                   |
-| `alerts.standard`                 | Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1/sev2/sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists | `{}`                                   |
-| `alerts.additional`               | Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: a Grafana AlertRule)                                                                                                                                 | `{}`                                   |
-| `alerts.contactPoints.secretName` | Secret holding the Squadcast webhook URLs                                                                                                                                                                                              | `squadcast-webhooks`                   |
-| `alerts.contactPoints.secretKey`  | Secret key of the general webhook (default: serviceName lowercased); the Sev1 contact point uses this key plus -sev1                                                                                                                   | `""`                                   |
-| `alerts.routing.routes`           | Extra child routes under the stack's notification route, after the Sev1 route                                                                                                                                                          | `[]`                                   |
+| Name                              | Description                                                                                                                                                                                                                            | Value                |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `alerts.enabled`                  | Render the stack's alerts                                                                                                                                                                                                              | `false`              |
+| `alerts.serviceName`              | HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled                                                                                                                                                  | `""`                 |
+| `alerts.displayName`              | Display name ([A-Za-z0-9]+, e.g. Invoice): resource names, titles, rule uids; required when enabled                                                                                                                                    | `""`                 |
+| `alerts.interval`                 | Rule group evaluation interval                                                                                                                                                                                                         | `60s`                |
+| `alerts.paused`                   | Default isPaused for standard and compact rules (raw rules keep their own isPaused)                                                                                                                                                    | `false`              |
+| `alerts.filters.excludedPaths`    | Paths left out of the alerts on the service's own HTTP responses (serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned): url.path values, or http.route values for nodejs                                             | `[]`                 |
+| `alerts.standard`                 | Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1/sev2/sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists | `{}`                 |
+| `alerts.additional`               | Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: a Grafana AlertRule)                                                                                                                                 | `{}`                 |
+| `alerts.contactPoints.secretName` | Secret holding the Squadcast webhook URLs                                                                                                                                                                                              | `squadcast-webhooks` |
+| `alerts.contactPoints.secretKey`  | Secret key of the general webhook (default: serviceName lowercased); the Sev1 contact point uses this key plus -sev1                                                                                                                   | `""`                 |
+| `alerts.routing.routes`           | Extra child routes under the stack's notification route, after the Sev1 route                                                                                                                                                          | `[]`                 |
 
 ### Deployment Settings
 
 | Name                  | Description                                                                            | Value   |
 | --------------------- | -------------------------------------------------------------------------------------- | ------- |
 | `isEnvironmentDeploy` | Whether this is an environment-level deployment (affects resource naming and behavior) | `false` |
+
+### Dependency deployments
+
+| Name                                    | Description                                                                          | Value   |
+| --------------------------------------- | ------------------------------------------------------------------------------------ | ------- |
+| `dependencyDeployments.mongodb.enabled` | Deploy a MongoDB replica set with the stack; MongoConnection_<env> then points at it | `false` |
 
 ## License
 

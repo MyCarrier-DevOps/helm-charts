@@ -1,0 +1,9 @@
+# The compare check (global.strategy.canary.analysis.compare, on by default since DEVOPS-322) turned off, for suites
+# whose canary Rollouts are not about it: with it on, every Rollout whose steps render gets the compare template, its
+# ExternalSecret and a second background analysis template. A test's own set overrides it.
+global:
+  strategy:
+    canary:
+      analysis:
+        compare:
+          enabled: false
