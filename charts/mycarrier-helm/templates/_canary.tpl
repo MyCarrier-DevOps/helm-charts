@@ -170,6 +170,23 @@
 {{- $steps := list -}}
 {{- if $cfg.steps }}
 {{- $steps = $cfg.steps -}}
+{{- /* The compare template, the chart's or a replacement, declares the args canary-hash and stable-hash with no
+       value; the background analysis passes them (helm.canary.backgroundAnalysis). Argo Rollouts resolves a step's
+       templates with the step's own args, on every reconcile, so a step that references compare without both leaves
+       the Rollout InvalidSpec ("args.canary-hash was not resolved") before any step runs. A default value would
+       compare empty hashes and match no pod, so the step must pass them. */ -}}
+{{- $compareRef := printf "%s-%s-compare" .Values.environment.name $fullName -}}
+{{- range $i, $step := $steps -}}
+  {{- $refs := list -}}
+  {{- range (dig "analysis" "templates" list $step) }}{{ $refs = append $refs (toString .templateName) }}{{ end -}}
+  {{- if has $compareRef $refs -}}
+    {{- $args := list -}}
+    {{- range (dig "analysis" "args" list $step) }}{{ $args = append $args (toString .name) }}{{ end -}}
+    {{- if not (and (has "canary-hash" $args) (has "stable-hash" $args)) -}}
+      {{- fail (printf "application '%s': global.strategy.canary.steps[%d] references %s without the args canary-hash and stable-hash, which the compare template declares, so Argo Rollouts would leave the Rollout InvalidSpec. Pass them in the step's analysis.args: canary-hash with valueFrom.podTemplateHashValue Latest and stable-hash with valueFrom.podTemplateHashValue Stable. Or remove the step: compare already runs as background analysis from the first weight until promotion." $.appName $i $compareRef) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 {{- else }}
 {{- $analysisStep := dict -}}
 {{- $available := include "helm.canary.analysis.available" . | fromJsonArray -}}

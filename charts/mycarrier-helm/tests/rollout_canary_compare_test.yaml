@@ -643,6 +643,83 @@ tests:
             - name: canary-hash
             - name: stable-hash
 
+  # Argo Rollouts resolves a step's templates with the step's own args, so a step that references compare without
+  # the two hashes leaves the Rollout InvalidSpec ("args.canary-hash was not resolved") at its first sync.
+  - it: fails an explicit analysis step that references compare without the canary and stable hashes
+    template: rollout.yaml
+    set: &explicitCompareStep
+      <<: *prod
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            budgetSeconds: 600
+            steps:
+              - setWeight: 10
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-compare
+              - pause: {duration: 5m}
+              - setWeight: 100
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          analysisTemplates:
+            - name: compare
+              count: 1
+              provider:
+                web:
+                  url: "http://compare.example/check?canary={{args.canary-hash}}&stable={{args.stable-hash}}"
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': global.strategy.canary.steps\\[1\\] references prod-mycarrier-api-compare without the args canary-hash and stable-hash"
+
+  - it: renders an explicit analysis step that passes compare the canary and stable hashes
+    template: rollout.yaml
+    set:
+      <<: *explicitCompareStep
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            budgetSeconds: 600
+            steps:
+              - setWeight: 10
+              - analysis:
+                  templates:
+                    - templateName: prod-mycarrier-api-compare
+                  args:
+                    - name: canary-hash
+                      valueFrom:
+                        podTemplateHashValue: Latest
+                    - name: stable-hash
+                      valueFrom:
+                        podTemplateHashValue: Stable
+              - pause: {duration: 5m}
+              - setWeight: 100
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1].analysis.args
+          value:
+            - name: canary-hash
+              valueFrom:
+                podTemplateHashValue: Latest
+            - name: stable-hash
+              valueFrom:
+                podTemplateHashValue: Stable
+
   - it: declares no args on a replacement entry of another name
     template: analysistemplate.yaml
     documentSelector:

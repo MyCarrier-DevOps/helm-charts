@@ -303,9 +303,9 @@ latency against stable on callees that take most of their traffic from a sibling
 To roll back, set `global.strategy.canary.dark: false`. The canary pod floor and the canary source routes stay; they
 go only with the chart version.
 
-## Canary compare in the release after 4.7.19 (canary Rollouts)
+## Canary compare in the release after 4.7.20 (canary Rollouts)
 
-The release after 4.7.19 adds the chart's `compare` AnalysisTemplate (DEVOPS-322). Where a canary Rollout's steps render
+The release after 4.7.20 adds the chart's `compare` AnalysisTemplate (DEVOPS-322). Where a canary Rollout's steps render
 (prod, or `stepsOutsideProd`), the Rollout runs it as background analysis next to `alerts`, from its first weight until
 promotion. Every 2 minutes it reads `http.server.request.duration` from ClickStack's ClickHouse for the canary's and the
 stable pods, matched by pod-template hash, and fails the canary on a higher 5xx ratio or a much slower p95. No stack
@@ -323,6 +323,7 @@ behaviour.
 | `analysis.compare.consecutiveErrorLimit` (`4`) | Errors in a row (non-2xx, timeout) the check tolerates. |
 | A `fullName` above 46 characters | Fails the render in every environment while compare is on for the application: the pod names would lose part of the hash. In a `feature<N>` environment without `stepsOutsideProd`, the name is measured without its `-feature<N>` suffix; a feature-environment drill with `stepsOutsideProd` needs the `-feature<N>` name to be 46 characters or fewer. Shorten it, or set `applications.<app>.canaryCompare: false`. |
 | `compare` in `analysis.templates` | Fails the render: it always runs unless opted out. A `compare` entry under `applications.<app>.analysisTemplates` replaces the chart's: the chart declares the args `canary-hash` and `stable-hash` on it, and it runs as background analysis, so set `count: 0` and an `interval` on it to run until promotion. |
+| An explicit analysis step that references `<environment>-<fullName>-compare` without `analysis.args` `canary-hash` and `stable-hash` | Fails the render: the template declares them with no value, and Argo Rollouts would leave the Rollout InvalidSpec. Pass them with `valueFrom.podTemplateHashValue` `Latest` and `Stable`, or remove the step: compare already runs as background analysis. |
 | The `fast` preset with `analysis.health.enabled` and `analysis.alerts.enabled` false and no extra template | Fails the render: the preset usually promotes before compare's first measurement (`initialDelay`), so compare does not count as the mandatory analysis there. |
 
 The template reads Vault DevOps `clickhouse/cloud/users/canary-analysis` (`address`, `username`, `password`) through
