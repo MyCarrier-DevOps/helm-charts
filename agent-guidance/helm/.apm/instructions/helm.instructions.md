@@ -130,6 +130,8 @@ For each `environments[]` entry, mc-environment builds the values of the generat
 3. `environments[].applications`, `jobs`, `cronjobs`, `secrets`, `infrastructure`, `dependencyDeployments`, `extraObjects` and the platform flags (see [mc-environment Specific Properties](#mc-environment-specific-properties)), unchanged
 4. The root-level `alerts`, unchanged and the same for every entry
 
+Because the `environments` list is replaced whole, a test definition's `env` (and the whole `testtrigger`) comes from the last values file whose `environments[]` contains the entry: nothing merges across files, and a later file whose entry has no `testtrigger` means no `env` and no tests. See [Test pod environment variables](#test-pod-environment-variables-env).
+
 The result is serialized into the ArgoCD `Application.spec.source.helm.values`, and Argo CD renders `mycarrier-helm` with it.
 
 ### Environments and their classes
@@ -1151,6 +1153,8 @@ applications:
       ttlSecondsAfterFinished: "3600"
       apikey: vault:DevOps/data/testengine/api#encoded_header
       enableV1: true
+      env:                              # optional: variables for every test container (see Test pod environment variables)
+        RESULTS_DB: "qa-results"
       testdefinitions:
         - containerImage: testing/myorg/myservice/tests
           containerTag: 1.0.0
@@ -1160,6 +1164,69 @@ applications:
 ```
 
 The trigger Job's pod carries the application's labels, except `app.kubernetes.io/name` and `app`, which are `<fullName>-trigger`. This keeps the pod from matching the application's Service and PDB selectors, and from being counted by its HPA.
+
+### Test pod environment variables (`env`)
+
+`env` takes effect when the pipeline pins mycarrier-helm ≥ not yet pinned and autotriggertests ≥ not yet pinned; until then it is ignored.
+
+`env` sets environment variables on the test container that TestEngine starts, as `TestEnvironmentVariables.EnvVars` in the request the chart renders.
+
+```yaml
+applications:
+  api:
+    testtrigger:
+      env:                              # every test definition of this application
+        RESULTS_DB: "qa-results"
+      testdefinitions:
+        - name: apitests
+          # ... containerImage, containerTag, secretId, filters ...
+          env:                          # this definition only; wins over testtrigger.env on a name clash
+            SHARED_KEY: "vault:QA/data/x#y"
+```
+
+**Where**
+- `testtrigger.env` applies to every definition; `testdefinitions[].env` to that definition, and wins on a clash. The two merge key by key.
+- Layout A: `testtrigger.env` merges key by key across `helm/deployment/values.yaml` and `helm/deployment/values.<env>.yaml`, and `testdefinitions` is replaced whole by the later file.
+- Layout B: Helm replaces the whole `environments` list, so nothing merges across files. For each values file whose `environments[]` contains the target entry, that entry's `applications.<app>.testtrigger` (possibly absent) is taken, and the last such file wins whole. A later file whose entry has no `testtrigger` therefore means no `env` and no tests from `env`.
+- `env: null` means none.
+
+**Values**
+- Quote every value. A number, boolean, null, map or list (also through a YAML alias) is refused: `yes`, `no`, `on`, `off`, `~` and numbers with a leading zero (`017`) must be quoted too. A plain `2026-10-30` is a string. A duplicate key inside one `env` block: the last one wins.
+- Quote names that YAML 1.1 reads as booleans (`y`, `n`, `yes`, `no`, `on`, `off`, `true`, `false`, in any case): unquoted, Helm turns them into `true` or `false`, which the chart refuses (`invalid_name`). A `~` name is refused by Helm itself while it reads the file. Names in error messages are not clipped.
+
+**Limits**
+- Name: `^[A-Za-z_][A-Za-z0-9_]*$`. No two names that differ only in case (the first in sorted order is reported).
+- 50 entries per definition after the merge; 4096 bytes per value; 16384 bytes of names plus values per definition; 65536 bytes per v1 request (all definitions of one application).
+- The escaped hook body, canary request and legacy script are at most 100 KiB (a `'` counts 6 bytes, a `$` counts 2).
+- No control characters in a value (any character below space, and DEL).
+
+**Overriding TestEngine's defaults.** `env` may set a name TestEngine already sets on the test container (`ENVIRONMENT`, `SECRETID`, `SERVICE_ADDRESS`, `HOME`, `TMPDIR`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and others): the `env` value replaces the default on the test container only. Overriding `HOME` or `TMPDIR` with a path that is not writable on the hardened read-only root breaks your own tests. Overriding `ENVIRONMENT`, `RELEASE_ID`, `RELEASE_DEFINITION_NAME` or `BRANCH_NAME` also changes what mc-test-cli files the uploaded results under, which is the service's choice.
+
+**Protected names** are refused with `protected_name`, compared case-insensitively:
+
+| Name | Why it cannot be overridden |
+|------|-----------------------------|
+| prefix `VAULT_` | Bank-Vaults' `vault-env` reads `VAULT_ADDR`, `VAULT_ROLE`, `VAULT_PATH` and the like to pick the Vault server and role; an override could resolve `vault:` references with another role or server and bypass the `QA/` rule |
+| prefix `LD_` | `LD_PRELOAD` and `LD_LIBRARY_PATH` load code into `vault-env`, which holds the Vault token, before the test program starts |
+| `PATH` | `vault-env` starts the container command by name, so `PATH` chooses which program runs with the resolved secrets in its environment |
+| `AUTOTEST_RESULTS_API_URL`, `AUTOTEST_RESULTS_API_KEY` | mc-test-cli uploads results to the URL with the platform's key: a URL override sends the key to any host, a key override files results under another identity |
+| `REQUEST_HEADERS` | The tests' only route to the canary; an override sends them to stable while the deploy verifier still passes |
+| `CORRELATION_ID` | Identifies the run in the results upload and feeds `OTEL_RESOURCE_ATTRIBUTES` |
+| `RUN_KIND` | Tests read it as `IsCanaryRun`; a wrong value makes canary-aware tests behave as a normal run, or the reverse |
+| `BATCH_ID`, `PARTITION_ID`, `JOB_NUMBER`, `ATTEMPT`, `ATTEMPT_ID`, `TEST_CATEGORY`, `TOTAL_TEST_JOB_COUNT` | TestEngine computes them for each run, partition or job; they identify the run's results and traces, and a fixed `ATTEMPT` mixes a retry's results with the first run's |
+| `OTEL_RESOURCE_ATTRIBUTES` | Carries the batch, partition, job and correlation ids that tie the test's traces to the run; its `k8s.*` inputs (`OTEL_RESOURCE_ATTRIBUTES_NODE_NAME`, `OTEL_RESOURCE_ATTRIBUTES_POD_*`) stay overridable |
+| `TRACEPARENT` | The tests' tracing picks the run's trace from it first; a values-file value would put every run of the service under one fixed trace |
+
+`TRACESTATE` and the other W3C and OTel variables a service sets are its own business; only `TRACEPARENT` is protected.
+
+**Secrets.** Only `vault:QA/...` references. Every `vault:` in a value must be followed by `QA/`, with no `..` path segment (up to the next `#`). Never a plain secret in a values file.
+
+**What renders.** `TestEnvironmentVariables.EnvVars` in the PostSync hook (v1 and legacy body), the prod-tests ConfigMap and the canary `TESTS_REQUEST`; omitted when empty. The hook body and the canary request are now escaped (`'` and `$`, and `{{` on the canary), so a stack whose testtrigger fields hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal.
+
+**Failure**
+- The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <code>`. Codes: `invalid_name`, `protected_name`, `duplicate_name`, `invalid_value`, `control_character`, `value_too_large`, `vault_prefix_not_allowed`, `too_many`, `definition_too_large`, `request_too_large`. The message names the variable, never the value; `too_many`, `definition_too_large`, `request_too_large` and a non-map `env` leave out the `variable` part.
+- Some inputs are refused first by the schema, with Helm's own message naming the path.
+- Layout B: the chart schema from `main` applies at once; the other rules fail at the Argo CD sync.
 
 ### Test triggers of Rollouts in prod
 
@@ -1212,12 +1279,16 @@ applications:
       tag: release-v1.0.0
     testtrigger:
       apikey: vault:DevOps/data/testengine/api#encoded_header
+      env:
+        RESULTS_DB: "qa-results"
       testdefinitions:
         - name: apitests
           containerImage: testing/myorg/myservice/tests
           containerTag: 1.0.0
           secretId: vault:QA/data/app_auth#SecretId
           filters: ["TestCategory=CoreAPI"]
+          env:
+            SHARED_KEY: "vault:QA/data/x#y"
 ```
 
 ### Test Trigger Parameters
@@ -1230,13 +1301,15 @@ applications:
 | `enableV1` | `true`: one request with every test definition to TestEngine's v1 API; `false`: one request per test definition to the legacy API, which is retired | `true` |
 | `backoffLimit` | Retry count on failure | `0` |
 | `resources` | Resource requests/limits for the trigger job pod | `100m`/`128Mi` requests, `500m`/`256Mi` limits |
+| `env` | Environment variables for every test definition's test container: a map of names to quoted strings. See [Test pod environment variables](#test-pod-environment-variables-env) | Not set |
 | `testdefinitions[].containerImage` | Test container image | Required |
 | `testdefinitions[].containerTag` | Test container tag | Required |
 | `testdefinitions[].filters` | Test category filters: a list of strings or one string | `[]` (runs all) |
 | `testdefinitions[].name` | Test name identifier | Required |
 | `testdefinitions[].secretId` | Auth secret (vault ref) | Required |
 | `testdefinitions[].serviceAddress` | Override target service address. With canary `tests`, it must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port: the canary run keeps its path on the `-preview` Service, and another host or port fails the render | Auto: `http://<fullname>.<ns>.svc.cluster.local:<ports.http>` |
-| `testdefinitions[].additionalEnvVars` | Extra env vars for test container | `""` (format: `key1=value1;key2=value2`) |
+| `testdefinitions[].env` | Environment variables for this definition's test container, merged over `testtrigger.env` (this definition wins). See [Test pod environment variables](#test-pod-environment-variables-env) | Not set |
+| `testdefinitions[].additionalEnvVars` | **Deprecated**: use `env`. Reaches the pod as one variable, `ADDITIONAL_ENV_VARS`, entries separated by `;` (format: `key1=value1;key2=value2`) | `""` |
 | `testdefinitions[].resultsApiKey` | autotest-results-api key, as `AUTOTEST_RESULTS_API_KEY` on the test container: `vault:DevOps/data/autotestresults_api/api#key`, the key the results API reads. Must be a `vault:` reference: a literal value fails the render. Set together with `resultsApiUrl` | Not set |
 | `testdefinitions[].resultsApiUrl` | autotest-results-api base URL, as `AUTOTEST_RESULTS_API_URL` on the test container: `vault:QA/data/autotestresults_api#url`, or an `https` URL under `mycarrier.tech` with no user info (the schema refuses anything else). Set together with `resultsApiKey`: one without the other fails the render. No default | Not set |
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
