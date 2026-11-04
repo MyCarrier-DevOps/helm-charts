@@ -1,0 +1,324 @@
+'baseline: v1 hook body without env':
+  1: |
+    |
+      set -u
+      failed=0
+      curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
+      --max-time 60 \
+      -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: $TESTENGINE_APIKEY" \
+      -d '{
+        "Tests": [
+          {
+            "ContainerImage": "testing/mycarrier/api/tests",
+            "ContainerTag": "1.0.0",
+            "HardenedSecurityContext": true,
+            "IsMonolith": false,
+            "NodeAffinity": [
+              {
+                "key": "kubernetes.azure.com/agentpool",
+                "operator": "In",
+                "values": [
+                  "testpool"
+                ]
+              }
+            ],
+            "PodResources": {
+              "limits": {
+                "cpu": "2000m",
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "250m",
+                "memory": "1Gi"
+              }
+            },
+            "SpreadAcrossNodes": "true",
+            "StackName": "mycarrier",
+            "TestEnvironmentVariables": {
+              "AdditionalEnvVars": "a=b;c=d",
+              "BranchName": "main",
+              "CorrelationId": "corr-1",
+              "EnvironmentName": "dev",
+              "LegacyMode": "false",
+              "ReleaseDefinitionName": "mycarrier-api",
+              "ReleaseId": "1.0.0",
+              "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+              "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+              "SecretId": "vault:QA/data/app_auth#SecretId",
+              "ServiceAddress": "http://mycarrier-api.dev.svc.cluster.local:8080"
+            },
+            "TestFilters": [
+              "TestCategory=CoreAPI",
+              "Priority=High"
+            ],
+            "TestName": "apitests",
+            "Tolerations": [
+              {
+                "effect": "NoSchedule",
+                "key": "workload",
+                "operator": "Equal",
+                "value": "tests"
+              }
+            ],
+            "UseDefaultNodeAffinity": "false"
+          },
+          {
+            "ContainerImage": "testing/mycarrier/api/uitests",
+            "ContainerTag": "2.0.0",
+            "HardenedSecurityContext": true,
+            "IsMonolith": false,
+            "NodeAffinity": [
+              {
+                "key": "kubernetes.azure.com/agentpool",
+                "operator": "In",
+                "values": [
+                  "testpool"
+                ]
+              }
+            ],
+            "PodResources": {
+              "limits": {
+                "cpu": "2000m",
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "250m",
+                "memory": "1Gi"
+              }
+            },
+            "SpreadAcrossNodes": "true",
+            "StackName": "mycarrier",
+            "TestEnvironmentVariables": {
+              "AdditionalEnvVars": "a=b;c=d",
+              "BranchName": "main",
+              "CorrelationId": "corr-1",
+              "EnvironmentName": "dev",
+              "LegacyMode": "false",
+              "ReleaseDefinitionName": "mycarrier-api",
+              "ReleaseId": "1.0.0",
+              "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+              "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+              "SecretId": "vault:QA/data/app_auth#SecretId",
+              "ServiceAddress": "http://mycarrier-api.dev.svc.cluster.local:8080"
+            },
+            "TestFilters": [
+              "TestCategory=UI"
+            ],
+            "TestName": "uitests",
+            "Tolerations": [
+              {
+                "effect": "NoSchedule",
+                "key": "workload",
+                "operator": "Equal",
+                "value": "tests"
+              }
+            ],
+            "UseDefaultNodeAffinity": "false"
+          }
+        ]
+      }' "$TESTENGINEHOOK_URL" || {
+        rc=$?
+        echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
+        failed=$((failed+1))
+      }
+      if [ "$failed" -gt 0 ]; then
+        echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+      fi
+      exit 0
+'baseline: legacy hook body without env':
+  1: |
+    |
+      set -u
+      failed=0
+      curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
+      --max-time 60 \
+      -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: $TESTENGINE_APIKEY" \
+      -d '{
+        "IsMonolith": false,
+        "TestName": "apitests",
+        "StackName": "mycarrier",
+        "ContainerImage": "testing/mycarrier/api/tests",
+        "ContainerTag": "1.0.0",
+        "HardenedSecurityContext": true,
+        "TestFilters": ["TestCategory=CoreAPI","Priority=High"],
+        "Tolerations": [{"effect":"NoSchedule","key":"workload","operator":"Equal","value":"tests"}],
+        "NodeAffinity": [{"key":"kubernetes.azure.com/agentpool","operator":"In","values":["testpool"]}],
+        "UseDefaultNodeAffinity": "false",
+        "SpreadAcrossNodes": "true",
+        "PodResources": {"limits":{"cpu":"2000m","memory":"4Gi"},"requests":{"cpu":"250m","memory":"1Gi"}},
+        "TestEnvironmentVariables": {
+            "EnvironmentName": "dev",
+            "ReleaseId": "1.0.0",
+            "SecretId": "vault:QA/data/app_auth#SecretId",
+            "ServiceAddress": "http://mycarrier-api.dev.svc.cluster.local:8080",
+            "ReleaseDefinitionName": "mycarrier-api",
+            "BranchName": "main",
+            "AdditionalEnvVars": "a=b;c=d",
+            "CorrelationId": "corr-1",
+            "LegacyMode": "false",
+            "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+            "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key"
+          }
+        }' "$TESTENGINEHOOK_URL" || {
+        rc=$?
+        echo "ERROR: TestEngine trigger failed for "'apitests'" (curl exit $rc)" >&2
+        failed=$((failed+1))
+      }
+      curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
+      --max-time 60 \
+      -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: $TESTENGINE_APIKEY" \
+      -d '{
+        "IsMonolith": false,
+        "TestName": "uitests",
+        "StackName": "mycarrier",
+        "ContainerImage": "testing/mycarrier/api/uitests",
+        "ContainerTag": "2.0.0",
+        "HardenedSecurityContext": true,
+        "TestFilters": ["TestCategory=UI"],
+        "Tolerations": [{"effect":"NoSchedule","key":"workload","operator":"Equal","value":"tests"}],
+        "NodeAffinity": [{"key":"kubernetes.azure.com/agentpool","operator":"In","values":["testpool"]}],
+        "UseDefaultNodeAffinity": "false",
+        "SpreadAcrossNodes": "true",
+        "PodResources": {"limits":{"cpu":"2000m","memory":"4Gi"},"requests":{"cpu":"250m","memory":"1Gi"}},
+        "TestEnvironmentVariables": {
+            "EnvironmentName": "dev",
+            "ReleaseId": "1.0.0",
+            "SecretId": "vault:QA/data/app_auth#SecretId",
+            "ServiceAddress": "http://mycarrier-api.dev.svc.cluster.local:8080",
+            "ReleaseDefinitionName": "mycarrier-api",
+            "BranchName": "main",
+            "AdditionalEnvVars": "a=b;c=d",
+            "CorrelationId": "corr-1",
+            "LegacyMode": "false",
+            "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+            "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key"
+          }
+        }' "$TESTENGINEHOOK_URL" || {
+        rc=$?
+        echo "ERROR: TestEngine trigger failed for "'uitests'" (curl exit $rc)" >&2
+        failed=$((failed+1))
+      }
+      if [ "$failed" -gt 0 ]; then
+        echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+      fi
+      exit 0
+'baseline: prod-tests ConfigMap without env':
+  1: |
+    |-
+      {
+        "Tests": [
+          {
+            "ContainerImage": "testing/mycarrier/api/tests",
+            "ContainerTag": "1.0.0",
+            "HardenedSecurityContext": true,
+            "IsMonolith": false,
+            "NodeAffinity": [
+              {
+                "key": "kubernetes.azure.com/agentpool",
+                "operator": "In",
+                "values": [
+                  "testpool"
+                ]
+              }
+            ],
+            "PodResources": {
+              "limits": {
+                "cpu": "2000m",
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "250m",
+                "memory": "1Gi"
+              }
+            },
+            "SpreadAcrossNodes": "true",
+            "StackName": "mycarrier",
+            "TestEnvironmentVariables": {
+              "AdditionalEnvVars": "a=b;c=d",
+              "BranchName": "main",
+              "CorrelationId": "corr-1",
+              "EnvironmentName": "prod",
+              "LegacyMode": "false",
+              "ReleaseDefinitionName": "mycarrier-api",
+              "ReleaseId": "1.0.0",
+              "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+              "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+              "SecretId": "vault:QA/data/app_auth#SecretId",
+              "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080"
+            },
+            "TestFilters": [
+              "TestCategory=CoreAPI",
+              "Priority=High"
+            ],
+            "TestName": "apitests",
+            "Tolerations": [
+              {
+                "effect": "NoSchedule",
+                "key": "workload",
+                "operator": "Equal",
+                "value": "tests"
+              }
+            ],
+            "UseDefaultNodeAffinity": "false"
+          },
+          {
+            "ContainerImage": "testing/mycarrier/api/uitests",
+            "ContainerTag": "2.0.0",
+            "HardenedSecurityContext": true,
+            "IsMonolith": false,
+            "NodeAffinity": [
+              {
+                "key": "kubernetes.azure.com/agentpool",
+                "operator": "In",
+                "values": [
+                  "testpool"
+                ]
+              }
+            ],
+            "PodResources": {
+              "limits": {
+                "cpu": "2000m",
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "250m",
+                "memory": "1Gi"
+              }
+            },
+            "SpreadAcrossNodes": "true",
+            "StackName": "mycarrier",
+            "TestEnvironmentVariables": {
+              "AdditionalEnvVars": "a=b;c=d",
+              "BranchName": "main",
+              "CorrelationId": "corr-1",
+              "EnvironmentName": "prod",
+              "LegacyMode": "false",
+              "ReleaseDefinitionName": "mycarrier-api",
+              "ReleaseId": "1.0.0",
+              "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
+              "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
+              "SecretId": "vault:QA/data/app_auth#SecretId",
+              "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080"
+            },
+            "TestFilters": [
+              "TestCategory=UI"
+            ],
+            "TestName": "uitests",
+            "Tolerations": [
+              {
+                "effect": "NoSchedule",
+                "key": "workload",
+                "operator": "Equal",
+                "value": "tests"
+              }
+            ],
+            "UseDefaultNodeAffinity": "false"
+          }
+        ]
+      }

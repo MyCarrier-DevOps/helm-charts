@@ -1,0 +1,190 @@
+suite: Baseline of the trigger request bodies without env (AQA-81)
+# Snapshots of what a typical testtrigger with no env renders: the PostSync hook body (v1 and legacy) and the
+# prod-tests ConfigMap body. They were taken on unchanged main, before testtrigger.env existed. Every later change
+# must keep them passing without -u. The values hold no $, ' or {{ on purpose. Snapshot paths only, so the chart's
+# version bump never changes them.
+templates:
+  - triggertestengine.yaml
+tests:
+  - it: "baseline: v1 hook body without env"
+    set:
+      global:
+        deploymentStrategy: rolling
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        gitbranch: main
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI, Priority=High]
+                additionalEnvVars: "a=b;c=d"
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+                tolerations:
+                  - key: workload
+                    operator: Equal
+                    value: tests
+                    effect: NoSchedule
+                nodeAffinity:
+                  - key: kubernetes.azure.com/agentpool
+                    operator: In
+                    values: [testpool]
+              - name: uitests
+                containerImage: testing/mycarrier/api/uitests
+                containerTag: 2.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=UI]
+                additionalEnvVars: "a=b;c=d"
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+                tolerations:
+                  - key: workload
+                    operator: Equal
+                    value: tests
+                    effect: NoSchedule
+                nodeAffinity:
+                  - key: kubernetes.azure.com/agentpool
+                    operator: In
+                    values: [testpool]
+    asserts:
+      - matchSnapshot:
+          path: spec.template.spec.containers[0].command[2]
+
+  - it: "baseline: legacy hook body without env"
+    set:
+      global:
+        deploymentStrategy: rolling
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        gitbranch: main
+      environment:
+        name: dev
+      applications:
+        api:
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: false
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI, Priority=High]
+                additionalEnvVars: "a=b;c=d"
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+                tolerations:
+                  - key: workload
+                    operator: Equal
+                    value: tests
+                    effect: NoSchedule
+                nodeAffinity:
+                  - key: kubernetes.azure.com/agentpool
+                    operator: In
+                    values: [testpool]
+              - name: uitests
+                containerImage: testing/mycarrier/api/uitests
+                containerTag: 2.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=UI]
+                additionalEnvVars: "a=b;c=d"
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+                tolerations:
+                  - key: workload
+                    operator: Equal
+                    value: tests
+                    effect: NoSchedule
+                nodeAffinity:
+                  - key: kubernetes.azure.com/agentpool
+                    operator: In
+                    values: [testpool]
+    asserts:
+      - matchSnapshot:
+          path: spec.template.spec.containers[0].command[2]
+
+  - it: "baseline: prod-tests ConfigMap without env"
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: mycarrier
+        language: csharp
+        correlationId: corr-1
+        gitbranch: main
+      environment:
+        name: prod
+      applications:
+        api:
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            enableV1: true
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI, Priority=High]
+                additionalEnvVars: "a=b;c=d"
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+                tolerations:
+                  - key: workload
+                    operator: Equal
+                    value: tests
+                    effect: NoSchedule
+                nodeAffinity:
+                  - key: kubernetes.azure.com/agentpool
+                    operator: In
+                    values: [testpool]
+              - name: uitests
+                containerImage: testing/mycarrier/api/uitests
+                containerTag: 2.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=UI]
+                additionalEnvVars: "a=b;c=d"
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+                tolerations:
+                  - key: workload
+                    operator: Equal
+                    value: tests
+                    effect: NoSchedule
+                nodeAffinity:
+                  - key: kubernetes.azure.com/agentpool
+                    operator: In
+                    values: [testpool]
+    asserts:
+      - matchSnapshot:
+          path: data["request.json"]
