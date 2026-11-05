@@ -1,0 +1,85 @@
+suite: Test trigger env schema (AQA-81)
+# values.schema.json refuses a bad testtrigger.env or testdefinitions[].env with Helm's own message, which names the
+# path (not the reason code). The patterns use . as the path separator, so they match both the Helm 3
+# form (applications.app1.testtrigger.env) and the JSON pointer form (/applications/app1/testtrigger/env).
+# Exception: a propertyNames refusal (a bad name, true/false) does not carry the path in Helm's message
+# ("invalid propertyName '1BAD'"), so those tests match the name only.
+# The YAML 1.1 behaviour of unquoted keys and values is tested from Python (Task 3), because helm-unittest parses
+# its own test file, not Helm's values.
+templates:
+  - triggertestengine.yaml
+tests:
+  - it: "schema: refuses an env name that is not POSIX"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": {"1BAD": "x"}, "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"]}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid propertyName '1BAD'"
+
+  - it: "schema: refuses the names true and false (shared)"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": {"true": "x"}, "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"]}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid propertyName 'true'"
+
+  - it: "schema: refuses the names true and false (per definition)"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"false": "x"}}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "invalid propertyName 'false'"
+
+  - it: "schema: refuses 51 entries at one level"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"V0": "x", "V1": "x", "V2": "x", "V3": "x", "V4": "x", "V5": "x", "V6": "x", "V7": "x", "V8": "x", "V9": "x", "V10": "x", "V11": "x", "V12": "x", "V13": "x", "V14": "x", "V15": "x", "V16": "x", "V17": "x", "V18": "x", "V19": "x", "V20": "x", "V21": "x", "V22": "x", "V23": "x", "V24": "x", "V25": "x", "V26": "x", "V27": "x", "V28": "x", "V29": "x", "V30": "x", "V31": "x", "V32": "x", "V33": "x", "V34": "x", "V35": "x", "V36": "x", "V37": "x", "V38": "x", "V39": "x", "V40": "x", "V41": "x", "V42": "x", "V43": "x", "V44": "x", "V45": "x", "V46": "x", "V47": "x", "V48": "x", "V49": "x", "V50": "x"}}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "testdefinitions.0.env"
+
+  - it: "schema: refuses a 4097-character value"
+    values:
+      - values/env_value_4097_chars.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "testdefinitions.0.env.BIG"
+
+  - it: "schema: refuses an unquoted number"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": {"PORT": 5}, "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"]}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env.PORT"
+
+  - it: "schema: refuses a boolean"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"BOOL_ON": true}}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env.BOOL_ON"
+
+  - it: "schema: refuses a null value"
+    values:
+      - values/env_null_value.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "env.FOO"
+
+  - it: "schema: refuses a map value"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"FOO": {"a": "b"}}}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env.FOO"
+
+  - it: "schema: refuses env that is not a map"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": "x", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"]}]}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: "testtrigger.env"
+
+  - it: "schema: accepts quoted strings at both levels"
+    set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": {"A": "x", "N_VAL": "5"}, "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"B": "true"}}]}}}}
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: "schema: accepts a null env"
+    values:
+      - values/env_null_env.yaml
+    asserts:
+      - isKind:
+          of: Job

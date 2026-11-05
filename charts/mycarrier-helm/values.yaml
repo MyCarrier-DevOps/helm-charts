@@ -826,6 +826,8 @@ applications: {}
 #     apikey: "vault:Secrets/data/testengine#apikey"
 #     enableV1: true                             # true (default): single bundled POST {"Tests":[...]} to api/v1 endpoint
 #                                                # false: one POST per testdefinition to the retired legacy endpoint
+#     env:
+#       RESULTS_DB: "qa-results"  # Optional, quoted strings: every test definition gets these
 #     resources:
 #       requests:
 #         cpu: "50m"
@@ -839,7 +841,9 @@ applications: {}
 #         containerImage: "myregistry.example.com/image/name"
 #         containerTag: "1.10.2"
 #         secretId: "vault:Secrets/data/app_authentication#SecretId"
-#         additionalEnvVars: "key1=value1;key2=value2"
+#         additionalEnvVars: "key1=value1;key2=value2"  # Deprecated: use env
+#         env:
+#           FOO: "bar"  # Optional: this definition only; wins over testtrigger.env
 #         resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"  # Optional, with resultsApiUrl: AUTOTEST_RESULTS_API_KEY; must be a vault: reference
 #         resultsApiUrl: "vault:QA/data/autotestresults_api#url"  # Optional, with resultsApiKey: AUTOTEST_RESULTS_API_URL; a vault: reference or an https URL
 #         legacyMode: false                      # Optional (default: false)

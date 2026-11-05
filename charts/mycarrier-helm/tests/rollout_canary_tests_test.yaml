@@ -2039,3 +2039,41 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "application 'api': the canary tests template needs the coordinator when the release has more than one canary Rollout"
+
+  # AQA-81: testtrigger.env reaches TestEngine as EnvVars on the canary tests request too (helm.testtrigger.v1request).
+  - it: "env: the canary tests request carries EnvVars"
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            <<: *testtrigger
+            env:
+              RESULTS_DB: qa-results
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"EnvVars": \{\s*"RESULTS_DB": "qa-results"\s*\}'
+
+  # The canary request sits in an AnalysisTemplate metric: it is escaped like the hook body, and keeps the 100 KiB cap.
+  - it: "env: an escaped canary request over 100 KiB fails"
+    template: analysistemplate.yaml
+    values:
+      - values/dark-off.yaml
+      - values/compare-off.yaml
+      - values/env_quotes_16k_api.yaml
+    set:
+      global: *global
+      environment:
+        name: prod
+      alerts:
+        serviceName: MyCarrier
+      applications.api.testtrigger.testdefinitions:
+        - {name: t1, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", filters: [TestCategory=CoreAPI]}
+        - {name: t2, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", filters: [TestCategory=CoreAPI]}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "t2": request_too_large$'

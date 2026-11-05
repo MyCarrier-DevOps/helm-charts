@@ -237,6 +237,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install --quiet pyyaml
+      - name: Build mycarrier-helm dependencies
+        run: helm dependency build charts/mycarrier-helm
+      - name: trigger env checks and request bodies
+        run: python3 -I .github/scripts/test_trigger_env.py
       - name: Push hook tests
         run: bash .claude/hooks/check-helm-guidance_test.sh
       - name: sync-rules tests

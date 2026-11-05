@@ -39,6 +39,23 @@ backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
 {{- $triggerName := printf "%s-trigger" (include "helm.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- $_ := set $podLabels "app.kubernetes.io/name" $triggerName }}
 {{- $_ := set $podLabels "app" $triggerName }}
+{{- /* Legacy path (enableV1 false): one request per definition, all in the one command[2] string. A script over 100 KiB
+       fails when some definition has EnvVars (a service without env can never newly fail). The 512 bytes are the fixed
+       text around the curl blocks (set -u, failed=0, the closing if and exit 0), which holds no values; the real
+       length is checked, so filters, tolerations, nodeAffinity and podResources count too. Nothing prints before this. */}}
+{{- $legacy := "" }}
+{{- if not $enableV1 }}
+  {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" false) | fromJson }}
+  {{- $legacy = include "helm.testtrigger.legacyCurls" (dict "ctx" . "env" $env) }}
+  {{- /* $legacy still carries the 12-space block-scalar indentation that YAML strips; count the text that reaches
+         command[2]. */}}
+  {{- if gt (len (regexReplaceAll "(?m)^ {12}" $legacy "")) 101888 }}
+    {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
+    {{- if $last }}
+      {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
 template:
   metadata:
     labels:
@@ -82,13 +99,50 @@ template:
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
-            -d '{{ include "helm.testtrigger.v1request" . | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
+            -d '{{ include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.testtrigger.v1request" .) "application" .application "argoTemplate" false) | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
               rc=$?
               echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
               failed=$((failed+1))
             }
           {{- else }}
-          {{- range dig "testtrigger" "testdefinitions" list .application }}
+          {{- $legacy }}
+          {{- end }}
+            if [ "$failed" -gt 0 ]; then
+              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
+            fi
+            exit 0
+        {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
+{{- end }}
+{{- end }}
+
+{{/*
+helm.testtrigger.legacyCurls: the curl commands of the legacy PostSync hook (testtrigger.enableV1 false), one per test
+definition, as the text that goes into the hook's script. Takes dict "ctx" <the hook's context, with .application> and
+"env" <the result of helm.testtrigger.envVars, decoded>. Each definition is its own HTTP request, so there is no cap
+across definitions; the caller checks the length of the whole script. EnvVars is the last key of
+TestEnvironmentVariables and is left out when the definition has none. Quotes and dollars in it are escaped like the v1
+hook body (helm.testtrigger.commandSafeJson); the other fields are printed as they always were.
+*/}}
+{{- define "helm.testtrigger.legacyCurls" -}}
+{{- $root := .ctx }}
+{{- $env := .env }}
+{{- $application := $root.application }}
+{{- $fullName := include "helm.fullname" $root }}
+{{- $baseName := include "helm.basename" $root }}
+{{- $namespace := include "helm.namespace" $root }}
+{{- $httpPort := 8080 }}
+{{- $gitBranch := $root.Values.global.gitbranch }}
+{{- $stackname := $root.Values.global.appStack }}
+{{- $correlationId := $root.Values.global.correlationId }}
+{{- if not (dig "service" "ports" false $application) }}
+{{- range $key, $value := $application.ports }}
+  {{- if eq ($key | lower) "http" }}
+    {{- $httpPort = $value }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- $imageTag := $application.image.tag }}
+{{- range $index, $definition := dig "testtrigger" "testdefinitions" list $application }}
           {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
           {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
           {{- $tolerations := $defaultTolerations }}
@@ -146,20 +200,14 @@ template:
                   "CorrelationId": "{{ $correlationId }}",
                   "LegacyMode": "{{ $legacyMode }}"{{- if $resultsApiUrl }},
                   "ResultsApiUrl": {{ $resultsApiUrl | quote }}{{- end }}{{- if $resultsApiKey }},
-                  "ResultsApiKey": {{ $resultsApiKey | quote }}{{- end }}
+                  "ResultsApiKey": {{ $resultsApiKey | quote }}{{- end }}{{- with index $env.byDefinition $index }},
+                  "EnvVars": {{ include "helm.testtrigger.commandSafeJson" (dict "json" (toJson .) "application" $application "argoTemplate" false) }}{{- end }}
                 }
               }' "$TESTENGINEHOOK_URL" || {
               rc=$?
               echo "ERROR: TestEngine trigger failed for "{{ .name | squote }}" (curl exit $rc)" >&2
               failed=$((failed+1))
             }
-          {{- end }}
-          {{- end }}
-            if [ "$failed" -gt 0 ]; then
-              echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
-            fi
-            exit 0
-        {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
 {{- end }}
 
@@ -169,7 +217,9 @@ testtrigger.testdefinitions item, with no SlipStep, so TestEngine bookends the e
 (prod_tests in prod) for the run. Two templates send it, so they cannot drift apart: the PostSync hook
 (helm.specs.testenginehook, with testtrigger.enableV1) and, for a prod canary Rollout, the <fullName>-prod-tests
 ConfigMap that the release's rollout-watch posts after promotion (DEVOPS-319, Tech Spec D7; triggertestengine.yaml).
-Takes the application context. Every test definition's results API settings are checked here.
+Takes the application context. Every test definition's results API settings are checked here, and so is its env: every
+test definition's EnvVars are merged and checked here (helm.testtrigger.envVars); the v1 request is one HTTP request,
+so the 64 KiB cap covers all definitions.
 A third caller, the canary tests template (helm.canary.tests.request, DEVOPS-515), adds .testRun to the context, a
 dict whose keys override the request and are absent for the other two callers: serviceAddresses (ServiceAddress, one
 entry per test definition, in order), tolerations (Tolerations of every definition, also when empty), and runKind,
@@ -194,6 +244,7 @@ empty), and correlationId (CorrelationId, a string).
 {{- end }}
 {{- end }}
 {{- $imageTag := .application.image.tag }}
+{{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
 {{- $tests := list }}
 {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
 {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
@@ -234,10 +285,69 @@ empty), and correlationId (CorrelationId, a string).
 {{- with $run.runKind }}{{- $_ := set $testEnv "RunKind" . }}{{- end }}
 {{- with $run.slipStep }}{{- $_ := set $testEnv "SlipStep" . }}{{- end }}
 {{- with $run.requestHeaders }}{{- $_ := set $testEnv "RequestHeaders" . }}{{- end }}
+{{- with index $env.byDefinition $index }}{{- $_ := set $testEnv "EnvVars" . }}{{- end }}
 {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
 {{- $tests = append $tests $test }}
 {{- end }}
 {{- dict "Tests" $tests | toPrettyJson }}
+{{- end }}
+
+{{/*
+helm.testtrigger.lastEnvDefinition: the name of the last test definition that has EnvVars, or "" when none has. Takes dict
+"application" <application map> "env" <the result of helm.testtrigger.envVars, decoded>. Names the definition in the
+request_too_large errors of the script and body size checks.
+*/}}
+{{- define "helm.testtrigger.lastEnvDefinition" -}}
+{{- $last := "" }}
+{{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
+  {{- if index $.env.byDefinition $index }}{{- $last = $definition.name }}{{- end }}
+{{- end }}
+{{- $last }}
+{{- end }}
+
+{{/*
+helm.testtrigger.commandSafeJson: a JSON request body made safe to paste where something other than the receiver reads it
+first: the PostSync hook's -d '...' (shell, then kubelet) and the canary Job's TESTS_REQUEST env value (kubelet, and Argo
+Rollouts for the AnalysisTemplate). The body stays valid JSON that decodes to the same request. The ConfigMap body
+(request.json) is read by nobody on the way, so it is not passed through here.
+Input: dict "json" <string> "application" <application map> "argoTemplate" <bool> "encodeVaultInline" <bool, optional>.
+Output: the escaped string.
+  1. ' becomes the six characters \u0027, the JSON escape of a single quote: without it any ' in any string (a filter, a
+     service address, an env value) ends the shell quote of -d '...' and the rest runs as shell.
+  2. $ becomes $$. Kubernetes expands $(NAME) in command and in env[].value, and turns $$ back into $ without expanding
+     it; so a value such as $(TESTENGINE_APIKEY) arrives literally instead of as the key's vault: reference, which would
+     get past the QA/ check.
+  3. Only with argoTemplate (the canary request sits inside an AnalysisTemplate metric): {{ becomes {\u007b. Argo
+     Rollouts (ResolveMetricArgs: it marshals the whole metric, Job spec included, and substitutes {{...}} over that text)
+     fails the AnalysisRun on an unknown tag or an unclosed {{, and replaces {{args.<name>}}. In JSON a { outside a string
+     is followed by " or }, so {{ occurs only inside strings, where the escape decodes to the same text.
+  4. Only with encodeVaultInline (the canary: TESTS_REQUEST is an env value of a pod that vault-env wraps, and vault-env
+     resolves an inline ${vault:...} in any env value): ${ becomes $\u007b, which JSON decodes back to ${ and the
+     Bank-Vaults inline pattern no longer matches. It runs before step 2, so the $ of the escape becomes $$ and kubelet
+     turns it back into $. The hook paths run no vault-env on the body and leave it out.
+Steps 1 to 3 do not depend on the order: no output of one step contains the input of another.
+Size: when at least one test definition has a non-empty EnvVars (so a service without env can never newly fail), an
+escaped body over 102400 bytes (100 KiB) fails with request_too_large, naming the last definition that has EnvVars. The
+limit is the Linux limit of 128 KiB for one command-line string, with room for the rest of the script (in the canary it
+bounds the env value the same way).
+*/}}
+{{- define "helm.testtrigger.commandSafeJson" -}}
+{{- $out := .json | replace "'" "\\u0027" }}
+{{- if .encodeVaultInline }}
+  {{- $out = $out | replace "${" "$\\u007b" }}
+{{- end }}
+{{- $out = $out | replace "$" "$$" }}
+{{- if .argoTemplate }}
+  {{- $out = $out | replace "{{" "{\\u007b" }}
+{{- end }}
+{{- if gt (len $out) 102400 }}
+  {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
+  {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
+  {{- if $last }}
+    {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
+  {{- end }}
+{{- end }}
+{{- $out }}
 {{- end }}
 
 {{/*
