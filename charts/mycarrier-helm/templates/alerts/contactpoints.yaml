@@ -1,4 +1,4 @@
-{{- if eq (include "helm.alerts.enabled" .) "true" }}
+{{- if eq (include "helm.alerts.contactPoints.enabled" .) "true" }}
 {{- $alerts := .Values.alerts }}
 {{- $secretKey := $alerts.contactPoints.secretKey | default (lower $alerts.serviceName) }}
 {{- range $receiver := list (dict "suffix" "" "name" $alerts.displayName "key" $secretKey) (dict "suffix" "-sev1" "name" (printf "%s Sev1" $alerts.displayName) "key" (printf "%s-sev1" $secretKey)) }}

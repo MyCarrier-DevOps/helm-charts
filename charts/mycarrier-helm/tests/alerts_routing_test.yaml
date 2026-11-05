@@ -130,6 +130,60 @@ tests:
             - alertname
             - PartnerId
 
+  - it: renders only the rule group when the stack's contact points are off (Grafana's default route takes its alerts)
+    templates:
+      - templates/alerts/alertrulegroup.yaml
+      - templates/alerts/contactpoints.yaml
+      - templates/alerts/notificationpolicyroute.yaml
+    set:
+      alerts:
+        contactPoints:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/alerts/alertrulegroup.yaml
+      - isKind:
+          of: GrafanaAlertRuleGroup
+        template: templates/alerts/alertrulegroup.yaml
+      - equal:
+          path: spec.rules[0].labels.alertSource
+          value: mycarrier-helm
+        template: templates/alerts/alertrulegroup.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/alerts/contactpoints.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/alerts/notificationpolicyroute.yaml
+
+  - it: fails on routing.routes when the stack's contact points are off (there is no stack route to attach them to)
+    template: templates/alerts/alertrulegroup.yaml
+    set:
+      alerts:
+        contactPoints:
+          enabled: false
+        routing:
+          routes:
+            - receiver: Integration
+              object_matchers:
+                - - alertType
+                  - "="
+                  - sustained_retries
+    asserts:
+      - failedTemplate:
+          errorPattern: "alerts.routing.routes needs the stack's notification route; it cannot be set while alerts.contactPoints.enabled is false"
+
+  - it: takes contactPoints.enabled only as a boolean
+    template: templates/alerts/contactpoints.yaml
+    set:
+      alerts:
+        contactPoints:
+          enabled: "no"
+    asserts:
+      - failedTemplate:
+          errorPattern: "/alerts/contactPoints/enabled.*got string, want boolean"
+
   - it: keeps names strings when they look like numbers
     templates:
       - templates/alerts/alertrulegroup.yaml

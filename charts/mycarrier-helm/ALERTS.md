@@ -2,7 +2,8 @@
 
 mycarrier-helm renders a stack's Grafana alerting from its `alerts:` values: one `GrafanaAlertRuleGroup` with the
 standard rules and any additional rules, two `GrafanaContactPoint`s (general and Sev1) and one
-`GrafanaNotificationPolicyRoute`. Alerts are off by default (`alerts.enabled: false`).
+`GrafanaNotificationPolicyRoute`. Alerts are off by default (`alerts.enabled: false`). A stack whose alerts should not
+page renders the rule group alone (`alerts.contactPoints.enabled: false`, see [Routing](#routing)).
 
 ## How alerts reach Grafana
 
@@ -39,7 +40,7 @@ mc-environment stack does the same at the top level of its values files.
 
 The Squadcast webhooks must exist in Vault under the keys `<serviceName lowercased>` and
 `<serviceName lowercased>-sev1` (the `squadcast-webhooks` secret in `monitoring`), or set
-`alerts.contactPoints.secretKey`.
+`alerts.contactPoints.secretKey`. A stack with `alerts.contactPoints.enabled: false` needs no webhooks.
 
 Other settings:
 
@@ -47,6 +48,7 @@ Other settings:
 | --- | --- | --- |
 | `alerts.interval` | `60s` | Rule group evaluation interval |
 | `alerts.paused` | `false` | `isPaused` for every standard and compact rule that does not set its own `paused`; raw rules keep their own `isPaused` |
+| `alerts.contactPoints.enabled` | `true` | `false` renders the rule group only, without the stack's contact points and route: its alerts take Grafana's default notification route (see [Routing](#routing)) |
 | `alerts.contactPoints.secretName` | `squadcast-webhooks` | Secret in `monitoring` holding the webhook URLs |
 | `alerts.contactPoints.secretKey` | `serviceName` lowercased | Key of the general webhook; the Sev1 contact point uses `<secretKey>-sev1` |
 | `alerts.additional.<key>.enabled` | `true` | `false` leaves that additional rule out |
@@ -196,6 +198,25 @@ alerts:
 
 The central `GrafanaNotificationPolicy` picks the route up through its `routeSelector`
 (`mycarrier.tech/notification-policy: mycarrier`) for alerts labelled `alertSource: mycarrier-helm`.
+
+### Alerts that do not page
+
+A stack whose alerts should not page, such as a test app, sets `alerts.contactPoints.enabled: false`. The chart then
+renders the rule group only: no contact points and no notification route, so no webhooks are needed. The rules keep
+every label, including `alertSource: mycarrier-helm` and `service`, and with no route of the stack's own to match
+them they take Grafana's default notification route for chart alerts.
+
+```yaml
+alerts:
+  enabled: true
+  serviceName: MC.TestApp
+  displayName: TestApp
+  contactPoints:
+    enabled: false
+```
+
+`alerts.routing.routes` needs the stack's route, so the render fails when it is set with
+`alerts.contactPoints.enabled: false`.
 
 ## Migrating a stack from AlertManagement
 
