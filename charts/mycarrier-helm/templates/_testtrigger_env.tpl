@@ -6,7 +6,9 @@ Rules (index of the AQA-77 plans is the shared contract; the checks run in this 
   1. env is a map (null or absent means no env).
   2. at most 50 entries after the merge (shared overlaid by per-definition, key by key, per-definition wins).
   3. per variable, names sorted: invalid_name, protected_name, duplicate_name, invalid_value, control_character,
-     value_too_large, vault_prefix_not_allowed.
+     value_too_large, vault_prefix_not_allowed. control_character (contract amendment A13) is any rune below 0x20,
+     0x7F, U+0080-U+009F, U+2028 or U+2029: YAML 1.1 reads U+0085, U+2028 and U+2029 as line breaks, so one in a value
+     would rewrite the rendered manifest.
   4. at most 16384 bytes per definition (sum of name and value), definition_too_large.
   5. at most 65536 bytes per HTTP request (all definitions of one v1 request), request_too_large.
 The message names the variable, never the value: EnvVars: test definition "<name>": variable "<VAR>": <code>.
@@ -71,7 +73,7 @@ Values are YAML strings only (as Helm reads the YAML); nothing is converted.
   {{- if not (kindIs "string" $value) }}
     {{- fail (printf "%s: variable \"%s\": invalid_value (quote the value as a YAML string)" $head $name) }}
   {{- end }}
-  {{- if regexMatch "[[:cntrl:]]" $value }}
+  {{- if regexMatch "[[:cntrl:]\\x{80}-\\x{9F}\\x{2028}\\x{2029}]" $value }}
     {{- fail (printf "%s: variable \"%s\": control_character" $head $name) }}
   {{- end }}
   {{- if gt (len $value) $maxValueBytes }}

@@ -247,6 +247,38 @@ tests:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
 
+  - it: "env: U+0085 NEL fails with control_character"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\Nb"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
+
+  - it: "env: U+2028 line separator fails with control_character"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\Lb"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
+
+  - it: "env: U+2029 paragraph separator fails with control_character"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\Pb"}}}}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
+
+  - it: "env: a no-break space and a letter with an accent are accepted"
+    set:
+      <<: *top
+      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {NBSP: "a\_b", ACCENT: "é"}}}}
+    asserts:
+      - isKind:
+          of: Job
+
   - it: "env: a value over 4096 bytes fails"
     values:
       - values/env_value_4098_bytes.yaml

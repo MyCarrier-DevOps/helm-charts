@@ -308,7 +308,8 @@ helm.testtrigger.commandSafeJson: a JSON request body made safe to paste where s
 first: the PostSync hook's -d '...' (shell, then kubelet) and the canary Job's TESTS_REQUEST env value (kubelet, and Argo
 Rollouts for the AnalysisTemplate). The body stays valid JSON that decodes to the same request. The ConfigMap body
 (request.json) is read by nobody on the way, so it is not passed through here.
-Input: dict "json" <string> "application" <application map> "argoTemplate" <bool>. Output: the escaped string.
+Input: dict "json" <string> "application" <application map> "argoTemplate" <bool> "encodeVaultInline" <bool, optional>.
+Output: the escaped string.
   1. ' becomes the six characters \u0027, the JSON escape of a single quote: without it any ' in any string (a filter, a
      service address, an env value) ends the shell quote of -d '...' and the rest runs as shell.
   2. $ becomes $$. Kubernetes expands $(NAME) in command and in env[].value, and turns $$ back into $ without expanding
@@ -318,14 +319,22 @@ Input: dict "json" <string> "application" <application map> "argoTemplate" <bool
      Rollouts (ResolveMetricArgs: it marshals the whole metric, Job spec included, and substitutes {{...}} over that text)
      fails the AnalysisRun on an unknown tag or an unclosed {{, and replaces {{args.<name>}}. In JSON a { outside a string
      is followed by " or }, so {{ occurs only inside strings, where the escape decodes to the same text.
-The order does not matter: no output of one step contains the input of another.
+  4. Only with encodeVaultInline (the canary: TESTS_REQUEST is an env value of a pod that vault-env wraps, and vault-env
+     resolves an inline ${vault:...} in any env value): ${ becomes $\u007b, which JSON decodes back to ${ and the
+     Bank-Vaults inline pattern no longer matches. It runs before step 2, so the $ of the escape becomes $$ and kubelet
+     turns it back into $. The hook paths run no vault-env on the body and leave it out.
+Steps 1 to 3 do not depend on the order: no output of one step contains the input of another.
 Size: when at least one test definition has a non-empty EnvVars (so a service without env can never newly fail), an
 escaped body over 102400 bytes (100 KiB) fails with request_too_large, naming the last definition that has EnvVars. The
 limit is the Linux limit of 128 KiB for one command-line string, with room for the rest of the script (in the canary it
 bounds the env value the same way).
 */}}
 {{- define "helm.testtrigger.commandSafeJson" -}}
-{{- $out := .json | replace "'" "\\u0027" | replace "$" "$$" }}
+{{- $out := .json | replace "'" "\\u0027" }}
+{{- if .encodeVaultInline }}
+  {{- $out = $out | replace "${" "$\\u007b" }}
+{{- end }}
+{{- $out = $out | replace "$" "$$" }}
 {{- if .argoTemplate }}
   {{- $out = $out | replace "{{" "{\\u007b" }}
 {{- end }}

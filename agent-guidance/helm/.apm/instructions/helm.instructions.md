@@ -1221,10 +1221,10 @@ applications:
 
 **Secrets.** Only `vault:QA/...` references. Every `vault:` in a value must be followed by `QA/`, with no `..` path segment (up to the next `#`). Never a plain secret in a values file.
 
-**What renders.** `TestEnvironmentVariables.EnvVars` in the PostSync hook (v1 and legacy body), the prod-tests ConfigMap and the canary `TESTS_REQUEST`; omitted when empty. The hook body and the canary request are now escaped (`'` and `$`, and `{{` on the canary), so a stack whose testtrigger fields hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal.
+**What renders.** `TestEnvironmentVariables.EnvVars` in the PostSync hook (v1 and legacy body), the prod-tests ConfigMap and the canary `TESTS_REQUEST`; omitted when empty. The hook body and the canary request are now escaped (`'` and `$`, and `{{` on the canary), so a stack whose testtrigger fields hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal. The canary request also encodes `${` as `$\u007b` (decodes back to `${`), because `vault-env` wraps the canary pod and resolves an inline `${vault:...}` in any env value, `TESTS_REQUEST` included; the hook body is not wrapped and keeps the plain text.
 
 **Failure**
-- The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <code>`. Codes: `invalid_name`, `protected_name`, `duplicate_name`, `invalid_value`, `control_character`, `value_too_large`, `vault_prefix_not_allowed`, `too_many`, `definition_too_large`, `request_too_large`. The message names the variable, never the value; `too_many`, `definition_too_large`, `request_too_large` and a non-map `env` leave out the `variable` part.
+- The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <code>`. Codes: `invalid_name`, `protected_name`, `duplicate_name`, `invalid_value`, `control_character`, `value_too_large`, `vault_prefix_not_allowed`, `too_many`, `definition_too_large`, `request_too_large`. The message names the variable, never the value; `too_many`, `definition_too_large`, `request_too_large` and a non-map `env` leave out the `variable` part. `control_character` means any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029 (YAML reads U+0085, U+2028 and U+2029 as line breaks).
 - Some inputs are refused first by the schema, with Helm's own message naming the path.
 - Layout B: the chart schema from `main` applies at once; the other rules fail at the Argo CD sync.
 

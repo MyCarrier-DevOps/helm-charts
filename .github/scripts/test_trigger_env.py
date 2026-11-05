@@ -185,6 +185,49 @@ class TemplatePathRefusals(unittest.TestCase):
         self.refuse(values(shared={"FOO": "a" + chr(0x7F) + "b"}),
                     'EnvVars: test definition "apitests": variable "FOO": control_character', secret=None)
 
+    # Contract amendment A13: control_character is any rune < 0x20, 0x7F, U+0080-U+009F, U+2028 and U+2029. YAML 1.1
+    # reads U+0085 (NEL), U+2028 and U+2029 as line breaks, so one of them in a value could rewrite the manifest.
+    def test_c1_and_line_separators_are_control_character(self):
+        for code in (0x80, 0x85, 0x9F, 0x2028, 0x2029):
+            with self.subTest(code=hex(code)):
+                self.refuse(values(shared={"FOO": "a" + chr(code) + "b"}),
+                            'EnvVars: test definition "apitests": variable "FOO": control_character', secret=None)
+
+    def test_neighbours_of_the_control_ranges_are_accepted(self):
+        for value in ("a" + chr(0xA0) + "b", "é", chr(0x2027) + chr(0x202A)):
+            with self.subTest(value=value):
+                r = render(values(shared={"FOO": value}))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(env_vars(r), {"FOO": value})
+
+
+class ManifestStructureIsNotRewritten(unittest.TestCase):
+    """A line-break rune in an env value must never change the structure of the rendered manifest."""
+
+    PAYLOAD_PARTS = ["x", "spec:", "  template:", "    spec:", "      restartPolicy: Never", "      containers:",
+                     "      - name: pwn", "        image: busybox", "        command: [sh, -c, id]", "metadata:",
+                     "  name: app-app1-trigger", "  annotations:", "    argocd.argoproj.io/hook: PostSync", "    x: |", "      "]
+
+    def check(self, vals, show_only=SHOW_ONLY, app="app1"):
+        for code in (0x85, 0x2028, 0x2029):
+            with self.subTest(code=hex(code)):
+                vals["applications"][app]["testtrigger"]["env"] = {"FOO": chr(code).join(self.PAYLOAD_PARTS)}
+                r = render(vals, show_only=show_only)
+                self.assertNotEqual(r.returncode, 0, "the payload rendered: " + r.stdout[:300])
+                self.assertRegex(error_text(r), re.escape('variable "FOO": control_character') + "$")
+
+    def test_v1_hook(self):
+        self.check(values(shared={}))
+
+    def test_legacy_hook(self):
+        self.check(legacy_values(shared={}))
+
+    def test_configmap(self):
+        self.check(CanaryVault.canary_dict(), show_only="templates/triggertestengine.yaml", app="api")
+
+    def test_canary_analysis_template(self):
+        self.check(CanaryVault.canary_dict(), show_only="templates/analysistemplate.yaml", app="api")
+
 
 class ProtectedNames(unittest.TestCase):
     def test_every_protected_name_and_prefix_is_refused(self):
@@ -464,6 +507,47 @@ class LegacyHookBody(unittest.TestCase):
         head = script[: script.index("curl")]
         tail = script[script.rindex('if [ "$failed"'):]
         self.assertLess(len((head + tail).encode("utf-8")), 512, repr(head + tail))
+
+
+class CanaryVault(unittest.TestCase):
+    """The canary sends the request as the env value TESTS_REQUEST, in a pod that vault-env wraps; vault-env resolves an
+    inline ${vault:...} in any env value (Bank-Vaults regex \${([>]{0,2}vault:.*?#*}?)}). So a ${ in the canary body is
+    encoded as $\u007b, which JSON decodes back to ${. The hook paths are not wrapped, so they keep the plain text."""
+
+    REF = "${vault:QA/x#y}"
+
+    @staticmethod
+    def canary_dict():
+        return yaml.safe_load(CANARY_VALUES % {"apikey": APIKEY, "weird": json.dumps(WEIRD)})
+
+    def canary_request(self, value):
+        vals = self.canary_dict()
+        vals["applications"]["api"]["testtrigger"]["env"] = {"V": value}
+        r = render(vals, show_only="templates/analysistemplate.yaml")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        tmpl = next(d for d in docs(r) if d["metadata"]["name"].endswith("-tests"))
+        c = tmpl["spec"]["metrics"][0]["provider"]["job"]["spec"]["template"]["spec"]["containers"][0]
+        raw = next(e["value"] for e in c["env"] if e["name"] == "TESTS_REQUEST")
+        return raw, json.loads(kubelet_expand(raw, container_env(c)))
+
+    def test_inline_vault_reference_stays_unresolved_and_round_trips(self):
+        for value in (self.REF, "pre" + self.REF + "post", "$" + self.REF, "$$" + self.REF, "{{" + self.REF, self.REF * 2,
+                      "${${vault:QA/x#y}}", "${>vault:QA/x#y}", "${>>vault:QA/x#y}"):
+            with self.subTest(value=value):
+                raw, request = self.canary_request(value)
+                after_kubelet = kubelet_expand(raw, {})
+                self.assertNotIn("${", after_kubelet)
+                self.assertNotIn("${vault:", raw)
+                self.assertEqual(request["Tests"][0]["TestEnvironmentVariables"]["EnvVars"], {"V": value})
+
+    def test_hook_body_keeps_the_plain_text(self):
+        vals = values(shared={"V": self.REF})
+        vals["applications"]["app1"]["testtrigger"]["apikey"] = APIKEY
+        r = render(vals)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c = hook_container(r)
+        script = kubelet_expand(c["command"][2], container_env(c))
+        self.assertIn(self.REF, script)
 
 
 # Helm's verdicts, pinned. Values are filled from real runs (see the report); a different Helm version fails the row.

@@ -385,11 +385,13 @@ Only `vault:QA/...` references. Every `vault:` in a value must be followed by `Q
 
 ### Failures
 
-The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <code>`. Codes: `invalid_name`, `protected_name`, `duplicate_name`, `invalid_value`, `control_character`, `value_too_large`, `vault_prefix_not_allowed`, `too_many`, `definition_too_large`, `request_too_large`. The message names the variable, never the value; `too_many`, `definition_too_large`, `request_too_large` and a non-map `env` leave out the `variable` part.
+The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <code>`. Codes: `invalid_name`, `protected_name`, `duplicate_name`, `invalid_value`, `control_character`, `value_too_large`, `vault_prefix_not_allowed`, `too_many`, `definition_too_large`, `request_too_large`. The message names the variable, never the value; `too_many`, `definition_too_large`, `request_too_large` and a non-map `env` leave out the `variable` part. `control_character` means any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029: YAML reads U+0085, U+2028 and U+2029 as line breaks, which could rewrite the rendered manifest.
 
 ### Escaping
 
 The hook body and the canary request are escaped (`'`, `$`, and `{{` on the canary). A stack whose testtrigger fields (filters, `serviceAddress`, `secretId`, `requestHeaders`) hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal instead of being expanded by Kubernetes.
+
+The canary request also encodes `${` as `$\u007b` (the JSON escape, which decodes back to `${`). The request is an env value (`TESTS_REQUEST`) of a pod that `vault-env` wraps, and `vault-env` resolves an inline `${vault:...}` in any env value, which would put the plaintext secret into the request. The encoded form no longer matches, so an env value such as `${vault:QA/x#y}` reaches TestEngine as written. The hook body is not wrapped by `vault-env` and keeps the plain text.
 
 ## Usage Notes
 

@@ -253,7 +253,7 @@ template:
         value: {{ include "helm.canary.tests.budgetSeconds" $ctx | quote }}
       - name: TESTS_REQUEST
         value: |-
-          {{- include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.canary.tests.request" (dict "context" $ctx "target" .target "requestHeaders" .requestHeaders)) "application" $ctx.application "argoTemplate" true) | nindent 10 }}
+          {{- include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.canary.tests.request" (dict "context" $ctx "target" .target "requestHeaders" .requestHeaders)) "application" $ctx.application "argoTemplate" true "encodeVaultInline" true) | nindent 10 }}
       - name: TESTS_REMEDY
         value: {{ ternary "set global.strategy.canary.dark: false" "remove tests from global.strategy.canary.analysis.templates" (eq (toString .target) "stable") | quote }}
       resources:
