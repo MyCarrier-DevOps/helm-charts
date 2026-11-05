@@ -13,19 +13,19 @@ tests:
     set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": {"1BAD": "x"}, "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"]}]}}}}
     asserts:
       - failedTemplate:
-          errorPattern: "1BAD"
+          errorPattern: "invalid propertyName '1BAD'"
 
   - it: "schema: refuses the names true and false (shared)"
     set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "env": {"true": "x"}, "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"]}]}}}}
     asserts:
       - failedTemplate:
-          errorPattern: "true"
+          errorPattern: "invalid propertyName 'true'"
 
   - it: "schema: refuses the names true and false (per definition)"
     set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"false": "x"}}]}}}}
     asserts:
       - failedTemplate:
-          errorPattern: "false"
+          errorPattern: "invalid propertyName 'false'"
 
   - it: "schema: refuses 51 entries at one level"
     set: {"fullnameOverride": "app", "namespace": "dev", "metaEnvironment": "dev", "applications": {"app1": {"version": "1.0.0", "enabled": true, "image": {"registry": "myregistry.example.com", "repository": "mycarrier/app1", "tag": "1.0.0"}, "testtrigger": {"ttlSecondsAfterFinished": "300", "testdefinitions": [{"name": "apitests", "containerImage": "alpine/curl", "containerTag": "latest", "secretId": "vault:Secret/data/secret#SecretId", "filters": ["TestCategory=whatever"], "env": {"V0": "x", "V1": "x", "V2": "x", "V3": "x", "V4": "x", "V5": "x", "V6": "x", "V7": "x", "V8": "x", "V9": "x", "V10": "x", "V11": "x", "V12": "x", "V13": "x", "V14": "x", "V15": "x", "V16": "x", "V17": "x", "V18": "x", "V19": "x", "V20": "x", "V21": "x", "V22": "x", "V23": "x", "V24": "x", "V25": "x", "V26": "x", "V27": "x", "V28": "x", "V29": "x", "V30": "x", "V31": "x", "V32": "x", "V33": "x", "V34": "x", "V35": "x", "V36": "x", "V37": "x", "V38": "x", "V39": "x", "V40": "x", "V41": "x", "V42": "x", "V43": "x", "V44": "x", "V45": "x", "V46": "x", "V47": "x", "V48": "x", "V49": "x", "V50": "x"}}]}}}}

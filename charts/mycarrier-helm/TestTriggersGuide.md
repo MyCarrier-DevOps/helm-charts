@@ -389,7 +389,9 @@ The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <cod
 
 ### Escaping
 
-The hook body and the canary request are escaped (`'`, `$`, and `{{` on the canary). A stack whose testtrigger fields (filters, `serviceAddress`, `secretId`, `requestHeaders`) hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal instead of being expanded by Kubernetes.
+The v1 hook body and the canary request are escaped (`'`, `$`, and `{{` on the canary). A stack whose testtrigger fields (filters, `serviceAddress`, `secretId`, `requestHeaders`) hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal instead of being expanded by Kubernetes.
+
+The legacy hook body (`enableV1: false`) escapes only `EnvVars`. Its other fields (`TestFilters`, `serviceAddress`, `secretId`) are printed as before, so a `'` in a filter still breaks the legacy curl.
 
 The canary request also encodes `${` as `$\u007b` (the JSON escape, which decodes back to `${`). The request is an env value (`TESTS_REQUEST`) of a pod that `vault-env` wraps, and `vault-env` resolves an inline `${vault:...}` in any env value, which would put the plaintext secret into the request. The encoded form no longer matches, so an env value such as `${vault:QA/x#y}` reaches TestEngine as written. The hook body is not wrapped by `vault-env` and keeps the plain text.
 
