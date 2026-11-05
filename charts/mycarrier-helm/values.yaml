@@ -1371,8 +1371,9 @@ infrastructure:
       #           maxDeliveryCount: 5                    # Fewer retries for notifications
 
 ## @section Alerts
-## Grafana alert rules, contact points and notification route for the stack (see ALERTS.md). They render under
-## templates/alerts/ only: application clusters exclude */alerts/*, the management cluster applies them.
+## Grafana alert rules for the stack and, unless alerts.contactPoints.enabled is false, its contact points and
+## notification route (see ALERTS.md). They render under templates/alerts/ only: application clusters exclude
+## */alerts/*, the management cluster applies them.
 
 ## @param alerts.enabled Render the stack's alerts
 ## @param alerts.serviceName HyperDX ServiceName prefix the queries match (e.g. MC.Invoice); required when enabled
@@ -1382,9 +1383,10 @@ infrastructure:
 ## @param alerts.filters.excludedPaths [array] Paths left out of the alerts on the service's own HTTP responses (serverErrorRatio, clientErrorRatio, serverErrorCount, http503Returned): url.path values, or http.route values for nodejs
 ## @param alerts.standard [object] Overrides of the standard alerts global.language supplies (csharp, nodejs; see ALERTS.md), per alert and field: enabled, severity (sev1/sev2/sev3), threshold, for, title, paused, noDataState, execErrState and the alert's own lists
 ## @param alerts.additional [object] Additional rules keyed by name: compact (title, severity, sql, ...) or raw (rule: a Grafana AlertRule)
+## @param alerts.contactPoints.enabled Render the stack's contact points and notification route; false renders the rules only, so the alerts take Grafana's default notification route and do not page (e.g. a test app)
 ## @param alerts.contactPoints.secretName Secret holding the Squadcast webhook URLs
 ## @param alerts.contactPoints.secretKey Secret key of the general webhook (default: serviceName lowercased); the Sev1 contact point uses this key plus -sev1
-## @param alerts.routing.routes [array] Extra child routes under the stack's notification route, after the Sev1 route
+## @param alerts.routing.routes [array] Extra child routes under the stack's notification route, after the Sev1 route; the render fails when set with alerts.contactPoints.enabled false
 alerts:
   enabled: false
     # enabled: true   # in the prod values file only (helm/values.prod.yaml): resource names carry no environment
@@ -1462,6 +1464,8 @@ alerts:
     #       alertType: sustained_retries
     #       severity: sev2
   contactPoints:
+    enabled: true
+      # enabled: false   # rules only: the alerts take Grafana's default notification route
     secretName: squadcast-webhooks
       # secretName: team-webhooks
     secretKey: ""

@@ -2535,7 +2535,7 @@
     },
     "alerts": {
       "type": "object",
-      "description": "Grafana alert rules, contact points and notification route for the stack (see ALERTS.md).",
+      "description": "Grafana alert rules for the stack and, unless alerts.contactPoints.enabled is false, its contact points and notification route (see ALERTS.md).",
       "additionalProperties": false,
       "properties": {
         "enabled": {
@@ -2925,6 +2925,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
             "secretName": {
               "type": "string"
             },

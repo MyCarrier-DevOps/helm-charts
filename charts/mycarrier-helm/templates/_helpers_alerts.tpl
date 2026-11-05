@@ -12,6 +12,17 @@ true
 {{- end -}}
 {{- end -}}
 
+{{/*
+helm.alerts.contactPoints.enabled: "true" when the stack's contact points and notification route render with its rule
+group. alerts.contactPoints.enabled: false leaves them out, so the stack's alerts take Grafana's default notification
+route.
+*/}}
+{{- define "helm.alerts.contactPoints.enabled" -}}
+{{- if and (eq (include "helm.alerts.enabled" .) "true") (dig "contactPoints" "enabled" true .Values.alerts) -}}
+true
+{{- end -}}
+{{- end -}}
+
 {{/* helm.alerts.name: displayName lowercased, the stem of every resource name and rule uid. */}}
 {{- define "helm.alerts.name" -}}
 {{- .Values.alerts.displayName | lower -}}
@@ -28,14 +39,18 @@ true
 
 {{/*
 helm.alerts.validate fails the render, naming the field, for what values.schema.json cannot express: required
-fields when alerts are enabled, the shape of additional rules and the rule checks of helm.alerts.rules. The schema
-enforces the standard keys and severities. Only alertrulegroup.yaml calls it, in every environment while
-alerts.enabled is true; the three alert templates always render together.
+fields when alerts are enabled, routing.routes without the stack's notification route, the shape of additional rules
+and the rule checks of helm.alerts.rules. The schema enforces the standard keys and severities. Only
+alertrulegroup.yaml calls it, in every environment while alerts.enabled is true; the rule group renders whenever the
+contact points and route do.
 */}}
 {{- define "helm.alerts.validate" -}}
 {{- $alerts := .Values.alerts -}}
 {{- if not $alerts.serviceName -}}
 {{- fail "alerts.serviceName is required when alerts are enabled" -}}
+{{- end -}}
+{{- if and (ne (include "helm.alerts.contactPoints.enabled" .) "true") (dig "routing" "routes" list $alerts) -}}
+{{- fail "alerts.routing.routes needs the stack's notification route; it cannot be set while alerts.contactPoints.enabled is false" -}}
 {{- end -}}
 {{- if not (regexMatch "^[A-Za-z0-9]+$" (toString $alerts.displayName)) -}}
 {{- fail "alerts.displayName is required when alerts are enabled and must match [A-Za-z0-9]+" -}}

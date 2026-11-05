@@ -1286,7 +1286,7 @@ A CronJob syncs in wave 10 with the workloads, after the pre-deploy jobs, so a s
 
 ## Alerts
 
-mycarrier-helm renders a stack's Grafana alerting from `alerts:`: one alert rule group with the standard rules for the stack's language plus any additional rules, two contact points (general and Sev1) and a notification route. The management cluster applies them; application clusters do not. Alerts are off by default (`alerts.enabled: false`).
+mycarrier-helm renders a stack's Grafana alerting from `alerts:`: one alert rule group with the standard rules for the stack's language plus any additional rules, two contact points (general and Sev1) and a notification route. The management cluster applies them; application clusters do not. Alerts are off by default (`alerts.enabled: false`). A stack whose alerts should not page renders the rule group only, with `alerts.contactPoints.enabled: false` (see [Alerts that do not page](#alerts-that-do-not-page)).
 
 `alerts:` belongs to the stack, next to `secrets:`. Put the shared settings (`serviceName`, `displayName`, overrides, additional rules) in `helm/values.yaml`, and `alerts.enabled: true` only in the values file of the environment that alerts — prod. The queries read production telemetry and the resource names do not include the environment, so never enable alerts in more than one environment.
 
@@ -1372,11 +1372,12 @@ alerts:
 | `alerts.filters.excludedPaths` | `[]` | Paths left out of the alerts on the service's own HTTP responses (`serverErrorRatio`, `clientErrorRatio`, `serverErrorCount`, `http503Returned`): `url.path` values, or `http.route` values for nodejs |
 | `alerts.standard.<key>` | Language defaults | Overrides of one standard alert (below) |
 | `alerts.additional.<name>` | — | Additional rules (below) |
+| `alerts.contactPoints.enabled` | `true` | `false` renders the rule group only: no contact points, no notification route, and the alerts take Grafana's default notification route |
 | `alerts.contactPoints.secretName` | `squadcast-webhooks` | Secret in `monitoring` holding the Squadcast webhook URLs |
 | `alerts.contactPoints.secretKey` | `serviceName` lowercased | Key of the general webhook; the Sev1 contact point uses `<secretKey>-sev1` |
-| `alerts.routing.routes` | `[]` | Extra child routes under the stack's notification route, after the Sev1 route |
+| `alerts.routing.routes` | `[]` | Extra child routes under the stack's notification route, after the Sev1 route. The render fails when it is set with `alerts.contactPoints.enabled: false` |
 
-The Squadcast webhooks must exist in Vault under the keys `<serviceName lowercased>` and `<serviceName lowercased>-sev1`, unless `alerts.contactPoints.secretKey` names other keys. The schema rejects unknown keys under `alerts`, except inside an additional rule.
+The Squadcast webhooks must exist in Vault under the keys `<serviceName lowercased>` and `<serviceName lowercased>-sev1`, unless `alerts.contactPoints.secretKey` names other keys; a stack with `alerts.contactPoints.enabled: false` needs none. The schema rejects unknown keys under `alerts`, except inside an additional rule, and a non-boolean `alerts.contactPoints.enabled`.
 
 ### Standard alerts
 
@@ -1422,6 +1423,20 @@ alerts:
 Compact defaults: `uid` `<displayName lowercased>_<key in snake_case>`, `alertType` `<key in snake_case>`, `timeRange` 300 (seconds), `condition.type` `gt`, `condition.reducer` `last`, `for` `5m`, `noDataState` `OK`, `execErrState` `KeepLast`, `paused` `alerts.paused`. `labels` and `annotations` merge over the defaults.
 
 The raw form, `alerts.additional.<name>.rule`, passes a Grafana `AlertRule` through unchanged; `uid`, `title`, `condition`, `data`, `for`, `noDataState` and `execErrState` are required. `enabled: false` on either form leaves the rule out. Rule uids must be unique and at most 40 characters of `[A-Za-z0-9_-]`; the render fails otherwise.
+
+### Alerts that do not page
+
+Use `alerts.contactPoints.enabled: false` for a stack whose alerts should not page, such as a test app. The chart renders the rule group only: no contact points and no notification route, so the stack needs no webhooks. The rules, their labels (`alertSource: mycarrier-helm`, `service`, `severity`), `serviceName` and `displayName` work as with the switch on; with no route of the stack's own, the alerts take Grafana's default notification route for chart alerts. It goes with the other shared alert settings in `helm/values.yaml`:
+
+```yaml
+alerts:
+  serviceName: MC.TestApp
+  displayName: TestApp
+  contactPoints:
+    enabled: false
+```
+
+`alerts.routing.routes` attaches to the stack's own route, so the render fails when it is set with `alerts.contactPoints.enabled: false`. Turning the switch back on (or removing it) renders the contact points and route again, and the stack's webhooks must then exist.
 
 ---
 
