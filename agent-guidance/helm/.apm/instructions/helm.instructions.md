@@ -1198,7 +1198,7 @@ applications:
 - Name: `^[A-Za-z_][A-Za-z0-9_]*$`. No two names that differ only in case (the first in sorted order is reported).
 - 50 entries per definition after the merge; 4096 bytes per value; 16384 bytes of names plus values per definition; 65536 bytes per v1 request (all definitions of one application).
 - The escaped hook body, canary request and legacy script are at most 100 KiB (a `'` counts 6 bytes, a `$` counts 2).
-- No control characters in a value (any character below space, and DEL).
+- No control characters in a value (any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029).
 
 **Overriding TestEngine's defaults.** `env` may set a name TestEngine already sets on the test container (`ENVIRONMENT`, `SECRETID`, `SERVICE_ADDRESS`, `HOME`, `TMPDIR`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and others): the `env` value replaces the default on the test container only. Overriding `HOME` or `TMPDIR` with a path that is not writable on the hardened read-only root breaks your own tests. Overriding `ENVIRONMENT`, `RELEASE_ID`, `RELEASE_DEFINITION_NAME` or `BRANCH_NAME` also changes what mc-test-cli files the uploaded results under, which is the service's choice.
 

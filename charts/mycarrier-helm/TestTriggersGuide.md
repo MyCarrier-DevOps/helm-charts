@@ -366,7 +366,7 @@ applications:
 | Bytes per definition (names plus values) | 16384 |
 | Bytes per v1 request (all definitions of one application) | 65536 |
 | Escaped hook body, canary request and legacy script | 100 KiB (a `'` counts 6 bytes, a `$` counts 2) |
-| Control characters in a value | none (any character below space, and DEL) |
+| Control characters in a value | none (any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029) |
 | Two names that differ only in case | refused (`duplicate_name`; the first in sorted order is reported) |
 
 The schema refuses some of these first (name pattern, 50 entries, 4096 bytes, non-string values) with Helm's own message naming the path; the template checks again, so the rules also hold when schema validation is skipped.

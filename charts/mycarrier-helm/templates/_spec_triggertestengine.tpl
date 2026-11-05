@@ -47,7 +47,9 @@ backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
 {{- if not $enableV1 }}
   {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" false) | fromJson }}
   {{- $legacy = include "helm.testtrigger.legacyCurls" (dict "ctx" . "env" $env) }}
-  {{- if gt (len $legacy) 101888 }}
+  {{- /* $legacy still carries the 12-space block-scalar indentation that YAML strips; count the text that reaches
+         command[2]. */}}
+  {{- if gt (len (regexReplaceAll "(?m)^ {12}" $legacy "")) 101888 }}
     {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
     {{- if $last }}
       {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
@@ -97,7 +99,7 @@ template:
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: $TESTENGINE_APIKEY" \
-            -d '{{ include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.testtrigger.v1request" . | indent 12 | trimPrefix "            ") "application" .application "argoTemplate" false) }}' "$TESTENGINEHOOK_URL" || {
+            -d '{{ include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.testtrigger.v1request" .) "application" .application "argoTemplate" false) | indent 12 | trimPrefix "            " }}' "$TESTENGINEHOOK_URL" || {
               rc=$?
               echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
               failed=$((failed+1))

@@ -509,8 +509,51 @@ class LegacyHookBody(unittest.TestCase):
         self.assertLess(len((head + tail).encode("utf-8")), 512, repr(head + tail))
 
 
+def big_env_values(quotes, legacy=False):
+    """Six definitions; t0 has 50 env values of `quotes` single quotes each (6 bytes per quote once escaped)."""
+    defs = [dict(DEFINITION, name="t%d" % i) for i in range(6)]
+    defs[0]["env"] = {"V%02d" % j: "'" * quotes for j in range(50)}
+    vals = values(definitions=defs)
+    if legacy:
+        vals["applications"]["app1"]["testtrigger"]["enableV1"] = False
+    return vals
+
+
+class SizeCapsCountRealBytes(unittest.TestCase):
+    """The 100 KiB caps count the text that reaches command[2], not the block-scalar indentation YAML strips. With
+    several definitions the indentation adds kilobytes, so bodies just under the cap failed before."""
+
+    def real_body(self, result):
+        script = hook_container(result)["command"][2]
+        return re.search(r"-d '(.*?)' \"\$TESTENGINEHOOK_URL\"", script, re.S).group(1)
+
+    def test_v1_body_just_under_the_cap_renders(self):
+        r = render(big_env_values(305))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        size = len(self.real_body(r).encode("utf-8"))
+        self.assertGreater(size, 99000)
+        self.assertLessEqual(size, 102400)
+
+    def test_v1_body_over_the_cap_fails(self):
+        r = render(big_env_values(320))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertTrue(error_text(r).endswith('EnvVars: test definition "t0": request_too_large'), error_text(r))
+
+    def test_legacy_script_just_under_the_cap_renders(self):
+        r = render(big_env_values(310, legacy=True))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        size = len(hook_container(r)["command"][2].encode("utf-8"))
+        self.assertGreater(size, 100500)
+        self.assertLessEqual(size, 102400)
+
+    def test_legacy_script_over_the_cap_fails(self):
+        r = render(big_env_values(318, legacy=True))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertTrue(error_text(r).endswith('EnvVars: test definition "t0": request_too_large'), error_text(r))
+
+
 class CanaryVault(unittest.TestCase):
-    """The canary sends the request as the env value TESTS_REQUEST, in a pod that vault-env wraps; vault-env resolves an
+    r"""The canary sends the request as the env value TESTS_REQUEST, in a pod that vault-env wraps; vault-env resolves an
     inline ${vault:...} in any env value (Bank-Vaults regex \${([>]{0,2}vault:.*?#*}?)}). So a ${ in the canary body is
     encoded as $\u007b, which JSON decodes back to ${. The hook paths are not wrapped, so they keep the plain text."""
 
