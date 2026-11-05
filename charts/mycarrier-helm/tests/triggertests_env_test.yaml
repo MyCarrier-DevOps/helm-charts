@@ -247,14 +247,9 @@ tests:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
 
-  - it: "env: U+0085 NEL fails with control_character"
-    set:
-      <<: *top
-      applications: {app1: {<<: *app1, testtrigger: {<<: *tt, env: {FOO: "a\Nb"}}}}
-    asserts:
-      - failedTemplate:
-          errorPattern: 'EnvVars: test definition "apitests": variable "FOO": control_character$'
-
+  # U+0085 (NEL) and U+0080-U+009F cannot go through helm-unittest: the set values are written out as YAML, and a NEL
+  # there is a line break that breaks the fixture itself (the very input control_character refuses). They are tested in
+  # .github/scripts/test_trigger_env.py.
   - it: "env: U+2028 line separator fails with control_character"
     set:
       <<: *top
