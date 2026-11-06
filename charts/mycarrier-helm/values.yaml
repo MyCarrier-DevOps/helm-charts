@@ -48,7 +48,7 @@ global:
   # runs the same steps). The steps render only when global.deploymentStrategy is canary, and then in prod only unless
   # stepsOutsideProd is true (outside prod: steps: []). The chart injects the stable and -preview Services, Istio
   # weights on every VirtualService route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and
-  # rollbackWindow (2 revisions), with or without the steps.
+  # rollbackWindow (as many revisions as the Rollout keeps, revisionHistoryLimit 10), with or without the steps.
   # strategy:
   #   canary:
   #     preset: standard          # standard: 10, 25, 50 with a 5m pause after each, then 100
