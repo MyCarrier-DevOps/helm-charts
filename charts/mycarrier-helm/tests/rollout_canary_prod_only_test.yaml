@@ -69,7 +69,7 @@ tests:
       - equal:
           path: spec.rollbackWindow
           value:
-            revisions: 2
+            revisions: 10
       - equal:
           path: spec.progressDeadlineSeconds
           value: 1200

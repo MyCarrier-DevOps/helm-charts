@@ -783,6 +783,8 @@ With `tests` in `analysis.templates` (which needs `dark: false` until Q54, see A
 
 `applications.<app>.progressDeadlineSeconds` overrides the deadline for one slow-starting application.
 
+**Rollback window.** Every Rollout of the chart keeps its last 10 old ReplicaSets (`revisionHistoryLimit: 10`). A Rollout without `migratingToRollouts`, whatever the property, also renders `rollbackWindow.revisions: 10`, the same number (2 before the release after 4.7.23, DEVOPS-557). On a canary Rollout, a GitOps revert to a revision inside the window skips the steps by design: Argo Rollouts scales the restored ReplicaSet to full traffic at once, with no barriers, analysis or pauses, because that revision already ran in prod. Argo Rollouts counts a revert as inside the window when the target ReplicaSet is older than the stable one and fewer than `revisions` ReplicaSets were created between them; aborted canaries count. So a revert to any revision the Rollout still keeps skips the steps, and a revert to one it no longer keeps is a new ReplicaSet that runs every step. A stack sets nothing for this; there is no value.
+
 **What the release reads.** A canary Rollout (`deploymentType: rollout` without `migratingToRollouts`, with `global.deploymentStrategy: canary`) carries three annotations that the release's rollout-watch reads. The first two render in every environment; `mycarrier.tech/canaryBudgetSeconds` renders only where the steps render (prod, or `stepsOutsideProd`). A Rollout whose property is not `canary` carries none of them, in any environment:
 
 - `mycarrier.tech/rolloutGroupSize`: the number of such Rollouts in the release.

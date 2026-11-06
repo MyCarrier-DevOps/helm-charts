@@ -149,7 +149,10 @@ tests:
       - equal:
           path: spec.rollbackWindow
           value:
-            revisions: 2
+            revisions: 10
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 10
 
   - it: honours global.strategy.canary.progressDeadlineSeconds
     template: rollout.yaml

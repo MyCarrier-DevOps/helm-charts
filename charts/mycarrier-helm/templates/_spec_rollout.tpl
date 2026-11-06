@@ -4,7 +4,10 @@
 {{- if and (ne "true" (include "helm.hpaCondition" . | trim)) (ne "true" (include "helm.kedaCondition" . | trim)) (not $.Values.scaling) }}
 {{- include "helm.specs.replicas" . }}
 {{- end }}
-revisionHistoryLimit: 10
+{{- /* The Rollout keeps this many old ReplicaSets, and rollbackWindow below takes the same number: a GitOps revert to
+       any revision the Rollout still keeps skips the steps (DEVOPS-557). */}}
+{{- $revisionHistoryLimit := 10 }}
+revisionHistoryLimit: {{ $revisionHistoryLimit }}
 selector:
   matchLabels:
     {{ include "helm.labels.selector" . | indent 4 | trim }}
@@ -35,12 +38,15 @@ workloadRef:
 {{- if $routed }}
 {{- $canaryConfig := include "helm.canary.config" . | fromJson }}
 {{- /* DEVOPS-307 defaults: a canary that makes no progress for this long aborts (and the Rollout goes back to
-       stable); a GitOps revert to one of the last 2 revisions skips the steps. applications.<app>.progressDeadlineSeconds
+       stable); a GitOps revert to a revision inside rollbackWindow skips the steps. Argo Rollouts counts a revert as
+       inside the window when fewer than `revisions` ReplicaSets were created between the target and the stable one, and
+       aborted canaries count, so the window is revisionHistoryLimit: a revert to any ReplicaSet the Rollout still keeps
+       goes straight to full traffic (DEVOPS-557). applications.<app>.progressDeadlineSeconds
        overrides the release-wide value for a slow-starting app; it is not a step setting, so lockstep is unaffected. */}}
 progressDeadlineSeconds: {{ dig "progressDeadlineSeconds" $canaryConfig.progressDeadlineSeconds .application }}
 progressDeadlineAbort: true
 rollbackWindow:
-  revisions: 2
+  revisions: {{ $revisionHistoryLimit }}
 {{- end }}
 strategy:
 {{- if $routed }}

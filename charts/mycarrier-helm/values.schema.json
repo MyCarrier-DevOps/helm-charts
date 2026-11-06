@@ -17,7 +17,7 @@
           "properties": {
             "canary": {
               "type": "object",
-              "description": "Canary settings for every application with deploymentType rollout (DEVOPS-311). The chart injects the stable and -preview Services, Istio weights on every VirtualService route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and a rollbackWindow of 2 revisions.",
+              "description": "Canary settings for every application with deploymentType rollout (DEVOPS-311). The chart injects the stable and -preview Services, Istio weights on every VirtualService route that reaches the app, progressDeadlineSeconds with progressDeadlineAbort, and a rollbackWindow of 10 revisions, the Rollout's revisionHistoryLimit: a GitOps revert to any revision the Rollout still keeps skips the steps.",
               "additionalProperties": false,
               "properties": {
                 "preset": {

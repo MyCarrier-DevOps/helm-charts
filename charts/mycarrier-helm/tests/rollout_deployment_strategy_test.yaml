@@ -103,7 +103,7 @@ tests:
         equal:
           path: spec.rollbackWindow
           value:
-            revisions: 2
+            revisions: 10
       - template: rollout.yaml
         notExists:
           path: spec.strategy.canary.analysis
