@@ -7,6 +7,10 @@
 {{- define "helm.canary.alerts.rulesCheck" -}}
 import json, os, random, sys, time, urllib.error, urllib.request
 
+# The CDN in front of Grafana blocks the default Python-urllib user agent with a 403 (DEVOPS-579), so the check names
+# itself, as the tests script does.
+USER_AGENT = "mycarrier-canary-alert-rules/1"
+
 # Same contract as alert-gate's evaluate_rules (DEVOPS-329): a rule matches when its labels, or the labels of any of
 # its instances, carry the service and environment and are outside the Platform folder; it is evaluable when it is
 # not paused, its health is not error, and not every instance is in an Error state.
@@ -55,7 +59,7 @@ def fetch():
     token = (os.environ.get("GRAFANA_API_KEY") or "").strip()
     if not token:
         raise RuntimeError("GRAFANA_API_KEY is empty (check the Vault property)")
-    request = urllib.request.Request(URL, headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
+    request = urllib.request.Request(URL, headers={"Authorization": "Bearer " + token, "Accept": "application/json", "User-Agent": USER_AGENT})
     error = "no attempt made"
     for attempt in range(3):
         retry_after = None
@@ -63,8 +67,8 @@ def fetch():
             with urllib.request.build_opener(NoRedirect).open(request, timeout=15) as response:
                 return json.load(response)
         except urllib.error.HTTPError as e:
-            if e.code < 500 and e.code != 429:  # 401/403 (token, role), another 4xx or a redirect: ours to fix
-                raise RuntimeError("rules API: HTTP %d" % e.code)
+            if e.code < 500 and e.code != 429:  # 401/403 (token, role, or blocked at the edge), another 4xx or a redirect: ours to fix
+                raise RuntimeError("rules API: HTTP %d%s" % (e.code, " (check the token and role; the request may also have been blocked at the edge)" if e.code in (401, 403) else ""))
             error = "HTTP %d" % e.code
             if e.code == 429 and str(e.headers.get("Retry-After") or "").isdigit():
                 retry_after = int(e.headers.get("Retry-After"))
