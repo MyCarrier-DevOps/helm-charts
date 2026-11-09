@@ -167,6 +167,22 @@ tests:
           path: spec.metrics[0].provider.job.spec.template.spec.securityContext.runAsNonRoot
           value: true
 
+  # The CDN in front of Grafana blocks the default Python-urllib user agent with a 403, so the script names itself.
+  - it: sends a User-Agent header from the alert-rules script
+    template: analysistemplate.yaml
+    documentIndex: 2
+    set: *prod
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: 'USER_AGENT = "mycarrier-canary-alert-rules/1"'
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: '"User-Agent": USER_AGENT'
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: blocked at the edge
+
   # The Job pod must never become an endpoint of the app's Service, and must finish without an Istio sidecar.
   - it: gives the Job pod no selector labels of the app and no Istio sidecar
     template: analysistemplate.yaml
