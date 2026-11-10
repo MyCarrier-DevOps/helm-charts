@@ -1,0 +1,584 @@
+suite: Session affinity on the multi-frontend VirtualService (canarySessionAffinity)
+# applications.<app>.canarySessionAffinity pins a browser to the revision that served its page, so a frontend whose pods
+# hold only their own version's hashed chunks does not load a chunk from the other revision at a weighted step.
+templates:
+  - frontendVirtualService.yaml
+values:
+  - values/multifrontend-affinity.yaml
+tests:
+  - it: renders the routes unchanged while the value is off
+    set:
+      applications:
+        shell:
+          canarySessionAffinity: false
+        admin:
+          canarySessionAffinity: false
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-admin-env-match
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-docs-env-match
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-shell-env-match
+      - equal:
+          path: spec.http[3].name
+          value: admin-path-route
+      - equal:
+          path: spec.http[4].name
+          value: docs-path-route
+      - equal:
+          path: spec.http[5].name
+          value: api-custom-route
+      - equal:
+          path: spec.http[6].name
+          value: everything-custom-route
+      - equal:
+          path: spec.http[7].name
+          value: old-redirect
+      - equal:
+          path: spec.http[8].name
+          value: test-stack-shell-catchall
+      - equal:
+          path: spec.http[9].name
+          value: canary
+      - notExists:
+          path: spec.http[3].route[0].headers
+      - notExists:
+          path: spec.http[3].route[1].headers
+
+  - it: renders a group of four routes in place of each route the Rollouts weight
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-admin-env-match-pin-canary
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-admin-env-match-pin-stable
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-admin-env-match
+      - equal:
+          path: spec.http[3].name
+          value: test-stack-admin-env-match-stable
+      - equal:
+          path: spec.http[4].name
+          value: test-stack-docs-env-match
+      - equal:
+          path: spec.http[5].name
+          value: test-stack-shell-env-match-pin-canary
+      - equal:
+          path: spec.http[6].name
+          value: test-stack-shell-env-match-pin-stable
+      - equal:
+          path: spec.http[7].name
+          value: test-stack-shell-env-match
+      - equal:
+          path: spec.http[8].name
+          value: test-stack-shell-env-match-stable
+      - equal:
+          path: spec.http[9].name
+          value: admin-path-route-pin-canary
+      - equal:
+          path: spec.http[10].name
+          value: admin-path-route-pin-stable
+      - equal:
+          path: spec.http[11].name
+          value: admin-path-route
+      - equal:
+          path: spec.http[12].name
+          value: admin-path-route-stable
+      - equal:
+          path: spec.http[13].name
+          value: docs-path-route
+      - equal:
+          path: spec.http[14].name
+          value: api-custom-route-pin-canary
+      - equal:
+          path: spec.http[15].name
+          value: api-custom-route-pin-stable
+      - equal:
+          path: spec.http[16].name
+          value: api-custom-route
+      - equal:
+          path: spec.http[17].name
+          value: api-custom-route-stable
+      - equal:
+          path: spec.http[18].name
+          value: everything-custom-route-pin-canary
+      - equal:
+          path: spec.http[19].name
+          value: everything-custom-route-pin-stable
+      - equal:
+          path: spec.http[20].name
+          value: everything-custom-route
+      - equal:
+          path: spec.http[21].name
+          value: everything-custom-route-stable
+      - equal:
+          path: spec.http[22].name
+          value: old-redirect
+      - equal:
+          path: spec.http[23].name
+          value: test-stack-shell-catchall-pin-canary
+      - equal:
+          path: spec.http[24].name
+          value: test-stack-shell-catchall-pin-stable
+      - equal:
+          path: spec.http[25].name
+          value: test-stack-shell-catchall
+      - equal:
+          path: spec.http[26].name
+          value: test-stack-shell-catchall-stable
+      - equal:
+          path: spec.http[27].name
+          value: canary-pin-canary
+      - equal:
+          path: spec.http[28].name
+          value: canary-pin-stable
+      - equal:
+          path: spec.http[29].name
+          value: canary
+      - equal:
+          path: spec.http[30].name
+          value: canary-stable
+
+  - it: pins a cookie holder to the canary or the stable revision with the route's own match
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-pin-canary")].match
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'
+              uri:
+                prefix: /admin
+              withoutHeaders:
+                environment: {}
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-pin-stable")].match
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=fda8f8352dda79647567a8993662af7a(;.*)?$'
+              uri:
+                prefix: /admin
+              withoutHeaders:
+                environment: {}
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-pin-canary")].route
+          value:
+            - destination:
+                host: test-stack-admin-preview.preprod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-pin-stable")].route
+          value:
+            - destination:
+                host: test-stack-admin.preprod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-pin-canary")].rewrite
+          value:
+            uri: /
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-pin-stable")].timeout
+          value: 151s
+
+  - it: keeps the managed route's name and weights and sets the cookie on a page load only
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route")].match
+          value:
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+              uri:
+                prefix: /admin
+              withoutHeaders:
+                environment: {}
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route")].route
+          value:
+            - destination:
+                host: test-stack-admin.preprod.svc.cluster.local
+                port:
+                  number: 4200
+              headers:
+                response:
+                  add:
+                    set-cookie: mc-canary-test-stack-preprod=fda8f8352dda79647567a8993662af7a; Path=/; Secure; HttpOnly; SameSite=Lax
+              weight: 100
+            - destination:
+                host: test-stack-admin-preview.preprod.svc.cluster.local
+                port:
+                  number: 4200
+              headers:
+                response:
+                  add:
+                    set-cookie: mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; Path=/; Secure; HttpOnly; SameSite=Lax
+              weight: 0
+
+  - it: sends a request without a cookie or a page-load header to the stable revision only, with the route's own match
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-stable")].match
+          value:
+            - uri:
+                prefix: /admin
+              withoutHeaders:
+                environment: {}
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-stable")].route
+          value:
+            - destination:
+                host: test-stack-admin.preprod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: spec.http[?(@.name=="admin-path-route-stable")].rewrite
+          value:
+            uri: /
+
+  - it: adds each condition to every match block of a route
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="api-custom-route-pin-canary")].match
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'
+              uri:
+                prefix: /api
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'
+                x-tenant:
+                  exact: acme
+              uri:
+                prefix: /v2/api
+      - equal:
+          path: spec.http[?(@.name=="api-custom-route")].match
+          value:
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+              uri:
+                prefix: /api
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+                x-tenant:
+                  exact: acme
+              uri:
+                prefix: /v2/api
+      - equal:
+          path: spec.http[?(@.name=="api-custom-route-stable")].match
+          value:
+            - uri:
+                prefix: /api
+            - headers:
+                x-tenant:
+                  exact: acme
+              uri:
+                prefix: /v2/api
+
+  - it: gives a route without a match one block of its own conditions
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="everything-custom-route-pin-stable")].match
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=fda8f8352dda79647567a8993662af7a(;.*)?$'
+      - equal:
+          path: spec.http[?(@.name=="everything-custom-route")].match
+          value:
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-stable")].match
+      - equal:
+          path: spec.http[?(@.name=="everything-custom-route-stable")].timeout
+          value: 151s
+
+  - it: carries the second match block of the default route into every route of its group
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="test-stack-shell-catchall")].match[0].headers
+          value:
+            sec-fetch-dest:
+              exact: document
+
+  - it: pins the default route to the primary's own preview and stable Services
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="canary-pin-canary")].route
+          value:
+            - destination:
+                host: test-stack-shell-preview
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: spec.http[?(@.name=="canary-pin-stable")].route
+          value:
+            - destination:
+                host: test-stack-shell
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: spec.http[?(@.name=="canary")].route[0].weight
+          value: 100
+      - equal:
+          path: spec.http[?(@.name=="canary")].route[1].weight
+          value: 0
+
+  - it: sets the cookie on the weighted destinations only
+    asserts:
+      - exists:
+          path: spec.http[?(@.name=="canary")].route[0].headers.response.add
+      # No route other than a weighted one carries a Set-Cookie: each unmanaged route has neither a route-level nor
+      # a destination-level response header add.
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-admin-env-match-pin-canary")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-admin-env-match-pin-canary")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-admin-env-match-pin-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-admin-env-match-pin-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-admin-env-match-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-admin-env-match-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-docs-env-match")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-docs-env-match")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="admin-path-route-pin-canary")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="admin-path-route-pin-canary")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="admin-path-route-pin-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="admin-path-route-pin-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="admin-path-route-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="admin-path-route-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="docs-path-route")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="docs-path-route")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="api-custom-route-pin-canary")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="api-custom-route-pin-canary")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="api-custom-route-pin-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="api-custom-route-pin-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="api-custom-route-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="api-custom-route-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-pin-canary")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-pin-canary")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-pin-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-pin-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="everything-custom-route-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-shell-catchall-pin-canary")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-shell-catchall-pin-canary")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-shell-catchall-pin-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-shell-catchall-pin-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-shell-catchall-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-shell-catchall-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="canary-pin-canary")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="canary-pin-canary")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="canary-pin-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="canary-pin-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="canary-stable")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="canary-stable")].route[0].headers
+      - notExists:
+          path: spec.http[?(@.name=="old-redirect")].headers.response.add
+      - notExists:
+          path: spec.http[?(@.name=="old-redirect")].route[0].headers
+
+  - it: leaves a route to a Deployment and a redirect as they were
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="docs-path-route")].route
+          value:
+            - destination:
+                host: test-stack-docs.preprod.svc.cluster.local
+                port:
+                  number: 4200
+      - equal:
+          path: spec.http[?(@.name=="old-redirect")].redirect.uri
+          value: /
+
+  - it: renders no cookie when no application is a Rollout
+    set:
+      applications:
+        shell:
+          deploymentType: deployment
+        admin:
+          deploymentType: deployment
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-admin-env-match
+      - equal:
+          path: spec.http[1].name
+          value: test-stack-docs-env-match
+      - equal:
+          path: spec.http[2].name
+          value: test-stack-shell-env-match
+      - equal:
+          path: spec.http[3].name
+          value: admin-path-route
+      - equal:
+          path: spec.http[4].name
+          value: docs-path-route
+      - equal:
+          path: spec.http[5].name
+          value: api-custom-route
+      - equal:
+          path: spec.http[6].name
+          value: everything-custom-route
+      - equal:
+          path: spec.http[7].name
+          value: old-redirect
+      - equal:
+          path: spec.http[8].name
+          value: test-stack-shell-catchall
+      - equal:
+          path: spec.http[9].name
+          value: shell-default
+      - notExists:
+          path: spec.http[3].route[0].headers
+      - notExists:
+          path: spec.http[3].route[1].headers
+
+  - it: does not need a correlationId when no application is a Rollout
+    set:
+      global:
+        correlationId: null
+      applications:
+        shell:
+          deploymentType: deployment
+        admin:
+          deploymentType: deployment
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: fails without a correlationId
+    set:
+      global:
+        correlationId: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "application '[a-z]+': canarySessionAffinity needs global.correlationId, from which the cookie values derive"
+
+  - it: fails when a route already matches on the cookie header
+    set:
+      applications:
+        shell:
+          networking:
+            istio:
+              routes:
+                api:
+                  match:
+                    - headers:
+                        cookie:
+                          regex: .*
+    asserts:
+      - failedTemplate:
+          errorPattern: route 'api-custom-route' already matches on the 'cookie' header
+
+  - it: wraps only the routes of an application with the value, in a mixed release
+    set:
+      applications:
+        admin:
+          canarySessionAffinity: false
+    asserts:
+      - equal: {path: "spec.http[0].name", value: test-stack-admin-env-match}
+      - equal: {path: "spec.http[1].name", value: test-stack-docs-env-match}
+      - equal: {path: "spec.http[2].name", value: test-stack-shell-env-match-pin-canary}
+      - equal: {path: "spec.http[3].name", value: test-stack-shell-env-match-pin-stable}
+      - equal: {path: "spec.http[4].name", value: test-stack-shell-env-match}
+      - equal: {path: "spec.http[5].name", value: test-stack-shell-env-match-stable}
+      - equal: {path: "spec.http[6].name", value: admin-path-route}
+      - equal: {path: "spec.http[7].name", value: docs-path-route}
+      - equal: {path: "spec.http[8].name", value: api-custom-route-pin-canary}
+      - notExists: {path: 'spec.http[?(@.name=="admin-path-route-pin-canary")]'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-admin-env-match-stable")]'}
+      - notExists: {path: 'spec.http[?(@.name=="admin-path-route")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-admin-env-match")].route[1].headers'}
+      - exists: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add'}
+
+  - it: wraps no route when no frontend application has the value
+    set:
+      applications:
+        shell:
+          canarySessionAffinity: false
+        admin:
+          canarySessionAffinity: false
+    asserts:
+      - lengthEqual: {path: spec.http, count: 10}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-canary")]'}
+
+  - it: renders exactly as with the value off where the canary steps do not render
+    set:
+      global:
+        correlationId: ""
+        strategy:
+          canary:
+            stepsOutsideProd: false
+    asserts:
+      - lengthEqual: {path: spec.http, count: 10}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-canary")]'}
+
+  - it: keeps the correlation id out of every cookie value and match
+    asserts:
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route-pin-canary")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route-pin-stable")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[0].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+
+  - it: shares one cookie across the frontends of a release
+    asserts:
+      - matchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; "}
+      - matchRegex: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; "}

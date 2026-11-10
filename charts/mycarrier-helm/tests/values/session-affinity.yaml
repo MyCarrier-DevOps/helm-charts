@@ -1,0 +1,68 @@
+global:
+  deploymentStrategy: canary
+  appStack: test-stack
+  language: nodejs
+  correlationId: Corr-ABC-123
+  strategy:
+    canary:
+      dark: true
+      leader: web
+environment:
+  name: prod
+applications:
+  web:
+    deploymentType: rollout
+    replicas: 2
+    canarySessionAffinity: true
+    canaryHealthPath: /health
+    image:
+      registry: registry.example.com
+      repository: web
+      tag: "1.0.0"
+    ports:
+      http: 4200
+    testtrigger:
+      testdefinitions:
+        - name: webtests
+          containerImage: testing/example/web-tests
+          containerTag: 1.0.0
+          secretId: vault:Example/data/auth#SecretId
+          filters: ["TestCategory=Smoke"]
+    networking:
+      istio:
+        routes:
+          spa:
+            match:
+              - uri:
+                  prefix: /spa
+            rewrite:
+              uri: /
+          multi:
+            match:
+              - uri:
+                  prefix: /b
+              - uri:
+                  prefix: /c
+                headers:
+                  x-tenant:
+                    exact: acme
+          everything:
+            rewrite:
+              uri: /x
+          other:
+            match:
+              - uri:
+                  prefix: /other
+            destination: other.example.svc.cluster.local
+        redirects:
+          old: new
+  api:
+    deploymentType: rollout
+    replicas: 2
+    canaryHealthPath: /health
+    image:
+      registry: registry.example.com
+      repository: api
+      tag: "1.0.0"
+    ports:
+      http: 8080

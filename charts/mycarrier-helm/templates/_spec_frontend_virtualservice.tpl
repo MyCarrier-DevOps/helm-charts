@@ -1,4 +1,23 @@
+{{- /* The multi-frontend VirtualService spec. For each frontend Rollout with canarySessionAffinity, the routes that
+       weight it are wrapped in cookie routes (helm.canary.sessionAffinity.routes) and the routes of every other
+       application stay as they are; helm.canary.virtualServices passes omitSessionAffinity to read the routes the
+       Rollouts weight, which are the same routes without them. */ -}}
 {{- define "helm.specs.multifrontend.virtualservice" -}}
+{{- $base := include "helm.specs.multifrontend.virtualservice.routes" . -}}
+{{- $apps := dict -}}
+{{- range $name, $values := .frontendApps -}}
+  {{- if eq (include "helm.canary.sessionAffinity" (dict "application" $values "Values" $.Values)) "true" }}{{ $_ := set $apps (include "helm.fullname" (merge (dict "appName" $name "application" $values) $)) $name }}{{ end -}}
+{{- end -}}
+{{- if and $apps (not .omitSessionAffinity) -}}
+  {{- $spec := $base | fromYaml -}}
+  {{- $_ := set $spec "http" (include "helm.canary.sessionAffinity.routes" (dict "http" $spec.http "apps" $apps "namespace" (include "helm.namespace" .) "ctx" .) | fromJsonArray) -}}
+  {{- toYaml $spec -}}
+{{- else -}}
+  {{- $base -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "helm.specs.multifrontend.virtualservice.routes" -}}
 {{- $frontendApps := .frontendApps }}
 {{- $primaryApp := .primaryApp }}
 {{- $domain := include "helm.domain" $ }}

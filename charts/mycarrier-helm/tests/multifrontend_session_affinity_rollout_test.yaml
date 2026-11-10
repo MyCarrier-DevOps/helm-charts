@@ -1,0 +1,64 @@
+suite: Multi-frontend cookie session affinity, Rollout traffic routing
+# The cookie routes are not managed by Argo Rollouts, so the Rollouts list the same weighted route names with the value on.
+templates:
+  - rollout.yaml
+values:
+  - values/multifrontend-affinity.yaml
+tests:
+  - it: keeps the Rollout's managed routes to the weighted route names
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[1].routes
+          value:
+            - test-stack-shell-env-match
+            - api-custom-route
+            - everything-custom-route
+            - test-stack-shell-catchall
+            - canary
+      - equal:
+          path: metadata.name
+          value: test-stack-shell
+
+  - it: lists only the weighted routes of the application, with no cookie route
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[1].routes
+          value:
+            - test-stack-admin-env-match
+            - admin-path-route
+
+  - it: lists the same routes with the value on for one frontend only
+    documentIndex: 1
+    set:
+      applications:
+        admin:
+          canarySessionAffinity: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[1].routes
+          value:
+            - test-stack-shell-env-match
+            - api-custom-route
+            - everything-custom-route
+            - test-stack-shell-catchall
+            - canary
+
+  - it: lists the same routes with the value off
+    documentIndex: 1
+    set:
+      applications:
+        shell:
+          canarySessionAffinity: false
+        admin:
+          canarySessionAffinity: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[1].routes
+          value:
+            - test-stack-shell-env-match
+            - api-custom-route
+            - everything-custom-route
+            - test-stack-shell-catchall
+            - canary

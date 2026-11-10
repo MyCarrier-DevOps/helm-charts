@@ -904,7 +904,7 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 - **Source routes match on source labels only.** mycarrier-helm 4.7.13 rendered each source route match with `gateways: [mesh]`. Istio ignores `sourceLabels` on such a match, so from the moment a Rollout's `-preview` Service switched to the canary, every in-mesh caller, stable pods and pods outside the release included, reached that canary, whatever the weight. The release after 4.7.13 renders the matches with `sourceLabels` and no `gateways`. This is a fix, not a breaking change: nothing to set.
 - **Load on a callee's canary.** At weight W, a callee's canary receives about W x (2 - W) of the traffic its callers in the release send it: the caller canary's share W through the source route, plus W of the caller stable's share by weight. Its pods are sized for W (at least 2), so it carries about 1.9 times its weight's share at 10%, 1.75 times at 25% and 1.5 times at 50%. The factor compounds down a call chain (A calls B calls C), an HPA that averages over all pods does not correct it, and at small replica counts the 2-pod floor absorbs it. The chart does not size for it; the DEVOPS-321 pilot watches canary pod CPU and latency against stable on callees that take most of their traffic from a sibling.
 - **Multi-frontend.** A frontend Rollout in a multi-frontend release fails to render while the dark stage is on, in every environment: the header route would also go into the shared `<primary>-multifrontend` VirtualService, where it matches every path. Set `dark: false` for such a release.
-- **What stays exposed.** A call that leaves the mesh (the public host, the ingress gateway, KrakenD) reaches the callee's stable pods, also from a canary pod. The `canary-header` route has no gateway restriction, but every Istio ingress gateway of the Development and Production clusters removes `X-MyCarrier-Canary` from a request before it routes it (`istio-system/strip-canary-header`, DEVOPS-524), so a public request that carries the release's correlation id reaches stable pods. Only in-mesh callers reach the canary through the header route: a dark-stage test sends the header from a pod with an Istio sidecar to the application's in-cluster address, never to its public host. From a pod without a sidecar, that request reaches stable pods. The chart's `tests-dark` Job runs without a sidecar and only sends TestEngine the request; TestEngine's test pods, which have sidecars, send the header. When one Rollout of the release aborts, for up to about 30 s (`abortScaleDownDelaySeconds`) the other Rollouts' canary pods that call it reach its aborted canary pods or its stable pods, then its stable pods: Argo Rollouts points its `-preview` Service back at stable, after pointing it at the aborted canary while that still has available pods. Every canary Rollout runs `darkReplicas` pods through the whole dark window, and the dark stage gates header-tagged HTTP traffic only: a canary Rollout that consumes a queue (a KEDA or Service Bus worker) does real work from those pods before the suite has passed, and its HTTP calls to the release's other canary Rollouts reach their canaries, still untested, through the source routes.
+- **What stays exposed.** A call that leaves the mesh (the public host, the ingress gateway, KrakenD) reaches the callee's stable pods, also from a canary pod. The `canary-header` route has no gateway restriction, but every Istio ingress gateway of the Development and Production clusters removes `X-MyCarrier-Canary` from a request before it routes it (`istio-system/strip-canary-header`, DEVOPS-524), so a public request that carries the release's correlation id reaches stable pods, except for an application with `canarySessionAffinity` (see Session affinity, below): its public host takes a cookie derived from the correlation id, and that cookie reaches the canary, the dark stage's included. Only in-mesh callers reach the canary through the header route: a dark-stage test sends the header from a pod with an Istio sidecar to the application's in-cluster address, never to its public host. From a pod without a sidecar, that request reaches stable pods. The chart's `tests-dark` Job runs without a sidecar and only sends TestEngine the request; TestEngine's test pods, which have sidecars, send the header. When one Rollout of the release aborts, for up to about 30 s (`abortScaleDownDelaySeconds`) the other Rollouts' canary pods that call it reach its aborted canary pods or its stable pods, then its stable pods: Argo Rollouts points its `-preview` Service back at stable, after pointing it at the aborted canary while that still has available pods. Every canary Rollout runs `darkReplicas` pods through the whole dark window, and the dark stage gates header-tagged HTTP traffic only: a canary Rollout that consumes a queue (a KEDA or Service Bus worker) does real work from those pods before the suite has passed, and its HTTP calls to the release's other canary Rollouts reach their canaries, still untested, through the source routes.
 - **Rollback.** `dark: false` turns the dark stage off and leaves the canary pod floor and the canary-to-canary routes on; they go only with the chart version.
 
 
@@ -915,6 +915,120 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 | `dev` | `networking.istio.offloadOperatorEnabled: false`, which deletes the application's dev VirtualService until Argo CD self-heals — try Rollouts in a feature environment instead |
 
 The chart fails the render when one of these is missing.
+
+**Session affinity.** `applications.<app>.canarySessionAffinity: true` (default `false`, per application like `canaryCompare` and `canaryHealthPath`) pins a browser to the revision that served its page while a weighted step splits that application's traffic. Use it for a browser-facing Rollout whose pods hold only their own build's hashed JS and CSS chunks (a single image serving single-page apps under several path prefixes, for example): without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. Set it on the browser-facing applications only; a release with an API Rollout and a frontend Rollout opts in just the frontend, and in a multi-frontend release each frontend opts in on its own. The value changes nothing for an application that is not a Rollout, and it acts only where the canary steps render (prod, or `stepsOutsideProd`, for a Rollout whose repository property is `canary`); elsewhere the VirtualService renders exactly as with the value off. Where it acts, an empty `global.correlationId` (the pipeline supplies it; the cookie values derive from it) fails the render. Where the routes are depends on the application. A regular application has its own VirtualService, and the routes are there. An `isFrontend` application in a multi-frontend release (two or more `isFrontend` applications and one `isPrimary`) has its routes in the shared `<primary>-multifrontend` VirtualService (`<fullName>-env-match`, `<app>-path-route`, custom routes, `<primary>-catchall` and the primary's `canary` route) and also in its own VirtualService, which the Rollout lists beside it; the chart wraps the weighted routes of both, for each frontend with the value on, and leaves the routes of a frontend without it as they are. In either VirtualService, for each route that weights the application, meaning a route whose destinations are exactly the application's stable and `-preview` Services, the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
+
+| Route | Matches | Goes to |
+|-------|---------|---------|
+| `<route>-pin-canary` | each of the route's matches and a `cookie` header `<name>=<canary value>` | the `-preview` Service only |
+| `<route>-pin-stable` | each of the route's matches and a `cookie` header `<name>=<stable value>` | the stable Service only |
+| `<route>` | each of the route's matches and `sec-fetch-dest: document` | the weighted stable and `-preview` destinations; each destination adds a `Set-Cookie` of `<name>=<canary value>` (canary) or `<name>=<stable value>` (stable), `Path=/; Secure; HttpOnly; SameSite=Lax` |
+| `<route>-stable` | the route's matches | the stable Service only |
+
+`<name>` is `mc-canary-<global.appStack>-<namespace>`, each part lower-cased and cut to `[a-z0-9-]`, so two stacks or two namespaces on a shared host do not overwrite each other's cookie, while the frontends of one multi-frontend release share one. The two values are independent SHA-256 digests (the first 32 hex digits) of `canary:<namespace>:<id>` and `stable:<namespace>:<id>`, with `<id>` the lower-cased `global.correlationId` and `<namespace>` the one the VirtualService renders into. The correlation id is never sent to the browser, the stable value does not reveal the canary one, and a cookie from a drill outside prod cannot be replayed in prod.
+
+**Exposure of the canary cookie.** With `canarySessionAffinity` on, anyone who knows the release's correlation id can compute the canary cookie (the derivation is in this guidance) and reach the canary through the application's public host, including during the dark stage, when the canary has not yet passed `tests-dark`. The correlation id is treated as internal-only: it is never sent to the browser, but it is on every pod label and in the slip. The gateway strip of `X-MyCarrier-Canary` that protects the dark stage's header route does not extend to this cookie, and the chart does not refuse `dark: true` with the value on. Weigh this before turning the value on for an application whose dark-stage canary must stay unreachable from outside, and keep the correlation id out of anything a browser or a public caller can see.
+
+ The cookie regex matches the whole header value, so another cookie's name or value never matches it. `<route>` keeps its name, so the Rollout still weights it (its `routes` list is the same with the value on); the other three are not managed by Argo Rollouts, which sets only the weights, so they and the cookie stay in place through every step. The canary source routes (`<route>-canary-source`, above) and the dark stage's `canary-header` route are left as they are; a route with only the `-preview` destination is never wrapped. A route that already matches on the `cookie` header, or on `sec-fetch-dest`, fails the render, because the new match cannot be added to it. The cookie is a session cookie, and `add` leaves the application's own `Set-Cookie` in place. Only the page-load route sets it, so a chunk, fetch or XHR response carries none.
+
+- For browser-facing applications only. The application's VirtualService also binds the `mesh` gateway, and an in-cluster caller sends no `Sec-Fetch-Dest`, so with the value on every in-cluster caller reaches the stable revision (a canary pod's calls still follow the source routes). Do not set it on an API that other services call.
+- A browser that does not send `Sec-Fetch-Dest` never takes the cookie, so it stays on the stable revision.
+- A request without a cookie, or with one of an earlier release, goes to the stable revision. A page loaded before the weighted step reaches the stable revision too.
+- While the value is on, never cache HTML at an edge (a CDN or Cloudflare cache rule) on the application's host: a cached page carries one cohort's `Set-Cookie` to every visitor.
+- The cookie cannot cover the switch at promotion or abort, when the stable revision changes under an open page. The application should reload the page once when a lazy chunk fails to load.
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: storefront
+  language: nodejs
+  correlationId: 0f3c9a7e-52d1-4c1a-9b7e-6a1f0c2d8e41   # supplied by the pipeline; set here only so the example renders
+  strategy:
+    canary:
+      dark: false                       # no leader or test definitions needed for this example
+
+# helm/values.prod.yaml
+environment:
+  name: prod
+
+# helm/deployment/values.yaml
+applications:
+  web:
+    deploymentType: rollout
+    canarySessionAffinity: true         # the frontend only; an API Rollout of the release leaves it off
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/web
+    ports:
+      http: 4200
+    networking:
+      istio:
+        routes:
+          checkout:
+            match:
+              - uri:
+                  prefix: /checkout
+            rewrite:
+              uri: /
+
+# helm/deployment/values.prod.yaml
+applications:
+  web:
+    image:
+      tag: release-v1.0.0
+```
+
+In a multi-frontend release the value goes on each frontend that serves its own hashed assets, next to `isFrontend`:
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: storefront
+  language: nodejs
+  correlationId: 0f3c9a7e-52d1-4c1a-9b7e-6a1f0c2d8e41   # supplied by the pipeline; set here only so the example renders
+  strategy:
+    canary:
+      dark: false                       # a multi-frontend release needs the dark stage off
+
+# helm/values.prod.yaml
+environment:
+  name: prod
+
+# helm/deployment/values.yaml
+applications:
+  shell:
+    isFrontend: true
+    isPrimary: true
+    deploymentType: rollout
+    canarySessionAffinity: true
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/shell
+    ports:
+      http: 4200
+  checkout:
+    isFrontend: true
+    routePrefix: /checkout
+    deploymentType: rollout
+    canarySessionAffinity: true         # a frontend without the value keeps its routes as they are
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/checkout
+    ports:
+      http: 4200
+
+# helm/deployment/values.prod.yaml
+applications:
+  shell:
+    image:
+      tag: release-v1.0.0
+  checkout:
+    image:
+      tag: release-v1.0.0
+```
 
 **Migrations.** A database migration runs in one of two ways. A migrator that runs to completion and exits goes in `jobs` with `timing: pre-deploy`: Argo CD runs the Job as a PreSync hook (or, with `runAsHook: false`, as a plain wave-0 resource that runs once per release), ahead of the workloads (sync wave 10), and waits for it to complete, so the migration finishes before any Deployment, StatefulSet or Rollout of the release is updated, and a failed Job fails the sync; it has no port and gets no canary steps. A long-running migrator application, which runs the migration when it starts and keeps running (like a worker), is an entry under `applications`; with `deploymentType: rollout` it takes part in the canary like any other Rollout, so give it an HTTP port and a health path for the health check (see Analysis), and set `networking.istio.externalEnabled: false` so that only in-cluster callers reach the pod that holds the database credentials. It gives no start order: it syncs in wave 10 with every Deployment, StatefulSet and Rollout, so their new pods start alongside it and can serve before the migration finishes. With the coordinator on (the default) the release moves in lockstep and an abort stops all of it; with `coordinator.enabled: false` each Rollout runs its own steps, so a migrator Rollout that aborts does not stop the others from promoting. The default readiness probe is a TCP check that passes once the port opens, so it does not catch a migration that fails while the process keeps running. Use it only when the migrator's readiness waits for its migration and every other application's readiness waits for the schema version it needs (`probes.readinessProbe`): keep the port, startup and liveness probes answering while the migration runs, and set `applications.<app>.progressDeadlineSeconds` above the longest migration on every Rollout whose readiness waits for it, or that Rollout aborts. With the coordinator on, a Rollout whose schema is already in place (its readiness does not wait) reaches the next barrier first and waits there for the migrator; that wait counts toward its own progress deadline and is capped by `coordinator.barrierTimeouts` (9m by default, `dark-passed` 15m), so a longer migration aborts the whole release. Raise the barrier timeouts above the longest migration, and `applications.<app>.progressDeadlineSeconds` above them on every Rollout of the release, not only the ones that wait (the chart fails the render when a barrier timeout reaches a Rollout's deadline); a longer deadline also delays the abort of a stuck canary pod, so keep it as low as the migration allows. Each barrier timeout also counts in the canary budget, which must stay at or below 5700 s (see What the release reads): the `standard` preset fits barrier timeouts of up to 10m each with the dark stage (`dark-passed` at its 15m), and up to 18m each with `dark: false`. Otherwise use the pre-deploy job. Either way, a migration must stay compatible with the previous version, whose pods keep running against the migrated schema, so an abort or a revert needs no database rollback. Applications with `migration` in the name are left out of automatic HPA (see [HPA](#hpa-horizontal-pod-autoscaler)).
 

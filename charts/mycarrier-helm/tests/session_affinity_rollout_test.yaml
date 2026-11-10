@@ -1,0 +1,43 @@
+suite: Session affinity, Rollout traffic routing
+# The cookie routes are not managed by Argo Rollouts, so the Rollout lists the same routes with the value on or off:
+# the original names, never a -pin-* or -stable twin, and the dark stage's canary-header managed route stays.
+templates:
+  - rollout.yaml
+values:
+  - values/session-affinity.yaml
+tests:
+  - it: lists the same routes with the value on and off
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[0].routes
+          value:
+            - test-stack-web
+            - everything
+            - multi
+            - spa
+            - canary
+      - equal:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: canary-header
+
+  - it: lists the same routes with the value off
+    documentIndex: 1
+    set:
+      applications:
+        web:
+          canarySessionAffinity: false
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices[0].routes
+          value:
+            - test-stack-web
+            - everything
+            - multi
+            - spa
+            - canary
+      - equal:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: canary-header

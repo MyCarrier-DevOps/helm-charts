@@ -1,0 +1,463 @@
+suite: Session affinity on the application's VirtualService (canarySessionAffinity)
+# A browser-facing Rollout whose pods hold only their own build's hashed assets must not be split per request at a
+# weighted step. With applications.<app>.canarySessionAffinity each route that weights the app becomes a group of
+# four: pin-canary, pin-stable, the weighted route (page loads only, which set the cookie) and a stable-only fallback.
+# The fixture's web app has custom routes (one prefix rewrite, one with two match blocks, one without a match, one to
+# another host), a redirect, canary source routes (the steps render in prod with the coordinator on) and the dark
+# stage; api is a Rollout without the value.
+templates:
+  - virtualService.yaml
+values:
+  - values/session-affinity.yaml
+tests:
+  - it: leaves the routes as they were while the value is off
+    set:
+      applications:
+        web:
+          canarySessionAffinity: false
+    documentIndex: 1
+    asserts:
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-canary")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-stable")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa")].route[0].headers'}
+      - equal: {path: "spec.http[0].name", value: test-stack-web-canary-source}
+      - equal: {path: "spec.http[1].name", value: test-stack-web}
+
+  - it: renders a group of four routes in place of each weighted route, source routes left in place
+    documentIndex: 1
+    asserts:
+      - lengthEqual: {path: spec.http, count: 27}
+      - equal: {path: "spec.http[0].name", value: test-stack-web-canary-source}
+      - equal: {path: "spec.http[1].name", value: test-stack-web-pin-canary}
+      - equal: {path: "spec.http[2].name", value: test-stack-web-pin-stable}
+      - equal: {path: "spec.http[3].name", value: test-stack-web}
+      - equal: {path: "spec.http[4].name", value: test-stack-web-stable}
+      - equal: {path: "spec.http[5].name", value: old}
+      - equal: {path: "spec.http[6].name", value: everything-canary-source}
+      - equal: {path: "spec.http[7].name", value: everything-pin-canary}
+      - equal: {path: "spec.http[8].name", value: everything-pin-stable}
+      - equal: {path: "spec.http[9].name", value: everything}
+      - equal: {path: "spec.http[10].name", value: everything-stable}
+      - equal: {path: "spec.http[11].name", value: multi-canary-source}
+      - equal: {path: "spec.http[12].name", value: multi-pin-canary}
+      - equal: {path: "spec.http[13].name", value: multi-pin-stable}
+      - equal: {path: "spec.http[14].name", value: multi}
+      - equal: {path: "spec.http[15].name", value: multi-stable}
+      - equal: {path: "spec.http[16].name", value: other}
+      - equal: {path: "spec.http[17].name", value: spa-canary-source}
+      - equal: {path: "spec.http[18].name", value: spa-pin-canary}
+      - equal: {path: "spec.http[19].name", value: spa-pin-stable}
+      - equal: {path: "spec.http[20].name", value: spa}
+      - equal: {path: "spec.http[21].name", value: spa-stable}
+      - equal: {path: "spec.http[22].name", value: canary-canary-source}
+      - equal: {path: "spec.http[23].name", value: canary-pin-canary}
+      - equal: {path: "spec.http[24].name", value: canary-pin-stable}
+      - equal: {path: "spec.http[25].name", value: canary}
+      - equal: {path: "spec.http[26].name", value: canary-stable}
+
+  - it: leaves an application without the value as it was
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.http[0].name", value: test-stack-api-canary-source}
+      - equal: {path: "spec.http[1].name", value: test-stack-api}
+      - equal: {path: "spec.http[2].name", value: canary-canary-source}
+      - equal: {path: "spec.http[3].name", value: canary}
+      - lengthEqual: {path: spec.http, count: 4}
+      - notExists: {path: "spec.http[1].route[0].headers"}
+
+  - it: keeps each canary source route as it is, with the -preview destination only and no cookie
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="spa-canary-source")].match'
+          value:
+            - sourceLabels:
+                mycarrier.tech/correlationId: Corr-ABC-123
+                mycarrier.tech/rollout-role: canary
+              uri:
+                prefix: /spa
+      - equal:
+          path: 'spec.http[?(@.name=="spa-canary-source")].route'
+          value:
+            - destination:
+                host: test-stack-web-preview.prod.svc.cluster.local
+                port:
+                  number: 4200
+      - equal:
+          path: 'spec.http[?(@.name=="spa-canary-source")].rewrite'
+          value:
+            uri: /
+
+  - it: pins a cookie holder to the canary or the stable revision with the route's own match and fields
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="spa-pin-canary")].match'
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-prod=7b0464db8d5315314a3adb6560db02be(;.*)?$'
+              uri:
+                prefix: /spa
+      - equal:
+          path: 'spec.http[?(@.name=="spa-pin-stable")].match'
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-prod=be62c76419c544bd7201a64853f91112(;.*)?$'
+              uri:
+                prefix: /spa
+      - equal:
+          path: 'spec.http[?(@.name=="spa-pin-canary")].route'
+          value:
+            - destination:
+                host: test-stack-web-preview.prod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: 'spec.http[?(@.name=="spa-pin-stable")].route'
+          value:
+            - destination:
+                host: test-stack-web.prod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal: {path: 'spec.http[?(@.name=="spa-pin-canary")].rewrite', value: {uri: /}}
+      - equal: {path: 'spec.http[?(@.name=="spa-pin-stable")].rewrite', value: {uri: /}}
+
+  - it: keeps the weighted route's name and weights, for page loads only, and sets the cookie on its destinations
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="spa")].match'
+          value:
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+              uri:
+                prefix: /spa
+      - equal:
+          path: 'spec.http[?(@.name=="spa")].route'
+          value:
+            - destination:
+                host: test-stack-web.prod.svc.cluster.local
+                port:
+                  number: 4200
+              headers:
+                response:
+                  add:
+                    set-cookie: mc-canary-test-stack-prod=be62c76419c544bd7201a64853f91112; Path=/; Secure; HttpOnly; SameSite=Lax
+              weight: 100
+            - destination:
+                host: test-stack-web-preview.prod.svc.cluster.local
+                port:
+                  number: 4200
+              headers:
+                response:
+                  add:
+                    set-cookie: mc-canary-test-stack-prod=7b0464db8d5315314a3adb6560db02be; Path=/; Secure; HttpOnly; SameSite=Lax
+              weight: 0
+      - equal: {path: 'spec.http[?(@.name=="spa")].rewrite', value: {uri: /}}
+
+  - it: sends a request with no cookie and no page-load header to the stable revision with the route's own match
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="spa-stable")].match'
+          value:
+            - uri:
+                prefix: /spa
+      - equal:
+          path: 'spec.http[?(@.name=="spa-stable")].route'
+          value:
+            - destination:
+                host: test-stack-web.prod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal: {path: 'spec.http[?(@.name=="spa-stable")].rewrite', value: {uri: /}}
+
+  - it: adds each condition to every match block of a route
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="multi-pin-canary")].match'
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-prod=7b0464db8d5315314a3adb6560db02be(;.*)?$'
+              uri:
+                prefix: /b
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-prod=7b0464db8d5315314a3adb6560db02be(;.*)?$'
+                x-tenant:
+                  exact: acme
+              uri:
+                prefix: /c
+      - equal:
+          path: 'spec.http[?(@.name=="multi")].match'
+          value:
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+              uri:
+                prefix: /b
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+                x-tenant:
+                  exact: acme
+              uri:
+                prefix: /c
+      - equal:
+          path: 'spec.http[?(@.name=="multi-stable")].match'
+          value:
+            - uri:
+                prefix: /b
+            - headers:
+                x-tenant:
+                  exact: acme
+              uri:
+                prefix: /c
+
+  - it: gives a route without a match one block of its own conditions
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="everything-pin-stable")].match'
+          value:
+            - headers:
+                cookie:
+                  regex: '^(.*;\s*)?mc-canary-test-stack-prod=be62c76419c544bd7201a64853f91112(;.*)?$'
+      - equal:
+          path: 'spec.http[?(@.name=="everything")].match'
+          value:
+            - headers:
+                sec-fetch-dest:
+                  exact: document
+      - notExists: {path: 'spec.http[?(@.name=="everything-stable")].match'}
+
+  - it: wraps the header route and the default route with the route's matches in every block
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="test-stack-web-pin-canary")].match[0].headers.cookie.regex'
+          value: '^(.*;\s*)?mc-canary-test-stack-prod=7b0464db8d5315314a3adb6560db02be(;.*)?$'
+      - equal:
+          path: 'spec.http[?(@.name=="test-stack-web")].match[0].headers.sec-fetch-dest'
+          value:
+            exact: document
+      - equal:
+          path: 'spec.http[?(@.name=="test-stack-web")].match[0].headers.environment'
+          value:
+            exact: prod
+
+  - it: sets the cookie on the weighted destinations only, so only a page load carries a Set-Cookie
+    documentIndex: 1
+    asserts:
+      - exists: {path: 'spec.http[?(@.name=="canary")].route[0].headers.response.add'}
+      - exists: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-canary-source")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-canary-source")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-canary")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-canary")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="old")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="old")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-canary-source")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-canary-source")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-pin-canary")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-pin-canary")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-pin-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-pin-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="everything-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-canary-source")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-canary-source")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-pin-canary")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-pin-canary")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-pin-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-pin-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="multi-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="other")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="other")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-canary-source")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-canary-source")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-pin-canary")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-pin-canary")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-pin-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-pin-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-canary-source")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-canary-source")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-canary")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-canary")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-stable")].route[0].headers'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-stable")].headers.response.add'}
+      - notExists: {path: 'spec.http[?(@.name=="canary-stable")].route[0].headers'}
+
+  - it: leaves a route to another host and a redirect as they were
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: 'spec.http[?(@.name=="other")].route'
+          value:
+            - destination:
+                host: other.example.svc.cluster.local
+                port:
+                  number: 4200
+      - equal: {path: 'spec.http[?(@.name=="old")].redirect.uri', value: /}
+
+  - it: wraps the routes without source routes too
+    documentIndex: 1
+    set:
+      global:
+        strategy:
+          canary:
+            dark: false
+            coordinator:
+              enabled: false
+    asserts:
+      - equal: {path: "spec.http[0].name", value: test-stack-web-pin-canary}
+      - equal: {path: "spec.http[3].name", value: test-stack-web-stable}
+      - notExists: {path: 'spec.http[?(@.name=="spa-canary-source")]'}
+
+  - it: changes nothing for an application that is not a Rollout
+    set:
+      applications:
+        web:
+          deploymentType: deployment
+    documentIndex: 1
+    asserts:
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-canary")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-stable")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa")].route[0].headers'}
+
+  - it: fails without a correlationId
+    set:
+      global:
+        correlationId: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'web': canarySessionAffinity needs global.correlationId, from which the cookie values derive"
+
+  - it: fails when a route already matches on the cookie header
+    set:
+      applications:
+        web:
+          networking:
+            istio:
+              routes:
+                spa:
+                  match:
+                    - headers:
+                        cookie:
+                          regex: .*
+    asserts:
+      - failedTemplate:
+          errorPattern: route 'spa' already matches on the 'cookie' header
+
+  - it: fails when a route already matches on sec-fetch-dest
+    set:
+      applications:
+        web:
+          networking:
+            istio:
+              routes:
+                spa:
+                  match:
+                    - headers:
+                        sec-fetch-dest:
+                          exact: empty
+    asserts:
+      - failedTemplate:
+          errorPattern: route 'spa' already matches on the 'sec-fetch-dest' header
+
+  - it: renders exactly as with the value off where the canary steps do not render
+    documentIndex: 1
+    set:
+      environment:
+        name: preprod
+      global:
+        correlationId: ""
+        strategy:
+          canary:
+            dark: false
+    asserts:
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-canary")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-stable")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa")].route[0].headers'}
+      - equal: {path: "spec.http[0].name", value: test-stack-web}
+      - lengthEqual: {path: spec.http, count: 7}
+
+  - it: wraps outside prod with stepsOutsideProd
+    documentIndex: 1
+    set:
+      environment:
+        name: preprod
+      global:
+        strategy:
+          canary:
+            dark: false
+            stepsOutsideProd: true
+    asserts:
+      - equal: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', value: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'}
+
+  - it: wraps nothing for a Rollout whose repository property is not canary
+    documentIndex: 1
+    set:
+      global:
+        deploymentStrategy: rolling
+    asserts:
+      - notExists: {path: 'spec.http[?(@.name=="spa-pin-canary")]'}
+
+  - it: keeps the correlation id out of every cookie value and match
+    documentIndex: 1
+    asserts:
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-stable")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[0].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+
+  - it: derives independent canary and stable values, neither containing the other
+    documentIndex: 1
+    asserts:
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-prod=7b0464db8d5315314a3adb6560db02be; "}
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[0].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-prod=be62c76419c544bd7201a64853f91112; "}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[0].headers.response.add.set-cookie', pattern: "7b0464db8d5315314a3adb6560db02be"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "be62c76419c544bd7201a64853f91112"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', pattern: "be62c76419c544bd7201a64853f91112"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-stable")].match[0].headers.cookie.regex', pattern: "7b0464db8d5315314a3adb6560db02be"}
+
+  - it: names the cookie after the release's app stack, cut to cookie-name-safe characters
+    documentIndex: 1
+    set:
+      global:
+        appStack: My_Stack.V2
+    asserts:
+      - matchRegex: {path: 'spec.http[1].match[0].headers.cookie.regex', pattern: "^\\^\\(\\.\\*;\\\\s\\*\\)\\?mc-canary-my-stack-v2-prod="}
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-my-stack-v2-prod="}
+
+  - it: gives the same correlation id different values and names in two namespaces
+    documentIndex: 1
+    set:
+      environment:
+        name: preprod
+      global:
+        strategy:
+          canary:
+            dark: false
+            stepsOutsideProd: true
+    asserts:
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; "}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "7b0464db8d5315314a3adb6560db02be"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', pattern: "mc-canary-test-stack-prod="}
