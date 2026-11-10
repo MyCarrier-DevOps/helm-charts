@@ -66,4 +66,6 @@ metadata:
 spec:
   {{ include "helm.specs.multifrontend.offload.virtualservice" $multiFrontendContext | indent 2 | trim }}
 {{- end }}
+{{- else if eq (include "helm.canary.sessionAffinity" .) "true" }}
+{{- fail "global.strategy.canary.sessionAffinity applies to the multi-frontend VirtualService, which a release has when two or more applications are isFrontend and one is isPrimary; this release has none." }}
 {{- end }}

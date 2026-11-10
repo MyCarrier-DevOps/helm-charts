@@ -880,7 +880,7 @@ http://{{ include "helm.fullname" . }}-preview.{{ include "helm.namespace" . }}.
   {{- if and (gt (len $frontendApps) 1) $primaryApp -}}
     {{- $primaryAppValues := index $frontendApps $primaryApp -}}
     {{- $primaryFullName := include "helm.fullname" (merge (dict "appName" $primaryApp "application" $primaryAppValues) (omit . "appName" "application")) -}}
-    {{- $mfContext := merge (dict "frontendApps" $frontendApps "primaryApp" $primaryApp "primaryAppValues" $primaryAppValues "primaryFullName" $primaryFullName) (omit . "appName" "application") -}}
+    {{- $mfContext := merge (dict "frontendApps" $frontendApps "primaryApp" $primaryApp "primaryAppValues" $primaryAppValues "primaryFullName" $primaryFullName "omitSessionAffinity" true) (omit . "appName" "application") -}}
     {{- $mf := include "helm.specs.multifrontend.virtualservice" $mfContext | fromYaml -}}
     {{- $mfRoutes := include "helm.canary.routesFor" (dict "spec" $mf "fullName" $fullName "namespace" $namespace) | fromJsonArray -}}
     {{- if $mfRoutes }}

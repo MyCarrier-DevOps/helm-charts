@@ -916,6 +916,70 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 
 The chart fails the render when one of these is missing.
 
+**Session affinity (multi-frontend).** `global.strategy.canary.sessionAffinity: true` (default `false`) pins a browser to the revision that served its page while a weighted step splits traffic. Use it for a multi-frontend release whose frontend pods hold only their own build's hashed JS and CSS chunks: without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. The value applies only to the shared `<primary>-multifrontend` VirtualService (two or more `isFrontend` applications and one `isPrimary`); without it the render fails, and so does an empty `global.correlationId`, which names the cookie (the pipeline supplies it). With no frontend Rollout in the release it changes nothing, and neither does it for Deployments or StatefulSets. For each route that sends traffic to a frontend Rollout and its `-preview` Service (the `<fullName>-env-match` routes, `<app>-path-route`, a custom route under `networking.istio.routes` without a `destination`, the `<fullName>-catchall` route and the primary's `canary` route), the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
+
+| Route | Matches | Goes to |
+|-------|---------|---------|
+| `<route>-pin-canary` | each of the route's matches and a `cookie` header `mc-canary=<id>` | the `-preview` Service only |
+| `<route>-pin-stable` | each of the route's matches and a `cookie` header `mc-canary=stable-<id>` | the stable Service only |
+| `<route>` | each of the route's matches and `sec-fetch-dest: document` | the weighted stable and `-preview` destinations; each destination adds a `Set-Cookie` of `mc-canary=<id>` (canary) or `mc-canary=stable-<id>` (stable), `Path=/; Secure; HttpOnly; SameSite=Lax` |
+| `<route>-stable` | the route's matches | the stable Service only |
+
+`<id>` is `global.correlationId`, lower-cased. The cookie regex matches the whole header value, so another cookie's name or value never matches it. `<route>` keeps its name, so the Rollout still weights it (its `routes` list is the same with the value on); the other three are not managed by Argo Rollouts, which sets only the weights, so they and the cookie stay in place through every step. A route that already matches on the `cookie` header, or on `sec-fetch-dest`, fails the render, because the new match cannot be added to it. The cookie is a session cookie, and `add` leaves the application's own `Set-Cookie` in place. Only the page-load route sets it, so a chunk, fetch or XHR response carries none.
+
+- A browser that does not send `Sec-Fetch-Dest` never takes the cookie, so it stays on the stable revision.
+- A request without a cookie, or with one of an earlier release, goes to the stable revision. A page loaded before the weighted step reaches the stable revision too.
+- While the value is on, never cache HTML at an edge (a CDN or Cloudflare cache rule) on the frontend host: a cached page carries one cohort's `Set-Cookie` to every visitor.
+- The cookie cannot cover the switch at promotion or abort, when the stable revision changes under an open page. The application should reload the page once when a lazy chunk fails to load.
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: storefront
+  language: nodejs
+  correlationId: 0f3c9a7e-52d1-4c1a-9b7e-6a1f0c2d8e41   # supplied by the pipeline; set here only so the example renders
+  strategy:
+    canary:
+      dark: false                       # a multi-frontend release needs the dark stage off
+      sessionAffinity: true             # pin a browser to the revision that served its page
+
+# helm/values.prod.yaml
+environment:
+  name: prod
+
+# helm/deployment/values.yaml
+applications:
+  shell:
+    isFrontend: true
+    isPrimary: true
+    deploymentType: rollout
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/shell
+    ports:
+      http: 4200
+  checkout:
+    isFrontend: true
+    routePrefix: /checkout
+    deploymentType: rollout
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/checkout
+    ports:
+      http: 4200
+
+# helm/deployment/values.prod.yaml
+applications:
+  shell:
+    image:
+      tag: release-v1.0.0
+  checkout:
+    image:
+      tag: release-v1.0.0
+```
+
 **Migrations.** A database migration runs in one of two ways. A migrator that runs to completion and exits goes in `jobs` with `timing: pre-deploy`: Argo CD runs the Job as a PreSync hook (or, with `runAsHook: false`, as a plain wave-0 resource that runs once per release), ahead of the workloads (sync wave 10), and waits for it to complete, so the migration finishes before any Deployment, StatefulSet or Rollout of the release is updated, and a failed Job fails the sync; it has no port and gets no canary steps. A long-running migrator application, which runs the migration when it starts and keeps running (like a worker), is an entry under `applications`; with `deploymentType: rollout` it takes part in the canary like any other Rollout, so give it an HTTP port and a health path for the health check (see Analysis), and set `networking.istio.externalEnabled: false` so that only in-cluster callers reach the pod that holds the database credentials. It gives no start order: it syncs in wave 10 with every Deployment, StatefulSet and Rollout, so their new pods start alongside it and can serve before the migration finishes. With the coordinator on (the default) the release moves in lockstep and an abort stops all of it; with `coordinator.enabled: false` each Rollout runs its own steps, so a migrator Rollout that aborts does not stop the others from promoting. The default readiness probe is a TCP check that passes once the port opens, so it does not catch a migration that fails while the process keeps running. Use it only when the migrator's readiness waits for its migration and every other application's readiness waits for the schema version it needs (`probes.readinessProbe`): keep the port, startup and liveness probes answering while the migration runs, and set `applications.<app>.progressDeadlineSeconds` above the longest migration on every Rollout whose readiness waits for it, or that Rollout aborts. With the coordinator on, a Rollout whose schema is already in place (its readiness does not wait) reaches the next barrier first and waits there for the migrator; that wait counts toward its own progress deadline and is capped by `coordinator.barrierTimeouts` (9m by default, `dark-passed` 15m), so a longer migration aborts the whole release. Raise the barrier timeouts above the longest migration, and `applications.<app>.progressDeadlineSeconds` above them on every Rollout of the release, not only the ones that wait (the chart fails the render when a barrier timeout reaches a Rollout's deadline); a longer deadline also delays the abort of a stuck canary pod, so keep it as low as the migration allows. Each barrier timeout also counts in the canary budget, which must stay at or below 5700 s (see What the release reads): the `standard` preset fits barrier timeouts of up to 10m each with the dark stage (`dark-passed` at its 15m), and up to 18m each with `dark: false`. Otherwise use the pre-deploy job. Either way, a migration must stay compatible with the previous version, whose pods keep running against the migrated schema, so an abort or a revert needs no database rollback. Applications with `migration` in the name are left out of automatic HPA (see [HPA](#hpa-horizontal-pod-autoscaler)).
 
 ### Switching between Deployment and Rollout

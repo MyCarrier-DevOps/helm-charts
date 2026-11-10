@@ -1,4 +1,22 @@
+{{- /* The multi-frontend VirtualService spec. With global.strategy.canary.sessionAffinity it carries the cookie
+       routes of helm.canary.sessionAffinity.routes; helm.canary.virtualServices passes omitSessionAffinity to read the
+       routes the Rollouts weight, which are the same routes without them. */ -}}
 {{- define "helm.specs.multifrontend.virtualservice" -}}
+{{- $base := include "helm.specs.multifrontend.virtualservice.routes" . -}}
+{{- if and (eq (include "helm.canary.sessionAffinity" .) "true") (not .omitSessionAffinity) -}}
+  {{- $spec := $base | fromYaml -}}
+  {{- $fullNames := list -}}
+  {{- range $name, $values := .frontendApps -}}
+    {{- if eq $values.deploymentType "rollout" }}{{ $fullNames = append $fullNames (include "helm.fullname" (merge (dict "appName" $name "application" $values) $)) }}{{ end -}}
+  {{- end -}}
+  {{- $_ := set $spec "http" (include "helm.canary.sessionAffinity.routes" (dict "http" $spec.http "fullNames" $fullNames "namespace" (include "helm.namespace" .) "ctx" .) | fromJsonArray) -}}
+  {{- toYaml $spec -}}
+{{- else -}}
+  {{- $base -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "helm.specs.multifrontend.virtualservice.routes" -}}
 {{- $frontendApps := .frontendApps }}
 {{- $primaryApp := .primaryApp }}
 {{- $domain := include "helm.domain" $ }}

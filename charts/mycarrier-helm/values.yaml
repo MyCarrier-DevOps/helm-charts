@@ -63,6 +63,11 @@ global:
   #                               # only global.correlationId and the canary pod floor (minimum replicas 2) are
   #                               # checked just where the steps render. dev and feature<N> default to 1 replica, so
   #                               # a drill there sets replicas: 2 on each canary Rollout.
+  #     sessionAffinity: false    # true: cookie session affinity on the multi-frontend VirtualService, for frontends whose
+  #                               # pods serve only their own build's hashed assets. A page load (Sec-Fetch-Dest:
+  #                               # document) sets an mc-canary session cookie naming the revision that served it, and
+  #                               # later requests with the cookie go to that revision. Fails the render without a
+  #                               # multi-frontend VirtualService or a global.correlationId.
   #     manualTimeout: 40m        # how long the release's rollout-watch allows for the manual pause (D22); it counts
   #                               # in the canary budget, and the pause itself has no time limit. With the manual
   #                               # preset, zero fails the render. The other presets and explicit steps ignore it.

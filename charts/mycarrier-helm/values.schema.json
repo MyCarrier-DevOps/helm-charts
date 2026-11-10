@@ -31,6 +31,11 @@
                   "default": false,
                   "description": "Render the canary steps (preset or explicit steps, with their barriers, analysis steps, pauses and dark stage) and mycarrier.tech/canaryBudgetSeconds outside prod, as in prod, for a test drill (DEVOPS-516). The chart's own alerts check stays prod only; in a drill only a replacement alerts entry (applications.<app>.analysisTemplates) runs as background analysis. It applies only to a Rollout whose repository's deployment-strategy property (global.deploymentStrategy) is canary; any other Rollout renders no steps in every environment, with or without it. false: only environment.name prod renders them; elsewhere a canary Rollout renders steps: [] and promotes at once. The render-time checks of a canary Rollout run in every environment either way, the leader rule, the leader's tests-dark, budgetSeconds for explicit steps and the budget limit included; only global.correlationId for the coordinator is required just where the steps render. New after 4.7.9: the 4.7.9 schema refuses it."
                 },
+                "sessionAffinity": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Cookie session affinity on the multi-frontend VirtualService, for frontends whose pods serve only their own build's hashed assets. A page load at a weighted step sets a session cookie naming the revision that served it, and later requests with the cookie go to that revision, so a chunk is never requested from the other revision. Applies to the routes of frontend Rollouts in the shared multi-frontend VirtualService; fails the render when the release has none or has no global.correlationId."
+                },
                 "manualTimeout": {
                   "type": "string",
                   "pattern": "^[0-9]+(s|m|h)$",

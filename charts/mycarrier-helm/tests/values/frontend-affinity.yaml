@@ -1,0 +1,61 @@
+global:
+  deploymentStrategy: canary
+  appStack: test-stack
+  correlationId: Corr-ABC-123
+  language: nodejs
+  strategy:
+    canary:
+      dark: false
+environment:
+  name: preprod
+applications:
+  shell:
+    isFrontend: true
+    isPrimary: true
+    routePrefix: /
+    deploymentType: rollout
+    canaryHealthPath: /health
+    image:
+      registry: registry.example.com
+      repository: shell
+      tag: "1.0.0"
+    ports:
+      http: 4200
+    networking:
+      istio:
+        routes:
+          api:
+            match:
+              - uri:
+                  prefix: /api
+              - uri:
+                  prefix: /v2/api
+                headers:
+                  x-tenant:
+                    exact: acme
+          everything:
+            rewrite:
+              uri: /x
+        redirects:
+          old: shell
+  admin:
+    isFrontend: true
+    routePrefix: /admin
+    deploymentType: rollout
+    canaryHealthPath: /health
+    image:
+      registry: registry.example.com
+      repository: admin
+      tag: "1.0.0"
+    ports:
+      http: 4200
+  docs:
+    isFrontend: true
+    routePrefix: /docs
+    deploymentType: deployment
+    image:
+      registry: registry.example.com
+      repository: docs
+      tag: "1.0.0"
+    ports:
+      http: 4200
