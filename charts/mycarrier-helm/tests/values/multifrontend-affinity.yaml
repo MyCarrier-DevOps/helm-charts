@@ -6,6 +6,7 @@ global:
   strategy:
     canary:
       dark: false
+      stepsOutsideProd: true
 environment:
   name: preprod
 applications:

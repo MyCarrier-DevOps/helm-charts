@@ -152,7 +152,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
               uri:
                 prefix: /admin
               withoutHeaders:
@@ -162,7 +162,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=stable-corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385(;.*)?$'
               uri:
                 prefix: /admin
               withoutHeaders:
@@ -213,7 +213,7 @@ tests:
               headers:
                 response:
                   add:
-                    set-cookie: mc-canary=stable-corr-abc-123; Path=/; Secure; HttpOnly; SameSite=Lax
+                    set-cookie: mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385; Path=/; Secure; HttpOnly; SameSite=Lax
               weight: 100
             - destination:
                 host: test-stack-admin-preview.preprod.svc.cluster.local
@@ -222,7 +222,7 @@ tests:
               headers:
                 response:
                   add:
-                    set-cookie: mc-canary=corr-abc-123; Path=/; Secure; HttpOnly; SameSite=Lax
+                    set-cookie: mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; Path=/; Secure; HttpOnly; SameSite=Lax
               weight: 0
 
   - it: sends a request without a cookie or a page-load header to the stable revision only, with the route's own match
@@ -254,12 +254,12 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
               uri:
                 prefix: /api
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
                 x-tenant:
                   exact: acme
               uri:
@@ -297,7 +297,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=stable-corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385(;.*)?$'
       - equal:
           path: spec.http[?(@.name=="everything-custom-route")].match
           value:
@@ -559,3 +559,26 @@ tests:
     asserts:
       - lengthEqual: {path: spec.http, count: 10}
       - notExists: {path: 'spec.http[?(@.name=="canary-pin-canary")]'}
+
+  - it: renders exactly as with the value off where the canary steps do not render
+    set:
+      global:
+        correlationId: ""
+        strategy:
+          canary:
+            stepsOutsideProd: false
+    asserts:
+      - lengthEqual: {path: spec.http, count: 10}
+      - notExists: {path: 'spec.http[?(@.name=="canary-pin-canary")]'}
+
+  - it: keeps the correlation id out of every cookie value and match
+    asserts:
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route-pin-canary")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route-pin-stable")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[0].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+
+  - it: shares one cookie across the frontends of a release
+    asserts:
+      - matchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; "}
+      - matchRegex: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; "}

@@ -3,10 +3,24 @@
        comes from one revision and a lazy chunk from the other. Istio picks the weighted destination before it hashes, so a
        DestinationRule consistentHash cannot pin a browser; a cookie match ahead of the weighted route can. */ -}}
 
-{{- /* "true" for a Rollout application with canarySessionAffinity: true (per application, like canaryCompare); "false"
-       for any other application, which the value leaves as it is. Takes the application context. */ -}}
+{{- /* "true" for a canary Rollout application with canarySessionAffinity: true (per application, like canaryCompare)
+       where its canary steps render (helm.canary.stepsRendered: prod, or stepsOutsideProd), where the Rollout weights
+       its routes and the release's global.correlationId is required; "false" otherwise, and the VirtualService renders
+       as with the value off. Takes the application context (or a dict of application and Values). */ -}}
 {{- define "helm.canary.sessionAffinity" -}}
-{{- if and (eq .application.deploymentType "rollout") (eq (toString (dig "canarySessionAffinity" false .application)) "true") }}true{{ else }}false{{ end -}}
+{{- if and (eq .application.deploymentType "rollout") (eq (toString (dig "canarySessionAffinity" false .application)) "true") (eq (include "helm.canary.stepsRendered" .) "true") }}true{{ else }}false{{ end -}}
+{{- end -}}
+
+{{- /* The release's cookie, as JSON {name, canary, stable}. The name is mc-canary-<global.appStack lower-cased, cut to
+       [a-z0-9-]>, so two releases on a shared host do not overwrite each other's cookie, and the frontends of one
+       release share one. The two values are independent SHA-256 digests of the lower-cased global.correlationId
+       (first 32 hex digits), so the browser never holds the correlation id and the stable value does not reveal the
+       canary one: a visitor cannot make the canary cookie by hand and reach a canary that is not yet public.
+       Takes a context with .Values. */ -}}
+{{- define "helm.canary.sessionAffinity.cookies" -}}
+{{- $cid := include "helm.canary.correlationId" . -}}
+{{- $stack := regexReplaceAll "[^a-z0-9-]" (lower (toString .Values.global.appStack)) "-" -}}
+{{- toJson (dict "name" (printf "mc-canary-%s" $stack) "canary" (sha256sum (printf "canary:%s" $cid) | trunc 32) "stable" (sha256sum (printf "stable:%s" $cid) | trunc 32)) -}}
 {{- end -}}
 
 {{- /* Match blocks (JSON) with a header condition added to each block of match; a missing match is one block of just
@@ -17,7 +31,7 @@
 {{- range (.match | default (list dict)) -}}
   {{- $headers := deepCopy (dig "headers" dict .) -}}
   {{- if hasKey $headers $.header -}}
-    {{- fail (printf "global.strategy.canary.sessionAffinity: route '%s' already matches on the '%s' header, so the session cookie match cannot be added to it. Match on something else in that route." $.route $.header) -}}
+    {{- fail (printf "canarySessionAffinity: route '%s' already matches on the '%s' header, so the session cookie match cannot be added to it. Match on something else in that route." $.route $.header) -}}
   {{- end -}}
   {{- $_ := set $headers $.header $.matcher -}}
   {{- $block := deepCopy (omit . "headers") -}}
@@ -27,12 +41,12 @@
 {{- toJson $blocks -}}
 {{- end -}}
 
-{{- /* The Cookie header value of a cookie named mc-canary whose value is exactly the given one, as an RE2 whole-value
-       regex (Envoy's safe_regex matches the whole header value): the cookie is the first or follows "; ", and it ends
-       the header or is followed by ";". The value is escaped, and the name cannot match as the tail of another name
-       (xmc-canary) or the value as the head of another (<id>x, or <id> against stable-<id>). */ -}}
+{{- /* The Cookie header regex for a cookie of the given name and exact value, as an RE2 whole-value regex (Envoy's
+       safe_regex matches the whole header value): the cookie is the first or follows "; ", and it ends the header or
+       is followed by ";". Name and value are escaped, so the name cannot match as the tail of another name
+       (xmc-canary-stack) or as another stack's name, nor the value as the head of another. Takes name and value. */ -}}
 {{- define "helm.canary.sessionAffinity.cookieRegex" -}}
-{{- printf "^(.*;\\s*)?mc-canary=%s(;.*)?$" (regexQuoteMeta .) -}}
+{{- printf "^(.*;\\s*)?%s=%s(;.*)?$" (regexQuoteMeta .name) (regexQuoteMeta .value) -}}
 {{- end -}}
 
 {{- /* The http routes of a VirtualService with, for each route that weights one of the given applications (a route
@@ -55,6 +69,7 @@
        Set-Cookie stays. Only a page load sets it, so a chunk, fetch or XHR response carries none. */ -}}
 {{- define "helm.canary.sessionAffinity.routes" -}}
 {{- $cid := include "helm.canary.correlationId" .ctx -}}
+{{- $cookies := include "helm.canary.sessionAffinity.cookies" .ctx | fromJson -}}
 {{- $attributes := "Path=/; Secure; HttpOnly; SameSite=Lax" -}}
 {{- $routes := list -}}
 {{- range .http -}}
@@ -85,9 +100,9 @@
     {{- $weightedDestinations := list -}}
     {{- range $route.route -}}
       {{- $isPreview := include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $owner "namespace" $.namespace) -}}
-      {{- $cookie := ternary $cid (printf "stable-%s" $cid) (eq $isPreview "true") -}}
+      {{- $cookie := ternary $cookies.canary $cookies.stable (eq $isPreview "true") -}}
       {{- $weightedDestination := deepCopy . -}}
-      {{- $_ := set $weightedDestination "headers" (dict "response" (dict "add" (dict "set-cookie" (printf "mc-canary=%s; %s" $cookie $attributes)))) -}}
+      {{- $_ := set $weightedDestination "headers" (dict "response" (dict "add" (dict "set-cookie" (printf "%s=%s; %s" $cookies.name $cookie $attributes)))) -}}
       {{- $weightedDestinations = append $weightedDestinations $weightedDestination -}}
       {{- $destination := deepCopy . -}}
       {{- $_ := set $destination "weight" 100 -}}
@@ -97,13 +112,13 @@
 
     {{- $pinCanary := deepCopy $rest -}}
     {{- $_ := set $pinCanary "name" (printf "%s-pin-canary" $name) -}}
-    {{- $_ := set $pinCanary "match" (include "helm.canary.sessionAffinity.match" (dict "route" $name "match" $route.match "header" "cookie" "matcher" (dict "regex" (include "helm.canary.sessionAffinity.cookieRegex" $cid))) | fromJsonArray) -}}
+    {{- $_ := set $pinCanary "match" (include "helm.canary.sessionAffinity.match" (dict "route" $name "match" $route.match "header" "cookie" "matcher" (dict "regex" (include "helm.canary.sessionAffinity.cookieRegex" (dict "name" $cookies.name "value" $cookies.canary)))) | fromJsonArray) -}}
     {{- $_ := set $pinCanary "route" $canaryDestinations -}}
     {{- $routes = append $routes $pinCanary -}}
 
     {{- $pinStable := deepCopy $rest -}}
     {{- $_ := set $pinStable "name" (printf "%s-pin-stable" $name) -}}
-    {{- $_ := set $pinStable "match" (include "helm.canary.sessionAffinity.match" (dict "route" $name "match" $route.match "header" "cookie" "matcher" (dict "regex" (include "helm.canary.sessionAffinity.cookieRegex" (printf "stable-%s" $cid)))) | fromJsonArray) -}}
+    {{- $_ := set $pinStable "match" (include "helm.canary.sessionAffinity.match" (dict "route" $name "match" $route.match "header" "cookie" "matcher" (dict "regex" (include "helm.canary.sessionAffinity.cookieRegex" (dict "name" $cookies.name "value" $cookies.stable)))) | fromJsonArray) -}}
     {{- $_ := set $pinStable "route" $stableDestinations -}}
     {{- $routes = append $routes $pinStable -}}
 

@@ -96,7 +96,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
               uri:
                 prefix: /spa
       - equal:
@@ -104,7 +104,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=stable-corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385(;.*)?$'
               uri:
                 prefix: /spa
       - equal:
@@ -147,7 +147,7 @@ tests:
               headers:
                 response:
                   add:
-                    set-cookie: mc-canary=stable-corr-abc-123; Path=/; Secure; HttpOnly; SameSite=Lax
+                    set-cookie: mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385; Path=/; Secure; HttpOnly; SameSite=Lax
               weight: 100
             - destination:
                 host: test-stack-web-preview.prod.svc.cluster.local
@@ -156,7 +156,7 @@ tests:
               headers:
                 response:
                   add:
-                    set-cookie: mc-canary=corr-abc-123; Path=/; Secure; HttpOnly; SameSite=Lax
+                    set-cookie: mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; Path=/; Secure; HttpOnly; SameSite=Lax
               weight: 0
       - equal: {path: 'spec.http[?(@.name=="spa")].rewrite', value: {uri: /}}
 
@@ -186,12 +186,12 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
               uri:
                 prefix: /b
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
                 x-tenant:
                   exact: acme
               uri:
@@ -230,7 +230,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary=stable-corr-abc-123(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385(;.*)?$'
       - equal:
           path: 'spec.http[?(@.name=="everything")].match'
           value:
@@ -244,7 +244,7 @@ tests:
     asserts:
       - equal:
           path: 'spec.http[?(@.name=="test-stack-web-pin-canary")].match[0].headers.cookie.regex'
-          value: '^(.*;\s*)?mc-canary=corr-abc-123(;.*)?$'
+          value: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
       - equal:
           path: 'spec.http[?(@.name=="test-stack-web")].match[0].headers.sec-fetch-dest'
           value:
@@ -323,7 +323,8 @@ tests:
         strategy:
           canary:
             dark: false
-        deploymentStrategy: rolling
+            coordinator:
+              enabled: false
     asserts:
       - equal: {path: "spec.http[0].name", value: test-stack-web-pin-canary}
       - equal: {path: "spec.http[3].name", value: test-stack-web-stable}
@@ -379,3 +380,69 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: route 'spa' already matches on the 'sec-fetch-dest' header
+
+  - it: renders exactly as with the value off where the canary steps do not render
+    documentIndex: 1
+    set:
+      environment:
+        name: preprod
+      global:
+        correlationId: ""
+        strategy:
+          canary:
+            dark: false
+    asserts:
+      - notExists: {path: 'spec.http[?(@.name=="test-stack-web-pin-canary")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa-stable")]'}
+      - notExists: {path: 'spec.http[?(@.name=="spa")].route[0].headers'}
+      - equal: {path: "spec.http[0].name", value: test-stack-web}
+      - lengthEqual: {path: spec.http, count: 7}
+
+  - it: wraps outside prod with stepsOutsideProd
+    documentIndex: 1
+    set:
+      environment:
+        name: preprod
+      global:
+        strategy:
+          canary:
+            dark: false
+            stepsOutsideProd: true
+    asserts:
+      - equal: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', value: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'}
+
+  - it: wraps nothing for a Rollout whose repository property is not canary
+    documentIndex: 1
+    set:
+      global:
+        deploymentStrategy: rolling
+    asserts:
+      - notExists: {path: 'spec.http[?(@.name=="spa-pin-canary")]'}
+
+  - it: keeps the correlation id out of every cookie value and match
+    documentIndex: 1
+    asserts:
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-stable")].match[0].headers.cookie.regex', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[0].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add.set-cookie', pattern: "(?i)corr-abc-123"}
+
+  - it: derives independent canary and stable values, neither containing the other
+    documentIndex: 1
+    asserts:
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; "}
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[0].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385; "}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[0].headers.response.add.set-cookie', pattern: "93f9af35aa2f4492e4492bf8550455d4"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "9e2763483e3fede8139aa2e93cbec385"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-canary")].match[0].headers.cookie.regex', pattern: "9e2763483e3fede8139aa2e93cbec385"}
+      - notMatchRegex: {path: 'spec.http[?(@.name=="spa-pin-stable")].match[0].headers.cookie.regex', pattern: "93f9af35aa2f4492e4492bf8550455d4"}
+
+  - it: names the cookie after the release's app stack, cut to cookie-name-safe characters
+    documentIndex: 1
+    set:
+      global:
+        appStack: My_Stack.V2
+    asserts:
+      - matchRegex: {path: 'spec.http[1].match[0].headers.cookie.regex', pattern: "^\\^\\(\\.\\*;\\\\s\\*\\)\\?mc-canary-my-stack-v2="}
+      - matchRegex: {path: 'spec.http[?(@.name=="spa")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-my-stack-v2="}

@@ -10,10 +10,11 @@ tests:
     documentIndex: 2
     asserts:
       - equal: {path: metadata.name, value: test-stack-shell}
-      - equal: {path: "spec.http[0].name", value: test-stack-shell-pin-canary}
-      - equal: {path: "spec.http[1].name", value: test-stack-shell-pin-stable}
-      - equal: {path: "spec.http[2].name", value: test-stack-shell}
-      - equal: {path: "spec.http[3].name", value: test-stack-shell-stable}
+      - equal: {path: "spec.http[0].name", value: test-stack-shell-canary-source}
+      - equal: {path: "spec.http[1].name", value: test-stack-shell-pin-canary}
+      - equal: {path: "spec.http[2].name", value: test-stack-shell-pin-stable}
+      - equal: {path: "spec.http[3].name", value: test-stack-shell}
+      - equal: {path: "spec.http[4].name", value: test-stack-shell-stable}
 
   - it: leaves the own VirtualService of a frontend without the value as it was
     documentIndex: 0
@@ -23,5 +24,6 @@ tests:
           canarySessionAffinity: false
     asserts:
       - equal: {path: metadata.name, value: test-stack-admin}
-      - equal: {path: "spec.http[0].name", value: test-stack-admin}
+      - equal: {path: "spec.http[0].name", value: test-stack-admin-canary-source}
+      - equal: {path: "spec.http[1].name", value: test-stack-admin}
       - notExists: {path: 'spec.http[?(@.name=="test-stack-admin-pin-canary")]'}

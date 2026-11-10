@@ -6,7 +6,7 @@
 {{- $base := include "helm.specs.multifrontend.virtualservice.routes" . -}}
 {{- $apps := dict -}}
 {{- range $name, $values := .frontendApps -}}
-  {{- if eq (include "helm.canary.sessionAffinity" (dict "application" $values)) "true" }}{{ $_ := set $apps (include "helm.fullname" (merge (dict "appName" $name "application" $values) $)) $name }}{{ end -}}
+  {{- if eq (include "helm.canary.sessionAffinity" (dict "application" $values "Values" $.Values)) "true" }}{{ $_ := set $apps (include "helm.fullname" (merge (dict "appName" $name "application" $values) $)) $name }}{{ end -}}
 {{- end -}}
 {{- if and $apps (not .omitSessionAffinity) -}}
   {{- $spec := $base | fromYaml -}}
