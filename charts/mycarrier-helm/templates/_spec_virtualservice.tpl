@@ -23,7 +23,7 @@
     {{- $_ := set $parsed "http" (include "helm.canary.sourceRoutes" (dict "http" $parsed.http "context" . "ctx" $ctx) | fromJsonArray) -}}
   {{- end -}}
   {{- if $affinity -}}
-    {{- $_ := set $parsed "http" (include "helm.canary.sessionAffinity.routes" (dict "http" $parsed.http "fullName" (include "helm.fullname" .) "namespace" (include "helm.namespace" .) "appName" .appName "ctx" .) | fromJsonArray) -}}
+    {{- $_ := set $parsed "http" (include "helm.canary.sessionAffinity.routes" (dict "http" $parsed.http "apps" (dict (include "helm.fullname" .) .appName) "namespace" (include "helm.namespace" .) "ctx" .) | fromJsonArray) -}}
   {{- end -}}
   {{- toYaml $parsed -}}
 {{- else -}}

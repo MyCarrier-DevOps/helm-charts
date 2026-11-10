@@ -916,7 +916,7 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 
 The chart fails the render when one of these is missing.
 
-**Session affinity.** `applications.<app>.canarySessionAffinity: true` (default `false`, per application like `canaryCompare` and `canaryHealthPath`) pins a browser to the revision that served its page while a weighted step splits that application's traffic. Use it for a browser-facing Rollout whose pods hold only their own build's hashed JS and CSS chunks (a single image serving single-page apps under several path prefixes, for example): without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. Set it on the frontend application only; a release with an API Rollout and a frontend Rollout opts in just the frontend. The value changes nothing for an application that is not a Rollout, and an empty `global.correlationId` (the pipeline supplies it; it names the cookie) fails the render. The routes are those of the application's own VirtualService, not the shared multi-frontend one. For each route that weights the application, meaning a route whose destinations are the application's stable and `-preview` Services (the header route, an allowed-endpoint route, a custom route under `networking.istio.routes` without a `destination`, the default route), the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
+**Session affinity.** `applications.<app>.canarySessionAffinity: true` (default `false`, per application like `canaryCompare` and `canaryHealthPath`) pins a browser to the revision that served its page while a weighted step splits that application's traffic. Use it for a browser-facing Rollout whose pods hold only their own build's hashed JS and CSS chunks (a single image serving single-page apps under several path prefixes, for example): without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. Set it on the browser-facing applications only; a release with an API Rollout and a frontend Rollout opts in just the frontend, and in a multi-frontend release each frontend opts in on its own. The value changes nothing for an application that is not a Rollout, and an empty `global.correlationId` (the pipeline supplies it; it names the cookie) fails the render. Where the routes are depends on the application. A regular application has its own VirtualService, and the routes are there. An `isFrontend` application in a multi-frontend release (two or more `isFrontend` applications and one `isPrimary`) has its routes in the shared `<primary>-multifrontend` VirtualService (`<fullName>-env-match`, `<app>-path-route`, custom routes, `<primary>-catchall` and the primary's `canary` route) and also in its own VirtualService, which the Rollout lists beside it; the chart wraps the weighted routes of both, for each frontend with the value on, and leaves the routes of a frontend without it as they are. In either VirtualService, for each route that weights the application, meaning a route whose destinations are exactly the application's stable and `-preview` Services, the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
 
 | Route | Matches | Goes to |
 |-------|---------|---------|
@@ -971,6 +971,57 @@ applications:
 # helm/deployment/values.prod.yaml
 applications:
   web:
+    image:
+      tag: release-v1.0.0
+```
+
+In a multi-frontend release the value goes on each frontend that serves its own hashed assets, next to `isFrontend`:
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: storefront
+  language: nodejs
+  correlationId: 0f3c9a7e-52d1-4c1a-9b7e-6a1f0c2d8e41   # supplied by the pipeline; set here only so the example renders
+  strategy:
+    canary:
+      dark: false                       # a multi-frontend release needs the dark stage off
+
+# helm/values.prod.yaml
+environment:
+  name: prod
+
+# helm/deployment/values.yaml
+applications:
+  shell:
+    isFrontend: true
+    isPrimary: true
+    deploymentType: rollout
+    canarySessionAffinity: true
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/shell
+    ports:
+      http: 4200
+  checkout:
+    isFrontend: true
+    routePrefix: /checkout
+    deploymentType: rollout
+    canarySessionAffinity: true         # a frontend without the value keeps its routes as they are
+    canaryHealthPath: /health
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/storefront/checkout
+    ports:
+      http: 4200
+
+# helm/deployment/values.prod.yaml
+applications:
+  shell:
+    image:
+      tag: release-v1.0.0
+  checkout:
     image:
       tag: release-v1.0.0
 ```

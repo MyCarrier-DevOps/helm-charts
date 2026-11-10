@@ -35,11 +35,13 @@
 {{- printf "^(.*;\\s*)?mc-canary=%s(;.*)?$" (regexQuoteMeta .) -}}
 {{- end -}}
 
-{{- /* The http routes of the application's VirtualService with, for each route that weights the application (a route
-       with both the application's stable Service and its -preview Service as destinations, and no other), a group of
-       four routes in the route's place, as JSON. A route with only the -preview destination (a canary source route)
-       or only the stable one is not weighted and stays as it is. Takes http (the parsed routes), fullName, namespace
-       appName and ctx (any context with .Values).
+{{- /* The http routes of a VirtualService with, for each route that weights one of the given applications (a route
+       whose destinations are exactly the stable Service and the -preview Service of that one application), a group
+       of four routes in the route's place, as JSON. A route with only the -preview destination (a canary source
+       route), only the stable one, or another host is not weighted and stays as it is, and so does a route of an
+       application that is not in apps. Takes http (the parsed routes), apps (a map of each opted-in application's full
+       name to its name), namespace and ctx (any context with .Values). The per-app VirtualService passes its own
+       application, the multi-frontend one every frontend Rollout with canarySessionAffinity.
          <route>-pin-canary  the route's match and the canary cookie: the -preview destinations only
          <route>-pin-stable  the route's match and the stable cookie: the stable destinations only
          <route>             the weighted route Argo Rollouts manages, with its name and weights: a page load
@@ -54,31 +56,35 @@
 {{- define "helm.canary.sessionAffinity.routes" -}}
 {{- $cid := include "helm.canary.correlationId" .ctx -}}
 {{- $attributes := "Path=/; Secure; HttpOnly; SameSite=Lax" -}}
-{{- $serviceDomain := printf "%s.%s.svc" .fullName .namespace -}}
 {{- $routes := list -}}
 {{- range .http -}}
   {{- $route := . -}}
-  {{- $stable := false -}}
-  {{- $preview := false -}}
-  {{- $foreign := false -}}
-  {{- range ($route.route | default list) -}}
-    {{- $host := toString .destination.host -}}
-    {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" $.fullName "namespace" $.namespace) }}{{ $preview = true -}}
-    {{- else if or (eq $host $.fullName) (eq $host $serviceDomain) (hasPrefix (printf "%s." $serviceDomain) $host) }}{{ $stable = true -}}
-    {{- else }}{{ $foreign = true }}{{ end -}}
+  {{- $owner := "" -}}
+  {{- range $fullName, $appName := $.apps -}}
+    {{- $serviceDomain := printf "%s.%s.svc" $fullName $.namespace -}}
+    {{- $stable := false -}}
+    {{- $preview := false -}}
+    {{- $foreign := false -}}
+    {{- range ($route.route | default list) -}}
+      {{- $host := toString .destination.host -}}
+      {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" $fullName "namespace" $.namespace) }}{{ $preview = true -}}
+      {{- else if or (eq $host $fullName) (eq $host $serviceDomain) (hasPrefix (printf "%s." $serviceDomain) $host) }}{{ $stable = true -}}
+      {{- else }}{{ $foreign = true }}{{ end -}}
+    {{- end -}}
+    {{- if and $stable $preview (not $foreign) }}{{ $owner = $fullName }}{{ end -}}
   {{- end -}}
-  {{- if not (and $stable $preview (not $foreign)) -}}
+  {{- if not $owner -}}
     {{- $routes = append $routes $route -}}
   {{- else -}}
     {{- if not $cid -}}
-      {{- fail (printf "application '%s': canarySessionAffinity needs global.correlationId, which names the release's cookie; it is empty." $.appName) -}}
+      {{- fail (printf "application '%s': canarySessionAffinity needs global.correlationId, which names the release's cookie; it is empty." (index $.apps $owner)) -}}
     {{- end -}}
     {{- $name := toString $route.name -}}
     {{- $canaryDestinations := list -}}
     {{- $stableDestinations := list -}}
     {{- $weightedDestinations := list -}}
     {{- range $route.route -}}
-      {{- $isPreview := include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $.fullName "namespace" $.namespace) -}}
+      {{- $isPreview := include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $owner "namespace" $.namespace) -}}
       {{- $cookie := ternary $cid (printf "stable-%s" $cid) (eq $isPreview "true") -}}
       {{- $weightedDestination := deepCopy . -}}
       {{- $_ := set $weightedDestination "headers" (dict "response" (dict "add" (dict "set-cookie" (printf "mc-canary=%s; %s" $cookie $attributes)))) -}}
