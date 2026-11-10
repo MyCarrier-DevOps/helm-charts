@@ -1,11 +1,12 @@
-{{- /* Cookie session affinity for the multi-frontend VirtualService (global.strategy.canary.sessionAffinity).
-       A frontend whose pods hold only their own version's hashed chunks breaks at a weighted step when index.html comes
-       from one revision and a lazy chunk from the other. Istio picks the weighted destination before it hashes, so a
+{{- /* Cookie session affinity for an application's VirtualService (applications.<app>.canarySessionAffinity).
+       An application whose pods hold only their own version's hashed chunks breaks at a weighted step when index.html
+       comes from one revision and a lazy chunk from the other. Istio picks the weighted destination before it hashes, so a
        DestinationRule consistentHash cannot pin a browser; a cookie match ahead of the weighted route can. */ -}}
 
-{{- /* "true" when global.strategy.canary.sessionAffinity is true. Compared as the string "true", as stepsOutsideProd is. */ -}}
+{{- /* "true" for a Rollout application with canarySessionAffinity: true (per application, like canaryCompare); "false"
+       for any other application, which the value leaves as it is. Takes the application context. */ -}}
 {{- define "helm.canary.sessionAffinity" -}}
-{{- if eq (toString (dig "strategy" "canary" "sessionAffinity" false (.Values.global | default dict))) "true" }}true{{ else }}false{{ end -}}
+{{- if and (eq .application.deploymentType "rollout") (eq (toString (dig "canarySessionAffinity" false .application)) "true") }}true{{ else }}false{{ end -}}
 {{- end -}}
 
 {{- /* Match blocks (JSON) with a header condition added to each block of match; a missing match is one block of just
@@ -34,10 +35,11 @@
 {{- printf "^(.*;\\s*)?mc-canary=%s(;.*)?$" (regexQuoteMeta .) -}}
 {{- end -}}
 
-{{- /* The http routes of the multi-frontend VirtualService with, for each route that a frontend Rollout weights (a
-       route with the -preview destination of one of its frontend Rollouts), a group of four routes in the route's
-       place, as JSON. Takes http (the parsed routes), fullNames (the full names of the frontend Rollouts), namespace
-       and ctx (any context with .Values).
+{{- /* The http routes of the application's VirtualService with, for each route that weights the application (a route
+       with both the application's stable Service and its -preview Service as destinations, and no other), a group of
+       four routes in the route's place, as JSON. A route with only the -preview destination (a canary source route)
+       or only the stable one is not weighted and stays as it is. Takes http (the parsed routes), fullName, namespace
+       appName and ctx (any context with .Values).
          <route>-pin-canary  the route's match and the canary cookie: the -preview destinations only
          <route>-pin-stable  the route's match and the stable cookie: the stable destinations only
          <route>             the weighted route Argo Rollouts manages, with its name and weights: a page load
@@ -52,39 +54,38 @@
 {{- define "helm.canary.sessionAffinity.routes" -}}
 {{- $cid := include "helm.canary.correlationId" .ctx -}}
 {{- $attributes := "Path=/; Secure; HttpOnly; SameSite=Lax" -}}
+{{- $serviceDomain := printf "%s.%s.svc" .fullName .namespace -}}
 {{- $routes := list -}}
 {{- range .http -}}
   {{- $route := . -}}
-  {{- $weighted := false -}}
+  {{- $stable := false -}}
+  {{- $preview := false -}}
+  {{- $foreign := false -}}
   {{- range ($route.route | default list) -}}
     {{- $host := toString .destination.host -}}
-    {{- range $.fullNames -}}
-      {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" . "namespace" $.namespace) }}{{ $weighted = true }}{{ end -}}
-    {{- end -}}
+    {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" $.fullName "namespace" $.namespace) }}{{ $preview = true -}}
+    {{- else if or (eq $host $.fullName) (eq $host $serviceDomain) (hasPrefix (printf "%s." $serviceDomain) $host) }}{{ $stable = true -}}
+    {{- else }}{{ $foreign = true }}{{ end -}}
   {{- end -}}
-  {{- if not $weighted -}}
+  {{- if not (and $stable $preview (not $foreign)) -}}
     {{- $routes = append $routes $route -}}
   {{- else -}}
     {{- if not $cid -}}
-      {{- fail "global.strategy.canary.sessionAffinity needs global.correlationId, which names the release's cookie; it is empty." -}}
+      {{- fail (printf "application '%s': canarySessionAffinity needs global.correlationId, which names the release's cookie; it is empty." $.appName) -}}
     {{- end -}}
     {{- $name := toString $route.name -}}
     {{- $canaryDestinations := list -}}
     {{- $stableDestinations := list -}}
     {{- $weightedDestinations := list -}}
     {{- range $route.route -}}
-      {{- $host := toString .destination.host -}}
-      {{- $preview := false -}}
-      {{- range $.fullNames -}}
-        {{- if include "helm.canary.isPreviewHost" (dict "host" $host "fullName" . "namespace" $.namespace) }}{{ $preview = true }}{{ end -}}
-      {{- end -}}
-      {{- $destination := deepCopy . -}}
-      {{- $cookie := ternary $cid (printf "stable-%s" $cid) $preview -}}
+      {{- $isPreview := include "helm.canary.isPreviewHost" (dict "host" (toString .destination.host) "fullName" $.fullName "namespace" $.namespace) -}}
+      {{- $cookie := ternary $cid (printf "stable-%s" $cid) (eq $isPreview "true") -}}
       {{- $weightedDestination := deepCopy . -}}
       {{- $_ := set $weightedDestination "headers" (dict "response" (dict "add" (dict "set-cookie" (printf "mc-canary=%s; %s" $cookie $attributes)))) -}}
       {{- $weightedDestinations = append $weightedDestinations $weightedDestination -}}
+      {{- $destination := deepCopy . -}}
       {{- $_ := set $destination "weight" 100 -}}
-      {{- if $preview }}{{ $canaryDestinations = append $canaryDestinations $destination }}{{ else }}{{ $stableDestinations = append $stableDestinations $destination }}{{ end -}}
+      {{- if eq $isPreview "true" }}{{ $canaryDestinations = append $canaryDestinations $destination }}{{ else }}{{ $stableDestinations = append $stableDestinations $destination }}{{ end -}}
     {{- end -}}
     {{- $rest := omit $route "name" "match" "route" -}}
 

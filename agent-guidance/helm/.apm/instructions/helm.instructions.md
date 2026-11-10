@@ -916,7 +916,7 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 
 The chart fails the render when one of these is missing.
 
-**Session affinity (multi-frontend).** `global.strategy.canary.sessionAffinity: true` (default `false`) pins a browser to the revision that served its page while a weighted step splits traffic. Use it for a multi-frontend release whose frontend pods hold only their own build's hashed JS and CSS chunks: without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. The value applies only to the shared `<primary>-multifrontend` VirtualService (two or more `isFrontend` applications and one `isPrimary`); without it the render fails, and so does an empty `global.correlationId`, which names the cookie (the pipeline supplies it). With no frontend Rollout in the release it changes nothing, and neither does it for Deployments or StatefulSets. For each route that sends traffic to a frontend Rollout and its `-preview` Service (the `<fullName>-env-match` routes, `<app>-path-route`, a custom route under `networking.istio.routes` without a `destination`, the `<fullName>-catchall` route and the primary's `canary` route), the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
+**Session affinity.** `applications.<app>.canarySessionAffinity: true` (default `false`, per application like `canaryCompare` and `canaryHealthPath`) pins a browser to the revision that served its page while a weighted step splits that application's traffic. Use it for a browser-facing Rollout whose pods hold only their own build's hashed JS and CSS chunks (a single image serving single-page apps under several path prefixes, for example): without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. Set it on the frontend application only; a release with an API Rollout and a frontend Rollout opts in just the frontend. The value changes nothing for an application that is not a Rollout, and an empty `global.correlationId` (the pipeline supplies it; it names the cookie) fails the render. The routes are those of the application's own VirtualService, not the shared multi-frontend one. For each route that weights the application, meaning a route whose destinations are the application's stable and `-preview` Services (the header route, an allowed-endpoint route, a custom route under `networking.istio.routes` without a `destination`, the default route), the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
 
 | Route | Matches | Goes to |
 |-------|---------|---------|
@@ -925,11 +925,12 @@ The chart fails the render when one of these is missing.
 | `<route>` | each of the route's matches and `sec-fetch-dest: document` | the weighted stable and `-preview` destinations; each destination adds a `Set-Cookie` of `mc-canary=<id>` (canary) or `mc-canary=stable-<id>` (stable), `Path=/; Secure; HttpOnly; SameSite=Lax` |
 | `<route>-stable` | the route's matches | the stable Service only |
 
-`<id>` is `global.correlationId`, lower-cased. The cookie regex matches the whole header value, so another cookie's name or value never matches it. `<route>` keeps its name, so the Rollout still weights it (its `routes` list is the same with the value on); the other three are not managed by Argo Rollouts, which sets only the weights, so they and the cookie stay in place through every step. A route that already matches on the `cookie` header, or on `sec-fetch-dest`, fails the render, because the new match cannot be added to it. The cookie is a session cookie, and `add` leaves the application's own `Set-Cookie` in place. Only the page-load route sets it, so a chunk, fetch or XHR response carries none.
+`<id>` is `global.correlationId`, lower-cased. The cookie regex matches the whole header value, so another cookie's name or value never matches it. `<route>` keeps its name, so the Rollout still weights it (its `routes` list is the same with the value on); the other three are not managed by Argo Rollouts, which sets only the weights, so they and the cookie stay in place through every step. The canary source routes (`<route>-canary-source`, above) and the dark stage's `canary-header` route are left as they are; a route with only the `-preview` destination is never wrapped. A route that already matches on the `cookie` header, or on `sec-fetch-dest`, fails the render, because the new match cannot be added to it. The cookie is a session cookie, and `add` leaves the application's own `Set-Cookie` in place. Only the page-load route sets it, so a chunk, fetch or XHR response carries none.
 
+- For browser-facing applications only. The application's VirtualService also binds the `mesh` gateway, and an in-cluster caller sends no `Sec-Fetch-Dest`, so with the value on every in-cluster caller reaches the stable revision (a canary pod's calls still follow the source routes). Do not set it on an API that other services call.
 - A browser that does not send `Sec-Fetch-Dest` never takes the cookie, so it stays on the stable revision.
 - A request without a cookie, or with one of an earlier release, goes to the stable revision. A page loaded before the weighted step reaches the stable revision too.
-- While the value is on, never cache HTML at an edge (a CDN or Cloudflare cache rule) on the frontend host: a cached page carries one cohort's `Set-Cookie` to every visitor.
+- While the value is on, never cache HTML at an edge (a CDN or Cloudflare cache rule) on the application's host: a cached page carries one cohort's `Set-Cookie` to every visitor.
 - The cookie cannot cover the switch at promotion or abort, when the stable revision changes under an open page. The application should reload the page once when a lazy chunk fails to load.
 
 ```yaml
@@ -940,8 +941,7 @@ global:
   correlationId: 0f3c9a7e-52d1-4c1a-9b7e-6a1f0c2d8e41   # supplied by the pipeline; set here only so the example renders
   strategy:
     canary:
-      dark: false                       # a multi-frontend release needs the dark stage off
-      sessionAffinity: true             # pin a browser to the revision that served its page
+      dark: false                       # no leader or test definitions needed for this example
 
 # helm/values.prod.yaml
 environment:
@@ -949,33 +949,28 @@ environment:
 
 # helm/deployment/values.yaml
 applications:
-  shell:
-    isFrontend: true
-    isPrimary: true
+  web:
     deploymentType: rollout
+    canarySessionAffinity: true         # the frontend only; an API Rollout of the release leaves it off
     canaryHealthPath: /health
     image:
       registry: mycarrieracr.azurecr.io
-      repository: appstack/storefront/shell
+      repository: appstack/storefront/web
     ports:
       http: 4200
-  checkout:
-    isFrontend: true
-    routePrefix: /checkout
-    deploymentType: rollout
-    canaryHealthPath: /health
-    image:
-      registry: mycarrieracr.azurecr.io
-      repository: appstack/storefront/checkout
-    ports:
-      http: 4200
+    networking:
+      istio:
+        routes:
+          checkout:
+            match:
+              - uri:
+                  prefix: /checkout
+            rewrite:
+              uri: /
 
 # helm/deployment/values.prod.yaml
 applications:
-  shell:
-    image:
-      tag: release-v1.0.0
-  checkout:
+  web:
     image:
       tag: release-v1.0.0
 ```

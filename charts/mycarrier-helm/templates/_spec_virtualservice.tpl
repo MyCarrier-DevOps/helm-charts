@@ -1,19 +1,30 @@
 {{- /* The app's VirtualService spec. Where a canary Rollout's source routes render (helm.canary.sourceRoutesRendered),
-       its http routes also carry them (helm.canary.sourceRoutes, DEVOPS-326), so the spec is parsed and written out
-       again there; every other render is helm.specs.virtualservice.base as it stands. helm.canary.virtualServices reads
-       this spec too, and lists no source route: a source route has only the -preview destination. */ -}}
+       its http routes also carry them (helm.canary.sourceRoutes, DEVOPS-326), and with canarySessionAffinity the
+       routes that weight it are wrapped in cookie routes (helm.canary.sessionAffinity.routes), so the spec is parsed
+       and written out again there; every other render is helm.specs.virtualservice.base as it stands. The cookie
+       routes come after the source routes, which have only the -preview destination and so are not wrapped.
+       helm.canary.virtualServices reads this spec too, with omitSessionAffinity, and lists no source route: a source
+       route has only the -preview destination; the cookie routes are not managed by Argo Rollouts, so the Rollout
+       lists the same routes with the value on or off. */ -}}
 {{- define "helm.specs.virtualservice" -}}
 {{- $spec := include "helm.specs.virtualservice.base" . -}}
-{{- if eq (include "helm.canary.sourceRoutesRendered" .) "true" -}}
+{{- $sourceRoutes := eq (include "helm.canary.sourceRoutesRendered" .) "true" -}}
+{{- $affinity := and (eq (include "helm.canary.sessionAffinity" .) "true") (not .omitSessionAffinity) -}}
+{{- if or $sourceRoutes $affinity -}}
   {{- $parsed := $spec | fromYaml -}}
   {{- if hasKey $parsed "Error" -}}
-    {{- fail (printf "application '%s': its VirtualService spec does not parse as YAML, so the canary source routes cannot be added. Check the values that feed it (networking.istio.routes, redirects, allowedEndpoints, responseHeaders, corsPolicy)." .appName) -}}
+    {{- fail (printf "application '%s': its VirtualService spec does not parse as YAML, so the canary source routes and session affinity routes cannot be added. Check the values that feed it (networking.istio.routes, redirects, allowedEndpoints, responseHeaders, corsPolicy)." .appName) -}}
   {{- end -}}
   {{- $ctx := .ctx -}}
   {{- if not $ctx -}}
     {{- $ctx = include "helm.context" . | fromJson -}}
   {{- end -}}
-  {{- $_ := set $parsed "http" (include "helm.canary.sourceRoutes" (dict "http" $parsed.http "context" . "ctx" $ctx) | fromJsonArray) -}}
+  {{- if $sourceRoutes -}}
+    {{- $_ := set $parsed "http" (include "helm.canary.sourceRoutes" (dict "http" $parsed.http "context" . "ctx" $ctx) | fromJsonArray) -}}
+  {{- end -}}
+  {{- if $affinity -}}
+    {{- $_ := set $parsed "http" (include "helm.canary.sessionAffinity.routes" (dict "http" $parsed.http "fullName" (include "helm.fullname" .) "namespace" (include "helm.namespace" .) "appName" .appName "ctx" .) | fromJsonArray) -}}
+  {{- end -}}
   {{- toYaml $parsed -}}
 {{- else -}}
   {{- $spec -}}
