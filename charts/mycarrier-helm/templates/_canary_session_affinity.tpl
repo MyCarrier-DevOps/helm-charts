@@ -11,16 +11,24 @@
 {{- if and (eq .application.deploymentType "rollout") (eq (toString (dig "canarySessionAffinity" false .application)) "true") (eq (include "helm.canary.stepsRendered" .) "true") }}true{{ else }}false{{ end -}}
 {{- end -}}
 
-{{- /* The release's cookie, as JSON {name, canary, stable}. The name is mc-canary-<global.appStack lower-cased, cut to
-       [a-z0-9-]>, so two releases on a shared host do not overwrite each other's cookie, and the frontends of one
-       release share one. The two values are independent SHA-256 digests of the lower-cased global.correlationId
-       (first 32 hex digits), so the browser never holds the correlation id and the stable value does not reveal the
-       canary one: a visitor cannot make the canary cookie by hand and reach a canary that is not yet public.
+{{- /* The cookie of the release in the VirtualService's namespace, as JSON {name, canary, stable}. The name is
+       mc-canary-<global.appStack>-<namespace>, each lower-cased and cut to [a-z0-9-], so two stacks or two namespaces
+       on a shared host do not overwrite each other's cookie, and the frontends of one release share one. The two
+       values are independent SHA-256 digests (first 32 hex digits) of "canary:<namespace>:<correlation id>" and
+       "stable:<namespace>:<correlation id>", with the correlation id lower-cased (helm.canary.correlationId). The
+       browser never holds the correlation id, the stable value does not reveal the canary one, and a cookie from one
+       namespace (a drill outside prod) cannot be replayed in another.
+       The values are not secret from anyone who knows the correlation id: the id is internal-only (it is on every pod
+       label and in the slip, and the derivation is public), but with canarySessionAffinity on, whoever knows it can
+       compute the canary cookie and reach the canary through the public host, the dark stage's canary included. The
+       gateway strip of X-MyCarrier-Canary that protects the dark stage's header route does not cover this cookie.
        Takes a context with .Values. */ -}}
 {{- define "helm.canary.sessionAffinity.cookies" -}}
 {{- $cid := include "helm.canary.correlationId" . -}}
+{{- $namespace := include "helm.namespace" . -}}
 {{- $stack := regexReplaceAll "[^a-z0-9-]" (lower (toString .Values.global.appStack)) "-" -}}
-{{- toJson (dict "name" (printf "mc-canary-%s" $stack) "canary" (sha256sum (printf "canary:%s" $cid) | trunc 32) "stable" (sha256sum (printf "stable:%s" $cid) | trunc 32)) -}}
+{{- $suffix := regexReplaceAll "[^a-z0-9-]" (lower $namespace) "-" -}}
+{{- toJson (dict "name" (printf "mc-canary-%s-%s" $stack $suffix) "canary" (sha256sum (printf "canary:%s:%s" $namespace $cid) | trunc 32) "stable" (sha256sum (printf "stable:%s:%s" $namespace $cid) | trunc 32)) -}}
 {{- end -}}
 
 {{- /* Match blocks (JSON) with a header condition added to each block of match; a missing match is one block of just
@@ -92,7 +100,7 @@
     {{- $routes = append $routes $route -}}
   {{- else -}}
     {{- if not $cid -}}
-      {{- fail (printf "application '%s': canarySessionAffinity needs global.correlationId, which names the release's cookie; it is empty." (index $.apps $owner)) -}}
+      {{- fail (printf "application '%s': canarySessionAffinity needs global.correlationId, from which the cookie values derive; it is empty." (index $.apps $owner)) -}}
     {{- end -}}
     {{- $name := toString $route.name -}}
     {{- $canaryDestinations := list -}}

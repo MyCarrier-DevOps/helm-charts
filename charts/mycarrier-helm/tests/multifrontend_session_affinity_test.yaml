@@ -152,7 +152,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'
               uri:
                 prefix: /admin
               withoutHeaders:
@@ -162,7 +162,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=fda8f8352dda79647567a8993662af7a(;.*)?$'
               uri:
                 prefix: /admin
               withoutHeaders:
@@ -213,7 +213,7 @@ tests:
               headers:
                 response:
                   add:
-                    set-cookie: mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385; Path=/; Secure; HttpOnly; SameSite=Lax
+                    set-cookie: mc-canary-test-stack-preprod=fda8f8352dda79647567a8993662af7a; Path=/; Secure; HttpOnly; SameSite=Lax
               weight: 100
             - destination:
                 host: test-stack-admin-preview.preprod.svc.cluster.local
@@ -222,7 +222,7 @@ tests:
               headers:
                 response:
                   add:
-                    set-cookie: mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; Path=/; Secure; HttpOnly; SameSite=Lax
+                    set-cookie: mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; Path=/; Secure; HttpOnly; SameSite=Lax
               weight: 0
 
   - it: sends a request without a cookie or a page-load header to the stable revision only, with the route's own match
@@ -254,12 +254,12 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'
               uri:
                 prefix: /api
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896(;.*)?$'
                 x-tenant:
                   exact: acme
               uri:
@@ -297,7 +297,7 @@ tests:
           value:
             - headers:
                 cookie:
-                  regex: '^(.*;\s*)?mc-canary-test-stack=9e2763483e3fede8139aa2e93cbec385(;.*)?$'
+                  regex: '^(.*;\s*)?mc-canary-test-stack-preprod=fda8f8352dda79647567a8993662af7a(;.*)?$'
       - equal:
           path: spec.http[?(@.name=="everything-custom-route")].match
           value:
@@ -509,7 +509,7 @@ tests:
         correlationId: ""
     asserts:
       - failedTemplate:
-          errorPattern: "application '[a-z]+': canarySessionAffinity needs global.correlationId"
+          errorPattern: "application '[a-z]+': canarySessionAffinity needs global.correlationId, from which the cookie values derive"
 
   - it: fails when a route already matches on the cookie header
     set:
@@ -580,5 +580,5 @@ tests:
 
   - it: shares one cookie across the frontends of a release
     asserts:
-      - matchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; "}
-      - matchRegex: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack=93f9af35aa2f4492e4492bf8550455d4; "}
+      - matchRegex: {path: 'spec.http[?(@.name=="admin-path-route")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; "}
+      - matchRegex: {path: 'spec.http[?(@.name=="canary")].route[1].headers.response.add.set-cookie', pattern: "^mc-canary-test-stack-preprod=f0af1f2d82fd33800a6841632f37b896; "}
