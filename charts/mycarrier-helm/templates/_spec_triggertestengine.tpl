@@ -10,18 +10,10 @@
 {{- $resourceDefaults := $chartDefaults.resources.testTrigger -}}
 {{- $imagePullSecret := $chartDefaults.imagePullSecret -}}
 {{- $restartPolicy := $chartDefaults.restartPolicy -}}
-{{- $httpPort := 8080 }}
 {{- $environment := $.Values.environment.name }}
 {{- $gitBranch := $.Values.global.gitbranch}}
 {{- $stackname := $.Values.global.appStack }}
 {{- $correlationId := $.Values.global.correlationId }}
-{{- if not (dig "service" "ports" false .application) }}
-{{- range $key, $value := .application.ports }}
-  {{- if eq ($key | lower) "http" }}
-    {{- $httpPort = $value }}
-  {{- end }}
-{{- end }}
-{{- end }}
 {{- $imageTag :=  .application.image.tag }}
 {{- $enableV1 := dig "testtrigger" "enableV1" true .application }}
 {{- $argoInst := $.Values.global.argoEventsInstance | default "argo-events" }}
@@ -116,6 +108,20 @@ template:
 {{- end }}
 
 {{/*
+helm.testtrigger.httpServicePort: the port of the application's http Service, the one a test calls when its definition
+sets no serviceAddress. Takes the application map. It is the Service port that helm.canary.previewPort finds for the
+http port (ports.http, 8080 when unset): the service.ports entry named http, else the one whose targetPort is ports.http,
+else ports.http itself; the container port does not have to equal it. When the Service exposes none, ports.http.
+*/}}
+{{- define "helm.testtrigger.httpServicePort" -}}
+{{- $port := 8080 }}
+{{- range $key, $value := .ports }}
+  {{- if eq ($key | lower) "http" }}{{- $port = $value }}{{- end }}
+{{- end }}
+{{- include "helm.canary.previewPort" (dict "application" . "port" $port) | default $port }}
+{{- end }}
+
+{{/*
 helm.testtrigger.legacyCurls: the curl commands of the legacy PostSync hook (testtrigger.enableV1 false), one per test
 definition, as the text that goes into the hook's script. Takes dict "ctx" <the hook's context, with .application> and
 "env" <the result of helm.testtrigger.envVars, decoded>. Each definition is its own HTTP request, so there is no cap
@@ -130,17 +136,10 @@ hook body (helm.testtrigger.commandSafeJson); the other fields are printed as th
 {{- $fullName := include "helm.fullname" $root }}
 {{- $baseName := include "helm.basename" $root }}
 {{- $namespace := include "helm.namespace" $root }}
-{{- $httpPort := 8080 }}
+{{- $httpPort := include "helm.testtrigger.httpServicePort" $application }}
 {{- $gitBranch := $root.Values.global.gitbranch }}
 {{- $stackname := $root.Values.global.appStack }}
 {{- $correlationId := $root.Values.global.correlationId }}
-{{- if not (dig "service" "ports" false $application) }}
-{{- range $key, $value := $application.ports }}
-  {{- if eq ($key | lower) "http" }}
-    {{- $httpPort = $value }}
-  {{- end }}
-{{- end }}
-{{- end }}
 {{- $imageTag := $application.image.tag }}
 {{- range $index, $definition := dig "testtrigger" "testdefinitions" list $application }}
           {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
@@ -231,18 +230,11 @@ empty), and correlationId (CorrelationId, a string).
 {{- $fullName := include "helm.fullname" . }}
 {{- $baseName := include "helm.basename" . }}
 {{- $namespace := include "helm.namespace" . }}
-{{- $httpPort := 8080 }}
+{{- $httpPort := include "helm.testtrigger.httpServicePort" .application }}
 {{- $gitBranch := .Values.global.gitbranch }}
 {{- $stackname := .Values.global.appStack }}
 {{- $correlationId := .Values.global.correlationId }}
 {{- if hasKey $run "correlationId" }}{{ $correlationId = $run.correlationId }}{{ end }}
-{{- if not (dig "service" "ports" false .application) }}
-{{- range $key, $value := .application.ports }}
-  {{- if eq ($key | lower) "http" }}
-    {{- $httpPort = $value }}
-  {{- end }}
-{{- end }}
-{{- end }}
 {{- $imageTag := .application.image.tag }}
 {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
 {{- $tests := list }}

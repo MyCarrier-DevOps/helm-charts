@@ -160,6 +160,26 @@ tests:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
           pattern: '-preview'
 
+  # The Service port is the one the stable Service exposes for http (service.ports, here 8080 to container port 4200),
+  # whatever the container port: ports.http stays the Service port the routes use.
+  - it: targets the stable Service on its http Service port when it maps to another container port
+    template: analysistemplate.yaml
+    documentSelector: *testsDarkTemplate
+    set:
+      <<: *dark
+      applications:
+        api:
+          <<: *api
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 4200
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:8080"'
+
   - it: sends the lower-cased canary header
     template: analysistemplate.yaml
     documentSelector: *testsDarkTemplate
