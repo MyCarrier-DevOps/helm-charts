@@ -218,6 +218,62 @@ tests:
           path: spec.metrics[0].provider.web.body
           pattern: FORMAT JSONEachRow\s*$
 
+  # The histograms are cumulative, so a series counts its last point minus its first point in the window. A series whose
+  # first exported point falls inside the window (a pod that started, or an error status seen for the first time) has
+  # no earlier point to subtract, and its first point already holds what it counted so far: it counts from zero. A
+  # series that has an earlier point (read from a lookback before the window) keeps last minus first, so a long-lived
+  # counter does not count from zero.
+  - it: counts a series whose first point falls inside the window from zero
+    template: analysistemplate.yaml
+    documentIndex: 4
+    set: *prod
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "now64\\(9\\) - toIntervalSecond\\(\\{window:UInt32\\}\\) AS window_start"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "countIf\\(TimeUnix < window_start\\) > 0 AS existed"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "last_count - if\\(existed, first_count, 0\\) AS delta"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "toInt64\\(last\\) - if\\(existed, toInt64\\(first\\), 0\\)"
+      - notMatchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "argMin\\(Count, TimeUnix\\)"
+
+  - it: takes the last and first point from inside the window and keeps a series that has an earlier point as last minus first
+    template: analysistemplate.yaml
+    documentIndex: 4
+    set: *prod
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "argMaxIf\\(Count, TimeUnix, TimeUnix >= window_start\\)"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "argMinIf\\(Count, TimeUnix, TimeUnix >= window_start\\)"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "argMaxIf\\(BucketCounts, TimeUnix, TimeUnix >= window_start\\)"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "argMinIf\\(BucketCounts, TimeUnix, TimeUnix >= window_start\\)"
+
+  - it: reads a lookback before the window to tell a new series from an old one, and drops a series with no point in the window
+    template: analysistemplate.yaml
+    documentIndex: 4
+    set: *prod
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "TimeUnix >= window_start - toIntervalSecond\\(300\\)"
+      - matchRegex:
+          path: spec.metrics[0].provider.web.body
+          pattern: "countIf\\(TimeUnix >= window_start\\) > 0"
+
   - it: runs alerts and compare as background analysis from the first weight, with the canary and stable hashes
     template: rollout.yaml
     set: *prod
