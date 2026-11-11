@@ -53,9 +53,9 @@ strategy:
 {{- /* The canary contract: the chart's stable and -preview Services, the Tech Spec's canary defaults (stable keeps
        full capacity (dynamicStableScale false, Argo Rollouts' default, so it is not rendered: the rollouts
        controller's typed Update drops a false non-pointer omitempty field and Argo CD would show the Rollout
-       OutOfSync for the whole canary), 30 s before an aborted canary scales down, at least 2 pods per ReplicaSet on a canary Rollout,
+       OutOfSync for the whole canary), 30 s before an aborted canary scales down, at least 2 pods per ReplicaSet on a canary Rollout (capped at its replicas),
        DEVOPS-326 spec A4: Argo Rollouts sizes a weight-sized canary max(ceil(weight x replicas / 100), 2), capped at
-       replicas, and helm.canary.configuredSteps refuses a minimum below 2 where the steps render; 1 on a Rollout whose
+       replicas, and helm.canary.configuredSteps refuses a minimum of 0 where the steps render; 1 on a Rollout whose
        property is not canary, so its render does not change), Istio weights on
        every route that reaches the app (helm.canary.virtualServices), the routes the steps manage (the dark stage's
        canary-header, helm.canary.managedRoutes), the release-wide steps (helm.canary.steps), and the background analysis

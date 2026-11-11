@@ -1,0 +1,201 @@
+
+### Chart [ mycarrier-helm ] mycarrier-helm
+
+ PASS  alerts - additional rules	mycarrier-helm/tests/alerts_additional_test.yaml
+ PASS  alerts - gating and validation	mycarrier-helm/tests/alerts_gating_test.yaml
+ PASS  alerts - contact points and notification route	mycarrier-helm/tests/alerts_routing_test.yaml
+ PASS  alerts - standard rules	mycarrier-helm/tests/alerts_standard_test.yaml
+ PASS  allowAllEndpoints is confined to dev and feature environments	mycarrier-helm/tests/allow_all_endpoints_guardrail_test.yaml
+ PASS  Allowed endpoint deduplication logic	mycarrier-helm/tests/allowed_endpoints_deduplication_test.yaml
+ PASS  Allowed endpoints functionality in VirtualService	mycarrier-helm/tests/allowed_endpoints_defaults_test.yaml
+ PASS  Allowed endpoints edge cases	mycarrier-helm/tests/allowed_endpoints_edge_cases_test.yaml
+ PASS  Allowed endpoints functionality in VirtualService	mycarrier-helm/tests/allowed_endpoints_test.yaml
+ PASS  HPA autoscaler template tests	mycarrier-helm/tests/autoscaler_test.yaml
+ PASS  Autoscaling Matrix Tests	mycarrier-helm/tests/autoscaling_matrix_test.yaml
+ PASS  Cloudflare Proxy Annotation Tests	mycarrier-helm/tests/cloudflare_proxy_annotation_test.yaml
+ PASS  CronJob advanced template tests	mycarrier-helm/tests/cronjob_advanced_test.yaml
+ PASS  CronJob template tests	mycarrier-helm/tests/cronjob_test.yaml
+ PASS  Crossplane Azure Resource Group Tests	mycarrier-helm/tests/crossplane_azure_resourcegroup_test.yaml
+ PASS  Crossplane Azure Service Bus Tests	mycarrier-helm/tests/crossplane_azure_servicebus_test.yaml
+ PASS  Crossplane Azure Storage Tests	mycarrier-helm/tests/crossplane_azure_storage_test.yaml
+ PASS  Custom Environment Name Tests	mycarrier-helm/tests/custom_environment_name_test.yaml
+ PASS  test default language endpoints functionality in VirtualService	mycarrier-helm/tests/default_endpoints_test.yaml
+ PASS  Chart Defaults Consistency Tests	mycarrier-helm/tests/defaults_consistency_test.yaml
+ PASS  Deployment template tests	mycarrier-helm/tests/deployment_test.yaml
+ PASS  Edge Cases Tests	mycarrier-helm/tests/edge_cases_test.yaml
+ PASS  Environment Variables Tests	mycarrier-helm/tests/environment_variables_test.yaml
+ PASS  Frontend VirtualService template tests	mycarrier-helm/tests/frontend_virtualservice_test.yaml
+ PASS  HPA Defaults from Replicas Tests	mycarrier-helm/tests/hpa_defaults_from_replicas_test.yaml
+ PASS  template indentation correctness	mycarrier-helm/tests/indentation_test.yaml
+ PASS  Internal enabled flag tests	mycarrier-helm/tests/internal_enabled_flag_test.yaml
+ PASS  Internal ServiceEntry template tests	mycarrier-helm/tests/internal_serviceentry_test.yaml
+ PASS  Job advanced template tests	mycarrier-helm/tests/job_advanced_test.yaml
+ PASS  Job template tests	mycarrier-helm/tests/job_test.yaml
+ PASS  KEDA ScaledObject template tests	mycarrier-helm/tests/keda_scaledobject_test.yaml
+ PASS  KrakenDAutoConfig template tests	mycarrier-helm/tests/krakend_autoconfig_test.yaml
+ PASS  Labels template tests	mycarrier-helm/tests/labels_test.yaml
+ PASS  legacyHostAliases generator-safety guard	mycarrier-helm/tests/legacyhostaliases_guards_test.yaml
+ PASS  helm.legacyHostFqdn legacy host alias tests	mycarrier-helm/tests/legacyhostaliases_test.yaml
+ PASS  Minimum Values Tests	mycarrier-helm/tests/minimal_values_test.yaml
+ PASS  Minimum Deployment Configuration Tests	mycarrier-helm/tests/minimum_deployment_test.yaml
+ PASS  Minimum HPA Configuration Tests	mycarrier-helm/tests/minimum_hpa_test.yaml
+ PASS  Minimum Rollout Configuration Tests	mycarrier-helm/tests/minimum_rollout_test.yaml
+ PASS  Minimum Service Configuration Tests	mycarrier-helm/tests/minimum_service_test.yaml
+ PASS  Minimum ServiceMonitor Configuration Tests	mycarrier-helm/tests/minimum_servicemonitor_test.yaml
+ PASS  Minimum StatefulSet Configuration Tests	mycarrier-helm/tests/minimum_statefulset_test.yaml
+ PASS  Minimum VirtualService Configuration Tests	mycarrier-helm/tests/minimum_virtualservice_test.yaml
+ PASS  MongoConnection injection with dependencyDeployments.mongodb	mycarrier-helm/tests/mongodb_connection_test.yaml
+ PASS  dependencyDeployments in feature-environment offloads	mycarrier-helm/tests/mongodb_offload_test.yaml
+ FAIL  dependencyDeployments.mongodb (in-cluster MongoDB)	mycarrier-helm/tests/mongodb_test.yaml
+	- deploys a 3-member replica set named after the stack in production
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- backs up production to the production container
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- backs production up to the stack's container when it names one
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- mounts the backup folder <meta environment>/<appStack>/<namespace>
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- names the backup folder after an overridden namespace
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- renders the on-demand restore in production
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- uses the stack name as the connection string's database
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- renders no backup or restore outside production (dev, preprod, feature environments)
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- backs up any environment that turns backups on, to the stack's container
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- rejects backups outside production without a container
+
+		- asserts[0] `failedTemplate` fail
+			Template:	mycarrier-helm/templates/mongodb.yaml
+			DocumentIndex:	0
+			Expected to match:
+				dependencyDeployments.mongodb.backup.container
+			Actual:
+				executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- fails when production names a non-production container
+
+		- asserts[0] `failedTemplate` fail
+			Template:	mycarrier-helm/templates/mongodb.yaml
+			DocumentIndex:	0
+			Expected to match:
+				does not match this environment
+			Actual:
+				executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- fails when another environment backs up to a production container
+
+		- asserts[0] `failedTemplate` fail
+			Template:	mycarrier-helm/templates/mongodb.yaml
+			DocumentIndex:	0
+			Expected to match:
+				does not match this environment
+			Actual:
+				executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- ignores a production container where backups are off
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- deploys one member outside production
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- deploys no backup in dev
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- backs up any production-like environment (prod-*)
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- keeps the restore CronJob name within 52 characters for a long appStack
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- keeps production's three members on separate nodes, one voluntary disruption at a time
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- takes the stack's members over the environment default
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- takes the stack's server version, storage and resources
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- takes the stack's backup schedule, time zone and retention
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- accepts a later 8.x server version
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+	- gives the database pods the stack's own ServiceAccount and Role
+		Error: template: mycarrier-helm/templates/mongodb.yaml:2:12: executing "mycarrier-helm/templates/mongodb.yaml" at <include "helm.mongodb.context" .>: error calling include: template: mycarrier-helm/templates/_mongodb.tpl:34:31: executing "helm.mongodb.context" at <deepCopy $defaults.backup>: error calling deepCopy: reflect: call of reflect.Value.Type on zero Value
+
+ PASS  Session affinity, the own VirtualService of a frontend in a multi-frontend release	mycarrier-helm/tests/multifrontend_session_affinity_own_test.yaml
+ PASS  Multi-frontend cookie session affinity, Rollout traffic routing	mycarrier-helm/tests/multifrontend_session_affinity_rollout_test.yaml
+ PASS  Session affinity on the multi-frontend VirtualService (canarySessionAffinity)	mycarrier-helm/tests/multifrontend_session_affinity_test.yaml
+ PASS  allowed endpoints by namespace - enforced everywhere except the plain dev namespace, with Swagger on dev/feature only and an allowAllEndpoints escape hatch	mycarrier-helm/tests/namespace_allowed_endpoints_test.yaml
+ PASS  Null Optional App Fields Tests	mycarrier-helm/tests/null_app_fields_test.yaml
+ PASS  Null Secret Fields Tests	mycarrier-helm/tests/null_secrets_test.yaml
+ PASS  Null Optional Fields Tests	mycarrier-helm/tests/null_values_test.yaml
+ PASS  offload VirtualService endpoint allowlist	mycarrier-helm/tests/offload_allowed_endpoints_test.yaml
+ PASS  Offload Operator integration tests	mycarrier-helm/tests/offload_operator_test.yaml
+ PASS  OpenTelemetry injection controls	mycarrier-helm/tests/otel_test.yaml
+ PASS  OpenTelemetry block consistency across workload types	mycarrier-helm/tests/otel_workloads_test.yaml
+ PASS  PodDisruptionBudget template tests	mycarrier-helm/tests/pdb_test.yaml
+ PASS  Resource Configuration Tests	mycarrier-helm/tests/resources_test.yaml
+ PASS  Rollout canary alerts (chart AnalysisTemplate on DEVOPS-329's label contract, DEVOPS-312)	mycarrier-helm/tests/rollout_canary_alerts_test.yaml
+ PASS  Rollout canary analysis template set (committed snapshot, DEVOPS-312 R5)	mycarrier-helm/tests/rollout_canary_analysis_snapshot_test.yaml
+ PASS  Rollout canary analysis (chart AnalysisTemplates, DEVOPS-312)	mycarrier-helm/tests/rollout_canary_analysis_test.yaml
+ PASS  Rollout canary bakeMinutes annotation (alert-gate's window after promotion, D18, DEVOPS-312/319)	mycarrier-helm/tests/rollout_canary_bake_test.yaml
+ PASS  Rollout canary budget annotation (mycarrier.tech/canaryBudgetSeconds, Tech Spec D22, DEVOPS-312/319)	mycarrier-helm/tests/rollout_canary_budget_test.yaml
+ PASS  Rollout canary compare (canary-versus-stable 5xx ratio and p95 from ClickStack, Tech Spec D4, DEVOPS-322)	mycarrier-helm/tests/rollout_canary_compare_test.yaml
+ PASS  Rollout canary contract (global.strategy.canary, Istio routing on every route)	mycarrier-helm/tests/rollout_canary_contract_test.yaml
+ PASS  Rollout canary coordinator (release-wide lockstep, DEVOPS-325 step plugin)	mycarrier-helm/tests/rollout_canary_coordinator_test.yaml
+ PASS  Rollout canary dark stage (header-gated, Tech Spec D11 and D20)	mycarrier-helm/tests/rollout_canary_dark_test.yaml
+ PASS  Rollout canary steps in prod only (Q52, DEVOPS-516)	mycarrier-helm/tests/rollout_canary_prod_only_test.yaml
+ PASS  Rollout canary source routes (canary pods of a release call its canaries, DEVOPS-326 spec A3)	mycarrier-helm/tests/rollout_canary_source_route_test.yaml
+ PASS  Rollout canary tests-dark AnalysisTemplate (dark stage leader suite, DEVOPS-326)	mycarrier-helm/tests/rollout_canary_tests_dark_test.yaml
+ PASS  Rollout canary tests AnalysisTemplate (TestEngine v1 caller contract, DEVOPS-515)	mycarrier-helm/tests/rollout_canary_tests_test.yaml
+ PASS  Rollout canary steps follow global.deploymentStrategy (the repository's deployment-strategy property, DEVOPS-310)	mycarrier-helm/tests/rollout_deployment_strategy_test.yaml
+ PASS  Deployment to Rollout migration (migratingToRollouts)	mycarrier-helm/tests/rollout_migration_test.yaml
+ PASS  Rollout render checks (dependency labels, offload operator)	mycarrier-helm/tests/rollout_render_checks_test.yaml
+ PASS  A Rollout app's Services and HPA skip kube-linter's dangling checks (DEVOPS-534)	mycarrier-helm/tests/rollout_service_kubelinter_test.yaml
+ PASS  Rollout Services use client-side apply	mycarrier-helm/tests/rollout_service_sync_options_test.yaml
+ PASS  Rollout template tests	mycarrier-helm/tests/rollout_test.yaml
+ PASS  Security Context Tests	mycarrier-helm/tests/security_context_test.yaml
+ PASS  Service template tests	mycarrier-helm/tests/service_test.yaml
+ PASS  ServiceMonitor template tests	mycarrier-helm/tests/servicemonitor_test.yaml
+ PASS  Session affinity, Rollout traffic routing	mycarrier-helm/tests/session_affinity_rollout_test.yaml
+ PASS  Session affinity on the application's VirtualService (canarySessionAffinity)	mycarrier-helm/tests/session_affinity_test.yaml
+ PASS  StatefulSet template tests	mycarrier-helm/tests/statefulset_test.yaml
+ PASS  Baseline of the trigger request bodies without env (AQA-81)	mycarrier-helm/tests/triggertests_env_baseline_test.yaml
+ PASS  Test trigger env schema (AQA-81)	mycarrier-helm/tests/triggertests_env_schema_test.yaml
+ PASS  Test trigger env, merge, validation and the v1 request (AQA-81)	mycarrier-helm/tests/triggertests_env_test.yaml
+ PASS  Test triggers for prod canary Rollouts (prod-tests ConfigMap in place of the PostSync hook, D7, DEVOPS-312/319)	mycarrier-helm/tests/triggertests_prod_canary_test.yaml
+ PASS  Test trigger tests template	mycarrier-helm/tests/triggertests_test.yaml
+ PASS  V2 Migration Feature Tests - Deployments	mycarrier-helm/tests/v2migration_deployment_test.yaml
+ PASS  V2 Migration Feature Tests - StatefulSets	mycarrier-helm/tests/v2migration_statefulset_test.yaml
+ PASS  Environment-header route carries the endpoint allowlist (opt-out, networking.istio.enforceAllowlistOnEnvironmentHeader)	mycarrier-helm/tests/virtualservice_env_header_allowlist_test.yaml
+ PASS  Multi-frontend release refuses a mesh-only frontend (networking.istio.externalEnabled)	mycarrier-helm/tests/virtualservice_external_frontend_test.yaml
+ PASS  VirtualService external exposure (networking.istio.externalEnabled)	mycarrier-helm/tests/virtualservice_external_test.yaml
+ PASS  VirtualService template tests	mycarrier-helm/tests/virtualservice_test.yaml
+ PASS  VPA Resource Defaults Tests	mycarrier-helm/tests/vpa_resource_defaults_test.yaml
+ PASS  VPA template tests	mycarrier-helm/tests/vpa_test.yaml
+ PASS  WasmPlugin template tests	mycarrier-helm/tests/wasmplugin_test.yaml
+ PASS  whitelabel host helper tests	mycarrier-helm/tests/whitelabel_host_test.yaml
+ PASS  withoutHeaders on the default route in non-simple envs (dev/feature*/uat/qa/demo); omitted in prod/preprod; allowedEndpoints rules remain URI-only in all envs	mycarrier-helm/tests/withoutheaders_nonsimple_envs_test.yaml
+
+Charts:      1 failed, 0 passed, 1 total
+Test Suites: 1 failed, 99 passed, 100 total
+Tests:       23 failed, 20 errored, 1434 passed, 1457 total
+Snapshot:    16 passed, 16 total
+Time:        28.90795141s
+
+Error: plugin "unittest" exited with error

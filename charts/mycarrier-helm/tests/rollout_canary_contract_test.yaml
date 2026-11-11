@@ -1530,11 +1530,11 @@ tests:
           path: spec.progressDeadlineSeconds
           value: 600
 
-  # Review Focus 4: minPodsPerReplicaSet is capped at spec.replicas, so a canary Rollout whose minimum replicas is below
-  # 2 would still run 1 canary pod. Where the steps render (prod, or stepsOutsideProd) the render fails; the minimum is
-  # autoscaling.minReplicas with the HPA, keda.idleReplicaCount (when set) or else keda.minReplicaCount with KEDA,
-  # else replicas.
-  - it: minimum below 2 fails where steps render (hpa)
+  # minPodsPerReplicaSet is capped at spec.replicas, so a canary Rollout whose minimum replicas is 1 runs a 1-pod
+  # canary: allowed, for applications that must run a single instance. Where the steps render (prod, or
+  # stepsOutsideProd) a minimum of 0 fails; the minimum is autoscaling.minReplicas with the HPA, keda.idleReplicaCount
+  # (when set) or else keda.minReplicaCount with KEDA, else replicas.
+  - it: renders a single-pod canary where steps render (hpa)
     template: rollout.yaml
     set:
       global:
@@ -1555,10 +1555,9 @@ tests:
             minReplicas: 1
             maxReplicas: 4
     asserts:
-      - failedTemplate:
-          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(autoscaling.minReplicas\\)"
+      - notFailedTemplate: {}
 
-  - it: minimum below 2 fails where steps render (keda)
+  - it: renders a single-pod canary where steps render (keda)
     template: rollout.yaml
     set:
       global:
@@ -1581,8 +1580,7 @@ tests:
             subscriptionName: my-sub
             minReplicaCount: 1
     asserts:
-      - failedTemplate:
-          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(keda.minReplicaCount\\)"
+      - notFailedTemplate: {}
 
   # KEDA scales the target to idleReplicaCount (it supports only 0) while its triggers are idle, below minReplicaCount;
   # Argo Rollouts caps minPodsPerReplicaSet at spec.replicas and keeps a count of 0 at 0 (CheckMinPodsPerReplicaSet,
@@ -1612,7 +1610,7 @@ tests:
             idleReplicaCount: 0
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 0 \\(keda.idleReplicaCount: KEDA scales the Rollout to it while its triggers are idle\\)\\..* Remove applications\\.api\\.keda\\.idleReplicaCount\\.$"
+          errorPattern: "application 'api': a canary Rollout needs at least 1 pod, and its minimum is 0 \\(keda.idleReplicaCount: KEDA scales the Rollout to it while its triggers are idle\\)\\..* Remove applications\\.api\\.keda\\.idleReplicaCount\\.$"
 
   - it: renders a KEDA-scaled canary Rollout with minReplicaCount 2 and no idleReplicaCount
     template: rollout.yaml
@@ -1642,7 +1640,7 @@ tests:
           path: spec.strategy.canary.minPodsPerReplicaSet
           value: 2
 
-  - it: minimum below 2 fails where steps render (replicas)
+  - it: renders a single-pod canary where steps render (replicas)
     template: rollout.yaml
     set:
       global:
@@ -1661,12 +1659,11 @@ tests:
           <<: *floorApp
           replicas: 1
     asserts:
-      - failedTemplate:
-          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(replicas\\)\\..* Set applications\\.api\\.replicas to 2 or more\\.$"
+      - notFailedTemplate: {}
 
   # The legacy top-level scaling value drops the Rollout's replicas when no HPA or KEDA scales it
   # (helm.specs.rollout), and Argo Rollouts then runs 1 replica.
-  - it: minimum below 2 fails where steps render (top-level scaling)
+  - it: renders a single-pod canary where steps render (top-level scaling)
     template: rollout.yaml
     set:
       global:
@@ -1686,8 +1683,7 @@ tests:
           <<: *floorApp
           replicas: 3
     asserts:
-      - failedTemplate:
-          errorPattern: "application 'api': a canary Rollout needs at least 2 pods, and its minimum is 1 \\(top-level scaling: the Rollout renders no replicas, and Argo Rollouts runs 1\\)\\..* Remove the top-level scaling value, or scale the application with an HPA or KEDA whose minimum is 2 or more\\.$"
+      - notFailedTemplate: {}
 
   - it: renders a KEDA-scaled canary Rollout whose minimum is the KEDA default 2
     template: rollout.yaml

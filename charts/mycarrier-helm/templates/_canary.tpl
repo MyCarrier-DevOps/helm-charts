@@ -157,13 +157,14 @@
 {{- if and $rendered $coordinator.enabled (not (dig "correlationId" "" (.Values.global | default dict))) -}}
   {{- fail "global.correlationId is required when the coordinator is enabled: the canary-coordinator groups a release's Rollouts by their mycarrier.tech/correlationId label." -}}
 {{- end -}}
-{{- /* The canary floor (spec A4): minPodsPerReplicaSet 2 is capped at spec.replicas, so a Rollout that can run 1 pod
-       would run a 1-pod canary, and one that KEDA scales to 0 (keda.idleReplicaCount) no canary pods. Checked where
-       the steps render; elsewhere the Rollout promotes at once. */ -}}
+{{- /* The canary floor: minPodsPerReplicaSet 2 is capped at spec.replicas, so a Rollout that runs 1 pod runs a 1-pod
+       canary (allowed, for applications that must run a single instance), and one that KEDA scales to 0
+       (keda.idleReplicaCount) no canary pods, which fails. Checked where the steps render; elsewhere the Rollout
+       promotes at once. */ -}}
 {{- if $rendered -}}
   {{- $minimum := include "helm.canary.minReplicas" . | fromJson -}}
-  {{- if lt (int $minimum.replicas) 2 -}}
-    {{- fail (printf "application '%s': a canary Rollout needs at least 2 pods, and its minimum is %d (%s). Argo Rollouts keeps the canary at minPodsPerReplicaSet (2) pods at every weight, but never above the Rollout's replicas, so the canary would run fewer than 2 pods. %s" .appName (int $minimum.replicas) $minimum.source $minimum.fix) -}}
+  {{- if lt (int $minimum.replicas) 1 -}}
+    {{- fail (printf "application '%s': a canary Rollout needs at least 1 pod, and its minimum is %d (%s). Argo Rollouts keeps the canary at minPodsPerReplicaSet (2) pods at every weight, but never above the Rollout's replicas, so the canary would run no pods. %s" .appName (int $minimum.replicas) $minimum.source $minimum.fix) -}}
   {{- end -}}
 {{- end -}}
 {{- $fullName := include "helm.fullname" . -}}
