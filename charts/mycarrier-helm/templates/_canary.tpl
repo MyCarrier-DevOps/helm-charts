@@ -221,7 +221,12 @@
   {{- if lt (int $cfg.darkReplicas) 2 -}}
     {{- fail (printf "global.strategy.canary.darkReplicas is %v; the minimum is 2. With one dark canary pod a single restart leaves the canary with no available pod, and Argo Rollouts removes the canary-header route in the middle of the dark suite. Set darkReplicas to 2 or more." $cfg.darkReplicas) -}}
   {{- end -}}
-  {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" (int $cfg.darkReplicas))) -}}
+  {{- /* The dark canary runs darkReplicas pods, or the Rollout's minimum replicas when that is smaller: an application
+         that runs a single pod (one that must run one instance) gets one dark pod. */ -}}
+  {{- $darkReplicas := int $cfg.darkReplicas -}}
+  {{- $minimum := int (include "helm.canary.minReplicas" . | fromJson).replicas -}}
+  {{- if and (ge $minimum 1) (lt $minimum $darkReplicas) }}{{ $darkReplicas = $minimum }}{{ end -}}
+  {{- $steps = append $steps (dict "setCanaryScale" (dict "replicas" $darkReplicas)) -}}
   {{- $steps = append $steps (dict "setHeaderRoute" (dict "name" "canary-header" "match" (list (dict "headerName" "X-MyCarrier-Canary" "headerValue" (dict "exact" (include "helm.canary.correlationId" .)))))) -}}
   {{- $steps = append $steps (include "helm.canary.barrier" (dict "name" "dark-ready" "coordinator" $coordinator) | fromJson) -}}
   {{- /* The leader's tests-dark renders (helm.canary.analysis.available): helm.canary.testsDark.wanted renders the

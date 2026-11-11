@@ -248,7 +248,7 @@ AnalysisTemplate (DEVOPS-326). It changes canary Rollouts only (`deploymentType:
 migrating Rollouts and Rollouts whose property is not `canary` render unchanged.
 
 With the coordinator on and a preset, each canary Rollout of the release runs the dark stage after its `start` barrier,
-where its steps render (prod, or `stepsOutsideProd`): `darkReplicas` canary pods (default 2, at least 2) at weight 0, a
+where its steps render (prod, or `stepsOutsideProd`): `darkReplicas` canary pods (default 2, at least 2; a Rollout whose minimum replicas is 1 gets 1) at weight 0, a
 `canary-header` route that sends `X-MyCarrier-Canary: <global.correlationId, lower-cased>` to the canary, the
 `dark-ready` barrier, the leader's `<environment>-<fullName>-tests-dark` analysis, the `dark-passed` barrier (15m), and
 the removal of the route. `tests-dark` is the chart's `tests` Job sent to the leader's stable Service with that header,

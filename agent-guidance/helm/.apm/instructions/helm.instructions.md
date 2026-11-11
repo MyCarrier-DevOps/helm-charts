@@ -886,7 +886,7 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 
 **Dark stage.** With the coordinator on and a preset, `dark: true` (the default since the release after 4.7.12, DEVOPS-326) runs the leader's test suite against the release's canaries at weight 0, before any customer HTTP request reaches them through the routes (queue-driven work in canary pods is not gated, see What stays exposed). Rollouts whose property is not `canary`, Deployments and StatefulSets render as before. Where the steps render (prod, or `stepsOutsideProd`), each canary Rollout of the release, after the `start` barrier:
 
-1. scales its canary to `darkReplicas` pods (default 2; the schema and the render refuse fewer: with one pod a single restart leaves the canary with no available pod, and Argo Rollouts removes the header route in the middle of the suite);
+1. scales its canary to `darkReplicas` pods (default 2, or 1 for a Rollout whose minimum replicas is 1, such as a single-instance migrator; the schema and the render refuse fewer: with one pod a single restart leaves the canary with no available pod, and Argo Rollouts removes the header route in the middle of the suite);
 2. adds the `canary-header` route, which sends a request carrying `X-MyCarrier-Canary: <global.correlationId, lower-cased>` to the canary, above every other route of its VirtualService; the weights stay 100/0;
 3. waits at `dark-ready` for the whole release;
 4. on the leader only, runs `<environment>-<fullName>-tests-dark`;

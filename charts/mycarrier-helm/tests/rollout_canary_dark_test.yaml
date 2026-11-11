@@ -658,6 +658,22 @@ tests:
           path: spec.strategy.canary.steps[2].setHeaderRoute.name
           value: canary-header
 
+  # A Rollout that runs a single pod (an application that must run one instance, such as a persistent migrator) gets a
+  # dark canary of its own size: the dark stage runs the smaller of darkReplicas and the Rollout's minimum replicas.
+  - it: sizes a single-pod Rollout's dark canary to one pod
+    set:
+      <<: *prodDefault
+      applications:
+        api:
+          <<: *suiteApp
+          replicas: 1
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            setCanaryScale:
+              replicas: 1
+
   # Decision 4: one dark canary pod restart would drop availability to 0 and Argo Rollouts would remove the header
   # route mid-suite, so darkReplicas is at least 2 (the schema's minimum; the render checks it too).
   - it: darkReplicas below 2 fails

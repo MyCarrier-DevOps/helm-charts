@@ -148,7 +148,7 @@ global:
   #                               # it off. A multi-frontend release fails to render with it on.
   #     # leader: api             # the application that runs the dark suite; required when the release has two or
   #                               # more canary Rollouts, defaults to the only one otherwise
-  #     darkReplicas: 2           # canary pods during the dark stage; at least 2, so one pod restart does not drop
+  #     darkReplicas: 2           # canary pods during the dark stage (1 for a single-pod Rollout); at least 2, so one pod restart does not drop
   #                               # the canary-header route mid-suite
   #     bakeMinutes: 30           # alert-gate's watch window after promotion (D18); set it longer for a service with
   #                               # a known slow-burn history. Rendered on every canary Rollout as the
