@@ -39,27 +39,45 @@ hyperdx.dev_otel_metrics_histogram
        - Requests with an http.route only: kubelet probes and CORS preflights have none, and would otherwise pad the
          canary's count and lower its 5xx ratio.
        - The histograms are cumulative, so each series (pod, attributes, start time) counts its last point minus its
-         first in the window, for the request count and for each bucket.
+         first in the window, for the request count and for each bucket. A series that has no point before the window
+         (a pod that started inside it, or a status that the pod answered for the first time) has nothing to subtract,
+         and its first point already holds what the series counted so far: it counts from zero. Whether a series
+         existed before the window is read from the points in the 300 s before it, which is more than the 60 s export
+         interval, so a long-lived counter keeps last minus first and does not count from zero. Without this, the
+         first window after a canary pod started, or after its first 5xx, missed what that first point held.
        - p95 is interpolated in the bucket that holds the 95th percentile of the summed bucket deltas.
        - The query has no GROUP BY at the top, so it always answers exactly one row, also with no data: zeros, never an
          empty body or null. Every value is a Float64, which ClickHouse writes as a JSON number. */ -}}
 {{- define "helm.canary.compare.query" -}}
 WITH
-  series AS (
+  now64(9) - toIntervalSecond({window:UInt32}) AS window_start,
+  points AS (
     SELECT
       splitByChar('-', ResourceAttributes['k8s.pod.name'])[-2] AS hash,
       toInt32OrZero(Attributes['http.response.status_code']) >= 500 AS server_error,
-      toInt64(argMax(Count, TimeUnix)) - toInt64(argMin(Count, TimeUnix)) AS delta,
-      arrayMap((last, first) -> toInt64(last) - toInt64(first), argMax(BucketCounts, TimeUnix), argMin(BucketCounts, TimeUnix)) AS buckets,
+      countIf(TimeUnix < window_start) > 0 AS existed,
+      toInt64(argMaxIf(Count, TimeUnix, TimeUnix >= window_start)) AS last_count,
+      toInt64(argMinIf(Count, TimeUnix, TimeUnix >= window_start)) AS first_count,
+      argMaxIf(BucketCounts, TimeUnix, TimeUnix >= window_start) AS last_buckets,
+      argMinIf(BucketCounts, TimeUnix, TimeUnix >= window_start) AS first_buckets,
       any(ExplicitBounds) AS bounds
     FROM {{ include "helm.canary.compare.table" . }}
     WHERE MetricName = 'http.server.request.duration'
-      AND TimeUnix >= now64(9) - toIntervalSecond({window:UInt32})
+      AND TimeUnix >= window_start - toIntervalSecond(300)
       AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
       AND startsWith(ResourceAttributes['k8s.pod.name'], {prefix:String})
       AND Attributes['http.route'] != ''
     GROUP BY ResourceAttributes['k8s.pod.name'], Attributes, StartTimeUnix
-    HAVING hash IN ({canary:String}, {stable:String})
+    HAVING hash IN ({canary:String}, {stable:String}) AND countIf(TimeUnix >= window_start) > 0
+  ),
+  series AS (
+    SELECT
+      hash,
+      server_error,
+      last_count - if(existed, first_count, 0) AS delta,
+      arrayMap((last, first) -> toInt64(last) - if(existed, toInt64(first), 0), last_buckets, first_buckets) AS buckets,
+      bounds
+    FROM points
   ),
   sides AS (
     SELECT
