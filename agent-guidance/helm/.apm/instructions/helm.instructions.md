@@ -710,9 +710,9 @@ applications:
 
 ## Rollouts
 
-`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. chart-renderer's kube-linter check models only built-in workloads, not the Rollout, so the chart marks the objects that point at a Rollout (DEVOPS-534). Both Services carry `ignore-check.kube-linter.io/dangling-service`; without it the check sees no pods behind them and refuses the render in every environment. A value that the application sets for that key in `service.annotations` is kept. The application's HPA, which renders by default in prod and targets the Rollout, carries `ignore-check.kube-linter.io/dangling-horizontalpodautoscaler`; without it the check finds no target and refuses the prod render. The Services and HPAs of Deployment and StatefulSet applications stay linted. This is a fix, not a breaking change: nothing to set. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's. A Rollout omits the zero-valued fields that the rollouts controller's typed Update drops, so that Argo CD stays Synced during a canary: `minReadySeconds` renders only when `applications.<app>.minReadySeconds` is above 0 (a Deployment still renders `minReadySeconds: 0`), and `dynamicStableScale` is not rendered (false is Argo Rollouts' default). A stack moves to Rollouts as a whole. In prod, a Rollout whose repository's `deployment-strategy` property is `canary` gets its prod tests from the release's rollout-watch instead of a PostSync hook (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod)).
+`deploymentType: rollout` deploys the application as an Argo Rollout with a canary strategy. The chart renders the canary itself: the `<fullName>` (stable) and `<fullName>-preview` Services, and Istio weights on every VirtualService route that reaches the application. chart-renderer's kube-linter check models only built-in workloads, not the Rollout, so the chart marks the objects that point at a Rollout (DEVOPS-534). Both Services carry `ignore-check.kube-linter.io/dangling-service`; without it the check sees no pods behind them and refuses the render in every environment. A value that the application sets for that key in `service.annotations` is kept. The application's HPA, which renders by default in prod and targets the Rollout, carries `ignore-check.kube-linter.io/dangling-horizontalpodautoscaler`; without it the check finds no target and refuses the prod render. The Services and HPAs of Deployment and StatefulSet applications stay linted. This is a fix, not a breaking change: nothing to set. Canary settings are release-wide, in `global.strategy.canary`, so every Rollout of a release runs the same steps. `updateStrategy.canary` on an application fails to render, and so does `updateStrategy.bluegreen`. A Rollout's replica count and pod template follow the same rules as a Deployment's. A Rollout omits the zero-valued fields that the rollouts controller's typed Update drops, so that Argo CD stays Synced during a canary: `minReadySeconds` renders only when `applications.<app>.minReadySeconds` is above 0 (a Deployment still renders `minReadySeconds: 0`), and `dynamicStableScale` is not rendered (false is Argo Rollouts' default). Canary releases run in production only, for every application. An opt-in sets `deploymentType: rollout` and the canary settings in the prod values (Layout A: `helm/deployment/values.prod.yaml`; Layout B: the prod `environments[]` entry), and every other environment keeps `deploymentType: deployment`. The shared `global.strategy.canary` can stay in the shared values: an environment whose applications are Deployments renders without error. In prod, a Rollout whose repository's `deployment-strategy` property is `canary` gets its prod tests from the release's rollout-watch instead of a PostSync hook (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod)).
 
-**The deployment-strategy property turns the steps on.** chart-renderer passes the repository's `deployment-strategy` property on every render as `global.deploymentStrategy`, on either chart: mycarrier-helm reads it directly, and mc-environment forwards its whole `global` map to each environment. Do not set it in a stack's values files. A Rollout (`deploymentType: rollout` without `migratingToRollouts`) runs canary steps only when the value is exactly `canary`. With any other value (`rolling`, empty, unset, or another spelling such as `Canary`) it renders with no steps, no analysis, no barriers or dark stage, no `managedRoutes`, none of the annotations under What the release reads, none of the chart's AnalysisTemplates and, in prod, no `<environment>-<fullName>-alerts` ExternalSecret; in prod it keeps its PostSync test hook. It keeps the `<fullName>` and `<fullName>-preview` Services, the VirtualService and `trafficRouting`, so switching the property moves no traffic: Argo Rollouts scales the new ReplicaSet to full size behind the `-preview` Service at weight 0, then points the stable Service at it. Such a Rollout still needs what the table below lists for every environment, `dev` and `feature<N>`, but not `global.correlationId`, a health path or an alerts service label. Render paths that do not pass the property, such as offloads, render Rollouts without steps until they do. Setting the property back to `rolling` turns the steps off for the next release.
+**The deployment-strategy property turns the steps on.** chart-renderer passes the repository's `deployment-strategy` property on every render as `global.deploymentStrategy`, on either chart: mycarrier-helm reads it directly, and mc-environment forwards its whole `global` map to each environment. Do not set it in a stack's values files. A Rollout (`deploymentType: rollout` without `migratingToRollouts`) runs canary steps only when the value is exactly `canary`. With any other value (`rolling`, empty, unset, or another spelling such as `Canary`) it renders with no steps, no analysis, no barriers or dark stage, no `managedRoutes`, none of the annotations under What the release reads, none of the chart's AnalysisTemplates and, in prod, no `<environment>-<fullName>-alerts` ExternalSecret; in prod it keeps its PostSync test hook. It keeps the `<fullName>` and `<fullName>-preview` Services, the VirtualService and `trafficRouting`, so switching the property moves no traffic: Argo Rollouts scales the new ReplicaSet to full size behind the `-preview` Service at weight 0, then points the stable Service at it. Such a Rollout still needs what the table below lists for the environment it runs in, but not `global.correlationId`, a health path or an alerts service label. Render paths that do not pass the property, such as offloads, render Rollouts without steps until they do. Setting the property back to `rolling` turns the steps off for the next release.
 
 ```yaml
 global:
@@ -762,7 +762,7 @@ global:
 
 - `stepsOutsideProd: true` (default `false`) renders the prod steps in any environment, for a test drill. Set it only for the drill's environment: Layout A in `helm/values.{env}.yaml`, Layout B in the `global` of that environment's `environments[]` entry. Do not set it in the shared `helm/values.yaml`. With it, a canary Rollout renders the same steps as in prod, with the environment's template names, and the same budget. It gives no steps to a Rollout whose property is not `canary`: that Rollout renders the same in every environment, with or without it. The chart's `alerts` check stays prod only; in a drill the chart's `compare` check and a replacement `alerts` entry run as background analysis.
 - The 4.7.9 schema refuses `stepsOutsideProd` ("additional properties not allowed"). A stack can set it only once the deploy-core pin has moved past 4.7.9 to 4.7.10 or later.
-- For a canary Rollout, the render-time checks run in every environment, with or without `stepsOutsideProd`, as on 4.7.9: a missing health path, all three analysis opt-outs, health and alerts opted out with the `fast` preset, a `fullName` too long for `compare` (in a `feature<N>` environment without `stepsOutsideProd`, measured without its `-feature<N>` suffix; see Analysis, `compare`), an extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, the leader rule, the leader's `tests-dark` (its `testtrigger.testdefinitions`, see Dark stage), a `darkReplicas` below 2, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s (the leader's `tests-dark` included), a zero `manualTimeout` with the `manual` preset, and the multi-frontend dark stage fail the render outside prod too. The checks of the chart's `tests` template (an application without test definitions, a zero `tests.timeout`, the barrier window and the others under Analysis, `tests`) also run in every environment, except `global.correlationId`, which applies where the steps render. A stack moves to canary as a whole, so the same Rollouts exist in every environment, and the stack sees these failures on its first render, not at its first prod canary.
+- For a canary Rollout, the render-time checks run in every environment where it renders (outside prod that is a drill), with or without `stepsOutsideProd`, as on 4.7.9: a missing health path, all three analysis opt-outs, health and alerts opted out with the `fast` preset, a `fullName` too long for `compare` (in a `feature<N>` environment without `stepsOutsideProd`, measured without its `-feature<N>` suffix; see Analysis, `compare`), an extra template that does not render, a barrier timeout at or above `progressDeadlineSeconds`, the leader rule, the leader's `tests-dark` (its `testtrigger.testdefinitions`, see Dark stage), a `darkReplicas` below 2, `budgetSeconds` for an explicit `steps` list, a budget above 5700 s (the leader's `tests-dark` included), a zero `manualTimeout` with the `manual` preset, and the multi-frontend dark stage fail the render outside prod too. The checks of the chart's `tests` template (an application without test definitions, a zero `tests.timeout`, the barrier window and the others under Analysis, `tests`) also run in every environment, except `global.correlationId`, which applies where the steps render. Canary Rollouts exist in prod only, so a stack sees these failures at its prod render.
 - Only two checks apply just where the steps render: `global.correlationId` for the coordinator, and the canary pod floor (a minimum of at least 2 replicas, see Dark stage). Outside prod without `stepsOutsideProd`, a render without a correlation id or with 1 replica succeeds. `dev` and `feature<N>` default to 1 replica (see [Default Replica Counts](#default-replica-counts-when-hpa-is-not-active)), so a drill there with `stepsOutsideProd` sets `replicas: 2` (or an autoscaler minimum of 2) on each canary Rollout.
 
 | Preset | Steps (after the dark stage) | Budget with the defaults: leader / follower | With `dark: false` | With the coordinator off |
@@ -910,11 +910,11 @@ In prod, a Rollout that runs canary steps does not run its test trigger as a Pos
 
 | Environment | What a Rollout needs |
 |-------------|----------------------|
-| Every environment | Istio left on (`networking.istio.enabled`, `istioDisabled`, `service.istioDisabled`), no `service.aliases`, no custom route whose `destination` is the application's own Service, and no two routes with the same name that reach it |
+| Every environment with a Rollout | Istio left on (`networking.istio.enabled`, `istioDisabled`, `service.istioDisabled`), no `service.aliases`, no custom route whose `destination` is the application's own Service, and no two routes with the same name that reach it |
 | `feature<N>` | `networking.istio.offloadOperatorEnabled: false` and `networking.istio.offloadVSEnabled: false` (on the primary frontend too, in a multi-frontend release) |
 | `dev` | `networking.istio.offloadOperatorEnabled: false`, which deletes the application's dev VirtualService until Argo CD self-heals — try Rollouts in a feature environment instead |
 
-The chart fails the render when one of these is missing.
+The chart fails the render when one of these is missing. The table applies only where an application is a Rollout; an application that stays a Deployment outside prod needs none of it.
 
 **Session affinity.** `applications.<app>.canarySessionAffinity: true` (default `false`, per application like `canaryCompare` and `canaryHealthPath`) pins a browser to the revision that served its page while a weighted step splits that application's traffic. Use it for a browser-facing Rollout whose pods hold only their own build's hashed JS and CSS chunks (a single image serving single-page apps under several path prefixes, for example): without it the VirtualService splits every request by weight on its own, so `index.html` can come from one revision and a lazy chunk from the other, the chunk answers 404 and the page goes blank. A DestinationRule `consistentHash` does not help, because Istio picks the weighted destination before it hashes. Set it on the browser-facing applications only; a release with an API Rollout and a frontend Rollout opts in just the frontend, and in a multi-frontend release each frontend opts in on its own. The value changes nothing for an application that is not a Rollout, and it acts only where the canary steps render (prod, or `stepsOutsideProd`, for a Rollout whose repository property is `canary`); elsewhere the VirtualService renders exactly as with the value off. Where it acts, an empty `global.correlationId` (the pipeline supplies it; the cookie values derive from it) fails the render. Where the routes are depends on the application. A regular application has its own VirtualService, and the routes are there. An `isFrontend` application in a multi-frontend release (two or more `isFrontend` applications and one `isPrimary`) has its routes in the shared `<primary>-multifrontend` VirtualService (`<fullName>-env-match`, `<app>-path-route`, custom routes, `<primary>-catchall` and the primary's `canary` route) and also in its own VirtualService, which the Rollout lists beside it; the chart wraps the weighted routes of both, for each frontend with the value on, and leaves the routes of a frontend without it as they are. In either VirtualService, for each route that weights the application, meaning a route whose destinations are exactly the application's stable and `-preview` Services, the chart renders four routes in the route's place, in this order, each with the route's own fields (rewrite, headers, timeout, retries, CORS):
 
@@ -1071,11 +1071,7 @@ environment:
 # helm/deployment/values.yaml
 applications:
   api:
-    # Every environment reads this file. Dev and feature<N> values files must also set
-    # networking.istio.offloadOperatorEnabled: false for api (see the table above), or keep
-    # deploymentType: deployment here and make the switch in helm/deployment/values.prod.yaml.
-    deploymentType: rollout             # release 1 of the switch to a Rollout
-    migratingToRollouts: true           # remove in release 2
+    deploymentType: deployment          # every environment but prod stays a Deployment
     image:
       registry: mycarrieracr.azurecr.io
       repository: appstack/myservice/api
@@ -1085,6 +1081,8 @@ applications:
 # helm/deployment/values.prod.yaml
 applications:
   api:
+    deploymentType: rollout             # release 1 of the switch to a Rollout, in prod only
+    migratingToRollouts: true           # remove in release 2
     image:
       tag: release-v1.0.0
 ```
@@ -1358,7 +1356,7 @@ A PostSync hook can fire at the start of a canary sync, after the last promote o
 
 ### Test definitions in canary analysis
 
-With `tests` in `global.strategy.canary.analysis.templates`, each analysis step of a canary Rollout (repository property `canary`, which chart-renderer passes as `global.deploymentStrategy`) also runs the application's test definitions against its `-preview` Service, and a failing suite aborts the canary (see [Rollouts](#rollouts), Analysis, `tests`). A Rollout whose property is not `canary` ignores `tests`. The hook and the prod-tests ConfigMap stay as they are. Every Rollout application of the release then needs `testdefinitions` in each environment where `tests` is listed. The canary run calls the `-preview` Service: a definition's `serviceAddress` must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port, and the run keeps its path; any other host or port fails the render. The run uses no `tolerations`, and `apikey` must be a `vault:` reference or unset. `tests` fails the render while the dark stage is on (the default), so a stack that lists it sets `dark: false` in the same place until Q54 is resolved; the dark stage instead runs the leader's test definitions once, at weight 0, against its stable Service with the canary header (`tests-dark`, see Rollouts, Dark stage), and then the leader needs `testdefinitions` in every environment. This example lists `tests` only in preprod, where the test definitions are, and turns the dark stage off there. With the property `canary`, preprod renders the template, and its Rollout runs no steps unless `stepsOutsideProd` is set; with any other property value, nothing of it renders. The property does not go in these files: chart-renderer passes it.
+With `tests` in `global.strategy.canary.analysis.templates`, each analysis step of a canary Rollout (repository property `canary`, which chart-renderer passes as `global.deploymentStrategy`) also runs the application's test definitions against its `-preview` Service, and a failing suite aborts the canary (see [Rollouts](#rollouts), Analysis, `tests`). A Rollout whose property is not `canary` ignores `tests`. The hook and the prod-tests ConfigMap stay as they are. Every Rollout application of the release then needs `testdefinitions` in each environment where `tests` is listed. The canary run calls the `-preview` Service: a definition's `serviceAddress` must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port, and the run keeps its path; any other host or port fails the render. The run uses no `tolerations`, and `apikey` must be a `vault:` reference or unset. `tests` fails the render while the dark stage is on (the default), so a stack that lists it sets `dark: false` in the same place until Q54 is resolved; the dark stage instead runs the leader's test definitions once, at weight 0, against its stable Service with the canary header (`tests-dark`, see Rollouts, Dark stage), and then the leader needs `testdefinitions` in every environment where it is a Rollout. This example lists `tests` in the prod values, where the Rollout and the test definitions are, and turns the dark stage off there. With any other property value, nothing of it renders. The property does not go in these files: chart-renderer passes it.
 
 ```yaml
 # helm/values.yaml
@@ -1367,14 +1365,15 @@ global:
   language: csharp
   # deploymentStrategy: canary      # not set here: chart-renderer passes the repository's deployment-strategy property
 
-# helm/values.preprod.yaml
+# helm/values.prod.yaml
 environment:
-  name: preprod
+  name: prod
 global:
+  correlationId: 0f3c9a7e-52d1-4c1a-9b7e-6a1f0c2d8e41   # supplied by the pipeline; set here only so the example renders
   strategy:
     canary:
-      dark: false                       # tests needs the dark stage off until Q54; in dev and prod (dark stage on)
-      #                                 # the leader (api) needs test definitions too, or dark: false there
+      dark: false                       # tests needs the dark stage off until Q54; with the dark stage on
+      #                                 # the leader (api) needs test definitions instead
       analysis:
         templates: [tests]              # the app's TestEngine suite in each analysis step (property canary only)
         tests:
@@ -1383,16 +1382,17 @@ global:
 # helm/deployment/values.yaml
 applications:
   api:
-    deploymentType: rollout
+    deploymentType: deployment          # prod only is a Rollout
     image:
       registry: mycarrieracr.azurecr.io
       repository: appstack/myservice/api
     ports:
       http: 8080
 
-# helm/deployment/values.preprod.yaml
+# helm/deployment/values.prod.yaml
 applications:
   api:
+    deploymentType: rollout
     image:
       tag: release-v1.0.0
     testtrigger:
@@ -1407,6 +1407,28 @@ applications:
           filters: ["TestCategory=CoreAPI"]
           env:
             SHARED_KEY: "vault:QA/data/x#y"
+```
+
+### Test suites on canary runs
+
+A canary run (the chart's `tests`, and `tests-dark` in the dark stage) sends the suite to the application's own Service on the Kubernetes network. The chart supplies the host and port of that address. A path the suite needs is the suite's own matter, not the chart's.
+
+The suite must be built for it. A canary run needs a test framework release newer than MC.TestAutomation 1.9.0, and the suite's code takes its service address from `ServiceUnderTestAddress` and sends the run's request headers with `RequestHeadersHandler`. The steps, the path rules and the checks are in the [migration guide](https://github.com/MyCarrier-Engineering/MC.TestAutomation/blob/integration/docs/migrations/after-1.9.0.md); the link needs MyCarrier GitHub org access.
+
+**A suite that calls a public URL tests the wrong build.** A public URL goes through the ingress gateway, which removes the canary header, so the request reaches the stable pods and the suite passes against the build that is not under test. A dark-stage suite must reach the canary on the Kubernetes network, at the address the chart gives the run (the definition's `serviceAddress`, or the application's own Service by default). The suite's code takes that address from `ServiceUnderTestAddress` and sends the run's request headers on every request to the application. A browser suite is no different: its requests carry none of the run's headers unless the suite adds them.
+
+**A suite for another service.** A test definition that tests a service other than the application that runs it cannot call that service's canary. Mark it with `FOREIGN_SERVICE=true` in its `additionalEnvVars`, and remove its `serviceAddress` if that is on another host: the chart refuses another host on a canary Rollout. The suite then calls its configured, published URL on every run, canary or not. Put the flag in `additionalEnvVars` and not in `env`: the framework reads it only from the `ADDITIONAL_ENV_VARS` entry, so a `FOREIGN_SERVICE` set in `env` has no effect. Entries are `name=value`, separated by `;`.
+
+```yaml
+applications:
+  curant:
+    testtrigger:
+      testdefinitions:
+        - name: paymentapitests
+          containerImage: testing/mc/payment/automatedtests/tests
+          containerTag: 1.0.0
+          secretId: vault:QA/data/app_auth#SecretId
+          additionalEnvVars: FOREIGN_SERVICE=true
 ```
 
 ### Test Trigger Parameters
@@ -1427,7 +1449,7 @@ applications:
 | `testdefinitions[].secretId` | Auth secret (vault ref) | Required |
 | `testdefinitions[].serviceAddress` | Override target service address. With canary `tests`, it must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port: the canary run keeps its path on the `-preview` Service, and another host or port fails the render | Auto: `http://<fullname>.<ns>.svc.cluster.local:<ports.http>` |
 | `testdefinitions[].env` | Environment variables for this definition's test container, merged over `testtrigger.env` (this definition wins). See [Test pod environment variables](#test-pod-environment-variables-env) | Not set |
-| `testdefinitions[].additionalEnvVars` | **Deprecated**: use `env`. Reaches the pod as one variable, `ADDITIONAL_ENV_VARS`, entries separated by `;` (format: `key1=value1;key2=value2`) | `""` |
+| `testdefinitions[].additionalEnvVars` | **Deprecated** for variables: use `env`. Reaches the pod as one variable, `ADDITIONAL_ENV_VARS`, entries separated by `;` (format: `key1=value1;key2=value2`). `FOREIGN_SERVICE` is the exception: the test framework reads it only from this value, never from `env` (see [Test suites on canary runs](#test-suites-on-canary-runs)) | `""` |
 | `testdefinitions[].resultsApiKey` | autotest-results-api key, as `AUTOTEST_RESULTS_API_KEY` on the test container: `vault:DevOps/data/autotestresults_api/api#key`, the key the results API reads. Must be a `vault:` reference: a literal value fails the render. Set together with `resultsApiUrl` | Not set |
 | `testdefinitions[].resultsApiUrl` | autotest-results-api base URL, as `AUTOTEST_RESULTS_API_URL` on the test container: `vault:QA/data/autotestresults_api#url`, or an `https` URL under `mycarrier.tech` with no user info (the schema refuses anything else). Set together with `resultsApiKey`: one without the other fails the render. No default | Not set |
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
