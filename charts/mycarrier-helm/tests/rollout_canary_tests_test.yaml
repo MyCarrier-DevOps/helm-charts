@@ -470,6 +470,26 @@ tests:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
           pattern: '"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:80"'
 
+  # ports.http is the Service port the routes use: the http Service port is the service.ports entry named http, also
+  # when its targetPort is another container port.
+  - it: addresses the -preview Service on the http Service port that maps to another container port
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 4200
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://mycarrier-api-preview\.prod\.svc\.cluster\.local:8080"'
+
   # M4, P3: a definition's serviceAddress on the app's own stable Service, or already on its -preview Service, moves to
   # the canonical -preview address and keeps its path, in each form of the Service name, with or without a scheme, user
   # info or the http Service port.
@@ -698,7 +718,7 @@ tests:
           testtrigger: *testtrigger
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': the canary tests run calls the -preview Service on the Service port that reaches the application's http container port, and its -preview Service exposes none. Set applications.api.ports.http"
+          errorPattern: "application 'api': the canary tests run calls the -preview Service on its http port, and its -preview Service exposes none. Set applications.api.ports.http to the http Service port"
 
   # N4: a literal key would sit in the AnalysisTemplate and in every AnalysisRun and Job.
   - it: fails a testtrigger.apikey that is not a vault reference, without printing it

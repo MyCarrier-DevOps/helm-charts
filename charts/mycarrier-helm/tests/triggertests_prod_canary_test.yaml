@@ -478,3 +478,68 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "test definition 'apitests' of 'mycarrier-api': resultsApiKey must be a vault reference"
+
+  # The default test address calls the Service port the stable Service exposes for http (service.ports), here 8080
+  # served by container port 4200; ports.http stays the Service port the routes use.
+  - it: addresses the stable Service on its http Service port in the ConfigMap's request
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          service:
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 4200
+          testtrigger: *testtrigger
+    asserts:
+      - matchRegex:
+          path: data["request.json"]
+          pattern: '"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:8080"'
+
+  - it: addresses the stable Service on a remapped http Service port in the ConfigMap's request
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 8080
+          testtrigger: *testtrigger
+    asserts:
+      - matchRegex:
+          path: data["request.json"]
+          pattern: '"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:80"'
+
+  # The legacy hook (enableV1: false) builds its default address the same way.
+  - it: addresses the stable Service on its http Service port in the legacy hook
+    set:
+      global: *global
+      environment:
+        name: preprod
+      applications:
+        api:
+          image: *image
+          ports: *ports
+          service:
+            ports:
+              - name: http
+                port: 80
+                targetPort: 8080
+          testtrigger:
+            <<: *testtrigger
+            enableV1: false
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ServiceAddress": "http://mycarrier-api\.preprod\.svc\.cluster\.local:80"'

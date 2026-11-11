@@ -675,7 +675,9 @@
 
 {{- /* The -preview Service port that reaches a container port of the app, given as a number or a port name, or "" when
        the Service does not expose it: the matching ports entry, or with service.ports the entry whose targetPort is
-       that number or name. */ -}}
+       that number or name. For the app's http port (ports.http, 8080 when unset) the service.ports entry named http
+       comes first, whatever its targetPort, because that entry is the Service port the application's routes and its
+       tests call (ports.http then names the Service port the routes use, and the container may serve on another). */ -}}
 {{- define "helm.canary.previewPort" -}}
 {{- $ports := .application.ports | default dict -}}
 {{- $want := .port -}}
@@ -690,6 +692,9 @@
 {{- if $containerPort -}}
   {{- $custom := dig "service" "ports" list .application -}}
   {{- if $custom -}}
+    {{- if eq $containerPort (toString (dig "ports" "http" 8080 .application)) -}}
+      {{- range $custom }}{{ if and (not $servicePort) (eq (lower (toString .name)) "http") }}{{ $servicePort = toString .port }}{{ end }}{{ end -}}
+    {{- end -}}
     {{- range $custom }}{{ $target := toString (default .port .targetPort) }}{{ if and (not $servicePort) (or (eq $target $containerPort) (and $portName (eq $target $portName))) }}{{ $servicePort = toString .port }}{{ end }}{{ end -}}
   {{- else -}}
     {{- range $name, $number := $ports }}{{ if eq (toString $number) $containerPort }}{{ $servicePort = $containerPort }}{{ end }}{{ end -}}

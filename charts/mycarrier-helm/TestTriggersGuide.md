@@ -135,7 +135,7 @@ Each test definition under `testdefinitions` supports the following parameters:
 | `filters` | Test filters to apply. Accepts a single string or an array of strings. | No | `[]` (empty array) | `"TestCategory=coretests"` or `["TestCategory=coretests", "TestCategory=othercoretests"]` |
 | `name` | Name of the test | Yes | None | `"apitests"` |
 | `secretId` | Secret ID for authentication, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/auth#secretid"` |
-| `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<httpPort>"` | `"my-service.namespace.svc.cluster.local:8080"` |
+| `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<http Service port>"` | `"my-service.namespace.svc.cluster.local:8080"` |
 | `releaseDefinitionName` | Optional release definition name - overrides default value = stack-component | No | stack-compoent | `"somestack-somecomponent"`
 | `env` | Environment variables set on **this definition's** test container only, as a map of names to quoted strings. Merged key by key over `testtrigger.env`; this definition wins on a name clash. See [Environment variables for test pods](#environment-variables-for-test-pods-env) | No | None | `{SHARED_KEY: "vault:QA/data/x#y"}` |
 | `additionalEnvVars` | **Deprecated**: use `env`. Reaches the pod as one variable, `ADDITIONAL_ENV_VARS`, entries separated by `;` | No | `""` | `"key1=value1;key2=value2"` |

@@ -124,8 +124,9 @@ true
        ServiceAddress and RequestHeaders.
        ServiceAddress: http://<fullName>-preview.<namespace>.svc.cluster.local:<port> (target preview) or
        http://<fullName>.<namespace>.svc.cluster.local:<port> (target stable: tests-dark, whose X-MyCarrier-Canary header
-       the dark stage's header route sends to the canary), on the Service port that reaches the app's http container
-       port (both Services expose the same ports); none fails the render. A definition's own serviceAddress whose host
+       the dark stage's header route sends to the canary), on the app's http Service port (helm.canary.previewPort: the
+       service.ports entry named http, else the entry whose targetPort is ports.http, else ports.http; both Services
+       expose the same ports); none fails the render. A definition's own serviceAddress whose host
        is the app's stable Service or its -preview Service (<fullName> or <fullName>-preview, with .<namespace>, .svc or
        .svc.cluster.local, with or without a scheme or user info) keeps its path on that address. It may name no port or
        the http Service port; another port fails the render, because the chart cannot tell which port of the target
@@ -149,7 +150,7 @@ true
 {{- $wayOut := ternary "set global.strategy.canary.dark: false" "leave tests out of global.strategy.canary.analysis.templates" $stable -}}
 {{- $servicePort := include "helm.canary.previewPort" (dict "application" $ctx.application "port" (dig "ports" "http" 8080 $ctx.application)) -}}
 {{- if not $servicePort -}}
-  {{- fail (printf "application '%s': %s calls the %s Service on the Service port that reaches the application's http container port, and its %s Service exposes none. Set applications.%s.ports.http to the container port the application serves on (with service.ports, also give it a Service port whose targetPort is that port)." $ctx.appName (untitle $Run) $kind $kind $ctx.appName) -}}
+  {{- fail (printf "application '%s': %s calls the %s Service on its http port, and its %s Service exposes none. Set applications.%s.ports.http to the http Service port (with service.ports, name that Service port http)." $ctx.appName (untitle $Run) $kind $kind $ctx.appName) -}}
 {{- end -}}
 {{- $base := printf "http://%s%s.%s.svc.cluster.local:%v" $fullName (ternary "" "-preview" $stable) $namespace $servicePort -}}
 {{- $ownHosts := list -}}
