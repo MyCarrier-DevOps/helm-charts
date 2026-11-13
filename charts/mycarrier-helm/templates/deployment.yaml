@@ -8,6 +8,7 @@
 {{- if or (eq $appValues.deploymentType "deployment") (and (eq $appValues.deploymentType "rollout") $appValues.migratingToRollouts) }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- $namespace := include "helm.namespace" $ }}
+{{- $spec := include "helm.specs.deployment" $appContext }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,8 +26,16 @@ metadata:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
     {{- end }}
     {{ include "helm.annotations.gateway" $appContext | indent 4 | trim }}
+    {{- with include "helm.mongodb.lintIgnores" (dict "root" $ "spec" $spec) }}
+    {{ . | indent 4 | trim }}
+    {{- end }}
+    {{- if $appValues.initContainers }}
+    {{- with include "helm.annotations.lintInitContainers" (dict "spec" $spec) }}
+    {{ . | indent 4 | trim }}
+    {{- end }}
+    {{- end }}
 spec:
-  {{ include "helm.specs.deployment" $appContext | indent 2 | trim }}
+  {{ $spec | indent 2 | trim }}
 ---
 {{- end }}
 {{- end }}

@@ -31,6 +31,8 @@ metadata:
   namespace: {{ .namespace }}
   labels:
     {{- toYaml .labels | nindent 4 }}
+  annotations:
+    {{- include "mc-mongodb.backupLintIgnores" (printf "%s-restore-connection" .name) | nindent 4 }}
 spec:
   suspend: true
   schedule: "0 0 31 2 *"

@@ -49,6 +49,15 @@ tests:
       - equal: {path: spec.maxUnavailable, value: 1}
       - equal: {path: spec.selector.matchLabels, value: {app: mydb-mc-mongodb-svc}}
 
+  # The Kubernetes default, stated: a member that is not Ready is evicted only while the others keep the budget.
+  # kube-linter, chart-renderer's render check, refuses a budget that leaves the policy unset.
+  - it: states the budget's policy for members that are not Ready
+    set:
+      members: 3
+    documentSelector: {path: kind, value: PodDisruptionBudget}
+    asserts:
+      - equal: {path: spec.unhealthyPodEvictionPolicy, value: IfHealthyBudget}
+
   - it: sets no anti-affinity and no disruption budget for a single member
     documentIndex: 0
     asserts:

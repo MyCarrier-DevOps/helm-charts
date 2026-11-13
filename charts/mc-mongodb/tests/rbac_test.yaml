@@ -39,6 +39,15 @@ tests:
       - equal: {path: roleRef, value: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: mydb-mc-mongodb-database}}
       - equal: {path: subjects, value: [{kind: ServiceAccount, name: mydb-mc-mongodb-database, namespace: tools}]}
 
+  # kube-linter's access-to-secrets check, which chart-renderer runs on every render, refuses any binding to a Role
+  # that can get Secrets and does not read resourceNames. Only the RoleBinding skips it, with the reason as its value.
+  - it: tells kube-linter why the bound Role reads a Secret
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/access-to-secrets"]
+          value: "get on Secret mydb-mc-mongodb-config only (resourceNames): the readiness probe reads the automation config"
+
   - it: renders nothing when embedded (standalone false)
     set:
       standalone: false

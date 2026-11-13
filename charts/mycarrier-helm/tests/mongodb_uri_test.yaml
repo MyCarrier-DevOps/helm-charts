@@ -1,0 +1,310 @@
+suite: MONGODB_URI injection with dependencyDeployments.mongodb
+# A stack that deploys the in-cluster MongoDB gets MONGODB_URI, read from the connection Secret, in its application
+# containers and their init containers, whatever global.language is. dependencyDeployments.mongodb.enabled alone
+# turns it on. A container whose own env sets MONGODB_URI keeps that value.
+templates:
+  - deployment.yaml
+  - rollout.yaml
+  - statefulset.yaml
+set:
+  global:
+    appStack: tools
+    language: python
+  environment: { name: preprod }
+  applications.api:
+    deploymentType: deployment
+    image: { registry: r, repository: api, tag: "1.0.0" }
+tests:
+  - it: gives a python stack's application container MONGODB_URI from the connection Secret
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: keeps a stack's own MONGODB_URI from global.env, and renders the name once
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.env.MONGODB_URI: mongodb://elsewhere:27017/tools
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI, value: mongodb://elsewhere:27017/tools }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+          count: 1
+
+  - it: gives a Deployment's init container MONGODB_URI
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: gives a StatefulSet's application container MONGODB_URI
+    template: statefulset.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.deploymentType: statefulset
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: gives a StatefulSet's init container MONGODB_URI
+    template: statefulset.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.deploymentType: statefulset
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: gives a Rollout's application container and init container MONGODB_URI
+    template: rollout.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.deploymentType: rollout
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: injects it for nodejs
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.language: nodejs
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: injects it for go
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.language: go
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  # csharp keeps its own variables as they were and gets MONGODB_URI like every other language.
+  - it: injects it for csharp next to MongoConnection_<env>
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.language: csharp
+      global.dependencies.mongodb: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MongoConnection_preprod
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: KeyVault_MongoConnection, value: MongoConnection_preprod }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: KeyVaultMongoConnection, value: MongoConnection_preprod }
+
+  - it: injects it for csharp without global.dependencies.mongodb
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.language: csharp
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  # disableLanguageSecrets turns the csharp variables off, not this one.
+  - it: injects it with global.disableLanguageSecrets
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.language: csharp
+      global.dependencies.mongodb: true
+      global.disableLanguageSecrets: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MongoConnection_preprod }
+          any: true
+
+  # A feature environment of the offload generator renders the forwarded dependencyDeployments.mongodb and no
+  # applications' env.
+  - it: injects it in a feature environment
+    template: deployment.yaml
+    set:
+      environment.name: feature3
+      dependencyDeployments.mongodb.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: injects nothing when MongoDB is not deployed
+    set:
+      applications:
+        api:
+          initContainers:
+            - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+        worker:
+          deploymentType: statefulset
+          image: { registry: r, repository: worker, tag: "1.0.0" }
+          initContainers:
+            - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+
+  - it: injects nothing when dependencyDeployments.mongodb.enabled is false
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+
+  - it: keeps an application's own MONGODB_URI, and renders the name once
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.env.MONGODB_URI: mongodb://elsewhere:27017/tools
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI, value: mongodb://elsewhere:27017/tools }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+          count: 1
+
+  - it: keeps a StatefulSet application's own MONGODB_URI, and renders the name once
+    template: statefulset.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.deploymentType: statefulset
+      applications.api.env.MONGODB_URI: mongodb://elsewhere:27017/tools
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI, value: mongodb://elsewhere:27017/tools }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+          count: 1
+
+  # An init container renders only its own env, not global.env or the application's: its own MONGODB_URI wins, and
+  # without one it gets the chart's.
+  - it: keeps an init container's own MONGODB_URI, and renders the name once
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.initContainers:
+        - name: migrate
+          image: r/migrate
+          tag: "1.0.0"
+          command: ["migrate"]
+          args: ["up"]
+          env: { MONGODB_URI: mongodb://elsewhere:27017/tools }
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content: { name: MONGODB_URI, value: mongodb://elsewhere:27017/tools }
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGODB_URI
+            valueFrom:
+              secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+
+  - it: injects it when global.env is null
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.env: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: MONGODB_URI }
+          any: true
+          count: 1

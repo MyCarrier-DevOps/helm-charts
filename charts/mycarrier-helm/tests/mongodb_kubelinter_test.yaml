@@ -1,0 +1,195 @@
+suite: Workloads that read the in-cluster MongoDB's connection Secret skip kube-linter's env checks
+# kube-linter, chart-renderer's render check, refuses a workload whose env var reads the connection Secret: no Secret is
+# in the render, because an ExternalSecret creates it in the cluster (env-value-from), and it is read through an env
+# var (read-secret-from-env-var). A kube-linter ignore covers the whole object, so only a Deployment, StatefulSet or
+# CronJob that carries such a reference skips those two checks, and only when the stack deploys MongoDB. kube-linter
+# does not model the Rollout, which needs none. .github/scripts/test_mongodb_kubelinter.sh runs kube-linter itself.
+templates:
+  - deployment.yaml
+  - statefulset.yaml
+  - rollout.yaml
+  - cronjob.yaml
+set:
+  global:
+    appStack: tools
+    language: python
+  environment: { name: preprod }
+  applications.api:
+    deploymentType: deployment
+    image: { registry: r, repository: api, tag: "1.0.0" }
+tests:
+  - it: annotates a Deployment that gets MONGODB_URI
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/env-value-from"]
+          value: "reads Secret tools-mongodb-connection, which the in-cluster MongoDB's ExternalSecret creates in the cluster; the render holds no Secret"
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]
+          value: "the in-cluster MongoDB's connection string exists only as a key of that Secret, and the containers read it from an env var"
+
+  - it: annotates a StatefulSet that gets MONGODB_URI
+    template: statefulset.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.deploymentType: statefulset
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/env-value-from"]
+          value: "reads Secret tools-mongodb-connection, which the in-cluster MongoDB's ExternalSecret creates in the cluster; the render holds no Secret"
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]
+          value: "the in-cluster MongoDB's connection string exists only as a key of that Secret, and the containers read it from an env var"
+
+  # cronjobs[] get no MONGODB_URI from the chart; one that reads the connection Secret names it in its own env.
+  - it: annotates a cronjobs[] CronJob whose own env reads the connection Secret
+    template: cronjob.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+          env:
+            MONGODB_URI:
+              valueFrom:
+                secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/env-value-from"]
+          value: "reads Secret tools-mongodb-connection, which the in-cluster MongoDB's ExternalSecret creates in the cluster; the render holds no Secret"
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]
+          value: "the in-cluster MongoDB's connection string exists only as a key of that Secret, and the containers read it from an env var"
+
+  # cronjobs[].annotations land on the CronJob's metadata: the entry's own value for a key stays, and the key renders
+  # once (a duplicate key fails this test's parse of the render). The chart still adds the key the entry does not set.
+  - it: keeps a cronjobs[] entry's own value for an ignore key, with no duplicate key
+    template: cronjob.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+          annotations:
+            ignore-check.kube-linter.io/env-value-from: set by the stack
+          env:
+            MONGODB_URI:
+              valueFrom:
+                secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/env-value-from"]
+          value: set by the stack
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]
+          value: "the in-cluster MongoDB's connection string exists only as a key of that Secret, and the containers read it from an env var"
+
+  # A stack's own reference renders with its keys sorted (key before name), unlike the chart's.
+  - it: annotates a Deployment whose only reference is the stack's own, under another variable name
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.env:
+        MONGODB_URI: mongodb://elsewhere:27017/tools
+        MONGO_URI:
+          valueFrom:
+            secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+    asserts:
+      - exists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - exists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  - it: annotates a Deployment whose only reference is the csharp MongoConnection_<env>
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.language: csharp
+      global.dependencies.mongodb: true
+      global.env.MONGODB_URI: mongodb://elsewhere:27017/tools
+    asserts:
+      - exists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - exists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  - it: annotates a Deployment whose only reference is in an init container
+    template: deployment.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.env.MONGODB_URI: mongodb://elsewhere:27017/tools
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - exists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - exists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  - it: leaves a workload linted when no container reads the connection Secret
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      global.env:
+        MONGODB_URI: mongodb://elsewhere:27017/tools
+        OTHER:
+          valueFrom:
+            secretKeyRef: { name: some-other-secret, key: value }
+      applications.worker:
+        deploymentType: statefulset
+        image: { registry: r, repository: worker, tag: "1.0.0" }
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  - it: annotates nothing when MongoDB is not deployed, whatever the workloads read
+    set:
+      global.env.MONGODB_URI:
+        valueFrom:
+          secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+      applications.worker:
+        deploymentType: statefulset
+        image: { registry: r, repository: worker, tag: "1.0.0" }
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+          env:
+            MONGODB_URI:
+              valueFrom:
+                secretKeyRef: { name: tools-mongodb-connection, key: connectionString }
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  - it: leaves a cronjobs[] CronJob without a reference linted
+    template: cronjob.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  # secretName loads the Secret with envFrom, which neither check looks at.
+  - it: leaves a cronjobs[] CronJob that loads the Secret with secretName linted
+    template: cronjob.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+          secretName: tools-mongodb-connection
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }
+
+  - it: adds nothing to a Rollout, which kube-linter does not model
+    template: rollout.yaml
+    set:
+      dependencyDeployments.mongodb.enabled: true
+      applications.api.deploymentType: rollout
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/env-value-from"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/read-secret-from-env-var"]' }

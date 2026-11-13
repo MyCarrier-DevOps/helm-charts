@@ -64,6 +64,18 @@ volumes:
 {{- end }}
 
 {{/*
+Annotations of the backup and restore CronJobs for kube-linter, chart-renderer's render check: the checks their design
+trips, each with the reason as its value. kube-linter sees no Secret in the render (an ExternalSecret creates it in the
+cluster), refuses a Secret read through an env var, and wants a liveness probe on every container.
+Usage: include "mc-mongodb.backupLintIgnores" $connectionSecret
+*/}}
+{{- define "mc-mongodb.backupLintIgnores" -}}
+ignore-check.kube-linter.io/env-value-from: "reads Secret {{ . }}, which an ExternalSecret creates in the cluster; the render holds no Secret"
+ignore-check.kube-linter.io/read-secret-from-env-var: "the script passes the connection string, a key of that Secret, to the mongo tools as MONGODB_URI"
+ignore-check.kube-linter.io/no-liveness-probe: "the container runs to completion as a Job; there is nothing to probe"
+{{- end }}
+
+{{/*
 Backup: a timestamped mongodump archive, written under a temporary name and renamed once complete, then deletion of
 archives older than the retention (by the timestamp in the name; blobfuse may not keep mtimes). set -e stops a
 failed dump before the rename and the prune.
@@ -155,6 +167,8 @@ metadata:
   namespace: {{ .namespace }}
   labels:
     {{- toYaml .labels | nindent 4 }}
+  annotations:
+    {{- include "mc-mongodb.backupLintIgnores" (printf "%s-backup-connection" .name) | nindent 4 }}
 spec:
   schedule: {{ .backup.schedule | quote }}
   timeZone: {{ .backup.timeZone }}

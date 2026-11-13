@@ -489,6 +489,10 @@ environment:
 
 ### Application Definitions
 
+A Deployment or StatefulSet with `initContainers` carries `ignore-check.kube-linter.io/unset-cpu-requirements` and
+`ignore-check.kube-linter.io/unset-memory-requirements`: the chart renders no resources for init containers, which
+chart-renderer's kube-linter check would refuse.
+
 The chart supports multiple applications within a single release:
 
 ```yaml
@@ -1249,7 +1253,10 @@ applications:
 
 ### Running Scheduled Jobs with CronJobs
 
-The chart supports Kubernetes CronJobs for running scheduled tasks such as backups, cleanup operations, or periodic data processing:
+The chart supports Kubernetes CronJobs for running scheduled tasks such as backups, cleanup operations, or periodic data processing.
+Every CronJob carries `ignore-check.kube-linter.io/no-liveness-probe`, because chart-renderer's kube-linter check wants a
+liveness probe on a container that runs to completion; an entry that sets the key in its own `annotations` keeps its
+value.
 
 #### Basic CronJob Example
 
@@ -1438,7 +1445,18 @@ dependencyDeployments:
 ```
 
 - The connection string is in Secret `<appStack>-mongodb-connection`, key `connectionString`; its database is
-  `appStack`. For a csharp stack with `global.dependencies.mongodb`, `MongoConnection_<env>` reads it instead of Vault.
+  `appStack`. Every application container and init container (Deployment, Rollout, StatefulSet) gets `MONGODB_URI`,
+  which reads it, for every `global.language`; `dependencyDeployments.mongodb.enabled` alone turns that on. A container
+  whose own env (`global.env` or the application's `env`; an init container's `env`) sets `MONGODB_URI` keeps its
+  value. `jobs` and `cronjobs` get no `MONGODB_URI`: reference the Secret in their own `env`, or load it with
+  `secretName`. For a csharp stack with `global.dependencies.mongodb`, `MongoConnection_<env>` also reads it, instead
+  of Vault.
+- chart-renderer's kube-linter check cannot see the Secret (an ExternalSecret creates it in the cluster) and refuses a
+  Secret read through an env var or by a Role. The chart sets `ignore-check.kube-linter.io/<check>` annotations on the
+  objects concerned: the database RoleBinding (`access-to-secrets`), the backup and restore CronJobs
+  (`env-value-from`, `read-secret-from-env-var`, `no-liveness-probe`), and every Deployment, StatefulSet and
+  `cronjobs` CronJob with an env var that reads the connection Secret (`env-value-from`,
+  `read-secret-from-env-var`). Workloads without such an env var, and stacks without the feature, stay linted.
 - Production (meta environment starting with `prod`) always backs up, to the `production` container of
   `mycarriermongobackups` unless `backup.container` names another, folder `<meta environment>/<appStack>/<namespace>`,
   and gets a suspended `<appStack>-mongodb-restore` CronJob. Any other environment backs up only with
@@ -1863,9 +1881,9 @@ When contributing to this chart, please follow the coding standards defined in t
 
 ### Dependency deployments
 
-| Name                                    | Description                                                                          | Value   |
-| --------------------------------------- | ------------------------------------------------------------------------------------ | ------- |
-| `dependencyDeployments.mongodb.enabled` | Deploy a MongoDB replica set with the stack; MongoConnection_<env> then points at it | `false` |
+| Name                                    | Description                                                                                                        | Value   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------- |
+| `dependencyDeployments.mongodb.enabled` | Deploy a MongoDB replica set with the stack; MONGODB_URI in its application containers reads the connection string | `false` |
 
 ## License
 

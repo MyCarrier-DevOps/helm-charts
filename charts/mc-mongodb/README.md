@@ -17,7 +17,8 @@ instance.
 
   The agent removes any user the chart does not declare (`ignoreUnknownUsers: false`).
 - With more than one member, required pod anti-affinity on `kubernetes.io/hostname` (one member per node, so the
-  cluster needs at least as many schedulable nodes as members) and a `PodDisruptionBudget` with `maxUnavailable: 1`.
+  cluster needs at least as many schedulable nodes as members) and a `PodDisruptionBudget` with `maxUnavailable: 1`
+  and `unhealthyPodEvictionPolicy: IfHealthyBudget`, the Kubernetes default.
 - A ServiceAccount, Role and RoleBinding (`<fullname>-database`) for the database pods. The Role allows only what the
   agent does: read the `<fullname>-config` Secret, and get, patch and delete the replica set's own pods
   (`<fullname>-0` to `-49`, MongoDB's member maximum). The operator's own `mongodb-kubernetes-appdb` exists only in the
@@ -29,6 +30,10 @@ instance.
   - a static blob `PersistentVolume`, reserved for its claim (`claimRef`), and the claim;
   - a backup `CronJob` (default daily at 02:00 UTC, keeping 7 days);
   - a suspended restore `CronJob`.
+- `ignore-check.kube-linter.io/<check>` annotations, for renders that kube-linter checks (chart-renderer runs it on
+  every mycarrier-helm render), each with the reason as its value: `access-to-secrets` on the RoleBinding, whose Role
+  reads the one Secret it names, and `env-value-from`, `read-secret-from-env-var` and `no-liveness-probe` on the backup
+  and restore CronJobs, which read a Secret an ExternalSecret creates in the cluster and run to completion.
 
 MongoDB, backup and restore pods run with an Istio sidecar, so traffic between members and from clients with
 sidecars is encrypted by Istio's automatic mutual TLS. The backup and restore pods ask for a native sidecar

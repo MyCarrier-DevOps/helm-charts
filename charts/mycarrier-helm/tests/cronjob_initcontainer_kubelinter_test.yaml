@@ -1,0 +1,108 @@
+suite: CronJobs and workloads with init containers skip the kube-linter checks they cannot meet
+# kube-linter, chart-renderer's render check, wants a liveness probe on a cronjobs[] container, which runs to
+# completion, and a cpu request and a memory limit on init containers, for which the chart renders no resources. The
+# objects concerned skip those checks with a per-object ignore whose value is the reason; nothing in a pod spec
+# changes. .github/scripts/test_rollout_services_kubelinter.sh and test_mongodb_kubelinter.sh run kube-linter itself.
+templates:
+  - cronjob.yaml
+  - deployment.yaml
+  - statefulset.yaml
+  - rollout.yaml
+set:
+  global:
+    appStack: tools
+    language: python
+  environment: { name: preprod }
+  applications.api:
+    deploymentType: deployment
+    image: { registry: r, repository: api, tag: "1.0.0" }
+tests:
+  - it: annotates every cronjobs[] CronJob for no-liveness-probe
+    template: cronjob.yaml
+    set:
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+        - name: hourly
+          schedule: "0 * * * *"
+          image: { registry: r, repository: hourly, tag: "1.0.0" }
+    asserts:
+      - hasDocuments: { count: 2 }
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/no-liveness-probe"]
+          value: "the container runs to completion as a Job; there is nothing to probe"
+
+  # cronjobs[].annotations land on the CronJob's metadata: the entry's own value stays, and the key renders once (a
+  # duplicate key fails this test's parse of the render).
+  - it: keeps a cronjobs[] entry's own value for no-liveness-probe, with no duplicate key
+    template: cronjob.yaml
+    set:
+      cronjobs:
+        - name: nightly
+          schedule: "0 3 * * *"
+          image: { registry: r, repository: nightly, tag: "1.0.0" }
+          annotations:
+            ignore-check.kube-linter.io/no-liveness-probe: set by the stack
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/no-liveness-probe"]
+          value: set by the stack
+
+  # The chart renders no resources for an init container, so kube-linter reports its cpu request and memory limit as
+  # unset. An ignore covers the whole object; the application container always renders both (helm.resources).
+  - it: annotates a Deployment with an init container for the unset cpu and memory checks
+    template: deployment.yaml
+    set:
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/unset-cpu-requirements"]
+          value: "the chart renders no resources for init containers (migrate)"
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/unset-memory-requirements"]
+          value: "the chart renders no resources for init containers (migrate)"
+
+  - it: annotates a StatefulSet with init containers, and names them
+    template: statefulset.yaml
+    set:
+      applications.api.deploymentType: statefulset
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+        - { name: seed, image: r/seed, tag: "1.0.0", command: ["seed"], args: ["run"] }
+    asserts:
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/unset-cpu-requirements"]
+          value: "the chart renders no resources for init containers (migrate, seed)"
+      - equal:
+          path: metadata.annotations["ignore-check.kube-linter.io/unset-memory-requirements"]
+          value: "the chart renders no resources for init containers (migrate, seed)"
+
+  - it: leaves workloads without init containers linted
+    set:
+      applications.worker:
+        deploymentType: statefulset
+        image: { registry: r, repository: worker, tag: "1.0.0" }
+    template: deployment.yaml
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/unset-cpu-requirements"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/unset-memory-requirements"]' }
+
+  - it: leaves a StatefulSet without init containers linted
+    template: statefulset.yaml
+    set:
+      applications.api.deploymentType: statefulset
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/unset-cpu-requirements"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/unset-memory-requirements"]' }
+
+  - it: adds nothing to a Rollout, which kube-linter does not model
+    template: rollout.yaml
+    set:
+      applications.api.deploymentType: rollout
+      applications.api.initContainers:
+        - { name: migrate, image: r/migrate, tag: "1.0.0", command: ["migrate"], args: ["up"] }
+    asserts:
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/unset-cpu-requirements"]' }
+      - notExists: { path: 'metadata.annotations["ignore-check.kube-linter.io/unset-memory-requirements"]' }
