@@ -117,13 +117,14 @@ true
 {{- /* The tests Job's TestEngine v1 request: helm.testtrigger.v1request, the request the PostSync hook and the prod-tests
        ConfigMap send for the same application, with four differences (V1_TRIGGER: Slip step routing and run kinds,
        Caller contract rule 10): ServiceAddress is the app's -preview Service (the canary pods), or its stable Service
-       for tests-dark; TestEnvironmentVariables gets RunKind canary and SlipStep none (no slip writes, no check-run, no
+       for tests-dark (its -preview Service with canaryDarkPreview); TestEnvironmentVariables gets RunKind canary and SlipStep none (no slip writes, no check-run, no
        webhook); Tolerations is [] so the test pods land on on-demand nodes. Takes context (the application context),
-       target (preview, the default, or stable) and requestHeaders (optional; RequestHeaders inside
+       name (tests or tests-dark: the wording of the failures), target (preview, the default, or stable) and requestHeaders (optional; RequestHeaders inside
        TestEnvironmentVariables). tests and tests-dark both build their request here, so their bodies differ only in
        ServiceAddress and RequestHeaders.
-       ServiceAddress: http://<fullName>-preview.<namespace>.svc.cluster.local:<port> (target preview) or
-       http://<fullName>.<namespace>.svc.cluster.local:<port> (target stable: tests-dark, whose X-MyCarrier-Canary header
+       ServiceAddress: http://<fullName>-preview.<namespace>.svc.cluster.local:<port> (target preview: tests, and
+       tests-dark when canaryDarkPreview is on) or http://<fullName>.<namespace>.svc.cluster.local:<port> (target
+       stable: tests-dark otherwise, whose X-MyCarrier-Canary header
        the dark stage's header route sends to the canary), on the app's http Service port (helm.canary.previewPort: the
        service.ports entry named http, else the entry whose targetPort is ports.http, else ports.http; both Services
        expose the same ports); none fails the render. A definition's own serviceAddress whose host
@@ -142,12 +143,13 @@ true
 {{- $ctx := .context -}}
 {{- $fullName := include "helm.fullname" $ctx -}}
 {{- $namespace := include "helm.namespace" $ctx -}}
-{{- /* The wording of the failures below: the run, the target Service, and the way out. */ -}}
+{{- /* The wording of the failures below: the run and the way out follow the template (name), the target Service follows the target. */ -}}
 {{- $stable := eq (toString .target) "stable" -}}
+{{- $dark := eq (toString .name) "tests-dark" -}}
 {{- $kind := ternary "stable" "-preview" $stable -}}
-{{- $Run := ternary "The dark stage's tests-dark run" "The canary tests run" $stable -}}
-{{- $template := ternary "tests-dark" "tests" $stable -}}
-{{- $wayOut := ternary "set global.strategy.canary.dark: false" "leave tests out of global.strategy.canary.analysis.templates" $stable -}}
+{{- $Run := ternary "The dark stage's tests-dark run" "The canary tests run" $dark -}}
+{{- $template := ternary "tests-dark" "tests" $dark -}}
+{{- $wayOut := ternary "set global.strategy.canary.dark: false" "leave tests out of global.strategy.canary.analysis.templates" $dark -}}
 {{- $servicePort := include "helm.canary.previewPort" (dict "application" $ctx.application "port" (dig "ports" "http" 8080 $ctx.application)) -}}
 {{- if not $servicePort -}}
   {{- fail (printf "application '%s': %s calls the %s Service on its http port, and its %s Service exposes none. Set applications.%s.ports.http to the http Service port (with service.ports, name that Service port http)." $ctx.appName (untitle $Run) $kind $kind $ctx.appName) -}}
@@ -200,7 +202,7 @@ true
        helm.canary.tests.script on analysis.tests.image. Takes context (the application context), name (the container
        and label suffix), and target and requestHeaders (optional, passed to helm.canary.tests.request). TESTS_REMEDY is
        the way out the script names when TestEngine has RUN_KINDS_ENABLED off: removing tests from
-       analysis.templates, or for tests-dark (target stable) setting dark: false. The TestEngine URL is the one the PostSync hook uses (helm.specs.testenginehook):
+       analysis.templates, or for tests-dark setting dark: false. The TestEngine URL is the one the PostSync hook uses (helm.specs.testenginehook):
        global.testengineWebhookUrl, else the v1 URL in Vault (url, or dev_url for the argo-events-test instance). The
        key is testtrigger.apikey, else the shared vault:DevOps/data/testengine/api#encoded_header (the hook sends
        testtrigger.apikey as it is, empty when unset). The key must be a vault: reference: a literal key would be stored
@@ -254,9 +256,9 @@ template:
         value: {{ include "helm.canary.tests.budgetSeconds" $ctx | quote }}
       - name: TESTS_REQUEST
         value: |-
-          {{- include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.canary.tests.request" (dict "context" $ctx "target" .target "requestHeaders" .requestHeaders)) "application" $ctx.application "argoTemplate" true "encodeVaultInline" true) | nindent 10 }}
+          {{- include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.canary.tests.request" (dict "context" $ctx "name" .name "target" .target "requestHeaders" .requestHeaders)) "application" $ctx.application "argoTemplate" true "encodeVaultInline" true) | nindent 10 }}
       - name: TESTS_REMEDY
-        value: {{ ternary "set global.strategy.canary.dark: false" "remove tests from global.strategy.canary.analysis.templates" (eq (toString .target) "stable") | quote }}
+        value: {{ ternary "set global.strategy.canary.dark: false" "remove tests from global.strategy.canary.analysis.templates" (eq (toString .name) "tests-dark") | quote }}
       resources:
         requests:
           cpu: 50m

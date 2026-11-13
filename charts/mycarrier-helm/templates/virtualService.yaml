@@ -37,6 +37,26 @@ metadata:
 spec:
   {{ include "helm.specs.virtualservice" $appContext | indent 2 | trim }}
 {{- end }}
+{{- if and $renderVirtualService (eq (include "helm.canary.darkPreview" $appContext) "true") }}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ $fullName }}-preview
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+spec:
+  hosts:
+  - {{ $fullName }}-preview
+  gateways:
+  - mesh
+  http:
+  {{- include "helm.canary.darkPreview.routes" $appContext | nindent 2 }}
+{{- end }}
 {{- $offloadVSEnabled := dig "networking" "istio" "offloadVSEnabled" true $appValues }}
 {{- if and $istioEnabled (not $appIstioDisabled) (not $serviceIstioDisabled) (hasPrefix "feature" $.Values.environment.name) $offloadVSEnabled (not (dig "networking" "krakend" "enabled" false $appValues)) }}
 ---
