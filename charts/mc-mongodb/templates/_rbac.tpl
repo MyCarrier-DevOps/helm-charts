@@ -42,6 +42,10 @@ metadata:
   namespace: {{ .namespace }}
   labels:
     {{- toYaml .labels | nindent 4 }}
+  # kube-linter, chart-renderer's render check, refuses a binding to any Role that can get Secrets (access-to-secrets)
+  # and does not read resourceNames, so the Role cannot be narrowed into passing: it already names the one Secret.
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: "get on Secret {{ .name }}-config only (resourceNames): the readiness probe reads the automation config"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

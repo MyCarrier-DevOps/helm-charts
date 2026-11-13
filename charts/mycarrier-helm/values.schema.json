@@ -2991,7 +2991,7 @@
             "enabled": {
               "type": "boolean",
               "default": false,
-              "description": "Deploy MongoDB with the stack. MongoConnection_<env> then points at it."
+              "description": "Deploy MongoDB with the stack. MONGODB_URI in its application containers reads the connection string."
             },
             "members": {
               "type": "integer",

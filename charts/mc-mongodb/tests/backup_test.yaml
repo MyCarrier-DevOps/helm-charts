@@ -163,3 +163,23 @@ tests:
     documentIndex: 2
     asserts:
       - matchRegex: {path: "spec.jobTemplate.spec.template.spec.containers[0].image", pattern: "^mongo:8\\.0\\.34@sha256:[0-9a-f]{64}$"}
+
+  # kube-linter, chart-renderer's render check, cannot see the Secret the ExternalSecret creates in the cluster, refuses
+  # a Secret read through an env var, and wants a liveness probe on a container that runs to completion. Only this
+  # CronJob skips those three checks, each with the reason as its value.
+  - it: tells kube-linter why the backup CronJob reads its connection Secret and has no liveness probe
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            ignore-check.kube-linter.io/env-value-from: "reads Secret mydb-mc-mongodb-backup-connection, which an ExternalSecret creates in the cluster; the render holds no Secret"
+            ignore-check.kube-linter.io/read-secret-from-env-var: "the script passes the connection string, a key of that Secret, to the mongo tools as MONGODB_URI"
+            ignore-check.kube-linter.io/no-liveness-probe: "the container runs to completion as a Job; there is nothing to probe"
+
+  - it: leaves the backup volume and its claim linted
+    asserts:
+      - notExists: {path: metadata.annotations}
+        documentIndex: 0
+      - notExists: {path: metadata.annotations}
+        documentIndex: 1

@@ -135,6 +135,9 @@ metadata:
     {{- toYaml .labels | nindent 4 }}
 spec:
   maxUnavailable: 1
+  # The Kubernetes default, stated because kube-linter, chart-renderer's render check, refuses a budget that leaves it
+  # unset: a member that is not Ready is evicted only while the other members keep the budget.
+  unhealthyPodEvictionPolicy: IfHealthyBudget
   selector:
     matchLabels:
       app: {{ .name }}-svc

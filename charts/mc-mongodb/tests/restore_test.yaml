@@ -65,3 +65,13 @@ tests:
       name: inventory-service-with-a-very-long-release-name-x
     asserts:
       - matchRegex: {path: metadata.name, pattern: "^.{1,52}$"}
+
+  # As for the backup CronJob: kube-linter, chart-renderer's render check, would refuse the render on these checks.
+  - it: tells kube-linter why the restore CronJob reads its connection Secret and has no liveness probe
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            ignore-check.kube-linter.io/env-value-from: "reads Secret mydb-mc-mongodb-restore-connection, which an ExternalSecret creates in the cluster; the render holds no Secret"
+            ignore-check.kube-linter.io/read-secret-from-env-var: "the script passes the connection string, a key of that Secret, to the mongo tools as MONGODB_URI"
+            ignore-check.kube-linter.io/no-liveness-probe: "the container runs to completion as a Job; there is nothing to probe"

@@ -13,6 +13,59 @@ allows a CronJob. */}}
 {{- end -}}
 
 {{/*
+MONGODB_URI for a container of a stack that deploys the in-cluster MongoDB: the connection string, read from the
+connection Secret, whatever global.language is. dependencyDeployments.mongodb.enabled alone turns it on. A container
+whose own env (.env, a map keyed by variable name) sets MONGODB_URI keeps that value, and the name renders once.
+Usage: include "helm.mongodb.env" (dict "root" $ "env" <the container's own env>)
+*/}}
+{{- define "helm.mongodb.env" -}}
+{{- if and (include "helm.mongodb.enabled" .root) (not (hasKey (.env | default dict) "MONGODB_URI")) }}
+- name: MONGODB_URI
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "helm.mongodb.name" .root }}-connection
+      key: connectionString
+{{- end }}
+{{- end -}}
+
+{{/*
+Annotations for kube-linter, chart-renderer's render check, on a workload whose containers read the connection Secret
+through an env var: MONGODB_URI above, the csharp MongoConnection_<env>, or a stack's own secretKeyRef. kube-linter
+finds no such Secret in the render, because an ExternalSecret creates it in the cluster (env-value-from), and refuses a
+Secret read through an env var (read-secret-from-env-var). An ignore covers the whole object, so it renders only when
+the stack deploys MongoDB and .spec, the workload's rendered spec (a Deployment's, a StatefulSet's or a CronJob's),
+has such a reference; every other workload stays linted. A key the object's own annotations (.annotations, optional)
+already set keeps that value and is left out here, so it renders once.
+Usage: include "helm.mongodb.lintIgnores" (dict "root" $ "spec" $spec "annotations" <the object's own annotations>)
+*/}}
+{{- define "helm.mongodb.lintIgnores" -}}
+{{- if include "helm.mongodb.enabled" .root }}
+{{- $secret := printf "%s-connection" (include "helm.mongodb.name" .root) }}
+{{- $spec := .spec | fromYaml }}
+{{- $podSpec := dig "template" "spec" dict (dig "jobTemplate" "spec" $spec $spec) }}
+{{- $reads := false }}
+{{- range concat ($podSpec.initContainers | default list) ($podSpec.containers | default list) }}
+{{- range .env | default list }}
+{{- if eq (dig "valueFrom" "secretKeyRef" "name" "" .) $secret }}
+{{- $reads = true }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if $reads }}
+{{- $ignores := dict
+  "ignore-check.kube-linter.io/env-value-from" (printf "reads Secret %s, which the in-cluster MongoDB's ExternalSecret creates in the cluster; the render holds no Secret" $secret)
+  "ignore-check.kube-linter.io/read-secret-from-env-var" "the in-cluster MongoDB's connection string exists only as a key of that Secret, and the containers read it from an env var" }}
+{{- $own := .annotations | default dict }}
+{{- range $check, $reason := $ignores }}
+{{- if not (hasKey $own $check) }}
+{{ $check }}: {{ $reason | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 The mc-mongodb render context. The subchart's values (.Values.mc-mongodb) supply the defaults; the stack's
 dependencyDeployments.mongodb overrides the settings it exposes; the environment decides the rest. Production (a meta
 environment starting with prod) always backs up, to the production container unless the stack names another; any other

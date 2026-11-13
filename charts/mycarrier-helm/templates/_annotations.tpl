@@ -66,3 +66,30 @@ argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Annotations for kube-linter, chart-renderer's render check, on a workload with init containers. The chart renders no
+resources for an init container, so kube-linter reports its cpu request (unset-cpu-requirements) and its memory limit
+(unset-memory-requirements) as unset and refuses the render. An ignore covers the whole object, so each renders only
+when .spec, the workload's rendered spec (a Deployment's or a StatefulSet's), has an init container without that
+requirement, and its value names them. The application container always renders both (helm.resources).
+Usage: include "helm.annotations.lintInitContainers" (dict "spec" $spec)
+*/}}
+{{- define "helm.annotations.lintInitContainers" -}}
+{{- $noCpuRequest := list }}
+{{- $noMemoryLimit := list }}
+{{- range dig "template" "spec" "initContainers" list (.spec | fromYaml) }}
+{{- if not (dig "resources" "requests" "cpu" "" .) }}
+{{- $noCpuRequest = append $noCpuRequest .name }}
+{{- end }}
+{{- if not (dig "resources" "limits" "memory" "" .) }}
+{{- $noMemoryLimit = append $noMemoryLimit .name }}
+{{- end }}
+{{- end }}
+{{- with $noCpuRequest }}
+ignore-check.kube-linter.io/unset-cpu-requirements: {{ printf "the chart renders no resources for init containers (%s)" (join ", " .) | quote }}
+{{- end }}
+{{- with $noMemoryLimit }}
+ignore-check.kube-linter.io/unset-memory-requirements: {{ printf "the chart renders no resources for init containers (%s)" (join ", " .) | quote }}
+{{- end }}
+{{- end -}}

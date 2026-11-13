@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 # kube-linter on rendered Rollout apps, run the way chart-renderer's render check runs it (DEVOPS-534).
 #
-# chart-renderer lints every rendered mycarrier-helm package with kube-linter, configured in MyCarrier-DevOps/chart-renderer
-# ci/render/internal/infrastructure/checks/kubelinter.go. This copies that configuration as of chart-renderer c8917dd
-# (kube-linter 0.8.3, ci/render/Dockerfile KUBELINTER_VERSION); compare it with kubelinter.go when the renderer changes:
-#   - `kube-linter lint <dir> --exclude <each of kubeLinterExcludes> --ignore-paths <path> --add-all-built-in`, where
-#     each ignored path is the full path of a file in the package named as in kubeLinterIgnored (it walks the dir);
-#   - a render fails when the output matches `found [1-9]\d* lint error`.
+# chart-renderer lints every rendered mycarrier-helm package with kube-linter; chart_renderer_kubelinter.sh holds its
+# configuration.
 # kube-linter models only built-in workloads, not the Argo Rollouts Rollout CRD. Before DEVOPS-534 its dangling-service
 # check refused every Rollout app's stable and -preview Services, and in prod its dangling-horizontalpodautoscaler check
 # refused the HPA that targets the Rollout. This checks that:
@@ -17,25 +13,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-KUBE_LINTER=${KUBE_LINTER:-kube-linter}
-for t in helm "$KUBE_LINTER"; do command -v "$t" >/dev/null || { echo "FAIL: $t is required"; exit 1; }; done
-echo "kube-linter $("$KUBE_LINTER" version)"
-
-# chart-renderer c8917dd: kubeLinterExcludes, kubeLinterIgnored, lintErrors.
-excludes=(env-var-secret no-anti-affinity latest-tag sorted-keys required-annotation-email default-service-account
-  restart-policy minimum-three-replicas no-readiness-probe dnsconfig-options required-label-owner no-node-affinity
-  non-isolated-pod no-rolling-update-strategy no-read-only-root-fs hpa-minimum-three-replicas)
-ignored_names=(triggertestengine.yaml jobs.yaml)
-lint_error_re='found [1-9][0-9]* lint error'
-lint() {
-  local args=(lint "$1") name path
-  for c in "${excludes[@]}"; do args+=(--exclude "$c"); done
-  for name in "${ignored_names[@]}"; do
-    while IFS= read -r path; do args+=(--ignore-paths "$path"); done < <(find "$1" -type f -name "$name")
-  done
-  args+=(--add-all-built-in)
-  "$KUBE_LINTER" "${args[@]}" 2>&1 || true
-}
+# shellcheck source=chart_renderer_kubelinter.sh
+source .github/scripts/chart_renderer_kubelinter.sh
 
 TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
@@ -67,9 +46,6 @@ applications:
     image: {registry: registry.example.com, repository: worker, tag: "1.0.0"}
     ports: {http: 8080}
 EOF
-
-fail=0
-check() { if [ "$2" = 0 ]; then echo "  PASS  $1"; else echo "  FAIL  $1"; fail=$((fail + 1)); fi; }
 
 # render NAME ENVIRONMENT STRATEGY: the rendered dir on stdout.
 render() {

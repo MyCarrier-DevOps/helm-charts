@@ -91,6 +91,9 @@ template:
           {{- toYaml .args | nindent 10 }}
         env:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
+          {{- with include "helm.mongodb.env" (dict "root" $ "env" .env) }}
+          {{ . | indent 10 | trim }}
+          {{- end }}
           {{ include "helm.otel.env" (merge (dict "otelUserEnv" .env) $) | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
         {{- /* helm.lang.vars re-injects the KeyVault_* keys, so they are stripped unless language secrets are off */}}
@@ -157,6 +160,9 @@ template:
         {{- end }}
         env:
           {{ include "helm.lang.vars" $ | indent 10 | trim }}
+          {{- with include "helm.mongodb.env" (dict "root" $ "env" (merge (dict) (.application.env | default dict) ($.Values.global.env | default dict))) }}
+          {{ . | indent 10 | trim }}
+          {{- end }}
           {{ include "helm.otel.env" $ | indent 10 | trim }}
           {{ include "helm.vault" $ | indent 10 | trim }}
           - name: "ComputedEnvironmentName"
