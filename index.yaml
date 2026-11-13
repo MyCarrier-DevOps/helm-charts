@@ -836,6 +836,26 @@ entries:
       category: Database
     apiVersion: v2
     appVersion: 8.0.34
+    created: "2026-11-13T23:42:17.065400426Z"
+    description: MongoDB replica set via the MongoDB operator, with generated credentials
+      and optional Azure Blob backups
+    digest: 2f4accd0c66dd0aa4e8d049ffa077ccffbd72f0be83a2ff61227f939cd7b3127
+    keywords:
+    - mongodb
+    - database
+    - backup
+    maintainers:
+    - email: devops@mycarrier.io
+      name: MyCarrier DevOps
+    name: mc-mongodb
+    type: application
+    urls:
+    - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/mc-mongodb-0.1.3/mc-mongodb-0.1.3.tgz
+    version: 0.1.3
+  - annotations:
+      category: Database
+    apiVersion: v2
+    appVersion: 8.0.34
     created: "2026-10-30T20:49:20.906364801Z"
     description: MongoDB replica set via the MongoDB operator, with generated credentials
       and optional Azure Blob backups
@@ -5177,4 +5197,4 @@ entries:
     urls:
     - https://github.com/MyCarrier-DevOps/helm-charts/releases/download/webhookharbor-0.8.1/webhookharbor-0.8.1.tgz
     version: 0.8.1
-generated: "2026-11-13T11:37:48.249187923Z"
+generated: "2026-11-13T23:42:17.066011129Z"
