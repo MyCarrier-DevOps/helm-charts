@@ -221,10 +221,11 @@ spec:
        prod.rollback, and gitops-rollback reverts the release. Hence analysis.tests.image should be an ACR mirror.
        The dark stage's leader (helm.canary.testsDark.wanted, DEVOPS-326) gets the same template as tests-dark: the
        same metric and Job, sent to the app's stable Service with X-MyCarrier-Canary: <lower-cased
-       global.correlationId>, which the dark stage's header route sends to the canary at weight 0. */}}
+       global.correlationId>, which the dark stage's header route sends to the canary at weight 0. With
+       canaryDarkPreview it is sent to the -preview Service instead (see helm.canary.darkPreview). */}}
 {{- $chartTests := list }}
 {{- if eq (include "helm.canary.tests.wanted" $appContext) "true" }}{{ $chartTests = append $chartTests (dict "name" "tests") }}{{ end }}
-{{- if eq (include "helm.canary.testsDark.wanted" $appContext) "true" }}{{ $chartTests = append $chartTests (dict "name" "tests-dark" "target" "stable" "requestHeaders" (dict "X-MyCarrier-Canary" (include "helm.canary.correlationId" $appContext))) }}{{ end }}
+{{- if eq (include "helm.canary.testsDark.wanted" $appContext) "true" }}{{ $chartTests = append $chartTests (dict "name" "tests-dark" "target" (ternary "preview" "stable" (eq (include "helm.canary.darkPreview" $appContext) "true")) "requestHeaders" (dict "X-MyCarrier-Canary" (include "helm.canary.correlationId" $appContext))) }}{{ end }}
 {{- range $chartTests }}
 ---
 apiVersion: argoproj.io/v1alpha1

@@ -303,6 +303,34 @@ latency against stable on callees that take most of their traffic from a sibling
 To roll back, set `global.strategy.canary.dark: false`. The canary pod floor and the canary source routes stay; they
 go only with the chart version.
 
+### Path routes and rewrites in the dark stage (`canaryDarkPreview`)
+
+The dark stage's `canary-header` route is written by Argo Rollouts and matches only the `X-MyCarrier-Canary` header. It
+goes ahead of every other route of the application's VirtualService, so a `tests-dark` request that carries the header
+skips the application's path routes and their rewrites (for a single-page app, `/callback` rewritten to
+`/ui/welcome/index.html`, and the `/MyCarrierAPI/` route to another Service). The chart cannot put its own routes ahead
+of it: Argo Rollouts removes every route named in `managedRoutes` when a Rollout is settled.
+
+`applications.<app>.canaryDarkPreview: true` (default `false`) makes `tests-dark` call the application's `-preview`
+Service instead of its stable Service, and renders a second VirtualService `<fullName>-preview` for the host
+`<fullName>-preview` on the `mesh` gateway only. The Rollout does not list it, so Argo Rollouts adds no managed route to
+it. It carries the application's own routes, in their order, with each destination on the application's own Services
+replaced by the `-preview` Service at weight 100; a destination on another Service stays; `match`, `rewrite`, `timeout`,
+`retries`, `headers` (response headers) and `corsPolicy` stay, so a response from the preview host is what the public
+route sends. A route with a `redirect` is left out. A route keeps its `fault` only when it is a deterministic abort
+(`abort.percentage.value: 100`, such as the allowlist's `-forbidden` route: 100% delay and 100% abort 403), so the preview
+host answers a disallowed path as the public host does; any other `fault` (a delay only, a partial abort, an abort
+without `percentage`, which Istio applies to no request) is removed and the route forwards as usual. `tests-dark` is one
+zero-tolerance run (`failureLimit` 0), so chaos faults must not reach it. When the application has several
+`service.ports`, a route keeps the destination on the port `tests-dark` calls (the `http` entry), else the first.
+The `canary-header` route of the main VirtualService stays, because DeployVerifier needs it.
+
+It changes nothing unless the chart renders `tests-dark` for the application (the leader of a canary Rollout release with
+the coordinator on, `dark: true`, a preset and the steps rendered, and no `analysisTemplates` entry named `tests-dark`
+of its own), so a follower gets no `-preview` VirtualService, and with the value off or the dark stage off the render is unchanged. A multi-frontend release
+cannot run the dark stage at all (see above), so the value does nothing there. The value needs a chart version that ships it, and that version must be pinned in
+the CI render step first: an older chart ignores the key silently and the dark stage behaves as before.
+
 ## Canary compare in the release after 4.7.20 (canary Rollouts)
 
 The release after 4.7.20 adds the chart's `compare` AnalysisTemplate (DEVOPS-322). Where a canary Rollout's steps render

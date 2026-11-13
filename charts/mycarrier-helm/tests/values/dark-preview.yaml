@@ -1,0 +1,61 @@
+# canaryDarkPreview fixture: a single-page app (web) with the routes the dark stage's header route would skip.
+global:
+  deploymentStrategy: canary
+  appStack: test-stack
+  language: nodejs
+  correlationId: Corr-ABC-123
+  strategy:
+    canary:
+      dark: true
+environment:
+  name: prod
+applications:
+  web:
+    deploymentType: rollout
+    replicas: 2
+    canaryDarkPreview: true
+    canaryHealthPath: /health
+    image:
+      registry: registry.example.com
+      repository: web
+      tag: "1.0.0"
+    ports:
+      http: 4200
+    testtrigger:
+      testdefinitions:
+        - name: webtests
+          containerImage: testing/example/web-tests
+          containerTag: 1.0.0
+          secretId: vault:Example/data/auth#SecretId
+          filters: ["TestCategory=Smoke"]
+    networking:
+      istio:
+        corsPolicy:
+          allowOrigins:
+            - exact: https://app.example.com
+        redirects:
+          old: new
+        routes:
+          oauth-callback:
+            match:
+              - uri:
+                  exact: /callback
+            rewrite:
+              uri: /ui/welcome/index.html
+          backend-api:
+            match:
+              - uri:
+                  prefix: /Api/
+            rewrite:
+              uri: /
+            destination: backend-api.prod.svc.cluster.local
+            port: 8081
+          slow:
+            match:
+              - uri:
+                  prefix: /slow
+            fault:
+              delay:
+                percentage:
+                  value: 1
+                fixedDelay: 2s

@@ -1,0 +1,575 @@
+suite: Rollout canary dark stage preview VirtualService (applications.<app>.canaryDarkPreview)
+# The dark stage's managed canary-header route matches only the X-MyCarrier-Canary header and goes ahead of every other
+# route, so a tests-dark request skips the application's path routes and rewrites. With canaryDarkPreview on, tests-dark
+# calls the -preview Service, and a second VirtualService, <fullName>-preview, which the Rollout does not list, carries
+# the application's own routes pointed at the -preview Service, with their response headers and corsPolicy.
+# tests/values/dark-preview.yaml is a prod canary
+# application with a rewrite route (oauth-callback), a route to another Service (backend-api), a route with a 1% delay
+# fault (slow), a redirect (old), response headers and a corsPolicy.
+templates:
+  - virtualService.yaml
+  - analysistemplate.yaml
+  - rollout.yaml
+values:
+  - values/dark-preview.yaml
+tests:
+  - it: renders no -preview VirtualService with the value off
+    template: virtualService.yaml
+    set:
+      applications.web.canaryDarkPreview: false
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: keeps tests-dark on the stable Service with the value off
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: prod-test-stack-web-tests-dark
+    set:
+      applications.web.canaryDarkPreview: false
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://test-stack-web\.prod\.svc\.cluster\.local:4200"'
+
+  - it: renders the -preview VirtualService on the mesh gateway only, with the main VirtualService's labels
+    template: virtualService.yaml
+    documentSelector: &previewVS
+      path: metadata.name
+      value: test-stack-web-preview
+    asserts:
+      - isKind:
+          of: VirtualService
+      - equal:
+          path: metadata.namespace
+          value: prod
+      - equal:
+          path: spec.hosts
+          value:
+            - test-stack-web-preview
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "0"
+            argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Prune=true
+      - equal:
+          path: metadata.labels.app
+          value: test-stack-web
+      - equal:
+          path: metadata.labels["mycarrier.tech/correlationId"]
+          value: Corr-ABC-123
+
+  - it: leaves the main VirtualService as it is with the value on
+    template: virtualService.yaml
+    documentSelector:
+      path: metadata.name
+      value: test-stack-web
+    asserts:
+      - equal:
+          path: spec.gateways
+          value:
+            - mesh
+            - istio-system/default
+
+  - it: copies every field of a route but its destinations as the main VirtualService has it (rewrite, headers, cors)
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    set:
+      applications.web.networking.istio.responseHeaders:
+        response:
+          set:
+            X-Test: preview
+    asserts:
+      - equal:
+          path: spec.http[2]
+          value:
+            name: oauth-callback
+            match:
+              - uri:
+                  exact: /callback
+            rewrite:
+              uri: /ui/welcome/index.html
+            timeout: 151s
+            retries:
+              attempts: 3
+              perTryTimeout: 50s
+              retryOn: 5xx,reset
+            headers:
+              response:
+                set:
+                  X-Test: preview
+            corsPolicy:
+              allowOrigins:
+                - exact: https://app.example.com
+            route:
+              - destination:
+                  host: test-stack-web-preview.prod.svc.cluster.local
+                  port:
+                    number: 4200
+                weight: 100
+
+  - it: replaces the own destinations of the first and the default route with one -preview destination at weight 100
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    asserts:
+      - equal:
+          path: spec.http[0].name
+          value: test-stack-web
+      - equal:
+          path: spec.http[0].route
+          value:
+            - destination:
+                host: test-stack-web-preview.prod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+      - equal:
+          path: spec.http[4].name
+          value: canary
+      - equal:
+          path: spec.http[4].route
+          value:
+            - destination:
+                host: test-stack-web-preview.prod.svc.cluster.local
+                port:
+                  number: 4200
+              weight: 100
+
+  - it: keeps a destination on another Service, with its match, rewrite, timeout and retries
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    asserts:
+      - equal:
+          path: spec.http[1].name
+          value: backend-api
+      - equal:
+          path: spec.http[1].match
+          value:
+            - uri:
+                prefix: /Api/
+      - equal:
+          path: spec.http[1].rewrite
+          value:
+            uri: /
+      - equal:
+          path: spec.http[1].route
+          value:
+            - destination:
+                host: backend-api.prod.svc.cluster.local
+                port:
+                  number: 8081
+      - equal:
+          path: spec.http[1].timeout
+          value: 151s
+      - equal:
+          path: spec.http[1].retries
+          value:
+            attempts: 3
+            perTryTimeout: 50s
+            retryOn: 5xx,reset
+
+  - it: leaves out the routes with a redirect and the source routes, and keeps the others
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 5
+      - notExists:
+          path: spec.http[?(@.name=="old")]
+      - notExists:
+          path: spec.http[?(@.name=="oauth-callback-canary-source")]
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-web-canary-source")]
+      - exists:
+          path: spec.http[?(@.name=="slow")]
+
+  # tests-dark is one zero-tolerance run (failureLimit 0): chaos must not reach it, so a delay-only fault, a partial abort
+  # and an abort without a percentage (which Istio applies to no request) are removed and the route forwards as usual.
+  # A deterministic abort (percentage 100) stays, so the preview host answers as the public host does.
+  - it: removes a fault that is not a deterministic abort, and keeps the route
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    set:
+      applications.web.networking.istio.routes:
+        half-abort:
+          match:
+            - uri:
+                prefix: /half
+          fault:
+            abort:
+              httpStatus: 500
+              percentage:
+                value: 50
+        bare-abort:
+          match:
+            - uri:
+                prefix: /bare
+          fault:
+            abort:
+              httpStatus: 500
+        always-abort:
+          match:
+            - uri:
+                prefix: /always
+          fault:
+            abort:
+              httpStatus: 503
+              percentage:
+                value: 100
+    asserts:
+      - exists:
+          path: spec.http[?(@.name=="half-abort")]
+      - notExists:
+          path: spec.http[?(@.name=="half-abort")].fault
+      - exists:
+          path: spec.http[?(@.name=="bare-abort")]
+      - notExists:
+          path: spec.http[?(@.name=="bare-abort")].fault
+      - equal:
+          path: spec.http[?(@.name=="always-abort")].fault
+          value:
+            abort:
+              httpStatus: 503
+              percentage:
+                value: 100
+      - notExists:
+          path: spec.http[?(@.name=="slow")].fault
+
+  # An allowlist app (csharp has default endpoints) ends with the -forbidden route: 100% delay and 100% abort 403, which
+  # the preview host keeps, as the public host answers a disallowed path.
+  - it: ends an allowlist application's routes with the -forbidden route, fault intact, on the -preview Service
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    set:
+      global.language: csharp
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="test-stack-web-forbidden")]
+          value:
+            name: test-stack-web-forbidden
+            fault:
+              abort:
+                httpStatus: 403
+                percentage:
+                  value: 100
+              delay:
+                fixedDelay: 29s
+                percentage:
+                  value: 100
+            route:
+              - destination:
+                  host: test-stack-web-preview.prod.svc.cluster.local
+                  port:
+                    number: 4200
+                weight: 100
+      - equal:
+          path: spec.http[6].name
+          value: test-stack-web-forbidden
+
+  - it: carries no pin, cookie or source routes with canarySessionAffinity on
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    set:
+      applications.web.canarySessionAffinity: true
+    asserts:
+      - lengthEqual:
+          path: spec.http
+          count: 5
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-web-pin-canary")]
+      - notExists:
+          path: spec.http[?(@.name=="test-stack-web-pin-stable")]
+      - notExists:
+          path: spec.http[?(@.name=="slow-pin-canary")]
+      - notExists:
+          path: spec.http[?(@.name=="canary-stable")]
+      - notExists:
+          path: spec.http[?(@.name=="canary-canary-source")]
+
+  # The default route has an own destination per service.ports entry. The preview route keeps the one on the port that
+  # tests-dark calls (the entry named http), not the first.
+  - it: keeps the destination on the port tests-dark calls when the service has several ports
+    set:
+      applications.web.service:
+        ports:
+          - name: metrics
+            port: 9090
+          - name: http
+            port: 8080
+    asserts:
+      - equal:
+          path: spec.http[?(@.name=="canary")].route
+          value:
+            - destination:
+                host: test-stack-web-preview.prod.svc.cluster.local
+                port:
+                  number: 8080
+              weight: 100
+        template: virtualService.yaml
+        documentSelector: *previewVS
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://test-stack-web-preview\.prod\.svc\.cluster\.local:8080"'
+        template: analysistemplate.yaml
+        documentSelector:
+          path: metadata.name
+          value: prod-test-stack-web-tests-dark
+
+  - it: renders no -preview VirtualService for a follower, whose tests-dark the chart does not render
+    template: virtualService.yaml
+    set:
+      global.strategy.canary.leader: lead
+      applications:
+        lead:
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: lead
+            tag: "1.0.0"
+          ports:
+            http: 4200
+          testtrigger:
+            testdefinitions:
+              - name: leadtests
+                containerImage: testing/example/lead-tests
+                containerTag: 1.0.0
+                secretId: vault:Example/data/auth#SecretId
+                filters: ["TestCategory=Smoke"]
+    asserts:
+      - containsDocument:
+          kind: VirtualService
+          apiVersion: networking.istio.io/v1alpha3
+          name: test-stack-web-preview
+          namespace: prod
+          any: true
+        not: true
+      - hasDocuments:
+          count: 2
+
+  # The preview host answers as the public route does: the response headers (the Content-Security-Policy included) and
+  # the corsPolicy of each route stay, so the page behaves as it does in production.
+  - it: keeps the default response headers and corsPolicy, and none where the main route has none
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    asserts:
+      - notExists:
+          path: spec.http[0].headers
+      - notExists:
+          path: spec.http[0].corsPolicy
+      - equal:
+          path: spec.http[1].corsPolicy
+          value:
+            allowOrigins:
+              - exact: https://app.example.com
+      - matchRegex:
+          path: spec.http[1].headers.response.set.Content-Security-Policy
+          pattern: "^default-src https: 'unsafe-eval' 'unsafe-inline' blob: data: wss:;"
+
+  - it: points tests-dark at the -preview Service with the value on, with the same remedy
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: prod-test-stack-web-tests-dark
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://test-stack-web-preview\.prod\.svc\.cluster\.local:4200"'
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"X-MyCarrier-Canary": "corr-abc-123"'
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: "set global.strategy.canary.dark: false"
+
+  - it: leaves the chart's tests template on -preview with or without the value (tests is not the dark stage)
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: prod-test-stack-web-tests
+    set:
+      global.strategy.canary.dark: false
+      global.strategy.canary.analysis.templates: [tests]
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"ServiceAddress": "http://test-stack-web-preview\.prod\.svc\.cluster\.local:4200"'
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: "remove tests from global.strategy.canary.analysis.templates"
+
+  # The failure wording follows the template (tests-dark), not the target Service, so the message names tests-dark and its
+  # way out with the value on (tests-dark calls -preview) and with it off (stable) alike.
+  - it: names tests-dark and its way out in a failure, with the value on
+    template: analysistemplate.yaml
+    set:
+      applications.web.testtrigger.testdefinitions:
+        - name: webtests
+          containerImage: testing/example/web-tests
+          containerTag: 1.0.0
+          secretId: vault:Example/data/auth#SecretId
+          filters: ["TestCategory=preprodSmoke"]
+    asserts:
+      - failedTemplate:
+          errorPattern: "so the tests-dark analysis would fail every prod canary. .* or set global.strategy.canary.dark: false in prod."
+
+  - it: names tests-dark and its way out in a failure, with the value off
+    template: analysistemplate.yaml
+    set:
+      applications.web.canaryDarkPreview: false
+      applications.web.testtrigger.testdefinitions:
+        - name: webtests
+          containerImage: testing/example/web-tests
+          containerTag: 1.0.0
+          secretId: vault:Example/data/auth#SecretId
+          filters: ["TestCategory=preprodSmoke"]
+    asserts:
+      - failedTemplate:
+          errorPattern: "so the tests-dark analysis would fail every prod canary. .* or set global.strategy.canary.dark: false in prod."
+
+  - it: does not list the -preview VirtualService in the Rollout's traffic routing, and keeps the managed route
+    template: rollout.yaml
+    documentSelector:
+      path: metadata.name
+      value: test-stack-web
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.istio.virtualServices
+          value:
+            - name: test-stack-web
+              routes:
+                - test-stack-web
+                - oauth-callback
+                - slow
+                - canary
+      - equal:
+          path: spec.strategy.canary.trafficRouting.managedRoutes
+          value:
+            - name: canary-header
+
+  - it: renders no -preview VirtualService and no tests-dark with dark off
+    set:
+      global.strategy.canary.dark: false
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: virtualService.yaml
+      - containsDocument:
+          kind: AnalysisTemplate
+          apiVersion: argoproj.io/v1alpha1
+          name: prod-test-stack-web-tests-dark
+          namespace: prod
+          any: true
+        not: true
+        template: analysistemplate.yaml
+
+  - it: renders no -preview VirtualService with the coordinator off (no dark stage)
+    template: virtualService.yaml
+    set:
+      global.strategy.canary.coordinator.enabled: false
+    asserts: &oneVS
+      - hasDocuments:
+          count: 1
+
+  - it: renders no -preview VirtualService for a Deployment
+    template: virtualService.yaml
+    set:
+      applications.web.deploymentType: deployment
+    asserts: *oneVS
+
+  - it: renders no -preview VirtualService for a Rollout whose deployment strategy is rolling
+    template: virtualService.yaml
+    set:
+      global.deploymentStrategy: rolling
+    asserts: *oneVS
+
+  - it: renders no -preview VirtualService where the steps do not render (not prod, no stepsOutsideProd)
+    template: virtualService.yaml
+    set:
+      environment.name: preprod
+    asserts: *oneVS
+
+  - it: renders the -preview VirtualService outside prod with stepsOutsideProd
+    template: virtualService.yaml
+    set:
+      environment.name: preprod
+      global.strategy.canary.stepsOutsideProd: true
+    asserts: &twoVS
+      - hasDocuments:
+          count: 2
+
+  # canaryDarkPreview needs no guard of its own in a multi-frontend release: with the dark stage on, the release already
+  # fails in helm.canary.virtualServices.
+  - it: fails the render for a frontend of a multi-frontend release with the dark stage on
+    template: rollout.yaml
+    set:
+      global.strategy.canary.leader: web
+      applications:
+        web:
+          isFrontend: true
+          isPrimary: true
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: rollout
+          canaryHealthPath: /health
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - failedTemplate:
+          errorPattern: "the dark stage's header route would also go into the shared .*-multifrontend VirtualService"
+
+  - it: accepts canaryDarkPreview on a single frontend
+    template: virtualService.yaml
+    set:
+      applications:
+        web:
+          isFrontend: true
+          isPrimary: true
+    asserts: *twoVS
+
+  - it: accepts canaryDarkPreview on a non-frontend application of a release that has several frontends
+    template: virtualService.yaml
+    documentSelector: *previewVS
+    set:
+      applications:
+        web:
+          isFrontend: false
+        shell:
+          isFrontend: true
+          isPrimary: true
+          routePrefix: /
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: shell
+            tag: "1.0.0"
+          ports:
+            http: 4200
+        admin:
+          isFrontend: true
+          routePrefix: /admin
+          deploymentType: deployment
+          image:
+            registry: registry.example.com
+            repository: admin
+            tag: "1.0.0"
+          ports:
+            http: 4200
+    asserts:
+      - isKind:
+          of: VirtualService
