@@ -1437,7 +1437,7 @@ dependencyDeployments:
   mongodb:
     enabled: true
     # members: 3                  # default: 3 in production, 1 elsewhere
-    # version: "8.0.34"
+    # version: "8.0.34"             # pulled as <version>-ubi8: it must exist upstream with that suffix
     # storage: { size: 10Gi, storageClassName: "" }
     # resources: {...}
     # backup: { schedule: "0 2 * * *", timeZone: Etc/UTC, retentionDays: 7 }

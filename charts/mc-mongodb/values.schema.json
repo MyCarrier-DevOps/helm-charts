@@ -38,6 +38,22 @@
       "default": "8.0.34",
       "description": "MongoDB server version (exact)"
     },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repository of the MongoDB server image, without tag"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Image type, the suffix of the tag: <version>-<type>"
+        }
+      }
+    },
     "featureCompatibilityVersion": {
       "type": "string",
       "default": "8.0",

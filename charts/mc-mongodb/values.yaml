@@ -17,6 +17,11 @@ fullnameOverride: ""
 members: 1
 ## @param version MongoDB server version (exact)
 version: "8.0.34"
+## @param image.repository Repository of the MongoDB server image, pulled through the Harbor proxy. The operator adds the image type to the tag only for docker.io/mongodb and quay.io/mongodb, so the chart sets the image itself.
+## @param image.type Image type: the server image is <repository>:<version>-<type>, so the version must exist upstream with this suffix
+image:
+  repository: harbor.mycarrier.tech/quay-proxy/mongodb/mongodb-community-server
+  type: ubi8
 ## @param featureCompatibilityVersion Pinned feature compatibility version, so upgrades are deliberate
 featureCompatibilityVersion: "8.0"
 

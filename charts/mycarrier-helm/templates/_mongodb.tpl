@@ -106,6 +106,7 @@ in helm/values.yaml fails here instead of silently stopping production backups. 
     "mycarrier.tech/environment" .Values.environment.name)
   "members" (default (ternary 3 1 $isProd) $stack.members)
   "version" (default $defaults.version $stack.version)
+  "image" $defaults.image
   "featureCompatibilityVersion" $defaults.featureCompatibilityVersion
   "storage" (mergeOverwrite (deepCopy $defaults.storage) ($stack.storage | default dict))
   "resources" (default $defaults.resources $stack.resources)
