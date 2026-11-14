@@ -19,6 +19,36 @@ tests:
       - equal: {path: spec.featureCompatibilityVersion, value: "8.0"}
       - equal: {path: spec.security.authentication.modes, value: [SCRAM]}
 
+  # The operator appends the image type to the tag only for docker.io/mongodb and quay.io/mongodb. Pulled through the
+  # Harbor proxy it asks for the bare version, which upstream does not publish, so the container names its image.
+  - it: pulls the server image with the image type as the tag suffix
+    documentIndex: 0
+    asserts:
+      - equal: {path: "spec.statefulSet.spec.template.spec.containers[0].name", value: mongod}
+      - equal:
+          path: "spec.statefulSet.spec.template.spec.containers[0].image"
+          value: harbor.mycarrier.tech/quay-proxy/mongodb/mongodb-community-server:8.0.34-ubi8
+
+  - it: follows the version in the image tag and keeps spec.version plain
+    set:
+      version: "8.0.35"
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.version, value: "8.0.35"}
+      - equal:
+          path: "spec.statefulSet.spec.template.spec.containers[0].image"
+          value: harbor.mycarrier.tech/quay-proxy/mongodb/mongodb-community-server:8.0.35-ubi8
+
+  - it: takes the repository and image type from values
+    set:
+      image.repository: registry.example/mirror/mongodb-community-server
+      image.type: ubi9
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: "spec.statefulSet.spec.template.spec.containers[0].image"
+          value: registry.example/mirror/mongodb-community-server:8.0.34-ubi9
+
   - it: sets the member count
     set:
       members: 3

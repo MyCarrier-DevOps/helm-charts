@@ -363,7 +363,7 @@ The database in the string is `appStack` in every environment. The `app` user ca
 |-------|-------------|---------|
 | `enabled` | Deploy MongoDB with the stack | `false` |
 | `members` | Replica set members | `3` in production, `1` elsewhere |
-| `version` | MongoDB server version (exact), an 8.x release: the chart pins feature compatibility version 8.0, and the schema rejects older servers | `8.0.34` |
+| `version` | MongoDB server version (exact), an 8.x release: the chart pins feature compatibility version 8.0, and the schema rejects older servers. The image pulled is `<version>-ubi8` from the Harbor proxy of `mongodb/mongodb-community-server`, so the version must exist upstream with that suffix | `8.0.34` |
 | `storage.size` | Data volume per member. Set it before the first deploy: the operator cannot resize the volumes, so a later change leaves the replica set failing to reconcile until they are resized by hand | `10Gi` |
 | `storage.storageClassName` | Storage class for the data volume. Set it before the first deploy, as for `storage.size` | cluster default |
 | `resources` | Resources for the `mongod` container; replaces the default as a whole | requests `250m` / `512Mi`, limit `1Gi` memory |

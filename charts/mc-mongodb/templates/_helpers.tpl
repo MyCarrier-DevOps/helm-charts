@@ -46,6 +46,7 @@ Usage: include "mc-mongodb.context" . | fromJson
   "labels" (include "mc-mongodb.labels" . | fromYaml)
   "members" $v.members
   "version" $v.version
+  "image" $v.image
   "featureCompatibilityVersion" $v.featureCompatibilityVersion
   "storage" $v.storage
   "resources" $v.resources

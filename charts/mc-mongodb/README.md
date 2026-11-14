@@ -47,6 +47,10 @@ The pods meet the clusters' Kyverno policies:
   the TCP probes through the sidecar, which still checks the container's port);
 - backup and restore run as the `mongo` image's non-root user (999) on a read-only root filesystem.
 
+The server image is `<image.repository>:<version>-<image.type>`, set on the `mongod` container. The operator adds the
+image type to the tag only for `docker.io/mongodb` and `quay.io/mongodb`; from the Harbor proxy it would ask for the
+bare version, which upstream does not publish. `version` itself stays the plain version, which the agent reads.
+
 ## Prerequisites
 
 - MongoDB Controllers for Kubernetes (`mongodb-kubernetes`, Helm repo `https://mongodb.github.io/helm-charts`) installed
@@ -161,6 +165,8 @@ this chart's values, applies the stack's overrides, and decides members and back
 | ----------------------------- | ----------------------------------------------------------------- | -------- |
 | `members`                     | Number of replica set members                                     | `1`      |
 | `version`                     | MongoDB server version (exact)                                    | `8.0.34` |
+| `image.repository`            | Repository of the MongoDB server image, pulled through the Harbor proxy | `harbor.mycarrier.tech/quay-proxy/mongodb/mongodb-community-server` |
+| `image.type`                  | Image type: the server image is `<repository>:<version>-<type>`, so the version must exist upstream with this suffix | `ubi8` |
 | `featureCompatibilityVersion` | Pinned feature compatibility version, so upgrades are deliberate  | `8.0`    |
 | `storage.size`                | Data volume size per member                                       | `10Gi`   |
 | `storage.storageClassName`    | Storage class for the data volume (empty uses the cluster default) | `""`     |

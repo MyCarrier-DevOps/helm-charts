@@ -87,8 +87,12 @@ spec:
           # agent's readiness probe. mongod opens its port once the agent has written its configuration, which the
           # startup probe allows up to 10 minutes for. The agent serves its status on 127.0.0.1:5000 only, out of
           # reach of a tcpSocket probe, so its liveness check runs inside the container.
+          # The image is set here because the operator adds the image type to the tag only for docker.io/mongodb and
+          # quay.io/mongodb; from any other repository, such as the Harbor proxy, it asks for the bare version, which
+          # upstream does not publish. spec.version stays the plain version, which the agent reads.
           containers:
             - name: mongod
+              image: {{ printf "%s:%s-%s" .image.repository .version .image.type }}
               resources:
                 {{- toYaml .resources | nindent 16 }}
               startupProbe:

@@ -19,6 +19,24 @@ tests:
       - equal: {path: metadata.namespace, value: prod}
       - equal: {path: spec.members, value: 3}
 
+  - it: pulls the server image as <version>-ubi8 through the Harbor proxy
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.version, value: "8.0.34"}
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].image
+          value: harbor.mycarrier.tech/quay-proxy/mongodb/mongodb-community-server:8.0.34-ubi8
+
+  - it: follows the stack's MongoDB version in the image tag
+    set:
+      dependencyDeployments.mongodb.version: "8.0.35"
+    documentSelector: {path: kind, value: MongoDBCommunity}
+    asserts:
+      - equal: {path: spec.version, value: "8.0.35"}
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].image
+          value: harbor.mycarrier.tech/quay-proxy/mongodb/mongodb-community-server:8.0.35-ubi8
+
   - it: backs up production to the production container
     documentSelector: {path: kind, value: PersistentVolume}
     asserts:
