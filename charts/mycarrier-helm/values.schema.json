@@ -408,7 +408,7 @@
           },
           "testtrigger": {
             "type": "object",
-            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's request: v1, or v2 with the key version: v2 when the test definitions set testEnvironmentTag) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
+            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request; testEnvironmentTag there fails the render until rollout-watch posts v2 requests, DEVOPS-319) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
             "properties": {
               "ttlSecondsAfterFinished": {
                 "type": "string",

@@ -544,10 +544,11 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ServiceAddress": "http://mycarrier-api\.preprod\.svc\.cluster\.local:80"'
 
-  # AQA-38: for test definitions with testEnvironmentTag, request.json holds the v2 request (helm.testtrigger.v2request)
-  # and the key version: v2 tells rollout-watch to post it to /v2/trigger. A v1 application has no version key, so its
-  # ConfigMap is unchanged. The dark stage is off in the v2 cases: its tests-dark run posts v1 only and refuses a tag.
-  - it: "AQA-38: the ConfigMap holds the v2 request and version v2 for a tag (results API)"
+  # AQA-38: rollout-watch posts request.json to TestEngine's v1 trigger only until it reads the ConfigMap's version key
+  # (DEVOPS-319), and v1 refuses a v2 request with a 422. So a prod canary Rollout whose test definitions set
+  # testEnvironmentTag fails the render. A v1 application has no version key, so its ConfigMap is unchanged. The dark
+  # stage is off in the v2 cases: its tests-dark run posts v1 only and refuses a tag.
+  - it: "AQA-38: refuses testEnvironmentTag on a prod canary Rollout until rollout-watch posts v2 (results API)"
     set:
       global: &globalDarkOff
         <<: *global
@@ -573,68 +574,10 @@ tests:
                 resultsApiUrl: vault:QA/data/autotestresults_api#url
                 resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
-      - hasDocuments:
-          count: 1
-      - isKind:
-          of: ConfigMap
-      - equal:
-          path: data.version
-          value: v2
-      - equal:
-          path: data["request.json"]
-          value: |-
-            {
-              "Tests": [
-                {
-                  "ContainerImage": "testing/mycarrier/api/tests",
-                  "ContainerTag": "1.0.0",
-                  "HardenedSecurityContext": true,
-                  "IsMonolith": false,
-                  "NodeAffinity": [],
-                  "PodResources": {
-                    "limits": {
-                      "cpu": "2000m",
-                      "memory": "4Gi"
-                    },
-                    "requests": {
-                      "cpu": "250m",
-                      "memory": "1Gi"
-                    }
-                  },
-                  "SpreadAcrossNodes": "true",
-                  "StackName": "mycarrier",
-                  "TestEnvironmentTag": "CoreAPI",
-                  "TestEnvironmentVariables": {
-                    "AdditionalEnvVars": "",
-                    "BranchName": "main",
-                    "CorrelationId": "corr-1",
-                    "EnvironmentName": "prod",
-                    "LegacyMode": "false",
-                    "ReleaseDefinitionName": "mycarrier-api",
-                    "ReleaseId": "1.0.0",
-                    "ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key",
-                    "ResultsApiUrl": "vault:QA/data/autotestresults_api#url",
-                    "SecretId": "vault:QA/data/app_auth#SecretId",
-                    "ServiceAddress": "http://mycarrier-api.prod.svc.cluster.local:8080"
-                  },
-                  "TestName": "apitests",
-                  "TestTags": [
-                    "Smoke"
-                  ],
-                  "Tolerations": [
-                    {
-                      "effect": "NoSchedule",
-                      "key": "kubernetes.azure.com/scalesetpriority",
-                      "operator": "Equal",
-                      "value": "spot"
-                    }
-                  ],
-                  "UseDefaultNodeAffinity": "false"
-                }
-              ]
-            }
+      - failedTemplate:
+          errorPattern: 'application ''api'': a Rollout in prod cannot use testEnvironmentTag yet\..*posts to TestEngine''s v1 trigger only \(DEVOPS-319\).*Keep filters on applications\.api\.testtrigger\.testdefinitions in the prod values'
 
-  - it: "AQA-38: the ConfigMap holds the v2 request and version v2 for a tag (no results API)"
+  - it: "AQA-38: refuses testEnvironmentTag on a prod canary Rollout until rollout-watch posts v2 (no results API)"
     set:
       global: *globalDarkOff
       environment: *prod
@@ -651,15 +594,8 @@ tests:
                 secretId: vault:QA/data/app_auth#SecretId
                 testEnvironmentTag: CoreAPI
     asserts:
-      - equal:
-          path: data.version
-          value: v2
-      - matchRegex:
-          path: data["request.json"]
-          pattern: '"TestEnvironmentTag": "CoreAPI"'
-      - notMatchRegex:
-          path: data["request.json"]
-          pattern: 'TestFilters|TestTags|MultiRun|ResultsApi'
+      - failedTemplate:
+          errorPattern: "application 'api': a Rollout in prod cannot use testEnvironmentTag yet"
 
   - it: "AQA-38: a v1 application's ConfigMap has no version key (results API)"
     set:

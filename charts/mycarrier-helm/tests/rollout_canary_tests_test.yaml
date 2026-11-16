@@ -2099,11 +2099,14 @@ tests:
           errorPattern: 'EnvVars: test definition "t2": request_too_large$'
 
   # AQA-38: the tests run posts to TestEngine's v1 trigger only, so a test definition with testEnvironmentTag (v2)
-  # fails the render instead of sending no filter, which would run every test in the image.
+  # fails the render instead of sending no filter, which would run every test in the image. It runs in preprod: in prod,
+  # triggertestengine.yaml refuses the tag first (rollout-watch posts v1 only, DEVOPS-319).
   - it: "AQA-38: refuses a test definition with testEnvironmentTag"
     template: analysistemplate.yaml
     set:
       <<: *prod
+      environment:
+        name: preprod
       applications:
         api:
           <<: *api
