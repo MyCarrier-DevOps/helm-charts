@@ -24,7 +24,7 @@
                   "type": "string",
                   "enum": ["standard", "fast", "manual"],
                   "default": "standard",
-                  "description": "Step ladder. standard: 10, 25 and 50 with a 5m pause after each, then 100. fast: 25, then 100. manual: 10, then a pause until resumed, then 100. An analysis step follows each weight and runs health (unless analysis.health.enabled is false) and the extra analysis.templates."
+                  "description": "Step ladder. standard: 10, 25 and 50 with a pause after each (5m, or pauses.w<weight>), then 100. fast: 25, then 100. manual: 10, then a pause until resumed, then 100. An analysis step follows each weight and runs health (unless analysis.health.enabled is false) and the extra analysis.templates."
                 },
                 "stepsOutsideProd": {
                   "type": "boolean",
@@ -36,6 +36,16 @@
                   "pattern": "^[0-9]+(s|m|h)$",
                   "default": "40m",
                   "description": "How long the release's rollout-watch allows for the manual preset's pause (Tech Spec D22): it counts as this duration in the canary budget (mycarrier.tech/canaryBudgetSeconds). The pause itself has no time limit. With the manual preset, zero fails the render. Ignored by the standard and fast presets and by an explicit steps list. The default 40m is the largest whole 5 minutes that keeps the manual preset's leader budget, with the dark stage, at or below 5700 s (5583 s; DEVOPS-326)."
+                },
+                "pauses": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The standard preset's pause after each weight (DEVOPS-603); a key that is not set keeps 5m. Each pause is at least 1m and the three add up to at least 10m, or the render fails: alerts and compare run as background analysis from the first weight until promotion and need that long to measure the canary. The pauses count in the canary budget (mycarrier.tech/canaryBudgetSeconds), so its 5700 s limit caps their sum (1257 s, about 21 minutes, with the other defaults). Only the standard preset reads it: with fast or manual it fails the render; an explicit steps list ignores it. For a hotfix, promote the Rollouts in full from the Rollouts interface, or set preset fast with dark false and put the values back afterwards.",
+                  "properties": {
+                    "w10": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "5m", "description": "Pause after the 10% weight's analysis step, before the w10 barrier." },
+                    "w25": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "5m", "description": "Pause after the 25% weight's analysis step, before the w25 barrier." },
+                    "w50": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "5m", "description": "Pause after the 50% weight's analysis step, before the w50 barrier." }
+                  }
                 },
                 "steps": {
                   "type": "array",

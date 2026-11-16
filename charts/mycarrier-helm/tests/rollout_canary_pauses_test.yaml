@@ -1,0 +1,331 @@
+suite: Rollout canary pauses per weight (global.strategy.canary.pauses, DEVOPS-603)
+# The standard preset pauses after each weight's analysis step: 5m by default, or pauses.w10, w25 and w50. Each pause
+# is at least 1m and the three add up to at least 10m; the budget (mycarrier.tech/canaryBudgetSeconds) adds the
+# durations, so the 5700 s limit caps them. fast and manual refuse pauses; an explicit steps list ignores them.
+# With the dark stage off and the coordinator on, the standard steps are: 0 start, 1 setWeight 10, 2 analysis,
+# 3 pause, 4 w10, 5 setWeight 25, 6 analysis, 7 pause, 8 w25, 9 setWeight 50, 10 analysis, 11 pause, 12 w50,
+# 13 setWeight 100. Budget with the defaults: start 540 + 3 x (health 90 + pause 300 + barrier 540) = 3330.
+templates:
+  - rollout.yaml
+tests:
+  - it: keeps 5m after every weight without pauses
+    set:
+      global: &global
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+      environment: &preprod
+        name: preprod
+      applications:
+        api: &rollout
+          deploymentType: rollout
+          image:
+            registry: registry.example.com
+            repository: api
+            tag: "1.0.0"
+          ports:
+            http: 8080
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[3]
+          value:
+            pause:
+              duration: 5m
+      - equal:
+          path: spec.strategy.canary.steps[7]
+          value:
+            pause:
+              duration: 5m
+      - equal:
+          path: spec.strategy.canary.steps[11]
+          value:
+            pause:
+              duration: 5m
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3330"
+
+  # 3330 + (600 - 300)
+  - it: renders a configured pause on its own weight and keeps 5m on the others
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: 10m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[3].pause.duration
+          value: 10m
+      - equal:
+          path: spec.strategy.canary.steps[7].pause.duration
+          value: 5m
+      - equal:
+          path: spec.strategy.canary.steps[11].pause.duration
+          value: 5m
+      - equal:
+          path: spec.strategy.canary.steps[4].plugin.config.name
+          value: w10
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3630"
+
+  # 3330 + 300 + 60 - 60
+  - it: renders a pause per weight and adds each difference from 5m to the budget
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: 10m
+              w25: 6m
+              w50: 4m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[3].pause.duration
+          value: 10m
+      - equal:
+          path: spec.strategy.canary.steps[7].pause.duration
+          value: 6m
+      - equal:
+          path: spec.strategy.canary.steps[11].pause.duration
+          value: 4m
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3630"
+
+  # 1m + 4m + 5m = 10m, the smallest sum; 3330 - 240 - 60
+  - it: accepts a 1m pause when the three add up to 10m
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: 1m
+              w25: 4m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[3].pause.duration
+          value: 1m
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3030"
+
+  - it: fails pauses that add up to less than 10m
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: 3m
+              w25: 3m
+              w50: 3m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.pauses add up to 540 s \\(w10 3m, w25 3m, w50 3m\\); the three pauses together need at least 10m"
+
+  - it: fails a pause below 1m
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: 59s
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.pauses.w10 is 59s; each pause is at least 1m"
+
+  # The schema refuses a value that is not a duration and a key that is not a weight; the template refuses them too
+  # in a render without schema validation (checked by hand: helm template --skip-schema-validation).
+  - it: fails a pause that is not a duration
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: 1d
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "pauses[./]w10.*[Dd]oes not match pattern"
+
+  - it: fails a key that is not a weight of the standard preset
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w30: 5m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "([Aa]dditional propert(y|ies) '?w30'? (is )?not allowed)"
+
+  - it: fails pauses with the fast preset
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            preset: fast
+            pauses:
+              w25: 5m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.pauses is set, and the fast preset has no timed pauses"
+
+  - it: fails pauses with the manual preset
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            preset: manual
+            pauses:
+              w10: 5m
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.strategy.canary.pauses is set, and the manual preset has no timed pauses"
+
+  - it: ignores pauses with an explicit steps list
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            pauses:
+              w10: 10m
+            steps:
+              - setWeight: 20
+              - pause:
+                  duration: 2m
+              - setWeight: 100
+            budgetSeconds: 120
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 20
+            - pause:
+                duration: 2m
+            - setWeight: 100
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "120"
+
+  # The standard leader with the dark stage uses 5343 s (rollout_canary_budget_test.yaml, "budgets fit"), so 357 s
+  # are left: w10 10m (5643 s) fits, w10 11m (5703 s) does not, and the message names the pauses.
+  - it: fits w10 10m in the leader's budget with the dark stage
+    set:
+      global: &fitGlobal
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            leader: api
+            pauses:
+              w10: 10m
+      environment:
+        name: prod
+      applications: &fitApps
+        api:
+          <<: *rollout
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+        worker:
+          <<: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5643"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-api
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "5070"
+        documentSelector:
+          path: metadata.name
+          value: test-stack-worker
+
+  - it: fails pauses that put the budget above 5700 s and names them
+    set:
+      global:
+        <<: *fitGlobal
+        strategy:
+          canary:
+            leader: api
+            pauses:
+              w10: 11m
+      environment:
+        name: prod
+      applications: *fitApps
+    asserts:
+      - failedTemplate:
+          errorPattern: "the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5703 s; the maximum is 5700 s.*Lower global.strategy.canary.pauses"
