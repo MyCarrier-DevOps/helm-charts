@@ -257,6 +257,29 @@ tests:
       - failedTemplate:
           errorPattern: "manualTimeout.*does not match pattern"
 
+  # helm.canary.durationSeconds reads the number as decimal, as Argo Rollouts does: 040m counts 2400 s, as 40m, not
+  # octal 32 minutes.
+  - it: counts a manualTimeout with leading zeros as decimal
+    set:
+      global:
+        deploymentStrategy: canary
+        appStack: test-stack
+        language: csharp
+        correlationId: corr-1
+        strategy:
+          canary:
+            dark: false
+            stepsOutsideProd: true
+            preset: manual
+            manualTimeout: "040m"
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3570"
+
   - it: ignores manualTimeout with the standard preset
     set:
       global:

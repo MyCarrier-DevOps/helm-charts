@@ -329,3 +329,44 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "the canary budget \\(mycarrier.tech/canaryBudgetSeconds\\) is 5703 s; the maximum is 5700 s.*Lower global.strategy.canary.pauses"
+
+  # helm.canary.durationSeconds reads the number as decimal, as Argo Rollouts does: 010m is 10 minutes (3630 s, as
+  # w10 10m), and 09m is 9 minutes (3570 s), not octal 8 or 0.
+  - it: counts a pause with leading zeros as decimal
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: "010m"
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[3].pause.duration
+          value: "010m"
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3630"
+
+  - it: counts 09m as nine minutes
+    set:
+      global:
+        <<: *global
+        strategy:
+          canary:
+            stepsOutsideProd: true
+            dark: false
+            pauses:
+              w10: "09m"
+      environment: *preprod
+      applications:
+        api: *rollout
+    asserts:
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3570"

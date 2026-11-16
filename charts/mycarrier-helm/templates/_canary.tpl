@@ -612,11 +612,13 @@
 {{- end -}}
 
 {{- /* A duration such as 90s, 9m or 1h (a barrier timeout, a pause, an analysis interval, manualTimeout), in seconds;
-       any other form yields 0, so a barrier timeout in another form is not checked. */ -}}
+       any other form yields 0, so a barrier timeout in another form is not checked. The number is decimal, as Argo
+       Rollouts reads it (Go time.ParseDuration): leading zeros are dropped before int, which would read 010 as octal
+       8 and 09 as 0. */ -}}
 {{- define "helm.canary.durationSeconds" -}}
 {{- $v := toString . -}}
 {{- if regexMatch "^[0-9]+(s|m|h)$" $v -}}
-  {{- $n := trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v)) | int -}}
+  {{- $n := regexReplaceAll "^0+([0-9])" (trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v))) "${1}" | int -}}
   {{- if hasSuffix "h" $v }}{{ mul $n 3600 }}{{ else if hasSuffix "m" $v }}{{ mul $n 60 }}{{ else }}{{ $n }}{{ end -}}
 {{- else -}}0{{- end -}}
 {{- end -}}
