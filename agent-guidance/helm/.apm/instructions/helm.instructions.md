@@ -1366,7 +1366,7 @@ applications:
 
 ### Tag-based test runs (`testEnvironmentTag`)
 
-A test definition can set `testEnvironmentTag` in place of `filters` (mycarrier-helm, AQA-38). The PostSync hook then posts to TestEngine's v2 trigger (`/v2/trigger`), which runs the tests carrying that tag (a `TestCategory`) in one Job, reported under Stage = the tag. Optional `testTags` narrows the run to tests that also carry every listed tag; optional `multiRun` (default `false`) asks for packed Jobs, which TestEngine does not do yet.
+A test definition can set `testEnvironmentTag` in place of `filters` (mycarrier-helm, AQA-38). The PostSync hook then posts to TestEngine's v2 trigger (`/v2/trigger`), which runs the tests carrying that tag (a `TestCategory`) in one Job, reported under Stage = the tag. Optional `testTags` narrows the run to tests that also carry every listed tag; optional `multiRun` (default `false`) asks for packed Jobs, which TestEngine does only while its `GET /v1/capabilities` reports `multi_run_enabled: true` (the `MULTI_RUN_ENABLED` switch, off by default); otherwise the run is one Job and the hook logs a `WARN:` line.
 
 ```yaml
 applications:
@@ -1503,7 +1503,7 @@ applications:
 | `testdefinitions[].filters` | Test category filters: a list of strings or one string. Sent to TestEngine's v1 trigger; not together with `testEnvironmentTag` | `[]` (runs all) |
 | `testdefinitions[].testEnvironmentTag` | Tag (a `TestCategory` in the test code) of the tests to run, sent to TestEngine's v2 trigger in place of `filters`. See [Tag-based test runs](#tag-based-test-runs-testenvironmenttag) | Not set (v1) |
 | `testdefinitions[].testTags` | With `testEnvironmentTag` only: run the tests that carry the tag and every listed tag (at most 10) | Not set |
-| `testdefinitions[].multiRun` | With `testEnvironmentTag` only: ask TestEngine for packed Jobs; not acted on yet (one Job) | `false` |
+| `testdefinitions[].multiRun` | With `testEnvironmentTag` only: ask TestEngine for packed Jobs; one Job unless TestEngine reports `multi_run_enabled: true` | `false` |
 | `testdefinitions[].name` | Test name identifier | Required |
 | `testdefinitions[].secretId` | Auth secret (vault ref) | Required |
 | `testdefinitions[].serviceAddress` | Override target service address. With canary `tests`, it must point at the application's own Service (or its `-preview` Service), with no port or the `http` Service port: the canary run keeps its path on the `-preview` Service, and another host or port fails the render | Auto: `http://<fullname>.<ns>.svc.cluster.local:<http Service port>`, the `service.ports` entry named `http`, else `ports.http` |

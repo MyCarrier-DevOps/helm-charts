@@ -518,7 +518,7 @@
                     },
                     "multiRun": {
                       "type": "boolean",
-                      "description": "AQA-38: optional, with testEnvironmentTag only: asks TestEngine to pack the tag's tests into several Jobs. TestEngine does not act on it yet (multi_run_enabled false in GET /v1/capabilities): the run is one Job, and the hook logs a WARN line.",
+                      "description": "AQA-38: optional, with testEnvironmentTag only: asks TestEngine to pack the tag's tests into several Jobs. TestEngine packs them only while GET /v1/capabilities reports multi_run_enabled true (its MULTI_RUN_ENABLED switch, off by default); otherwise the run is one Job, and the hook logs a WARN line.",
                       "default": false
                     },
                     "serviceAddress": {
