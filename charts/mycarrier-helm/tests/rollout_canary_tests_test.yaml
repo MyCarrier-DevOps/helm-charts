@@ -2097,3 +2097,23 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "t2": request_too_large$'
+
+  # AQA-38: the tests run posts to TestEngine's v1 trigger only, so a test definition with testEnvironmentTag (v2)
+  # fails the render instead of sending no filter, which would run every test in the image.
+  - it: "AQA-38: refuses a test definition with testEnvironmentTag"
+    template: analysistemplate.yaml
+    set:
+      <<: *prod
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: CoreAPI
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': test definition 'apitests' sets testEnvironmentTag, testTags or multiRun \\(TestEngine's v2 trigger\\), and the canary tests run posts to TestEngine's v1 trigger only. Keep filters on this application's test definitions, define your own tests entry under applications.api.analysisTemplates, or leave tests out of global.strategy.canary.analysis.templates"

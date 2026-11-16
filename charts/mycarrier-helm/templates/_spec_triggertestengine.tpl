@@ -21,6 +21,7 @@
 {{- $apiPath := ternary "testengine/api/v1" "testengine/api" $enableV1 }}
 {{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (printf "vault:DevOps/data/%s#%s" $apiPath $urlKey) }}
 {{- if dig "testtrigger" false .application }}
+{{- $triggerVersion := include "helm.testtrigger.version" . }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
 activeDeadlineSeconds: {{ dig "testtrigger" "activeDeadlineSeconds" 300 .application }}
 backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
@@ -85,7 +86,9 @@ template:
           - |
             set -u
             failed=0
-          {{- if $enableV1 }}
+          {{- if eq $triggerVersion "v2" }}
+          {{- include "helm.testtrigger.v2curls" . }}
+          {{- else if $enableV1 }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
             --max-time 60 \
             -X POST \
@@ -239,6 +242,9 @@ empty), and correlationId (CorrelationId, a string).
 {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
 {{- $tests := list }}
 {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
+{{- if and (not $.v2Build) (include "helm.testtrigger.hasV2Fields" .) }}
+  {{- fail (printf "test definition '%s' of '%s': testEnvironmentTag, testTags and multiRun go to TestEngine's v2 trigger, and this request is a v1 request, which would send no filter and run every test in the image. Use filters here" (toString .name) $fullName) }}
+{{- end }}
 {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
 {{- with $run.serviceAddresses }}{{ $serviceAddress = index . $index }}{{ end }}
 {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
@@ -357,4 +363,193 @@ change both together.
 {{- if ne (empty $def.resultsApiUrl) (empty $def.resultsApiKey) }}
   {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" $def.name .fullName) }}
 {{- end }}
+{{- end }}
+
+{{/*
+helm.testtrigger.hasV2Fields: "true" when a test definition sets a v2 field with a value (testEnvironmentTag not empty,
+testTags not empty, or multiRun true), else "". Takes the test definition. Presence is by value, as on TestEngine's
+/v2/trigger: testEnvironmentTag "", testTags [] and multiRun false read as absent.
+*/}}
+{{- define "helm.testtrigger.hasV2Fields" -}}
+{{- if or (not (empty .testEnvironmentTag)) (not (empty .testTags)) (eq (toString .multiRun) "true") }}true{{ end }}
+{{- end }}
+
+{{/*
+helm.testtrigger.version (AQA-38): the TestEngine trigger an application's test definitions go to, "v1" or "v2", after
+checking their v2 fields. Takes the application context. A definition with filters, or with neither filters nor a tag
+(it runs every test), goes to v1; a definition with testEnvironmentTag goes to v2 (TestEngine's /v2/trigger,
+MC.TestEngine docs/V2_TRIGGER.md). All definitions of an application go to the same version: each version is its own
+batch, and two batches with one correlation id write the slip's tests step twice, read as a retry of each other and
+get one check-run each. The tag rules are TestEngine's (trigger_v2.go validateV2Entry, shared with the Worker through
+testdata/v2_message_cases.json): letters, digits, '_', '.' and '-', at most 100 characters and at least one letter or
+digit; at most 10 testTags, each with the same characters and length. A tag needs testtrigger.enableV1: the legacy
+per-definition call would send no filter and run every test. Every failure names the definition and the field.
+*/}}
+{{- define "helm.testtrigger.version" -}}
+{{- $fullName := include "helm.fullname" . }}
+{{- $enableV1 := dig "testtrigger" "enableV1" true .application }}
+{{- $v1 := list }}
+{{- $v2 := list }}
+{{- $tagChars := "must use only letters, digits, '_', '.' and '-' (TestEngine's /v2/trigger refuses any other character)" }}
+{{- range dig "testtrigger" "testdefinitions" list .application }}
+  {{- $where := printf "test definition '%s' of '%s'" (toString .name) $fullName }}
+  {{- if not (or (kindIs "invalid" .testEnvironmentTag) (kindIs "string" .testEnvironmentTag)) }}
+    {{- fail (printf "%s: testEnvironmentTag must be a string" $where) }}
+  {{- end }}
+  {{- if not (or (kindIs "invalid" .testTags) (kindIs "slice" .testTags)) }}
+    {{- fail (printf "%s: testTags must be a list of strings" $where) }}
+  {{- end }}
+  {{- if not (or (kindIs "invalid" .multiRun) (kindIs "bool" .multiRun)) }}
+    {{- fail (printf "%s: multiRun must be true or false" $where) }}
+  {{- end }}
+  {{- $tag := .testEnvironmentTag | default "" }}
+  {{- $testTags := .testTags | default list }}
+  {{- if not $tag }}
+    {{- if $testTags }}
+      {{- fail (printf "%s: testTags needs testEnvironmentTag. testTags narrows the tests of a tag on TestEngine's v2 trigger; set testEnvironmentTag, or remove testTags and keep filters" $where) }}
+    {{- end }}
+    {{- if .multiRun }}
+      {{- fail (printf "%s: multiRun needs testEnvironmentTag. multiRun packs the tests of a tag on TestEngine's v2 trigger; set testEnvironmentTag, or remove multiRun and keep filters" $where) }}
+    {{- end }}
+    {{- $v1 = append $v1 (toString .name) }}
+  {{- else }}
+    {{- if not (empty .filters) }}
+      {{- fail (printf "%s: set either filters (TestEngine's v1 trigger) or testEnvironmentTag (its v2 trigger), not both. To move the definition to v2, replace filters with testEnvironmentTag" $where) }}
+    {{- end }}
+    {{- if gt (len $tag) 100 }}
+      {{- fail (printf "%s: testEnvironmentTag must be at most 100 characters" $where) }}
+    {{- end }}
+    {{- if not (regexMatch "^[A-Za-z0-9_.-]+$" $tag) }}
+      {{- fail (printf "%s: testEnvironmentTag '%s' %s" $where $tag $tagChars) }}
+    {{- end }}
+    {{- if not (regexMatch "[A-Za-z0-9]" $tag) }}
+      {{- fail (printf "%s: testEnvironmentTag '%s' must contain a letter or digit" $where $tag) }}
+    {{- end }}
+    {{- if gt (len $testTags) 10 }}
+      {{- fail (printf "%s: testTags allows at most 10 entries" $where) }}
+    {{- end }}
+    {{- range $i, $testTag := $testTags }}
+      {{- if not (kindIs "string" $testTag) }}
+        {{- fail (printf "%s: testTags[%d] must be a string" $where $i) }}
+      {{- end }}
+      {{- if gt (len $testTag) 100 }}
+        {{- fail (printf "%s: testTags[%d] must be at most 100 characters" $where $i) }}
+      {{- end }}
+      {{- if not (regexMatch "^[A-Za-z0-9_.-]+$" $testTag) }}
+        {{- fail (printf "%s: testTags[%d] '%s' %s" $where $i $testTag $tagChars) }}
+      {{- end }}
+    {{- end }}
+    {{- if not $enableV1 }}
+      {{- fail (printf "%s: testEnvironmentTag needs testtrigger.enableV1: true. With enableV1 false the chart sends one legacy call per definition, which has no tag and would run every test in the image" $where) }}
+    {{- end }}
+    {{- $v2 = append $v2 (toString .name) }}
+  {{- end }}
+{{- end }}
+{{- if and $v1 $v2 }}
+  {{- fail (printf "application '%s': test definition '%s' goes to TestEngine's v1 trigger (filters) and '%s' to its v2 trigger (testEnvironmentTag). All test definitions of an application use the same trigger: each trigger is its own batch, and two batches of one deployment write its tests step twice. Move every definition to testEnvironmentTag in one change, or keep filters on all of them" $fullName (first $v1) (first $v2)) }}
+{{- end }}
+{{- ternary "v2" "v1" (not (empty $v2)) }}
+{{- end }}
+
+{{/*
+helm.testtrigger.v2request (AQA-38): the TestEngine v2 request for an application whose test definitions set
+testEnvironmentTag, as indented JSON: helm.testtrigger.v1request without TestFilters, plus TestEnvironmentTag, TestTags
+(left out when empty) and MultiRun (left out when false) on each entry. Built from the v1 request, so every other field
+(resources, tolerations, results API, EnvVars and its 64 KiB cap) is the same in both. Takes the application context;
+call it only after helm.testtrigger.version answered v2.
+*/}}
+{{- define "helm.testtrigger.v2request" -}}
+{{- $v1 := include "helm.testtrigger.v1request" (merge (dict "v2Build" true) .) | fromJson }}
+{{- if not (kindIs "slice" $v1.Tests) }}
+  {{- fail (printf "'%s': the v1 request did not decode for the v2 request: %v" (include "helm.fullname" .) (index $v1 "Error" | default "no Tests")) }}
+{{- end }}
+{{- $definitions := dig "testtrigger" "testdefinitions" list .application }}
+{{- $tests := list }}
+{{- range $index, $test := $v1.Tests }}
+  {{- $definition := index $definitions $index }}
+  {{- $test = omit $test "TestFilters" }}
+  {{- $_ := set $test "TestEnvironmentTag" $definition.testEnvironmentTag }}
+  {{- with $definition.testTags }}{{ $_ := set $test "TestTags" . }}{{ end }}
+  {{- if $definition.multiRun }}{{ $_ := set $test "MultiRun" true }}{{ end }}
+  {{- $tests = append $tests $test }}
+{{- end }}
+{{- dict "Tests" $tests | toPrettyJson }}
+{{- end }}
+
+{{/*
+helm.testtrigger.v2curls (AQA-38): the PostSync hook's script for an application on TestEngine's v2 trigger, as the text
+that goes into the script (12-space block indentation, like helm.testtrigger.legacyCurls). Takes the application context.
+TESTENGINEHOOK_URL is the v1 trigger URL; the API root is that URL without a trailing /v1/trigger or /trigger (as the
+canary tests script's api_base). Before the post it reads GET /v1/capabilities: a 404 (a TestEngine older than
+capabilities) or a trigger_versions without "v2" means v2 is switched off in that TestEngine, and nothing is posted.
+With v2 listed, a 404 on POST /v2/trigger means the route to it is missing. Every failure logs an ERROR: line and counts
+in failed; the script still exits 0, as the v1 hook does, so Argo CD does not retry the sync. There is no fallback to v1.
+No temp files: the container's root filesystem is read-only, so curl's output is read from a command substitution with
+the HTTP status on its last line. The body is escaped by helm.testtrigger.commandSafeJson, as the v1 body, and assigned
+to payload outside any $(...): kubelet reads $(...) up to its first ) as one variable name and leaves that span as it
+is, so a $$ inside it would reach TestEngine doubled.
+*/}}
+{{- define "helm.testtrigger.v2curls" -}}
+{{- $multiRun := false }}
+{{- range dig "testtrigger" "testdefinitions" list .application }}
+  {{- if .multiRun }}{{ $multiRun = true }}{{ end }}
+{{- end }}
+            base=${TESTENGINEHOOK_URL%/}
+            case "$base" in
+              */v1/trigger) base=${base%/v1/trigger} ;;
+              */trigger) base=${base%/trigger} ;;
+            esac
+            v2=0
+            out=$(curl -sS --max-time 15 -H "Authorization: $TESTENGINE_APIKEY" -w '\n%{http_code}' "$base/v1/capabilities")
+            rc=$?
+            code=$(printf '%s\n' "$out" | tail -n 1)
+            body=$(printf '%s\n' "$out" | sed '$d')
+            if [ "$rc" -ne 0 ]; then
+              echo "ERROR: TestEngine v2 trigger not sent: GET /v1/capabilities failed (curl exit $rc)" >&2
+              failed=$((failed+1))
+            elif [ "$code" = "404" ]; then
+              echo "ERROR: TestEngine v2 trigger not sent: v2 is switched off in this TestEngine (GET /v1/capabilities answered 404: the API is older than v2). Switch on TRIGGER_V2_ENABLED there, or put filters back in the test definitions" >&2
+              failed=$((failed+1))
+            elif [ "$code" != "200" ]; then
+              printf '%s\n' "$body"
+              echo "ERROR: TestEngine v2 trigger not sent: GET /v1/capabilities answered HTTP $code" >&2
+              failed=$((failed+1))
+            elif ! printf '%s' "$body" | tr -d ' \t\r\n' | grep -q '"trigger_versions":\[[^]]*"v2"'; then
+              echo "ERROR: TestEngine v2 trigger not sent: v2 is switched off in this TestEngine (GET /v1/capabilities does not list v2 in trigger_versions). Switch on TRIGGER_V2_ENABLED there, or put filters back in the test definitions" >&2
+              failed=$((failed+1))
+            else
+              v2=1
+            fi
+{{- if $multiRun }}
+            if [ "$v2" -eq 1 ] && ! printf '%s' "$body" | tr -d ' \t\r\n' | grep -q '"multi_run_enabled":true'; then
+              echo "WARN: multiRun is set, and this TestEngine does not pack Jobs yet (multi_run_enabled is not true): each test definition runs as one Job" >&2
+            fi
+{{- end }}
+            if [ "$v2" -eq 1 ]; then
+              payload='{{ include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.testtrigger.v2request" .) "application" .application "argoTemplate" false) | indent 14 | trimPrefix "              " }}'
+              out=$(curl -sS --max-time 60 -w '\n%{http_code}' \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -H "Authorization: $TESTENGINE_APIKEY" \
+              -d "$payload" "$base/v2/trigger")
+              rc=$?
+              code=$(printf '%s\n' "$out" | tail -n 1)
+              printf '%s\n' "$out" | sed '$d'
+              echo "TestEngine HTTP status: $code"
+              if [ "$rc" -ne 0 ]; then
+                echo "ERROR: TestEngine v2 trigger failed (curl exit $rc)" >&2
+                failed=$((failed+1))
+              elif [ "$code" = "404" ]; then
+                echo "ERROR: TestEngine v2 trigger failed: TestEngine lists v2 in /v1/capabilities, and POST /v2/trigger answered 404: the /v2/trigger route is missing (the mesh does not route it to the API)" >&2
+                failed=$((failed+1))
+              else
+                case "$code" in
+                  2??) ;;
+                  *)
+                    echo "ERROR: TestEngine v2 trigger failed (HTTP $code)" >&2
+                    failed=$((failed+1))
+                    ;;
+                esac
+              fi
+            fi
 {{- end }}
