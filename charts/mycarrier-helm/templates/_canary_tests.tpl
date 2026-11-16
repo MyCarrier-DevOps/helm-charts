@@ -48,7 +48,12 @@
 {{- range (.context.application.analysisTemplates | default list) }}{{ if eq (toString .name) $.name }}{{ $replaced = true }}{{ end }}{{ end -}}
 {{- if not $replaced -}}
   {{- $trigger := .context.application.testtrigger | default dict -}}
-  {{- if not (and (kindIs "map" $trigger) (get $trigger "testdefinitions")) -}}
+  {{- $split := dict -}}
+  {{- if kindIs "map" $trigger -}}
+    {{- include "helm.testtrigger.splitDefinitions" (dict "application" .context.application "appName" .context.appName "out" $split) -}}
+  {{- end -}}
+  {{- /* Scheduled test definitions (AQA-90) do not count: they never run in the canary run. */ -}}
+  {{- if not $split.plain -}}
     {{- fail .message -}}
   {{- end -}}
 true
@@ -140,7 +145,15 @@ true
        so such a filter fails the render here, with TestEngine's own reading of a filter: the text before the first &,
        without TestCategory=. A filter TestEngine reads from Vault (a vault: reference) is not known here. */ -}}
 {{- define "helm.canary.tests.request" -}}
+{{- /* Scheduled test definitions (AQA-90) run on their own CronJobs, never in the canary run. */ -}}
+{{- $split := dict -}}
+{{- include "helm.testtrigger.splitDefinitions" (dict "application" .context.application "appName" .context.appName "out" $split) -}}
 {{- $ctx := .context -}}
+{{- if $split.scheduled -}}
+  {{- $ctx = dict -}}
+  {{- range $key, $value := .context }}{{ $_ := set $ctx $key $value }}{{ end -}}
+  {{- $_ := set $ctx "application" $split.application -}}
+{{- end -}}
 {{- $fullName := include "helm.fullname" $ctx -}}
 {{- $namespace := include "helm.namespace" $ctx -}}
 {{- /* The wording of the failures below: the run and the way out follow the template (name), the target Service follows the target. */ -}}

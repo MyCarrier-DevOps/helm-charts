@@ -508,6 +508,20 @@
                       "type": "string",
                       "description": "Optional service address for the test to target"
                     },
+                    "schedule": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Cron schedule (AQA-90). A definition with a schedule renders as its own CronJob <fullName>-<name> that asks TestEngine's v1 trigger for a loop run (RunKind loop, SlipStep none, no CorrelationId, ReleaseId = containerTag) on that schedule, and leaves the PostSync hook, the prod-tests ConfigMap and the canary tests. Needs enableV1 (not false), a DNS-label name and none of testEnvironmentTag, testTags or multiRun: true, or the render fails. serviceAddress is sent but not used."
+                    },
+                    "suspend": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Suspends the CronJob of a scheduled definition (schedule set); ignored without schedule."
+                    },
+                    "targetEnvironment": {
+                      "type": "string",
+                      "description": "EnvironmentName of a scheduled definition's loop run, the environment its tests run against (for example prodactive); defaults to the namespace. Ignored without schedule."
+                    },
                     "additionalEnvVars": {
                       "type": "string",
                       "description": "Additional environment variables to pass to the test container. Deprecated: use env"

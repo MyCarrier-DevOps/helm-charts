@@ -198,6 +198,12 @@ jobs:
         if: ${{ matrix.chart == 'charts/mycarrier-helm' }}
         run: python3 -I .github/scripts/test_canary_tests_check.py
 
+      # A scheduled test definition's CronJob asks TestEngine for a loop run (AQA-90); its script must fail the Job on
+      # anything but a started run or the lease 409, so its exit codes are tested against a stub TestEngine.
+      - name: scheduled trigger script exit codes
+        if: ${{ matrix.chart == 'charts/mycarrier-helm' }}
+        run: python3 -I .github/scripts/test_scheduled_trigger_check.py
+
       # chart-renderer lints every rendered mycarrier-helm package with kube-linter. A Rollout app's Services and prod
       # HPA must pass its dangling checks, and a Service that selects no workload must still fail them (DEVOPS-534).
       # A stack that deploys the in-cluster MongoDB must pass too, and a workload that reads another Secret must still

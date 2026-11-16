@@ -1474,8 +1474,72 @@ applications:
 | `testdefinitions[].resultsApiUrl` | autotest-results-api base URL, as `AUTOTEST_RESULTS_API_URL` on the test container: `vault:QA/data/autotestresults_api#url`, or an `https` URL under `mycarrier.tech` with no user info (the schema refuses anything else). Set together with `resultsApiKey`: one without the other fails the render. No default | Not set |
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
 | `testdefinitions[].hardenedSecurityContext` | Run the test pod non-root with a read-only root filesystem | `true` |
+| `testdefinitions[].schedule` | Cron schedule. Makes the definition a scheduled loop trigger, its own CronJob instead of part of the hook. See [Scheduled test definitions](#scheduled-test-definitions) | Not set |
+| `testdefinitions[].suspend` | Suspends a scheduled definition's CronJob; ignored without `schedule` | `false` |
+| `testdefinitions[].targetEnvironment` | `EnvironmentName` of a scheduled definition's loop run, the environment its tests run against (for example `prodactive`); ignored without `schedule` | The namespace |
 
 The chart picks the TestEngine URL itself (from Vault, by `enableV1` and the pipeline's Argo Events instance); there is no URL value to set. The hook never fails the sync: when a call to TestEngine fails, the trigger pod logs an `ERROR:` line with the HTTP status and still exits 0. The Job is deleted when it finishes, so if tests do not appear in TestEngine, check the trigger pod's log during the sync.
+
+### Scheduled test definitions
+
+A test definition with `schedule` is a scheduled loop trigger (AQA-90). It does not join the PostSync hook: the chart renders it as its own CronJob, `<fullName>-<name>` in the application's namespace, which asks TestEngine for one `loop` run on each tick. The hook, the prod-tests ConfigMap and the canary `tests` run only the definitions without `schedule`; an application whose definitions all have `schedule` gets no hook. Definitions without `schedule` render exactly as before.
+
+- **What it sends.** The hook's v1 request for that one definition, with `RunKind: loop`, `SlipStep: none`, no `CorrelationId` (TestEngine mints one per run), `EnvironmentName` from `targetEnvironment` (default: the namespace) and `ReleaseId` = `containerTag`. The other fields (`filters`, `secretId`, `releaseDefinitionName`, `resultsApiKey`/`resultsApiUrl`, `podResources`, `env`, ...) work as for the hook.
+- **`ServiceAddress` is unused.** TestEngine requires one, so the chart sends the definition's `serviceAddress` or its default address as for the hook; a loop run does not use it, so leave `serviceAddress` unset.
+- **Tag.** The image tag updater rewrites every `testdefinitions[].containerTag`, scheduled ones included, so the loop follows the latest build of its image with no change.
+- **The CronJob.** `concurrencyPolicy: Forbid`, `startingDeadlineSeconds: 120`, `suspend` from the definition (default `false`). Its Job is the hook's: the same `alpine/curl` container, `apikey`, TestEngine URL, Vault annotations, `activeDeadlineSeconds`, `ttlSecondsAfterFinished`, `backoffLimit` and `resources` from `testtrigger`. A name longer than 52 characters is cut to 43 and gets a hash of the full name.
+- **Exit codes.** Unlike the hook, which always exits 0, the Job fails when the tick starts no run. It exits 0 when TestEngine answers `200`, and when it answers `409` because the previous run of the same loop still holds its lease (that tick is skipped). Any other status, other `409`s included, and no answer fail the Job, so a missed tick shows as a failed Job in the namespace.
+- **v1 only.** Loops need TestEngine's `/v1/trigger`. The render fails for a scheduled definition when `testtrigger.enableV1` is `false`, or when it sets `testEnvironmentTag`, `testTags` or `multiRun: true`.
+- **Name.** It names the CronJob: lowercase letters, digits and `-`, starting and ending with a letter or digit, and unique among the application's scheduled definitions, or the render fails.
+- **Where.** In the environment's `deployment/values.{env}.yaml`, beside the other test definitions (Layout B: the `testtrigger` of that environment's `environments[]` entry).
+
+```yaml
+# helm/values.yaml
+global:
+  appStack: myservice
+  language: csharp
+
+# helm/values.uat.yaml
+environment:
+  name: uat
+
+# helm/deployment/values.yaml
+applications:
+  web:
+    image:
+      registry: mycarrieracr.azurecr.io
+      repository: appstack/myservice/web
+    ports:
+      http: 8080
+
+# helm/deployment/values.uat.yaml
+applications:
+  web:
+    image:
+      tag: 1.0.0
+    testtrigger:
+      apikey: vault:DevOps/data/testengine/api#encoded_header
+      testdefinitions:
+        - name: uitests                 # no schedule: runs in the PostSync hook after each sync
+          containerImage: testing/myorg/myservice/tests
+          containerTag: 1.0.0
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: ["TestCategory=UI"]
+        - name: looptest-prod           # CronJob myservice-web-looptest-prod
+          schedule: "*/5 * * * *"
+          suspend: false
+          targetEnvironment: prodactive # EnvironmentName of the loop run
+          containerImage: testing/myorg/myservice/constantloop
+          containerTag: 1.0.0           # kept current by the image tag updater
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: myservice-looptesting
+          filters: ["TestCategory=LoopUITest"]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+          podResources:
+            requests: {cpu: "5", memory: 6Gi}
+            limits: {cpu: "6", memory: 12Gi}
+```
 
 ---
 
