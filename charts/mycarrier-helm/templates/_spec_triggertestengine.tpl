@@ -28,7 +28,9 @@ backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
        <fullName>-trigger. With the application's own values they matched its Service selector, so the trigger pod
        (no port, no readiness probe) could take the Service's traffic while it ran, and its PDB and HPA counted it. */}}
 {{- $podLabels := include "helm.labels.standard" . | fromYaml }}
-{{- $triggerName := printf "%s-trigger" (include "helm.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- /* A scheduled trigger's pod (AQA-90) takes its CronJob's name instead. */}}
+{{- $scheduled := dig "scheduledTrigger" "name" "" . }}
+{{- $triggerName := $scheduled | default (printf "%s-trigger" (include "helm.fullname" .) | trunc 63 | trimSuffix "-") }}
 {{- $_ := set $podLabels "app.kubernetes.io/name" $triggerName }}
 {{- $_ := set $podLabels "app" $triggerName }}
 {{- /* Legacy path (enableV1 false): one request per definition, all in the one command[2] string. A script over 100 KiB
@@ -83,6 +85,9 @@ template:
           - /bin/sh
           - -c
           - |
+          {{- if $scheduled }}
+            {{- include "helm.testtrigger.scheduledScript" . | nindent 12 }}
+          {{- else }}
             set -u
             failed=0
           {{- if $enableV1 }}
@@ -103,6 +108,7 @@ template:
               echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
             fi
             exit 0
+          {{- end }}
         {{ include "helm.containerSecurityContext" . | indent 8 | trim }}
 {{- end }}
 {{- end }}
@@ -224,6 +230,10 @@ dict whose keys override the request and are absent for the other two callers: s
 entry per test definition, in order), tolerations (Tolerations of every definition, also when empty), and runKind,
 slipStep and requestHeaders (RunKind, SlipStep and RequestHeaders inside TestEnvironmentVariables, set only when not
 empty), and correlationId (CorrelationId, a string).
+A fourth caller, the scheduled trigger CronJob (scheduledtriggertestengine.yaml, AQA-90), passes an application whose
+testdefinitions hold only its scheduled definition and sets runKind loop and slipStep none, plus three keys of its own:
+environmentName and releaseId (EnvironmentName and ReleaseId, set only when not empty) and omitCorrelationId (true
+leaves CorrelationId out: TestEngine mints it for a loop run and refuses a caller's).
 */}}
 {{- define "helm.testtrigger.v1request" -}}
 {{- $run := .testRun | default dict }}
@@ -277,6 +287,9 @@ empty), and correlationId (CorrelationId, a string).
 {{- with $run.runKind }}{{- $_ := set $testEnv "RunKind" . }}{{- end }}
 {{- with $run.slipStep }}{{- $_ := set $testEnv "SlipStep" . }}{{- end }}
 {{- with $run.requestHeaders }}{{- $_ := set $testEnv "RequestHeaders" . }}{{- end }}
+{{- with $run.environmentName }}{{- $_ := set $testEnv "EnvironmentName" . }}{{- end }}
+{{- with $run.releaseId }}{{- $_ := set $testEnv "ReleaseId" . }}{{- end }}
+{{- if $run.omitCorrelationId }}{{- $_ := unset $testEnv "CorrelationId" }}{{- end }}
 {{- with index $env.byDefinition $index }}{{- $_ := set $testEnv "EnvVars" . }}{{- end }}
 {{- $test := dict "IsMonolith" false "TestName" .name "StackName" $stackname "ContainerImage" (.containerImage | default "") "ContainerTag" (.containerTag | default "") "HardenedSecurityContext" $hardenedSecurityContext "TestFilters" .filters "Tolerations" $tolerations "NodeAffinity" $nodeAffinity "UseDefaultNodeAffinity" $useDefaultNodeAffinity "SpreadAcrossNodes" $spreadAcrossNodes "PodResources" $podResources "TestEnvironmentVariables" $testEnv }}
 {{- $tests = append $tests $test }}
@@ -357,4 +370,105 @@ change both together.
 {{- if ne (empty $def.resultsApiUrl) (empty $def.resultsApiKey) }}
   {{- fail (printf "test definition '%s' of '%s': resultsApiKey and resultsApiUrl go together; set both or neither, since the test container uploads results only when both are set" $def.name .fullName) }}
 {{- end }}
+{{- end }}
+
+
+{{/*
+helm.testtrigger.splitDefinitions: separates an application's scheduled test definitions (a schedule set, AQA-90) from
+its plain ones. Takes dict "application" <application map> "appName" <name> "out" <a dict to fill>, and sets in out:
+plain (the definitions without schedule, in order), scheduled (the ones with schedule) and application (the application
+itself when none is scheduled, so its renders do not change; else a copy whose testtrigger.testdefinitions are only the
+plain ones). The PostSync hook, the prod-tests ConfigMap and the canary tests run the plain definitions only; each
+scheduled one becomes its own CronJob (scheduledtriggertestengine.yaml).
+A scheduled definition fails the render when:
+  - testtrigger.enableV1 is false: TestEngine accepts the loop run kind on /v1/trigger only;
+  - it sets testEnvironmentTag, testTags or multiRun: true (AQA-38's v2 keys): loop runs are v1-only (D19);
+  - its name is not a DNS label (it names the CronJob), or another scheduled definition has the same name.
+*/}}
+{{- define "helm.testtrigger.splitDefinitions" -}}
+{{- $appName := .appName }}
+{{- $plain := list }}
+{{- $scheduled := list }}
+{{- $names := dict }}
+{{- range $definition := dig "testtrigger" "testdefinitions" list .application }}
+  {{- if not $definition.schedule }}
+    {{- $plain = append $plain $definition }}
+  {{- else }}
+    {{- $name := toString $definition.name }}
+    {{- $where := printf "application '%s': scheduled test definition '%s'" $appName $name }}
+    {{- if not (dig "testtrigger" "enableV1" true $.application) }}
+      {{- fail (printf "%s needs testtrigger.enableV1: true. A scheduled definition starts a loop run, which TestEngine accepts on /v1/trigger only. Remove testtrigger.enableV1: false, or remove schedule from the definition." $where) }}
+    {{- end }}
+    {{- range $key := list "testEnvironmentTag" "testTags" "multiRun" }}
+      {{- if get $definition $key }}
+        {{- fail (printf "%s sets %s. Loop runs are v1-only: they run the definition's filters, never a test environment tag, test tags or multi-run. Remove %s, or remove schedule from the definition." $where $key $key) }}
+      {{- end }}
+    {{- end }}
+    {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $name) }}
+      {{- fail (printf "%s: the name of a scheduled definition names its CronJob, so it must be lowercase letters, digits and '-', starting and ending with a letter or digit." $where) }}
+    {{- end }}
+    {{- if hasKey $names $name }}
+      {{- fail (printf "%s: another scheduled definition of the application has the same name, and each one names its own CronJob. Give each scheduled definition its own name." $where) }}
+    {{- end }}
+    {{- $_ := set $names $name true }}
+    {{- $scheduled = append $scheduled $definition }}
+  {{- end }}
+{{- end }}
+{{- $application := .application }}
+{{- if $scheduled }}
+  {{- $application = deepCopy .application }}
+  {{- $_ := set $application.testtrigger "testdefinitions" $plain }}
+{{- end }}
+{{- $_ := set .out "plain" $plain }}
+{{- $_ := set .out "scheduled" $scheduled }}
+{{- $_ := set .out "application" $application }}
+{{- end }}
+
+{{/*
+helm.testtrigger.loopLeaseDetail: the text that tells TestEngine's lease 409 apart from its other 409s (a slip-claim
+refusal, a retry-case state). TestEngine answers 409 with this lease detail when the previous run of the same loop
+still holds the loop lease (MC.TestEngine, AQA-87 R7). The scheduled trigger script matches it, lowercase, anywhere in
+the lowercased answer body. AQA-87's final detail text is not fixed yet: when it is, check it still contains this text,
+and change it here only (the script and .github/scripts/test_scheduled_trigger_check.py read it from here).
+*/}}
+{{- define "helm.testtrigger.loopLeaseDetail" -}}
+loop lease
+{{- end }}
+
+{{/*
+helm.testtrigger.scheduledScript: the shell script of a scheduled trigger's Job (AQA-90). Takes the scheduled
+trigger's context: the application context whose application holds only the scheduled definition, with .testRun for
+the loop request (helm.testtrigger.v1request). It posts the one loop test to TestEngine's v1 trigger and, unlike the
+PostSync hook (which always exits 0 so Argo CD does not retry the sync), it fails the Job on anything but a started
+run, so a missed tick shows as a failed Job: 200 and the lease 409 (helm.testtrigger.loopLeaseDetail) exit 0; any
+other status, other 409s included, or no answer exits 1. It prints the answer body and status, never the key or the URL. The body goes through
+helm.testtrigger.commandSafeJson like the hook's.
+*/}}
+{{- define "helm.testtrigger.scheduledScript" -}}
+set -u
+lease={{ include "helm.testtrigger.loopLeaseDetail" . | squote }}
+out=$(curl -sS --max-time 60 -w '\nHTTP_STATUS:%{http_code}' \
+-X POST \
+-H "Content-Type: application/json" \
+-H "Authorization: $TESTENGINE_APIKEY" \
+-d '{{ include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.testtrigger.v1request" .) "application" .application "argoTemplate" false) }}' "$TESTENGINEHOOK_URL") || {
+  rc=$?
+  echo "ERROR: TestEngine trigger failed (curl exit $rc): this tick started no run" >&2
+  exit 1
+}
+status=${out##*HTTP_STATUS:}
+body=${out%HTTP_STATUS:*}
+printf '%s\n' "$body"
+echo "TestEngine HTTP status: $status"
+case "$status:$(printf '%s' "$body" | tr 'A-Z' 'a-z')" in
+  200:*)
+    exit 0
+    ;;
+  409:*"$lease"*)
+    echo "The previous run of this loop still holds its lease: this tick is skipped"
+    exit 0
+    ;;
+esac
+echo "ERROR: TestEngine answered HTTP $status: this tick started no run" >&2
+exit 1
 {{- end }}

@@ -1,0 +1,51 @@
+{{- /* Scheduled test definitions (AQA-90): each testtrigger.testdefinitions entry with a schedule renders as its own
+       CronJob that asks TestEngine for a loop run, in place of joining the PostSync hook (triggertestengine.yaml). Its
+       Job is the hook's Job (helm.specs.testenginehook) with its own script (helm.testtrigger.scheduledScript), and its
+       request is the hook's request (helm.testtrigger.v1request) for that one definition: RunKind loop, SlipStep none,
+       no CorrelationId, EnvironmentName = targetEnvironment (default: the namespace), ReleaseId = containerTag.
+       The checks on scheduled definitions are in helm.testtrigger.splitDefinitions. */ -}}
+{{- $globalCtx := dict -}}
+{{- range $appName, $appValues := .Values.applications }}
+{{- if $appValues.testtrigger }}
+{{- $split := dict }}
+{{- include "helm.testtrigger.splitDefinitions" (dict "application" $appValues "appName" $appName "out" $split) }}
+{{- if $split.scheduled }}
+{{- if not $globalCtx }}{{ $globalCtx = include "helm.context" $ | fromJson }}{{ end }}
+{{- $appContext := merge (dict "appName" $appName "application" $appValues "ctx" $globalCtx) $ }}
+{{- $namespace := include "helm.namespace" $appContext }}
+{{- $fullName := include "helm.fullname" $appContext }}
+{{- range $definition := $split.scheduled }}
+{{- /* A CronJob name has at most 52 characters (its Jobs add 11). A longer one keeps 43 and a hash of the whole name. */}}
+{{- $name := printf "%s-%s" $fullName $definition.name }}
+{{- if gt (len $name) 52 }}
+{{- $name = printf "%s-%s" ($name | trunc 43 | trimSuffix "-") (sha256sum $name | trunc 8) }}
+{{- end }}
+{{- $application := deepCopy $appValues }}
+{{- $_ := set $application.testtrigger "testdefinitions" (list $definition) }}
+{{- $run := dict "runKind" "loop" "slipStep" "none" "omitCorrelationId" true "environmentName" ($definition.targetEnvironment | default $namespace) "releaseId" (toString $definition.containerTag) }}
+{{- $triggerContext := merge (dict "application" $application "testRun" $run "scheduledTrigger" (dict "name" $name)) $appContext }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+    {{ include "helm.labels.dependencies" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.standard" $appContext | indent 4 | trim }}
+    {{ include "helm.labels.version" $appContext | indent 4 | trim }}
+spec:
+  schedule: {{ $definition.schedule | quote }}
+  suspend: {{ $definition.suspend | default false }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  jobTemplate:
+    metadata:
+      annotations:
+        {{ include "helm.annotations.vault" $appValues | indent 8 | trim }}
+    spec:
+      {{ include "helm.specs.testenginehook" $triggerContext | indent 6 | trim }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

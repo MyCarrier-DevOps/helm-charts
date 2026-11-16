@@ -6,6 +6,12 @@
 {{- $namespace := include "helm.namespace" $ }}
 {{- $fullName := include "helm.fullname" $appContext }}
 {{- if .testtrigger }}
+{{- /* Scheduled test definitions (a schedule set, AQA-90) never join the hook or the prod-tests ConfigMap: each becomes
+       its own CronJob (scheduledtriggertestengine.yaml). With only scheduled definitions, neither renders. */}}
+{{- $split := dict }}
+{{- include "helm.testtrigger.splitDefinitions" (dict "application" $appValues "appName" $appName "out" $split) }}
+{{- $_ := set $appContext "application" $split.application }}
+{{- if or $split.plain (not $split.scheduled) }}
 {{- /* A prod canary Rollout gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after
        the last promote or after an abort, so it could test the wrong version. The release's rollout-watch starts
        prod_tests after promotion instead (DEVOPS-319): it posts request.json from the <fullName>-prod-tests ConfigMap
@@ -58,6 +64,7 @@ metadata:
     {{ include "helm.annotations.vault" . | indent 4 | trim }}
 spec:
   {{ include "helm.specs.testenginehook" $appContext | indent 2 | trim }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
