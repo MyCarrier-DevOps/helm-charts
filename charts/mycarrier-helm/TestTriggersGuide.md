@@ -19,7 +19,7 @@ How it works:
 In prod, an application with `deploymentType: rollout` (without `migratingToRollouts`) whose repository's `deployment-strategy` property is `canary` (chart-renderer passes it as `global.deploymentStrategy`) gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. The release's rollout-watch (DEVOPS-319) starts the prod tests after the canary is promoted instead:
 
 - rollout-watch runs only on the canary release path, and the chart follows the same property: a prod Rollout in a `rolling` or unset repository runs no canary steps and keeps its PostSync hook.
-- With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger. rollout-watch posts only to TestEngine's v1 trigger until it reads the ConfigMap's `version` key (DEVOPS-319), and v1 refuses a v2 request with a `422`, so for now a prod canary Rollout whose test definitions set `testEnvironmentTag` fails the render: keep `filters` in its prod values. Once rollout-watch reads `version`, the chart can render `request.json` with the v2 request and a second key, `version: v2`, so rollout-watch posts it to `/v2/trigger`; without `version` the request is v1.
+- With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger. rollout-watch posts only to TestEngine's v1 trigger until it reads the ConfigMap's `version` key (DEVOPS-613), and v1 refuses a v2 request with a `422`, so for now a prod canary Rollout whose test definitions set `testEnvironmentTag` fails the render: keep `filters` in its prod values. Once rollout-watch reads `version`, the chart can render `request.json` with the v2 request and a second key, `version: v2`, so rollout-watch posts it to `/v2/trigger`; without `version` the request is v1.
 - With `enableV1: false`, the render fails, because nothing would start the application's prod tests.
 - With `enableV1: true`, `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.
 
@@ -372,7 +372,7 @@ The render fails, naming the application, the test definition and the field, whe
 - the application's canary `tests` or `tests-dark` template renders (they post to v1 only, see Test definitions in canary
   analysis);
 - the application is a Rollout in prod with no PostSync hook (a `canary` repository, see above): rollout-watch posts
-  its prod-tests request to v1 only until DEVOPS-319, so keep `filters` in its prod values.
+  its prod-tests request to v1 only until DEVOPS-613, so keep `filters` in its prod values.
 
 A definition with neither `filters` nor a tag still goes to v1 and runs every test, as before.
 
@@ -399,7 +399,7 @@ Because every definition of an application uses the same trigger, such an applic
 1. Check that TestEngine has v2 on in the instance the service calls: `GET /v1/capabilities` lists `"v2"` in
    `trigger_versions`. The switch is per TestEngine instance (`testengine-dev`, `testengine`), not per environment.
 2. Check that every caller the service uses knows v2: this chart version, autotriggertests (AQA-54) and, for a prod canary
-   Rollout, rollout-watch (DEVOPS-319) and the canary `tests` template (not yet: keep `filters` there; the render fails
+   Rollout, rollout-watch (DEVOPS-613) and the canary `tests` template (not yet: keep `filters` there; the render fails
    for a tag on a prod canary Rollout). An older chart
    version does not know `testEnvironmentTag` and would send no filter, which runs every test.
 3. In one change, replace `filters` with `testEnvironmentTag` (and `testTags` if needed) on every test definition of the

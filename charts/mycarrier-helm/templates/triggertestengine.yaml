@@ -23,11 +23,12 @@
 {{- if not (dig "testtrigger" "enableV1" true $appValues) }}
 {{- fail (printf "application '%s': a Rollout in prod needs testtrigger.enableV1: true. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion through TestEngine's v1 trigger (DEVOPS-319), so without enableV1 nothing would run its prod tests. Set applications.%s.testtrigger.enableV1: true." $appName $appName) }}
 {{- end }}
-{{- /* AQA-38: rollout-watch does not read the ConfigMap's version key yet (DEVOPS-319). It would post the v2 request to
-       /v1/trigger, which refuses it with a 422, and the prod tests would not run. Remove this check once rollout-watch
-       posts a version: v2 request to /v2/trigger; the v2 branch of the ConfigMap below is ready for it. */}}
+{{- /* AQA-38: rollout-watch's start-prod-tests does not read the ConfigMap's version key yet (DEVOPS-613). It would post
+       the v2 request to /v1/trigger, which refuses it with a 422, and the prod tests would not run. Remove this check once
+       DEVOPS-613 ships (rollout-watch posts a version: v2 request to /v2/trigger), and bring back the unit tests that
+       assert the v2 ConfigMap; the v2 branch of the ConfigMap below is ready for it. */}}
 {{- if eq $triggerVersion "v2" }}
-{{- fail (printf "application '%s': a Rollout in prod cannot use testEnvironmentTag yet. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion and posts to TestEngine's v1 trigger only (DEVOPS-319), which refuses a v2 request with a 422, so its prod tests would not run. Keep filters on applications.%s.testtrigger.testdefinitions in the prod values." $appName $appName) }}
+{{- fail (printf "application '%s': a Rollout in prod cannot use testEnvironmentTag yet. The chart renders no PostSync hook for it: the release's rollout-watch starts prod_tests after promotion and posts to TestEngine's v1 trigger only until DEVOPS-613, which refuses a v2 request with a 422, so its prod tests would not run. Keep filters on applications.%s.testtrigger.testdefinitions in the prod values." $appName $appName) }}
 {{- end }}
 {{- if dig "testtrigger" "enableV1" true $appValues }}
 {{- $apikey := dig "testtrigger" "apikey" "" $appValues | default "" | toString }}
