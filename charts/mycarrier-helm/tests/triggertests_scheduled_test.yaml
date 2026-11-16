@@ -162,7 +162,23 @@ tests:
   - it: takes suspend from the definition
     template: scheduledtriggertestengine.yaml
     set:
-      applications.web.testtrigger.testdefinitions[1].suspend: true
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          suspend: true
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
       - equal:
           path: spec.suspend
@@ -171,7 +187,21 @@ tests:
   - it: sends the namespace as EnvironmentName when the definition sets no targetEnvironment
     template: scheduledtriggertestengine.yaml
     set:
-      applications.web.testtrigger.testdefinitions[1].targetEnvironment: ""
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
       - matchRegex:
           path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
@@ -179,7 +209,23 @@ tests:
 
   - it: renders no hook when every definition is scheduled
     set:
-      applications.web.testtrigger.testdefinitions[0].schedule: "0/30 * * * *"
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+          schedule: "0/30 * * * *"
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
       - hasDocuments:
           count: 0
@@ -209,7 +255,22 @@ tests:
   - it: keeps a long CronJob name within 52 characters with a hash of the full name
     template: scheduledtriggertestengine.yaml
     set:
-      applications.web.testtrigger.testdefinitions[1].name: looptest-prod-with-a-really-long-name
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: looptest-prod-with-a-really-long-name
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
       - matchRegex:
           path: metadata.name
@@ -219,43 +280,127 @@ tests:
     set:
       applications.web.testtrigger.enableV1: false
     asserts:
-      - failedTemplate:
+      - template: triggertestengine.yaml
+        failedTemplate:
           errorPattern: "application 'web': scheduled test definition 'looptest-prod' needs testtrigger.enableV1: true"
 
   - it: fails the render for a scheduled definition with testEnvironmentTag
     set:
-      applications.web.testtrigger.testdefinitions[1].testEnvironmentTag: smoke
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          testEnvironmentTag: smoke
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
-      - failedTemplate:
+      - template: triggertestengine.yaml
+        failedTemplate:
           errorPattern: "scheduled test definition 'looptest-prod' sets testEnvironmentTag. Loop runs are v1-only"
 
   - it: fails the render for a scheduled definition with testTags
     set:
-      applications.web.testtrigger.testdefinitions[1].testTags: [smoke]
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          testTags: [smoke]
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
-      - failedTemplate:
+      - template: triggertestengine.yaml
+        failedTemplate:
           errorPattern: "scheduled test definition 'looptest-prod' sets testTags. Loop runs are v1-only"
 
   - it: fails the render for a scheduled definition with multiRun true
     set:
-      applications.web.testtrigger.testdefinitions[1].multiRun: true
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          multiRun: true
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
-      - failedTemplate:
+      - template: triggertestengine.yaml
+        failedTemplate:
           errorPattern: "scheduled test definition 'looptest-prod' sets multiRun. Loop runs are v1-only"
 
   - it: fails the render for a scheduled definition whose name is not a DNS label
     set:
-      applications.web.testtrigger.testdefinitions[1].name: LoopTest_Prod
+      applications.web.testtrigger.testdefinitions:
+        - name: uitests
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+        - name: LoopTest_Prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
-      - failedTemplate:
+      - template: triggertestengine.yaml
+        failedTemplate:
           errorPattern: "scheduled test definition 'LoopTest_Prod': the name of a scheduled definition names its CronJob"
 
   - it: fails the render for two scheduled definitions with the same name
     set:
-      applications.web.testtrigger.testdefinitions[0].name: looptest-prod
-      applications.web.testtrigger.testdefinitions[0].schedule: "0/30 * * * *"
+      applications.web.testtrigger.testdefinitions:
+        - name: looptest-prod
+          containerImage: testing/mycarrier/frontend/tests
+          containerTag: 26.46.1
+          secretId: vault:QA/data/app_auth#SecretId
+          filters: [TestCategory=UI]
+          schedule: "0/30 * * * *"
+        - name: looptest-prod
+          schedule: "*/5 * * * *"
+          targetEnvironment: prodactive
+          containerImage: testing/mycarrier/frontend/constantloop
+          containerTag: 26.46.41549d4
+          secretId: vault:QA/data/app_auth#SecretId
+          releaseDefinitionName: mycarrier-looptesting
+          filters: [TestCategory=LoopUITest]
+          resultsApiUrl: vault:QA/data/autotestresults_api#url
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
     asserts:
-      - failedTemplate:
+      - template: triggertestengine.yaml
+        failedTemplate:
           errorPattern: "another scheduled definition of the application has the same name"
 
   - it: leaves the scheduled definition out of the prod-tests ConfigMap of a prod canary Rollout
