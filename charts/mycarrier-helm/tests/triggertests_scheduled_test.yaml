@@ -154,7 +154,7 @@ tests:
           value: mycarrier-frontend-web-looptest-prod
       - matchRegex:
           path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
-          pattern: lease='loop lease'
+          pattern: lease='loop_lease_held'
       - matchRegex:
           path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
           pattern: exit 1\n$

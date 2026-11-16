@@ -428,11 +428,11 @@ A scheduled definition fails the render when:
 helm.testtrigger.loopLeaseDetail: the text that tells TestEngine's lease 409 apart from its other 409s (a slip-claim
 refusal, a retry-case state). TestEngine answers 409 with this lease detail when the previous run of the same loop
 still holds the loop lease (MC.TestEngine, AQA-87 R7). The scheduled trigger script matches it, lowercase, anywhere in
-the lowercased answer body. AQA-87's final detail text is not fixed yet: when it is, check it still contains this text,
-and change it here only (the script and .github/scripts/test_scheduled_trigger_check.py read it from here).
+the lowercased answer body. It is the code that starts AQA-87's lease 409 detail ("loop_lease_held: a run of this
+loop is in flight; nothing was dispatched", MC.TestEngine#113). If that code changes, change it here only (the script and .github/scripts/test_scheduled_trigger_check.py read it from here).
 */}}
 {{- define "helm.testtrigger.loopLeaseDetail" -}}
-loop lease
+loop_lease_held
 {{- end }}
 
 {{/*
