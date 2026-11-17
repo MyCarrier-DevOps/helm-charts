@@ -180,6 +180,13 @@ true
   {{- end -}}
   {{- $addresses = append $addresses $address -}}
 {{- end -}}
+{{- /* AQA-38: this run posts to TestEngine's v1 trigger only, so a test definition with testEnvironmentTag (v2) would
+       send no filter and run every test in the image. */ -}}
+{{- range (dig "testtrigger" "testdefinitions" list $ctx.application) -}}
+  {{- if include "helm.testtrigger.hasV2Fields" . -}}
+    {{- fail (printf "application '%s': test definition '%s' sets testEnvironmentTag, testTags or multiRun (TestEngine's v2 trigger), and %s posts to TestEngine's v1 trigger only. Keep filters on this application's test definitions, define your own %s entry under applications.%s.analysisTemplates, or %s." $ctx.appName (toString .name) (untitle $Run) $template $ctx.appName $wayOut) -}}
+  {{- end -}}
+{{- end -}}
 {{- $run := dict "serviceAddresses" $addresses "tolerations" (list) "runKind" "canary" "slipStep" "none" "requestHeaders" (.requestHeaders | default dict) "correlationId" (include "helm.canary.correlationIdString" $ctx) -}}
 {{- $environmentName := lower (toString $namespace) -}}
 {{- if and (contains "prod" $environmentName) (not (contains "preprod" $environmentName)) -}}

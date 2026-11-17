@@ -408,7 +408,7 @@
           },
           "testtrigger": {
             "type": "object",
-            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
+            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request; testEnvironmentTag there fails the render until rollout-watch posts v2 requests, DEVOPS-613) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
             "properties": {
               "ttlSecondsAfterFinished": {
                 "type": "string",
@@ -503,6 +503,23 @@
                         "type": "string"
                       },
                       "default": []
+                    },
+                    "testEnvironmentTag": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "AQA-38: the test environment tag (a TestCategory in the test code) of the tests to run, sent to TestEngine's v2 trigger (/v2/trigger) in place of filters; they run in one Job, reported under Stage = the tag. Letters, digits, '_', '.' and '-' only, at most 100 characters, with at least one letter or digit. Set either filters or testEnvironmentTag, not both; every test definition of an application uses the same trigger, and a tag needs testtrigger.enableV1: true. The render checks these rules. See TestTriggersGuide.md."
+                    },
+                    "testTags": {
+                      "type": "array",
+                      "description": "AQA-38: optional, with testEnvironmentTag only: narrows the run to tests that carry the tag and every listed tag. At most 10 entries, each with the characters and length of testEnvironmentTag.",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "multiRun": {
+                      "type": "boolean",
+                      "description": "AQA-38: optional, with testEnvironmentTag only: asks TestEngine to pack the tag's tests into several Jobs. TestEngine packs them only while GET /v1/capabilities reports multi_run_enabled true (its MULTI_RUN_ENABLED switch, off by default); otherwise the run is one Job, and the hook logs a WARN line.",
+                      "default": false
                     },
                     "serviceAddress": {
                       "type": "string",

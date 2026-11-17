@@ -543,3 +543,135 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ServiceAddress": "http://mycarrier-api\.preprod\.svc\.cluster\.local:80"'
+
+  # AQA-38: rollout-watch posts request.json to TestEngine's v1 trigger only until it reads the ConfigMap's version key
+  # (DEVOPS-613), and v1 refuses a v2 request with a 422. So a prod canary Rollout whose test definitions set
+  # testEnvironmentTag fails the render. A v1 application has no version key, so its ConfigMap is unchanged. The dark
+  # stage is off in the v2 cases: its tests-dark run posts v1 only and refuses a tag.
+  - it: "AQA-38: refuses testEnvironmentTag on a prod canary Rollout until rollout-watch posts v2 (results API)"
+    set:
+      global: &globalDarkOff
+        <<: *global
+        strategy:
+          canary:
+            dark: false
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            apikey: vault:DevOps/data/testengine/api#encoded_header
+            testdefinitions:
+              - &prodV2Definition
+                name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: CoreAPI
+                testTags: [Smoke]
+                resultsApiUrl: vault:QA/data/autotestresults_api#url
+                resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+    asserts:
+      - failedTemplate:
+          errorPattern: 'application ''api'': a Rollout in prod cannot use testEnvironmentTag yet\..*posts to TestEngine''s v1 trigger only until DEVOPS-613.*Keep filters on applications\.api\.testtrigger\.testdefinitions in the prod values'
+
+  - it: "AQA-38: refuses testEnvironmentTag on a prod canary Rollout until rollout-watch posts v2 (no results API)"
+    set:
+      global: *globalDarkOff
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: CoreAPI
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': a Rollout in prod cannot use testEnvironmentTag yet"
+
+  - it: "AQA-38: a v1 application's ConfigMap has no version key (results API)"
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger: *testtrigger
+    asserts:
+      - notExists:
+          path: data.version
+      - matchRegex:
+          path: data["request.json"]
+          pattern: '"TestFilters": \[\s*"TestCategory=CoreAPI"\s*\]'
+
+  - it: "AQA-38: a v1 application's ConfigMap has no version key (no results API)"
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=CoreAPI]
+    asserts:
+      - notExists:
+          path: data.version
+      - notMatchRegex:
+          path: data["request.json"]
+          pattern: 'TestEnvironmentTag|ResultsApi'
+
+  - it: "AQA-38: refuses v1 and v2 definitions in one prod canary Rollout"
+    set:
+      global: *globalDarkOff
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            testdefinitions:
+              - *prodV2Definition
+              - name: uitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                filters: [TestCategory=Ui]
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'mycarrier-api': test definition 'uitests' goes to TestEngine's v1 trigger \\(filters\\) and 'apitests' to its v2 trigger"
+
+  - it: "AQA-38: the enableV1 rule still applies to a prod canary Rollout with a tag"
+    set:
+      global: *globalDarkOff
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            enableV1: false
+            testdefinitions:
+              - *prodV2Definition
+    asserts:
+      - failedTemplate:
+          errorPattern: "testEnvironmentTag needs testtrigger.enableV1: true"
+

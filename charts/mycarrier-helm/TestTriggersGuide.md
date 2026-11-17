@@ -19,7 +19,7 @@ How it works:
 In prod, an application with `deploymentType: rollout` (without `migratingToRollouts`) whose repository's `deployment-strategy` property is `canary` (chart-renderer passes it as `global.deploymentStrategy`) gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. The release's rollout-watch (DEVOPS-319) starts the prod tests after the canary is promoted instead:
 
 - rollout-watch runs only on the canary release path, and the chart follows the same property: a prod Rollout in a `rolling` or unset repository runs no canary steps and keeps its PostSync hook.
-- With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger.
+- With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger. rollout-watch posts only to TestEngine's v1 trigger until it reads the ConfigMap's `version` key (DEVOPS-613), and v1 refuses a v2 request with a `422`, so for now a prod canary Rollout whose test definitions set `testEnvironmentTag` fails the render: keep `filters` in its prod values. Once rollout-watch reads `version`, the chart can render `request.json` with the v2 request and a second key, `version: v2`, so rollout-watch posts it to `/v2/trigger`; without `version` the request is v1.
 - With `enableV1: false`, the render fails, because nothing would start the application's prod tests.
 - With `enableV1: true`, `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.
 
@@ -39,6 +39,10 @@ Rollout application needs `testdefinitions` where `tests` is listed, and TestEng
 the stack-values guidance (Rollouts, Analysis) for the timeout (`analysis.tests.timeout`, default `7m`, plus
 `analysis.tests.startupSeconds`, default `120`), the canary budget and the barrier window. A Rollout
 whose property is not `canary` ignores `tests`: it renders no tests template and runs none of its checks.
+The `tests` and `tests-dark` runs post to TestEngine's v1 trigger only: an application whose test definitions set
+`testEnvironmentTag` fails the render where the chart's `tests` or `tests-dark` template renders for it (`tests-dark` is on by
+default for a prod canary leader). Keep `filters` on such an application, define your own template under
+`analysisTemplates`, or leave `tests` out of `analysis.templates` (for `tests-dark`, set `dark: false`).
 
 ## Configuration Structure
 
@@ -132,7 +136,10 @@ Each test definition under `testdefinitions` supports the following parameters:
 |-----------|-------------|----------|---------|---------|
 | `containerImage` | The container image containing the test code | Yes | None | `"testing/exampletestapp"` |
 | `containerTag` | The tag of the container image to use | Yes | None | `"abcd1234"` |
-| `filters` | Test filters to apply. Accepts a single string or an array of strings. | No | `[]` (empty array) | `"TestCategory=coretests"` or `["TestCategory=coretests", "TestCategory=othercoretests"]` |
+| `filters` | Test filters to apply, sent to TestEngine's v1 trigger. Accepts a single string or an array of strings. Not together with `testEnvironmentTag`. | No | `[]` (empty array) | `"TestCategory=coretests"` or `["TestCategory=coretests", "TestCategory=othercoretests"]` |
+| `testEnvironmentTag` | The tag (a `TestCategory` in the test code) of the tests to run, sent to TestEngine's v2 trigger in place of `filters`. Letters, digits, `_`, `.` and `-`, at most 100 characters, at least one letter or digit. See [Tag-based runs](#tag-based-runs-testenvironmenttag-v2-trigger) | No | None (v1 with `filters`) | `"FeatureCore"` |
+| `testTags` | With `testEnvironmentTag` only: runs the tests that carry the tag **and** every listed tag. At most 10, same characters as the tag | No | None | `["Invoices"]` |
+| `multiRun` | With `testEnvironmentTag` only: asks TestEngine to pack the tests into several Jobs. Packed only while that TestEngine reports `multi_run_enabled: true` in `GET /v1/capabilities` (its `MULTI_RUN_ENABLED` switch, off by default); otherwise the run is one Job and the hook logs a `WARN:` line | No | `false` | `true` |
 | `name` | Name of the test | Yes | None | `"apitests"` |
 | `secretId` | Secret ID for authentication, can be a direct value or a vault reference | Yes | None | `"vault:Secrets/data/auth#secretid"` |
 | `serviceAddress` | Optional service address for the test to target | No | `"<fullname>.<namespace>.svc.cluster.local:<http Service port>"` | `"my-service.namespace.svc.cluster.local:8080"` |
@@ -324,6 +331,83 @@ applications:
 ```
 Explanation: This configuration creates one test trigger Job per application: one Job for `api` and one Job for `internal-api`. Each Job sends a single curl POST to the test engine API whose payload bundles all of that application's test definitions in a `Tests` array — so the `api` Job's payload contains two test entries and the `internal-api` Job's payload contains one. The `api` Job has custom resource requirements and the first test definition specifies a custom service address.
 
+## Tag-based runs (`testEnvironmentTag`, v2 trigger)
+
+A test definition can name a **test environment tag** instead of a `filters` list (AQA-38). The hook then posts to
+TestEngine's v2 trigger (`/v2/trigger`), which runs the tests that carry the tag (a `TestCategory` in the test code) in
+one Job and reports them under Stage = the tag. The service no longer keeps a Vault list of test categories.
+
+```yaml
+testtrigger:
+  apikey: vault:DevOps/data/testengine/api#encoded_header
+  enableV1: true
+  testdefinitions:
+    - name: apitests
+      containerImage: testing/mc/document/automatedtests/tests
+      containerTag: 26.47.0a103e0
+      secretId: vault:QA/data/app_auth#SecretId
+      testEnvironmentTag: FeatureCore   # in place of filters
+      testTags: [Invoices]              # optional: tests with FeatureCore and Invoices
+      multiRun: false                   # optional, default false
+      resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+      resultsApiUrl: vault:QA/data/autotestresults_api#url
+```
+
+The v2 request is the v1 request without `TestFilters`, with `TestEnvironmentTag`, `TestTags` (left out when empty) and
+`MultiRun` (left out when false). Everything else is the same: `podResources` and its default, tolerations, the results
+API settings, `env` and its limits.
+
+### Rules (checked at render)
+
+The render fails, naming the application, the test definition and the field, when:
+
+- a definition sets both `filters` (not empty) and `testEnvironmentTag`;
+- `testTags` or `multiRun: true` is set without `testEnvironmentTag`;
+- the tag or a test tag has a character other than letters, digits, `_`, `.` and `-`, is longer than 100 characters, or
+  (the tag) has no letter or digit; or there are more than 10 `testTags`;
+- a definition sets `testEnvironmentTag` and `testtrigger.enableV1` is `false` (the legacy per-definition call has no tag
+  and would run every test);
+- some definitions of an application set `testEnvironmentTag` and others do not. All definitions of an application use the
+  same trigger: two triggers are two batches, and two batches of one deployment write its tests step twice;
+- the application's canary `tests` or `tests-dark` template renders (they post to v1 only, see Test definitions in canary
+  analysis);
+- the application is a Rollout in prod with no PostSync hook (a `canary` repository, see above): rollout-watch posts
+  its prod-tests request to v1 only until DEVOPS-613, so keep `filters` in its prod values.
+
+A definition with neither `filters` nor a tag still goes to v1 and runs every test, as before.
+
+### What the hook does
+
+1. Reads `GET /v1/capabilities` on the TestEngine of the hook's URL (the URL without its `/v1/trigger`).
+2. A `404` there (a TestEngine older than capabilities), or a `trigger_versions` without `v2`, logs
+   `ERROR: TestEngine v2 trigger not sent: v2 is switched off in this TestEngine ...` and posts nothing. Any other failure
+   (no answer, `401`, `5xx`) logs its own `ERROR:` line and posts nothing.
+3. With `multiRun: true` and `multi_run_enabled` not `true`, logs a `WARN:` line: the run is one Job.
+4. Posts the v2 request to `/v2/trigger`. A `404` there, with `v2` listed, logs
+   `ERROR: ... the /v2/trigger route is missing`. Any other non-2xx answer logs `ERROR: TestEngine v2 trigger failed (HTTP <code>)`.
+
+There is no fallback to v1. Like the v1 hook, the script exits 0 after an error, so Argo CD does not retry the sync:
+look for `ERROR:` in the trigger pod's log. Nothing then runs the tests or writes the slip's tests step.
+
+**One Job.** A v2 run is one Job for the whole tag, and TestEngine stops watching a Job after 25 minutes. Keep a large
+serial suite on `filters` (one Job per filter) until TestEngine packs Jobs (`multiRun`, `multi_run_enabled: true`).
+Because every definition of an application uses the same trigger, such an application keeps all its definitions on
+`filters` until then.
+
+### Moving a service to the tag
+
+1. Check that TestEngine has v2 on in the instance the service calls: `GET /v1/capabilities` lists `"v2"` in
+   `trigger_versions`. The switch is per TestEngine instance (`testengine-dev`, `testengine`), not per environment.
+2. Check that every caller the service uses knows v2: this chart version, autotriggertests (AQA-54) and, for a prod canary
+   Rollout, rollout-watch (DEVOPS-613) and the canary `tests` template (not yet: keep `filters` there; the render fails
+   for a tag on a prod canary Rollout). An older chart
+   version does not know `testEnvironmentTag` and would send no filter, which runs every test.
+3. In one change, replace `filters` with `testEnvironmentTag` (and `testTags` if needed) on every test definition of the
+   application.
+
+**Rollback:** put `filters` back in place of the tag. Do the same if TestEngine switches v2 off: the hook then logs the
+switched-off `ERROR:` line and runs no tests until `filters` are back.
+
 ## Environment variables for test pods (`env`)
 
 `env` sets environment variables on the test container that TestEngine starts for a test definition. They reach TestEngine as `TestEnvironmentVariables.EnvVars` in every request the chart renders: the PostSync hook (v1 and legacy body), the `<fullName>-prod-tests` ConfigMap and the canary `TESTS_REQUEST`. The field is omitted when there are no variables.
@@ -431,3 +515,7 @@ The canary request also encodes `${` as `$\u007b` (the JSON escape, which decode
   - Incorrect container image or tag specification
   - Network connectivity issues during test dispatch
   - Authentication or authorization failures
+
+4. **`v2 is switched off in this TestEngine`**: the definitions set `testEnvironmentTag`, and the TestEngine the hook calls does not offer `/v2/trigger` (`GET /v1/capabilities` answered 404 or does not list `v2`). Nothing ran. Ask for `TRIGGER_V2_ENABLED` in that TestEngine, or put `filters` back.
+
+5. **`the /v2/trigger route is missing`**: TestEngine lists `v2`, and the mesh does not route `/v2/trigger` to it. Nothing ran. Ask DevOps to route it, or put `filters` back.

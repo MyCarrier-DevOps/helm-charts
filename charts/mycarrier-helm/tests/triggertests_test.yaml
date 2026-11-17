@@ -2490,3 +2490,380 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "does not match pattern"
+
+  # AQA-38: testEnvironmentTag sends the definitions to TestEngine's v2 trigger. Every case runs with the results API
+  # settings (resultsApiKey/resultsApiUrl) and without them. .github/scripts/test_trigger_v2.py runs the script itself.
+  - it: "AQA-38 v1: filters only post the v1 request to the hook URL, with no capabilities read (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: &v2DefResults
+            name: apitests
+            containerImage: alpine/curl
+            containerTag: latest
+            secretId: vault:Secret/data/secret#SecretId
+            resultsApiUrl: vault:QA/data/autotestresults_api#url
+            resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+          filters: [TestCategory=CoreAPI]
+    asserts: &v1Asserts
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestFilters": \[\s*"TestCategory=CoreAPI"\s*\]'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "' \"\\$TESTENGINEHOOK_URL\" \\|\\| \\{"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'capabilities|v2/trigger|TestEnvironmentTag'
+
+  - it: "AQA-38 v1: filters only post the v1 request to the hook URL, with no capabilities read (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: &v2Def
+            name: apitests
+            containerImage: alpine/curl
+            containerTag: latest
+            secretId: vault:Secret/data/secret#SecretId
+          filters: [TestCategory=CoreAPI]
+    asserts: *v1Asserts
+
+  - it: "AQA-38 v2: a tag reads capabilities, then posts the v2 request to /v2/trigger (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: FeatureCore
+    asserts: &v2Asserts
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)"\$base/v1/capabilities".*
+ *payload=.\{.*
+ *-d "\$payload" "\$base/v2/trigger"\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestEnvironmentTag": "FeatureCore"'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'TestFilters|TestTags|MultiRun|WARN|TESTENGINEHOOK_URL" \|\||/v1/trigger"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'v2 is switched off in this TestEngine \(GET /v1/capabilities answered 404'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'v2 is switched off in this TestEngine \(GET /v1/capabilities does not list v2 in trigger_versions\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'the /v2/trigger route is missing'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)"PodResources": \{\s*"limits": \{\s*"cpu": "2000m",\s*"memory": "4Gi"\s*\},\s*"requests": \{\s*"cpu": "250m",\s*"memory": "1Gi"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'exit 0\s*$'
+
+  - it: "AQA-38 v2: a tag reads capabilities, then posts the v2 request to /v2/trigger (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+    asserts: *v2Asserts
+
+  - it: "AQA-38 v2: the results API settings reach the v2 request"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: FeatureCore
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"ResultsApiUrl": "vault:QA/data/autotestresults_api#url"'
+
+  - it: "AQA-38 v2: multiRun sends MultiRun true and warns while TestEngine packs no Jobs (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: FeatureCore
+          multiRun: true
+    asserts: &multiRunAsserts
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"MultiRun": true'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'WARN: multiRun is set'
+
+  - it: "AQA-38 v2: multiRun sends MultiRun true and warns while TestEngine packs no Jobs (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+          multiRun: true
+    asserts: *multiRunAsserts
+
+  - it: "AQA-38 v2: multiRun false is left out of the request"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+          multiRun: false
+          testTags: []
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'MultiRun|TestTags|WARN'
+
+  - it: "AQA-38 v2: testTags are sent in order (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: Invoices.Api
+          testTags: [Smoke, a_b, c-d]
+    asserts: &testTagsAsserts
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestEnvironmentTag": "Invoices.Api"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestTags": \[\s*"Smoke",\s*"a_b",\s*"c-d"\s*\]'
+
+  - it: "AQA-38 v2: testTags are sent in order (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: Invoices.Api
+          testTags: [Smoke, a_b, c-d]
+    asserts: *testTagsAsserts
+
+  - it: "AQA-38 v2: two tagged definitions go in one v2 batch"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+        - <<: *v2DefResults
+          name: uitests
+          testEnvironmentTag: Ui
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)"TestEnvironmentTag": "FeatureCore".*"TestEnvironmentTag": "Ui"'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)/v2/trigger"\).*/v2/trigger"\)'
+
+  - it: "AQA-38 v2: tags at TestEngine's limits render (100 characters, 10 testTags)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: Taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          testTags: [t0, t1, t2, t3, t4, t5, t6, t7, t8, -Edge--Case-]
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"TestEnvironmentTag": "T(a){99}"'
+
+  # Render checks: each fails with a message that names the definition and the field.
+  - it: "AQA-38 refuses filters and testEnvironmentTag together (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          filters: [TestCategory=CoreAPI]
+          testEnvironmentTag: FeatureCore
+    asserts: &bothAsserts
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' of 'app-app1': set either filters \\(TestEngine's v1 trigger\\) or testEnvironmentTag \\(its v2 trigger\\), not both"
+
+  - it: "AQA-38 refuses filters and testEnvironmentTag together (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          filters: [TestCategory=CoreAPI]
+          testEnvironmentTag: FeatureCore
+    asserts: *bothAsserts
+
+  - it: "AQA-38 refuses testTags without testEnvironmentTag (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testTags: [Smoke]
+    asserts: &testTagsNoTagAsserts
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' of 'app-app1': testTags needs testEnvironmentTag"
+
+  - it: "AQA-38 refuses testTags without testEnvironmentTag (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testTags: [Smoke]
+    asserts: *testTagsNoTagAsserts
+
+  - it: "AQA-38 refuses multiRun without testEnvironmentTag (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          multiRun: true
+    asserts: &multiRunNoTagAsserts
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' of 'app-app1': multiRun needs testEnvironmentTag"
+
+  - it: "AQA-38 refuses multiRun without testEnvironmentTag (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          multiRun: true
+    asserts: *multiRunNoTagAsserts
+
+  - it: "AQA-38 refuses a tag with a character TestEngine refuses (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: "a&TestCategory=b"
+    asserts: &badTagAsserts
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' of 'app-app1': testEnvironmentTag 'a&TestCategory=b' must use only letters, digits, '_', '.' and '-'"
+
+  - it: "AQA-38 refuses a tag with a character TestEngine refuses (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: "a&TestCategory=b"
+    asserts: *badTagAsserts
+
+  - it: "AQA-38 refuses a test tag with a space"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+          testTags: [ok, "no way"]
+    asserts:
+      - failedTemplate:
+          errorPattern: "testTags\\[1\\] 'no way' must use only letters, digits"
+
+  - it: "AQA-38 refuses a tag of only '_', '.' and '-'"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: "._-"
+    asserts:
+      - failedTemplate:
+          errorPattern: "testEnvironmentTag '._-' must contain a letter or digit"
+
+  - it: "AQA-38 refuses a tag over 100 characters"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: Taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - failedTemplate:
+          errorPattern: "testEnvironmentTag must be at most 100 characters"
+
+  - it: "AQA-38 refuses more than 10 testTags"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: FeatureCore
+          testTags: [t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10]
+    asserts:
+      - failedTemplate:
+          errorPattern: "testTags allows at most 10 entries"
+
+  - it: "AQA-38 refuses an empty test tag"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+          testTags: [""]
+    asserts:
+      - failedTemplate:
+          errorPattern: "testTags\\[0\\] '' must use only letters, digits"
+
+  - it: "AQA-38 refuses a test tag over 100 characters"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+          testTags: [Taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+    asserts:
+      - failedTemplate:
+          errorPattern: "testTags\\[0\\] must be at most 100 characters"
+
+  - it: "AQA-38 refuses a tag without enableV1 (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.enableV1: false
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          testEnvironmentTag: FeatureCore
+    asserts: &noV1Asserts
+      - failedTemplate:
+          errorPattern: "test definition 'apitests' of 'app-app1': testEnvironmentTag needs testtrigger.enableV1: true"
+
+  - it: "AQA-38 refuses a tag without enableV1 (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.enableV1: false
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+    asserts: *noV1Asserts
+
+  - it: "AQA-38 refuses v1 and v2 definitions in one application (results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2DefResults
+          filters: [TestCategory=CoreAPI]
+        - <<: *v2DefResults
+          name: tagged
+          testEnvironmentTag: FeatureCore
+    asserts: &mixedAsserts
+      - failedTemplate:
+          errorPattern: "application 'app-app1': test definition 'apitests' goes to TestEngine's v1 trigger \\(filters\\) and 'tagged' to its v2 trigger \\(testEnvironmentTag\\). All test definitions of an application use the same trigger"
+
+  - it: "AQA-38 refuses v1 and v2 definitions in one application (no results API)"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          filters: [TestCategory=CoreAPI]
+        - <<: *v2Def
+          name: tagged
+          testEnvironmentTag: FeatureCore
+    asserts: *mixedAsserts
+
+  - it: "AQA-38 keeps the results API check on v2 definitions"
+    values: [values/v2-trigger-app.yaml]
+    set:
+      applications.app1.testtrigger.testdefinitions:
+        - <<: *v2Def
+          testEnvironmentTag: FeatureCore
+          resultsApiKey: vault:DevOps/data/autotestresults_api/api#key
+    asserts:
+      - failedTemplate:
+          errorPattern: "resultsApiKey and resultsApiUrl go together"
