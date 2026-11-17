@@ -86,7 +86,8 @@
 {{- end -}}
 
 {{- /* The canary steps: global.strategy.canary.steps verbatim when set, otherwise the preset ladder (DEVOPS-307):
-         standard  10, analysis, pause 5m, 25, analysis, pause 5m, 50, analysis, pause 5m, 100
+         standard  10, analysis, pause 5m, 25, analysis, pause 5m, 50, analysis, pause 5m, 100 (each pause from
+                   global.strategy.canary.pauses.w<weight> when set, DEVOPS-603)
          fast      25, analysis, 100
          manual    10, analysis, pause (until resumed), 100
        Each analysis step runs health (unless analysis.health.enabled is false) and the extra analysis.templates (the
@@ -240,7 +241,7 @@
 {{- $ladder := list -}}
 {{- $pause := dict -}}
 {{- if eq $cfg.preset "standard" -}}
-  {{- $ladder = list 10 25 50 -}}{{- $pause = dict "duration" "5m" -}}
+  {{- $ladder = list 10 25 50 -}}{{- $pause = dict "w10" "5m" "w25" "5m" "w50" "5m" -}}
 {{- else if eq $cfg.preset "fast" -}}
   {{- $ladder = list 25 -}}
 {{- else if eq $cfg.preset "manual" -}}
@@ -248,13 +249,43 @@
 {{- else -}}
   {{- fail (printf "global.strategy.canary.preset '%s' is not one of standard, fast, manual" $cfg.preset) -}}
 {{- end -}}
+{{- /* global.strategy.canary.pauses (DEVOPS-603): the standard preset's pause after each weight, keyed w<weight> like
+       coordinator.barrierTimeouts; a key that is not set keeps 5m. Each pause is at least 1m and the three add up to at
+       least 10m: alerts (rules with a for window of 5m) and compare (initialDelay 3m, then every 2m) run as background
+       analysis from the first weight until promotion, so what counts is how long the canary serves traffic, not each
+       pause. helm.canary.budgetSeconds adds the durations, so the 5700 s limit caps their sum (1257 s, about 21 minutes,
+       with the other defaults). fast and manual have no timed pauses and ignore pauses, as they ignore manualTimeout,
+       so a stack can switch to fast for a hotfix and back without touching pauses; an explicit steps list ignores it
+       too. */ -}}
+{{- if and $cfg.pauses (eq $cfg.preset "standard") -}}
+  {{- if not (kindIs "map" $cfg.pauses) -}}
+    {{- fail (printf "global.strategy.canary.pauses is '%v'; it maps w10, w25 and w50 to a duration such as 10m." $cfg.pauses) -}}
+  {{- end -}}
+  {{- range $key, $value := $cfg.pauses -}}
+    {{- if not (hasKey $pause $key) -}}
+      {{- fail (printf "global.strategy.canary.pauses.%s is not a weight of the standard preset; use w10, w25 or w50." $key) -}}
+    {{- end -}}
+    {{- if not (regexMatch "^[0-9]+(s|m|h)$" (toString $value)) -}}
+      {{- fail (printf "global.strategy.canary.pauses.%s is '%v'; it needs a duration in seconds, minutes or hours, such as 90s, 10m or 1h." $key $value) -}}
+    {{- end -}}
+    {{- if lt (include "helm.canary.durationSeconds" $value | int) 60 -}}
+      {{- fail (printf "global.strategy.canary.pauses.%s is %v; each pause is at least 1m." $key $value) -}}
+    {{- end -}}
+    {{- $_ := set $pause $key (toString $value) -}}
+  {{- end -}}
+  {{- $total := 0 -}}
+  {{- range $pause }}{{ $total = add $total (include "helm.canary.durationSeconds" . | int) }}{{ end -}}
+  {{- if lt (int $total) 600 -}}
+    {{- fail (printf "global.strategy.canary.pauses add up to %d s (w10 %s, w25 %s, w50 %s); the three pauses together need at least 10m, so the background alerts check (rules with a 5m for window) and compare (initialDelay 3m, then every 2m) can measure the canary before it is promoted." (int $total) $pause.w10 $pause.w25 $pause.w50) -}}
+  {{- end -}}
+{{- end -}}
 {{- range $i, $weight := $ladder -}}
   {{- $reset := and (eq $i 0) $coordinator.enabled $cfg.dark -}}
   {{- if $reset }}{{ $steps = append $steps (dict "setCanaryScale" (dict "weight" $weight)) }}{{ end -}}
   {{- $steps = append $steps (dict "setWeight" $weight) -}}
   {{- if $reset }}{{ $steps = append $steps (dict "setCanaryScale" (dict "matchTrafficWeight" true)) }}{{ end -}}
   {{- if $analysisStep }}{{ $steps = append $steps $analysisStep }}{{ end -}}
-  {{- if eq $cfg.preset "manual" }}{{ $steps = append $steps (dict "pause" (dict)) }}{{ else if $pause }}{{ $steps = append $steps (dict "pause" $pause) }}{{ end -}}
+  {{- if eq $cfg.preset "manual" }}{{ $steps = append $steps (dict "pause" (dict)) }}{{ else if $pause }}{{ $steps = append $steps (dict "pause" (dict "duration" (index $pause (printf "w%d" $weight)))) }}{{ end -}}
   {{- if $coordinator.enabled }}{{ $steps = append $steps (include "helm.canary.barrier" (dict "name" (printf "w%d" $weight) "coordinator" $coordinator) | fromJson) }}{{ end -}}
 {{- end -}}
 {{- $steps = append $steps (dict "setWeight" 100) -}}
@@ -561,7 +592,7 @@
   {{- end -}}
 {{- end -}}
 {{- if gt (int $budget) 5700 -}}
-  {{- fail (printf "application '%s': the canary budget (mycarrier.tech/canaryBudgetSeconds) is %d s; the maximum is 5700 s. rollout-watch's release workflow has activeDeadlineSeconds 10800, which must cover about 70 minutes before the canary starts, the budget, and 15 minutes after it (DEVOPS-319). Lower global.strategy.canary.manualTimeout, the coordinator.barrierTimeouts, or the analysis templates' count or interval; with explicit steps, shorten their pauses and lower budgetSeconds." .appName (int $budget)) -}}
+  {{- fail (printf "application '%s': the canary budget (mycarrier.tech/canaryBudgetSeconds) is %d s; the maximum is 5700 s. rollout-watch's release workflow has activeDeadlineSeconds 10800, which must cover about 70 minutes before the canary starts, the budget, and 15 minutes after it (DEVOPS-319). Lower global.strategy.canary.pauses, manualTimeout, the coordinator.barrierTimeouts, or the analysis templates' count or interval; with explicit steps, shorten their pauses and lower budgetSeconds." .appName (int $budget)) -}}
 {{- end -}}
 {{- int $budget -}}
 {{- end -}}
@@ -579,11 +610,13 @@
 {{- end -}}
 
 {{- /* A duration such as 90s, 9m or 1h (a barrier timeout, a pause, an analysis interval, manualTimeout), in seconds;
-       any other form yields 0, so a barrier timeout in another form is not checked. */ -}}
+       any other form yields 0, so a barrier timeout in another form is not checked. The number is decimal, as Argo
+       Rollouts reads it (Go time.ParseDuration): leading zeros are dropped before int, which would read 010 as octal
+       8 and 09 as 0. */ -}}
 {{- define "helm.canary.durationSeconds" -}}
 {{- $v := toString . -}}
 {{- if regexMatch "^[0-9]+(s|m|h)$" $v -}}
-  {{- $n := trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v)) | int -}}
+  {{- $n := regexReplaceAll "^0+([0-9])" (trimSuffix "h" (trimSuffix "m" (trimSuffix "s" $v))) "${1}" | int -}}
   {{- if hasSuffix "h" $v }}{{ mul $n 3600 }}{{ else if hasSuffix "m" $v }}{{ mul $n 60 }}{{ else }}{{ $n }}{{ end -}}
 {{- else -}}0{{- end -}}
 {{- end -}}
