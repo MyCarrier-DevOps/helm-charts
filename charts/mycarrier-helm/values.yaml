@@ -70,10 +70,10 @@ global:
   #     # pauses:                 # the standard preset's pause after each weight (DEVOPS-603); an unset key keeps
   #     #   w10: 10m              # 5m. Each pause is at least 1m, the three add up to at least 10m, and they count
   #     #   w25: 5m               # in the canary budget, so the 5700 s limit caps their sum at about 21 minutes
-  #     #   w50: 5m               # (1257 s) with the other defaults. Only the standard preset reads it; with fast or
-  #                               # manual it fails the render, and explicit steps ignore it. For a hotfix, promote
-  #                               # the Rollouts in full from the Rollouts interface (it skips the remaining steps),
-  #                               # or set preset: fast with dark: false, and put the values back afterwards.
+  #     #   w50: 5m               # (1257 s) with the other defaults. Only the standard preset reads it; fast,
+  #                               # manual and explicit steps ignore it. For a hotfix, press Promote-Full on every
+  #                               # Rollout of the release in the Argo Rollouts dashboard (rollouts-prod.mycarrier.tech),
+  #                               # or set preset: fast with dark: false (pauses can stay) and put them back afterwards.
   #     steps: []                 # Argo Rollouts canary steps that replace the preset verbatim
   #     # budgetSeconds: 1800     # required with steps, in every environment: their worst-case length in seconds
   #                               # (pauses, each analysis step's longest template, barrier timeouts), 1 to 5700.

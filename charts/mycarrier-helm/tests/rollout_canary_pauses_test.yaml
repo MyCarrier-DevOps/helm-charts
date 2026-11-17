@@ -1,7 +1,8 @@
 suite: Rollout canary pauses per weight (global.strategy.canary.pauses, DEVOPS-603)
 # The standard preset pauses after each weight's analysis step: 5m by default, or pauses.w10, w25 and w50. Each pause
 # is at least 1m and the three add up to at least 10m; the budget (mycarrier.tech/canaryBudgetSeconds) adds the
-# durations, so the 5700 s limit caps them. fast and manual refuse pauses; an explicit steps list ignores them.
+# durations, so the 5700 s limit caps them. fast, manual and an explicit steps list ignore pauses, as fast and
+# manual ignore manualTimeout: a stack can switch to fast for a hotfix and back without touching pauses.
 # With the dark stage off and the coordinator on, the standard steps are: 0 start, 1 setWeight 10, 2 analysis,
 # 3 pause, 4 w10, 5 setWeight 25, 6 analysis, 7 pause, 8 w25, 9 setWeight 50, 10 analysis, 11 pause, 12 w50,
 # 13 setWeight 100. Budget with the defaults: start 540 + 3 x (health 90 + pause 300 + barrier 540) = 3330.
@@ -206,7 +207,9 @@ tests:
       - failedTemplate:
           errorPattern: "([Aa]dditional propert(y|ies) '?w30'? (is )?not allowed)"
 
-  - it: fails pauses with the fast preset
+  # start 540 + health 90 + w25 540, as without pauses. 30s and a sum of 30 s would fail with the standard preset,
+  # so the fast preset does not check pauses at all.
+  - it: ignores pauses with the fast preset
     set:
       global:
         <<: *global
@@ -216,15 +219,22 @@ tests:
             dark: false
             preset: fast
             pauses:
-              w25: 5m
+              w10: 30s
       environment: *preprod
       applications:
         api: *rollout
     asserts:
-      - failedTemplate:
-          errorPattern: "global.strategy.canary.pauses is set, and the fast preset has no timed pauses"
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "1170"
+      - notContains:
+          path: spec.strategy.canary.steps
+          content:
+            pause:
+              duration: 30s
 
-  - it: fails pauses with the manual preset
+  # start 540 + health 90 + manual pause 2400 (manualTimeout 40m) + w10 540, as without pauses.
+  - it: ignores pauses with the manual preset
     set:
       global:
         <<: *global
@@ -234,13 +244,18 @@ tests:
             dark: false
             preset: manual
             pauses:
-              w10: 5m
+              w10: 10m
       environment: *preprod
       applications:
         api: *rollout
     asserts:
-      - failedTemplate:
-          errorPattern: "global.strategy.canary.pauses is set, and the manual preset has no timed pauses"
+      - equal:
+          path: metadata.annotations["mycarrier.tech/canaryBudgetSeconds"]
+          value: "3570"
+      - equal:
+          path: spec.strategy.canary.steps[3]
+          value:
+            pause: {}
 
   - it: ignores pauses with an explicit steps list
     set:

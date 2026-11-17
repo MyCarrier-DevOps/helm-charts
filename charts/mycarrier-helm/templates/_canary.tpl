@@ -254,16 +254,14 @@
        least 10m: alerts (rules with a for window of 5m) and compare (initialDelay 3m, then every 2m) run as background
        analysis from the first weight until promotion, so what counts is how long the canary serves traffic, not each
        pause. helm.canary.budgetSeconds adds the durations, so the 5700 s limit caps their sum (1257 s, about 21 minutes,
-       with the other defaults). fast and manual have no timed pauses, so a key fails there; an explicit steps list
-       ignores pauses. */ -}}
-{{- with $cfg.pauses -}}
-  {{- if not (kindIs "map" .) -}}
-    {{- fail (printf "global.strategy.canary.pauses is '%v'; it maps w10, w25 and w50 to a duration such as 10m." .) -}}
+       with the other defaults). fast and manual have no timed pauses and ignore pauses, as they ignore manualTimeout,
+       so a stack can switch to fast for a hotfix and back without touching pauses; an explicit steps list ignores it
+       too. */ -}}
+{{- if and $cfg.pauses (eq $cfg.preset "standard") -}}
+  {{- if not (kindIs "map" $cfg.pauses) -}}
+    {{- fail (printf "global.strategy.canary.pauses is '%v'; it maps w10, w25 and w50 to a duration such as 10m." $cfg.pauses) -}}
   {{- end -}}
-  {{- if ne $cfg.preset "standard" -}}
-    {{- fail (printf "global.strategy.canary.pauses is set, and the %s preset has no timed pauses: only the standard preset (w10, w25, w50) reads it. Remove pauses, or use preset: standard." $cfg.preset) -}}
-  {{- end -}}
-  {{- range $key, $value := . -}}
+  {{- range $key, $value := $cfg.pauses -}}
     {{- if not (hasKey $pause $key) -}}
       {{- fail (printf "global.strategy.canary.pauses.%s is not a weight of the standard preset; use w10, w25 or w50." $key) -}}
     {{- end -}}
