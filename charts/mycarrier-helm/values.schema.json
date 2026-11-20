@@ -2607,6 +2607,13 @@
               "items": {
                 "type": "string"
               }
+            },
+            "excludedServices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         },

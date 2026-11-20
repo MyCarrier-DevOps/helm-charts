@@ -393,3 +393,63 @@ tests:
       - matchRegex:
           path: spec.rules[2].data[0].model.rawSql
           pattern: "AND SpanAttributes\\['http.route'\\] NOT IN \\('/api/v1/customer-health'\\)"
+
+  - it: leaves excluded service prefixes out of every csharp standard rule
+    set:
+      alerts:
+        serviceName: MC.Integration
+        displayName: Integration
+        filters:
+          excludedServices:
+            - MC.IntegrationAsService
+            - MC.Integration.O'Test
+    asserts:
+      - matchRegex:
+          path: spec.rules[0].data[0].model.rawSql
+          pattern: "(?s)ServiceName LIKE 'MC.Integration%'\n    AND ServiceName NOT LIKE 'MC.IntegrationAsService%'\n    AND ServiceName NOT LIKE 'MC.Integration.O''Test%'.*http_errors.*ServiceName LIKE 'MC.Integration%'\n    AND ServiceName NOT LIKE 'MC.IntegrationAsService%'.*http_non_errors"
+      - matchRegex:
+          path: spec.rules[1].data[0].model.rawSql
+          pattern: "(?s)NOT LIKE 'MC.IntegrationAsService%'.*NOT LIKE 'MC.IntegrationAsService%'"
+      - matchRegex:
+          path: spec.rules[2].data[0].model.rawSql
+          pattern: "ServiceName LIKE 'MC.Integration%'\n    AND ServiceName NOT LIKE 'MC.IntegrationAsService%'"
+      - matchRegex:
+          path: spec.rules[3].data[0].model.rawSql
+          pattern: "ServiceName LIKE 'MC.Integration%'\n    AND ServiceName NOT LIKE 'MC.IntegrationAsService%'"
+      - matchRegex:
+          path: spec.rules[4].data[0].model.rawSql
+          pattern: "ServiceName LIKE 'MC.Integration%'\n    AND ServiceName NOT LIKE 'MC.IntegrationAsService%'"
+      - matchRegex:
+          path: spec.rules[5].data[0].model.rawSql
+          pattern: "ServiceName LIKE 'MC.Integration%'\n    AND ServiceName NOT LIKE 'MC.IntegrationAsService%'"
+      - equal:
+          path: spec.rules[0].labels.service
+          value: mc.integration
+      - equal:
+          path: spec.rules[0].uid
+          value: integration_sev1_http_errors
+
+  - it: leaves excluded service prefixes out of a nodejs stack's standard rules with NOT ILIKE
+    set:
+      global:
+        language: nodejs
+      alerts:
+        filters:
+          excludedServices:
+            - MC.InvoiceOther
+    asserts:
+      - matchRegex:
+          path: spec.rules[0].data[0].model.rawSql
+          pattern: "ServiceName ILIKE 'MC.Invoice%'\n  AND ServiceName NOT ILIKE 'MC.InvoiceOther%'"
+      - matchRegex:
+          path: spec.rules[2].data[0].model.rawSql
+          pattern: "ServiceName ILIKE 'MC.Invoice%'\n  AND ServiceName NOT ILIKE 'MC.InvoiceOther%'"
+
+  - it: adds no service filter when excludedServices is empty
+    asserts:
+      - notMatchRegex:
+          path: spec.rules[0].data[0].model.rawSql
+          pattern: "NOT LIKE 'MC"
+      - notMatchRegex:
+          path: spec.rules[5].data[0].model.rawSql
+          pattern: "NOT LIKE '[^']*%'"

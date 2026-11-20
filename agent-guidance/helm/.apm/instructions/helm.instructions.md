@@ -1648,6 +1648,7 @@ alerts:
 | `alerts.interval` | `60s` | Rule group evaluation interval |
 | `alerts.paused` | `false` | Pauses every standard and compact rule that does not set its own `paused` |
 | `alerts.filters.excludedPaths` | `[]` | Paths left out of the alerts on the service's own HTTP responses (`serverErrorRatio`, `clientErrorRatio`, `serverErrorCount`, `http503Returned`): `url.path` values, or `http.route` values for nodejs |
+| `alerts.filters.excludedServices` | `[]` | `ServiceName` prefixes left out of every standard alert (`AND ServiceName NOT LIKE '<prefix>%'`, `NOT ILIKE` for nodejs). `serviceName` is a prefix, so `MC.Integration` also matches `MC.IntegrationAsService.*`; list the other stack's prefix here so its faults do not page under this stack too. The `service` label, contact points and rule uids do not change; additional rules and the HyperDX links are not filtered |
 | `alerts.standard.<key>` | Language defaults | Overrides of one standard alert (below) |
 | `alerts.additional.<name>` | — | Additional rules (below) |
 | `alerts.contactPoints.enabled` | `true` | `false` renders the rule group only: no contact points, no notification route, and the alerts take Grafana's default notification route |
