@@ -15,11 +15,11 @@
 {{- $stackname := $.Values.global.appStack }}
 {{- $correlationId := $.Values.global.correlationId }}
 {{- $imageTag :=  .application.image.tag }}
-{{- $enableV1 := dig "testtrigger" "enableV1" true .application }}
 {{- $argoInst := $.Values.global.argoEventsInstance | default "argo-events" }}
 {{- $urlKey := ternary "dev_url" "url" (eq $argoInst "argo-events-test") }}
-{{- $apiPath := ternary "testengine/api/v1" "testengine/api" $enableV1 }}
-{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (printf "vault:DevOps/data/%s#%s" $apiPath $urlKey) }}
+{{- /* Always TestEngine's v1 trigger URL: the legacy testengine/api URL is gone with POST /trigger (DEVOPS-623/629);
+       the v2 script derives the API root from it. */}}
+{{- $defaultWebhookUrl := $.Values.global.testengineWebhookUrl | default (printf "vault:DevOps/data/testengine/api/v1#%s" $urlKey) }}
 {{- if dig "testtrigger" false .application }}
 {{- $triggerVersion := include "helm.testtrigger.version" . }}
 ttlSecondsAfterFinished: {{ dig "testtrigger" "ttlSecondsAfterFinished" 3600 .application }}
@@ -32,23 +32,6 @@ backoffLimit: {{ dig "testtrigger" "backoffLimit" 0 .application }}
 {{- $triggerName := printf "%s-trigger" (include "helm.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- $_ := set $podLabels "app.kubernetes.io/name" $triggerName }}
 {{- $_ := set $podLabels "app" $triggerName }}
-{{- /* Legacy path (enableV1 false): one request per definition, all in the one command[2] string. A script over 100 KiB
-       fails when some definition has EnvVars (a service without env can never newly fail). The 512 bytes are the fixed
-       text around the curl blocks (set -u, failed=0, the closing if and exit 0), which holds no values; the real
-       length is checked, so filters, tolerations, nodeAffinity and podResources count too. Nothing prints before this. */}}
-{{- $legacy := "" }}
-{{- if not $enableV1 }}
-  {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" false) | fromJson }}
-  {{- $legacy = include "helm.testtrigger.legacyCurls" (dict "ctx" . "env" $env) }}
-  {{- /* $legacy still carries the 12-space block-scalar indentation that YAML strips; count the text that reaches
-         command[2]. */}}
-  {{- if gt (len (regexReplaceAll "(?m)^ {12}" $legacy "")) 101888 }}
-    {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
-    {{- if $last }}
-      {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
-    {{- end }}
-  {{- end }}
-{{- end }}
 template:
   metadata:
     labels:
@@ -88,7 +71,7 @@ template:
             failed=0
           {{- if eq $triggerVersion "v2" }}
           {{- include "helm.testtrigger.v2curls" . }}
-          {{- else if $enableV1 }}
+          {{- else }}
             curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
             --max-time 60 \
             -X POST \
@@ -99,8 +82,6 @@ template:
               echo "ERROR: TestEngine trigger failed (curl exit $rc)" >&2
               failed=$((failed+1))
             }
-          {{- else }}
-          {{- $legacy }}
           {{- end }}
             if [ "$failed" -gt 0 ]; then
               echo "ERROR: $failed TestEngine trigger call(s) failed — see above; exiting 0 to avoid ArgoCD sync retries" >&2
@@ -125,99 +106,10 @@ else ports.http itself; the container port does not have to equal it. When the S
 {{- end }}
 
 {{/*
-helm.testtrigger.legacyCurls: the curl commands of the legacy PostSync hook (testtrigger.enableV1 false), one per test
-definition, as the text that goes into the hook's script. Takes dict "ctx" <the hook's context, with .application> and
-"env" <the result of helm.testtrigger.envVars, decoded>. Each definition is its own HTTP request, so there is no cap
-across definitions; the caller checks the length of the whole script. EnvVars is the last key of
-TestEnvironmentVariables and is left out when the definition has none. Quotes and dollars in it are escaped like the v1
-hook body (helm.testtrigger.commandSafeJson); the other fields are printed as they always were.
-*/}}
-{{- define "helm.testtrigger.legacyCurls" -}}
-{{- $root := .ctx }}
-{{- $env := .env }}
-{{- $application := $root.application }}
-{{- $fullName := include "helm.fullname" $root }}
-{{- $baseName := include "helm.basename" $root }}
-{{- $namespace := include "helm.namespace" $root }}
-{{- $httpPort := include "helm.testtrigger.httpServicePort" $application }}
-{{- $gitBranch := $root.Values.global.gitbranch }}
-{{- $stackname := $root.Values.global.appStack }}
-{{- $correlationId := $root.Values.global.correlationId }}
-{{- $imageTag := $application.image.tag }}
-{{- range $index, $definition := dig "testtrigger" "testdefinitions" list $application }}
-          {{- $serviceAddress := .serviceAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $fullName $namespace $httpPort) }}
-          {{- $defaultTolerations := list (dict "key" "kubernetes.azure.com/scalesetpriority" "operator" "Equal" "value" "spot" "effect" "NoSchedule") }}
-          {{- $tolerations := $defaultTolerations }}
-          {{- if hasKey . "tolerations" }}
-            {{- $tolerations = .tolerations }}
-          {{- end }}
-          {{- $nodeAffinity := .nodeAffinity | default list }}
-          {{- $useDefaultNodeAffinity := "false" }}
-          {{- if hasKey . "useDefaultNodeAffinity" }}
-            {{- $useDefaultNodeAffinity = printf "%v" .useDefaultNodeAffinity }}
-          {{- end }}
-          {{- $legacyMode := "false" }}
-          {{- if hasKey . "legacyMode" }}
-            {{- $legacyMode = printf "%v" .legacyMode }}
-          {{- end }}
-          {{- $spreadAcrossNodes := "true" }}
-          {{- if hasKey . "spreadAcrossNodes" }}
-            {{- $spreadAcrossNodes = printf "%v" .spreadAcrossNodes }}
-          {{- end }}
-          {{- $hardenedSecurityContext := true }}
-          {{- if and (hasKey . "hardenedSecurityContext") (eq (lower (printf "%v" .hardenedSecurityContext)) "false") }}
-            {{- $hardenedSecurityContext = false }}
-          {{- end }}
-          {{- $defaultPodResources := dict "limits" (dict "cpu" "2000m" "memory" "4Gi") "requests" (dict "cpu" "250m" "memory" "1Gi") }}
-          {{- $podResources := .podResources | default $defaultPodResources }}
-          {{- include "helm.testtrigger.validateResultsApi" (dict "def" . "fullName" $fullName) }}
-          {{- $resultsApiKey := .resultsApiKey | default "" }}
-          {{- $resultsApiUrl := .resultsApiUrl | default "" }}
-            curl -sS --fail-with-body -w '\nTestEngine HTTP status: %{http_code}\n' \
-            --max-time 60 \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "Authorization: $TESTENGINE_APIKEY" \
-            -d '{
-              "IsMonolith": false,
-              "TestName": "{{ .name }}",
-              "StackName": "{{ $stackname }}",
-              "ContainerImage": "{{ .containerImage }}",
-              "ContainerTag": "{{ .containerTag }}",
-              "HardenedSecurityContext": {{ $hardenedSecurityContext }},
-              "TestFilters": {{ .filters | toJson }},
-              "Tolerations": {{ $tolerations | toJson }},
-              "NodeAffinity": {{ $nodeAffinity | toJson }},
-              "UseDefaultNodeAffinity": "{{ $useDefaultNodeAffinity }}",
-              "SpreadAcrossNodes": "{{ $spreadAcrossNodes }}",
-              "PodResources": {{ $podResources | toJson }},
-              "TestEnvironmentVariables": {
-                  "EnvironmentName": "{{ $namespace }}",
-                  "ReleaseId": "{{ $imageTag }}",
-                  "SecretId": "{{ .secretId }}",
-                  "ServiceAddress": {{ $serviceAddress | quote }},
-                  "ReleaseDefinitionName": "{{ .releaseDefinitionName | default $baseName }}",
-                  "BranchName": "{{ $gitBranch }}",
-                  "AdditionalEnvVars": "{{ .additionalEnvVars}}",
-                  "CorrelationId": "{{ $correlationId }}",
-                  "LegacyMode": "{{ $legacyMode }}"{{- if $resultsApiUrl }},
-                  "ResultsApiUrl": {{ $resultsApiUrl | quote }}{{- end }}{{- if $resultsApiKey }},
-                  "ResultsApiKey": {{ $resultsApiKey | quote }}{{- end }}{{- with index $env.byDefinition $index }},
-                  "EnvVars": {{ include "helm.testtrigger.commandSafeJson" (dict "json" (toJson .) "application" $application "argoTemplate" false) }}{{- end }}
-                }
-              }' "$TESTENGINEHOOK_URL" || {
-              rc=$?
-              echo "ERROR: TestEngine trigger failed for "{{ .name | squote }}" (curl exit $rc)" >&2
-              failed=$((failed+1))
-            }
-{{- end }}
-{{- end }}
-
-{{/*
 The TestEngine v1 request for an application, as indented JSON: {"Tests": [...]}, one entry per
 testtrigger.testdefinitions item, with no SlipStep, so TestEngine bookends the environment's tests step
 (prod_tests in prod) for the run. Two templates send it, so they cannot drift apart: the PostSync hook
-(helm.specs.testenginehook, with testtrigger.enableV1) and, for a prod canary Rollout, the <fullName>-prod-tests
+(helm.specs.testenginehook) and, for a prod canary Rollout, the <fullName>-prod-tests
 ConfigMap that the release's rollout-watch posts after promotion (DEVOPS-319, Tech Spec D7; triggertestengine.yaml).
 Takes the application context. Every test definition's results API settings are checked here, and so is its env: every
 test definition's EnvVars are merged and checked here (helm.testtrigger.envVars); the v1 request is one HTTP request,
@@ -239,7 +131,7 @@ empty), and correlationId (CorrelationId, a string).
 {{- $correlationId := .Values.global.correlationId }}
 {{- if hasKey $run "correlationId" }}{{ $correlationId = $run.correlationId }}{{ end }}
 {{- $imageTag := .application.image.tag }}
-{{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
+{{- $env := include "helm.testtrigger.envVars" (dict "application" .application) | fromJson }}
 {{- $tests := list }}
 {{- range $index, $definition := dig "testtrigger" "testdefinitions" list .application }}
 {{- if and (not $.v2Build) (include "helm.testtrigger.hasV2Fields" .) }}
@@ -339,7 +231,7 @@ bounds the env value the same way).
   {{- $out = $out | replace "{{" "{\\u007b" }}
 {{- end }}
 {{- if gt (len $out) 102400 }}
-  {{- $env := include "helm.testtrigger.envVars" (dict "application" .application "enforceRequestCap" true) | fromJson }}
+  {{- $env := include "helm.testtrigger.envVars" (dict "application" .application) | fromJson }}
   {{- $last := include "helm.testtrigger.lastEnvDefinition" (dict "application" .application "env" $env) }}
   {{- if $last }}
     {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $last) }}
@@ -349,8 +241,8 @@ bounds the env value the same way).
 {{- end }}
 
 {{/*
-Checks a test definition's results API settings, for both the v1 and the legacy path: the key and the URL
-go together, and the key is a whole-value vault reference. The error names the field, never the value, so
+Checks a test definition's results API settings (helm.testtrigger.v1request, which the v2 request is built from): the key
+and the URL go together, and the key is a whole-value vault reference. The error names the field, never the value, so
 a literal key does not reach the render log; that is why the key is not checked in values.schema.json.
 The vault reference pattern is also the vault branch of the resultsApiUrl pattern in values.schema.json:
 change both together.
@@ -382,12 +274,10 @@ MC.TestEngine docs/V2_TRIGGER.md). All definitions of an application go to the s
 batch, and two batches with one correlation id write the slip's tests step twice, read as a retry of each other and
 get one check-run each. The tag rules are TestEngine's (trigger_v2.go validateV2Entry, shared with the Worker through
 testdata/v2_message_cases.json): letters, digits, '_', '.' and '-', at most 100 characters and at least one letter or
-digit; at most 10 testTags, each with the same characters and length. A tag needs testtrigger.enableV1: the legacy
-per-definition call would send no filter and run every test. Every failure names the definition and the field.
+digit; at most 10 testTags, each with the same characters and length. Every failure names the definition and the field.
 */}}
 {{- define "helm.testtrigger.version" -}}
 {{- $fullName := include "helm.fullname" . }}
-{{- $enableV1 := dig "testtrigger" "enableV1" true .application }}
 {{- $v1 := list }}
 {{- $v2 := list }}
 {{- $tagChars := "must use only letters, digits, '_', '.' and '-' (TestEngine's /v2/trigger refuses any other character)" }}
@@ -439,9 +329,6 @@ per-definition call would send no filter and run every test. Every failure names
         {{- fail (printf "%s: testTags[%d] '%s' %s" $where $i $testTag $tagChars) }}
       {{- end }}
     {{- end }}
-    {{- if not $enableV1 }}
-      {{- fail (printf "%s: testEnvironmentTag needs testtrigger.enableV1: true. With enableV1 false the chart sends one legacy call per definition, which has no tag and would run every test in the image" $where) }}
-    {{- end }}
     {{- $v2 = append $v2 (toString .name) }}
   {{- end }}
 {{- end }}
@@ -478,7 +365,8 @@ call it only after helm.testtrigger.version answered v2.
 
 {{/*
 helm.testtrigger.v2curls (AQA-38): the PostSync hook's script for an application on TestEngine's v2 trigger, as the text
-that goes into the script (12-space block indentation, like helm.testtrigger.legacyCurls). Takes the application context.
+that goes into the script (12-space block indentation, like the v1 curl block of helm.specs.testenginehook). Takes the
+application context.
 TESTENGINEHOOK_URL is the v1 trigger URL; the API root is that URL without a trailing /v1/trigger or /trigger (as the
 canary tests script's api_base). Before the post it reads GET /v1/capabilities: a 404 (a TestEngine older than
 capabilities) or a trigger_versions without "v2" means v2 is switched off in that TestEngine, and nothing is posted.

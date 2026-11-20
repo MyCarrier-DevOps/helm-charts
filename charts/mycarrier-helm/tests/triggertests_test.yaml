@@ -146,7 +146,7 @@ tests:
       - exists:
           path: spec
 
-  # enableV1 / legacy mode tests
+  # enableV1 tests
   - it: should bundle all test definitions into a single curl when enableV1 is true
     set:
       fullnameOverride: app
@@ -207,7 +207,9 @@ tests:
           path: spec.template.spec.containers[0].env[1].value
           value: "vault:DevOps/data/testengine/api/v1#url"
 
-  - it: should emit a separate curl per test definition when enableV1 is false
+  # DEVOPS-629: TestEngine's legacy POST /trigger is removed (DEVOPS-623). enableV1: false selected the per-definition
+  # calls to it, so it fails the render, with or without test definitions, and names the application.
+  - it: fails the render when testtrigger.enableV1 is false
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -230,32 +232,28 @@ tests:
                 secretId: "vault:Secret/data/secret#SecretId"
                 filters:
                   - "TestCategory=api"
-              - name: "uitests"
-                containerImage: "cypress/included"
-                containerTag: "12.8.1"
-                secretId: "vault:Secret/data/ui#SecretId"
-                filters:
-                  - "TestCategory=ui"
     asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"Tests":\['
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"TestName": "apitests"'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"TestName": "uitests"'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)curl -sS --fail-with-body.*curl -sS --fail-with-body'
-      - equal:
-          path: spec.template.spec.containers[0].env[1].value
-          value: "vault:DevOps/data/testengine/api#url"
+      - failedTemplate:
+          errorPattern: "application 'app1': testtrigger.enableV1: false is not supported\\. TestEngine's legacy POST /trigger is removed \\(DEVOPS-623\\).* Remove applications\\.app1\\.testtrigger\\.enableV1, or set it to true\\.$"
+
+  - it: fails the render when testtrigger.enableV1 is false and the testtrigger has no test definitions
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        worker:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/worker"
+            tag: "1.0.0"
+          testtrigger:
+            enableV1: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'worker': testtrigger.enableV1: false is not supported\\."
 
   # The legacy API is retired, so enableV1 defaults to true: one bundled POST to api/v1.
   - it: should default to v1 mode when enableV1 is omitted
@@ -301,49 +299,6 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api/v1#url"
 
-  - it: should use legacy mode when enableV1 is false
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            enableV1: false
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                filters:
-                  - "TestCategory=api"
-              - name: "uitests"
-                containerImage: "cypress/included"
-                containerTag: "12.8.1"
-                secretId: "vault:Secret/data/ui#SecretId"
-                filters:
-                  - "TestCategory=ui"
-    asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"Tests":\['
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)curl -sS --fail-with-body.*curl -sS --fail-with-body'
-      - equal:
-          path: spec.template.spec.containers[0].env[1].value
-          value: "vault:DevOps/data/testengine/api#url"
 
   # Edge case tests for testdefinitions
   - it: should handle multiple test definitions correctly
@@ -577,7 +532,6 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
-            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -593,7 +547,7 @@ tests:
           count: 1
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"Tolerations":\s*\[.*"key":\s*"kubernetes.azure.com/scalesetpriority"'
+          pattern: '(?s)"Tolerations":\s*\[[^\]]*"key":\s*"kubernetes.azure.com/scalesetpriority"'
 
   - it: should use custom tolerations when specified
     set:
@@ -609,7 +563,6 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
-            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -630,7 +583,7 @@ tests:
           count: 1
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"Tolerations":\s*\[.*"key":\s*"custom-key"'
+          pattern: '(?s)"Tolerations":\s*\[[^\]]*"key":\s*"custom-key"'
 
   - it: should include empty NodeAffinity by default
     set:
@@ -677,7 +630,6 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
-            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -699,7 +651,7 @@ tests:
           count: 1
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"NodeAffinity":\s*\[.*"key":\s*"agentpool"'
+          pattern: '(?s)"NodeAffinity":\s*\[[^\]]*"key":\s*"agentpool"'
 
   - it: should include UseDefaultNodeAffinity as false by default
     set:
@@ -905,7 +857,6 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
-            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -921,10 +872,10 @@ tests:
           count: 1
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"PodResources":\s*\{.*"cpu":\s*"2000m"'
+          pattern: '(?s)"PodResources":\s*\{\s*"limits":\s*\{\s*"cpu":\s*"2000m"'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"requests":\{"cpu":"250m","memory":"1Gi"\}'
+          pattern: '(?s)"requests":\s*\{\s*"cpu":\s*"250m",\s*"memory":\s*"1Gi"\s*\}'
 
   - it: should pin default PodResources requests.memory to 1Gi when enableV1 is true
     set:
@@ -972,7 +923,6 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
-            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -995,7 +945,7 @@ tests:
           count: 1
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"PodResources":\s*\{.*"cpu":\s*"4000m"'
+          pattern: '(?s)"PodResources":\s*\{\s*"limits":\s*\{\s*"cpu":\s*"4000m"'
 
   - it: should include HardenedSecurityContext as true by default (legacy mode)
     set:
@@ -1530,50 +1480,15 @@ tests:
           pattern: '"TestFilters":\s*"TestCategory=coretests"'
 
   # ── TestEngine webhook URL selection tests ────────────────────────────────
-  # URL is computed from (argoEventsInstance x enableV1).
-  #   argoEventsInstance=argo-events-test -> dev_url
-  #   argoEventsInstance=argo-events / unset (default) -> url
-  #   enableV1=true  -> .../api/v1#<key>
-  #   enableV1=false -> .../api#<key>
+  # URL is computed from argoEventsInstance; the path is always .../api/v1 (enableV1: false fails the render,
+  # DEVOPS-629).
+  #   argoEventsInstance=argo-events-test -> api/v1#dev_url
+  #   argoEventsInstance=argo-events / unset (default) -> api/v1#url
   # appStack=example is NOT a URL signal: MC.Example runs in both workflow-core
   # (argo-events) and workflow-dev (argo-events-test), so its TestEngine target
   # is driven purely by the source cluster.
   # Legacy global.testengineWebhookUrl override still wins when set (back-compat 3.1.9).
 
-  - it: prod argo-events + enableV1=false -> api#url
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      global.argoEventsInstance: "argo-events"
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            enableV1: false
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                filters:
-                  - "TestCategory=whatever"
-    asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#url"
 
   - it: prod argo-events + enableV1=true -> api/v1#url
     set:
@@ -1610,40 +1525,6 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api/v1#url"
 
-  - it: dev argo-events-test + enableV1=false -> api#dev_url
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      global.argoEventsInstance: "argo-events-test"
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            enableV1: false
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                filters:
-                  - "TestCategory=whatever"
-    asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#dev_url"
 
   - it: dev argo-events-test + enableV1=true -> api/v1#dev_url
     set:
@@ -1713,7 +1594,7 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api/v1#url"
 
-  - it: appStack=example + argo-events -> api#url (cluster wins, appStack is not a URL signal)
+  - it: appStack=example + argo-events -> api/v1#url (cluster wins, appStack is not a URL signal)
     set:
       fullnameOverride: app
       namespace: dev-app
@@ -1729,7 +1610,6 @@ tests:
             repository: "mycarrier/app1"
             tag: "1.0.0"
           testtrigger:
-            enableV1: false
             ttlSecondsAfterFinished: "300"
             testdefinitions:
               - name: "apitests"
@@ -1747,7 +1627,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: TESTENGINEHOOK_URL
-            value: "vault:DevOps/data/testengine/api#url"
+            value: "vault:DevOps/data/testengine/api/v1#url"
 
   - it: appStack=example + argo-events-test + enableV1=true -> api/v1#dev_url
     set:
@@ -1816,64 +1696,6 @@ tests:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
 
-  - it: "legacy: curl call is guarded, failure is logged with the single-quoted test name, script always exits 0"
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            enableV1: false
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                filters:
-                  - "TestCategory=whatever"
-    asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - equal:
-          path: spec.backoffLimit
-          value: 0
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'curl -sS --fail-with-body -w '
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '--max-time 60'
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '--retry'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*failed=0\s*$'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"\$TESTENGINEHOOK_URL" \|\| \{'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for "''apitests''" \(curl exit \$rc\)'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit\s+([1-9]|"?\$)'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'exit 0\s*$'
 
   - it: "enableV1: curl call is guarded, failure is logged, script always exits 0"
     set:
@@ -1934,73 +1756,6 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'exit 0\s*$'
 
-  - it: "legacy multi-definition: every definition gets a guarded curl call, failures are counted and summarized, script always exits 0"
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            ttlSecondsAfterFinished: "300"
-            enableV1: false
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                filters:
-                  - "TestCategory=api"
-              - name: "uitests"
-                containerImage: "cypress/included"
-                containerTag: "12.8.1"
-                secretId: "vault:Secret/data/ui#SecretId"
-                filters:
-                  - "TestCategory=ui"
-              - name: "performancetests"
-                containerImage: "k6/operator"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/performance#SecretId"
-                filters:
-                  - "TestCategory=performance"
-    asserts:
-      - isKind:
-          of: Job
-      - hasDocuments:
-          count: 1
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*set -e'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*failed=0\s*$'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{.*"\$TESTENGINEHOOK_URL" \|\| \{'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for "''apitests''" \(curl exit \$rc\)'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for "''uitests''" \(curl exit \$rc\)'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: TestEngine trigger failed for "''performancetests''" \(curl exit \$rc\)'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'ERROR: \$failed TestEngine trigger call\(s\) failed'
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '(?m)^\s*exit\s+([1-9]|"?\$)'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: 'exit 0\s*$'
 
   - it: back-compat — legacy global.testengineWebhookUrl still wins when set (3.1.9 transitional)
     set:
@@ -2127,42 +1882,6 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"ResultsApi(Url|Key)"'
 
-  - it: should send the results API key and URL
-    set:
-      fullnameOverride: app
-      namespace: dev-app
-      metaEnvironment: dev
-      applications:
-        app1:
-          version: 1.0.0
-          enabled: true
-          image:
-            registry: "myregistry.example.com"
-            repository: "mycarrier/app1"
-            tag: "1.0.0"
-          testtrigger:
-            enableV1: false
-            ttlSecondsAfterFinished: "300"
-            testdefinitions:
-              - name: "apitests"
-                containerImage: "alpine/curl"
-                containerTag: "latest"
-                secretId: "vault:Secret/data/secret#SecretId"
-                resultsApiKey: "vault:DevOps/data/autotestresults_api/api#key"
-                resultsApiUrl: "vault:QA/data/autotestresults_api#url"
-    asserts:
-      - isKind:
-          of: Job
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiKey":\s*"vault:DevOps/data/autotestresults_api/api#key"'
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"ResultsApiUrl":\s*"vault:QA/data/autotestresults_api#url"'
-
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: '"LegacyMode": "false",\s*"ResultsApiUrl": "vault:QA/data/autotestresults_api#url",\s*"ResultsApiKey": "vault:DevOps/data/autotestresults_api/api#key"\s*}'
   - it: should send the results API key and URL on the v1 path
     set:
       fullnameOverride: app
@@ -2813,7 +2532,7 @@ tests:
       - failedTemplate:
           errorPattern: "testTags\\[0\\] must be at most 100 characters"
 
-  - it: "AQA-38 refuses a tag without enableV1 (results API)"
+  - it: "AQA-38 a tag with enableV1: false fails on enableV1 (results API)"
     values: [values/v2-trigger-app.yaml]
     set:
       applications.app1.testtrigger.enableV1: false
@@ -2822,9 +2541,9 @@ tests:
           testEnvironmentTag: FeatureCore
     asserts: &noV1Asserts
       - failedTemplate:
-          errorPattern: "test definition 'apitests' of 'app-app1': testEnvironmentTag needs testtrigger.enableV1: true"
+          errorPattern: "application 'app1': testtrigger.enableV1: false is not supported\\."
 
-  - it: "AQA-38 refuses a tag without enableV1 (no results API)"
+  - it: "AQA-38 a tag with enableV1: false fails on enableV1 (no results API)"
     values: [values/v2-trigger-app.yaml]
     set:
       applications.app1.testtrigger.enableV1: false

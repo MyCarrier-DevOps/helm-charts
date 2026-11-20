@@ -278,8 +278,8 @@ tests:
           value: mycarrier-worker-trigger
         documentIndex: 1
 
-  # rollout-watch posts only to TestEngine's v1 trigger, and the hook stays off (D7), so without enableV1 nothing would
-  # start prod_tests for the application: the render fails.
+  # enableV1: false fails the render for every application (DEVOPS-629), a canary Rollout in prod too: the legacy
+  # TestEngine trigger is removed, and rollout-watch posts only to the v1 trigger.
   - it: fails the render for a canary Rollout in prod with testtrigger.enableV1 false
     set:
       global: *global
@@ -299,7 +299,7 @@ tests:
                 secretId: vault:QA/data/app_auth#SecretId
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': a Rollout in prod needs testtrigger.enableV1: true."
+          errorPattern: "application 'api': testtrigger.enableV1: false is not supported\\. .* Remove applications\\.api\\.testtrigger\\.enableV1, or set it to true\\.$"
 
 
   # enableV1 defaults to true (the legacy API is retired), so a testtrigger without it renders the ConfigMap.
@@ -426,7 +426,7 @@ tests:
           testtrigger: *testtrigger
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': global.testengineWebhookUrl cannot be set in prod while a Rollout has a testtrigger with enableV1"
+          errorPattern: "application 'api': global.testengineWebhookUrl cannot be set in prod while a Rollout has a testtrigger\\. The chart renders no PostSync hook"
 
   - it: keeps both overrides on the hook of a canary Rollout outside prod
     set:
@@ -521,8 +521,8 @@ tests:
           path: data["request.json"]
           pattern: '"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:80"'
 
-  # The legacy hook (enableV1: false) builds its default address the same way.
-  - it: addresses the stable Service on its http Service port in the legacy hook
+  # The PostSync hook (here a Deployment outside prod) builds its default address the same way.
+  - it: addresses the stable Service on its http Service port in the hook
     set:
       global: *global
       environment:
@@ -536,9 +536,7 @@ tests:
               - name: http
                 port: 80
                 targetPort: 8080
-          testtrigger:
-            <<: *testtrigger
-            enableV1: false
+          testtrigger: *testtrigger
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
@@ -658,7 +656,7 @@ tests:
       - failedTemplate:
           errorPattern: "application 'mycarrier-api': test definition 'uitests' goes to TestEngine's v1 trigger \\(filters\\) and 'apitests' to its v2 trigger"
 
-  - it: "AQA-38: the enableV1 rule still applies to a prod canary Rollout with a tag"
+  - it: "AQA-38: enableV1: false fails a prod canary Rollout with a tag on the enableV1 rule"
     set:
       global: *globalDarkOff
       environment: *prod
@@ -673,5 +671,5 @@ tests:
               - *prodV2Definition
     asserts:
       - failedTemplate:
-          errorPattern: "testEnvironmentTag needs testtrigger.enableV1: true"
+          errorPattern: "application 'api': testtrigger.enableV1: false is not supported\\."
 
