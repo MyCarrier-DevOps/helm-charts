@@ -101,6 +101,22 @@ alerts:
       - /api/v1/customer-health
 ```
 
+`serviceName` is a prefix, so it also matches any other stack whose services start with the same letters:
+`MC.Integration` matches `MC.Integration.*`, `MC.Integrations.*` and `MC.IntegrationAsService.*`, and a fault in the
+other stack pages under both stacks' rules. `alerts.filters.excludedServices` lists `ServiceName` prefixes to leave out
+of every standard rule. Each adds `AND ServiceName NOT LIKE '<prefix>%'` (`NOT ILIKE` for a nodejs stack) beside the
+`serviceName` filter. The `service` label, contact points and rule uids do not change. `_` and `%` in a prefix are
+`LIKE` wildcards, as in `serviceName`. Compact and raw additional rules carry their own SQL and are not changed; the
+HyperDX links on the rules still search on `serviceName` alone.
+
+```yaml
+alerts:
+  serviceName: MC.Integration
+  filters:
+    excludedServices:
+      - MC.IntegrationAsService
+```
+
 ## Additional rules
 
 `alerts.additional` is a map keyed by rule name. The compact form builds a ClickHouse rule like the standard ones:

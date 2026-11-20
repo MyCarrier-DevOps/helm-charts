@@ -29,7 +29,8 @@ each alert, as a JSON object. An override replaces the default, including false,
       "name" (include "helm.alerts.name" .)
       "language" $language
       "route" (ternary "http.route" "url.path" (eq $language "nodejs"))
-      "excludedPaths" (dig "filters" "excludedPaths" (list) $alerts) -}}
+      "excludedPaths" (dig "filters" "excludedPaths" (list) $alerts)
+      "excludedServices" (dig "filters" "excludedServices" (list) $alerts) -}}
 {{- $rules := list -}}
 {{- range $key := list "serverErrorRatio" "clientErrorRatio" "serverErrorCount" "http503Returned" "http503Received" "nonHttpErrors" -}}
 {{- $rule := index $standard $key -}}
@@ -79,7 +80,7 @@ labels, the description annotation and per-rule overrides of paused, noDataState
       "uid" (printf "%s_sev1_http_errors" (trunc 23 .name))
       "title" (printf "%s Server HTTP Errors > %v%% in 5m" .alerts.displayName .rule.threshold)
       "alertType" "server_http_errors"
-      "sql" (include "helm.alerts.sql.errorRatio" (dict "language" .language "column" "ServerError" "service" .alerts.serviceName "excluded" .excludedPaths))
+      "sql" (include "helm.alerts.sql.errorRatio" (dict "excludedServices" .excludedServices "language" .language "column" "ServerError" "service" .alerts.serviceName "excluded" .excludedPaths))
       "evaluator" "gt" "reducer" "last" "threshold" .rule.threshold "noDataState" "OK"
       "description" (printf "More than %v%% server http errors in %s service over the last 5 minutes." .rule.threshold .alerts.displayName)
       "hyperdx" (include "helm.alerts.hyperdx.status" (dict "service" .alerts.serviceName "filter" (printf "SpanAttributes.%s:*+SpanAttributes.http.response.status_code:%%3E=500" .route)))) -}}
@@ -91,7 +92,7 @@ labels, the description annotation and per-rule overrides of paused, noDataState
       "uid" (printf "%s_sev2_http_errors" (trunc 23 .name))
       "title" (printf "%s Client HTTP Errors > %v%% in 5m" .alerts.displayName .rule.threshold)
       "alertType" "client_http_errors"
-      "sql" (include "helm.alerts.sql.errorRatio" (dict "language" .language "column" "ClientError" "service" .alerts.serviceName "excluded" .excludedPaths))
+      "sql" (include "helm.alerts.sql.errorRatio" (dict "excludedServices" .excludedServices "language" .language "column" "ClientError" "service" .alerts.serviceName "excluded" .excludedPaths))
       "evaluator" "gt" "reducer" "last" "threshold" .rule.threshold "noDataState" "OK"
       "description" (printf "More than %v%% client http errors in %s service over the last 5 minutes." .rule.threshold .alerts.displayName)
       "hyperdx" (include "helm.alerts.hyperdx.status" (dict "service" .alerts.serviceName "filter" (printf "SpanAttributes.%s:*+SpanAttributes.http.response.status_code:%%3E=400+SpanAttributes.http.response.status_code:%%3C499" .route)))) -}}
@@ -103,7 +104,7 @@ labels, the description annotation and per-rule overrides of paused, noDataState
       "uid" (printf "%s_http_errors" (trunc 28 .name))
       "title" (printf "%s HTTP Errors > %v in 5m" .alerts.displayName .rule.threshold)
       "alertType" "http_errors"
-      "sql" (include "helm.alerts.sql.serverErrorCount" (dict "language" .language "service" .alerts.serviceName "excluded" .excludedPaths))
+      "sql" (include "helm.alerts.sql.serverErrorCount" (dict "excludedServices" .excludedServices "language" .language "service" .alerts.serviceName "excluded" .excludedPaths))
       "evaluator" "gt" "reducer" "last" "threshold" .rule.threshold "noDataState" "OK"
       "description" (printf "More than %v http errors in %s service over the last 5 minutes." .rule.threshold .alerts.displayName)
       "hyperdx" (include "helm.alerts.hyperdx.status" (dict "service" .alerts.serviceName "filter" (printf "SpanAttributes.%s:*+SpanAttributes.http.response.status_code:%%3E=500" .route)))) -}}
@@ -115,7 +116,7 @@ labels, the description annotation and per-rule overrides of paused, noDataState
       "uid" (printf "%s_sev1_503_returned" (trunc 21 .name))
       "title" (printf "%s HTTP 503 Service Unavailable in 5m" .alerts.displayName)
       "alertType" "http_503_returned"
-      "sql" (include "helm.alerts.sql.http503Returned" (dict "service" .alerts.serviceName "excluded" (concat (.rule.probePaths | default list) .excludedPaths)))
+      "sql" (include "helm.alerts.sql.http503Returned" (dict "excludedServices" .excludedServices "service" .alerts.serviceName "excluded" (concat (.rule.probePaths | default list) .excludedPaths)))
       "evaluator" "gt" "reducer" "last" "threshold" (.rule.threshold | default 0) "noDataState" "OK"
       "description" (printf "%s returned HTTP 503 Service Unavailable to a caller over the last 5 minutes. Kubernetes probe endpoints are excluded." .alerts.displayName)
       "hyperdx" (include "helm.alerts.hyperdx.503" (dict "service" .alerts.serviceName "kind" "Server" "column" "SpanAttributes[%27url.path%27]+as+UrlPath"))) -}}
@@ -127,7 +128,7 @@ labels, the description annotation and per-rule overrides of paused, noDataState
       "uid" (printf "%s_sev2_503_received" (trunc 21 .name))
       "title" (printf "%s Dependency HTTP 503 in 5m" .alerts.displayName)
       "alertType" "http_503_received"
-      "sql" (include "helm.alerts.sql.http503Received" (dict "service" .alerts.serviceName "excludedHosts" (.rule.excludedHosts | default list)))
+      "sql" (include "helm.alerts.sql.http503Received" (dict "excludedServices" .excludedServices "service" .alerts.serviceName "excludedHosts" (.rule.excludedHosts | default list)))
       "evaluator" "gt" "reducer" "last" "threshold" (.rule.threshold | default 0) "noDataState" "OK"
       "description" (printf "%s received HTTP 503 Service Unavailable from an upstream dependency over the last 5 minutes." .alerts.displayName)
       "hyperdx" (include "helm.alerts.hyperdx.503" (dict "service" .alerts.serviceName "kind" "Client" "column" "SpanAttributes[%27server.address%27]+as+Dependency"))) -}}
@@ -139,13 +140,23 @@ labels, the description annotation and per-rule overrides of paused, noDataState
       "uid" (printf "%s_non_http_errors" (trunc 24 .name))
       "title" (printf "%s Non HTTP Errors > %v in 5m" .alerts.displayName .rule.threshold)
       "alertType" "non_http_errors"
-      "sql" (include "helm.alerts.sql.nonHttpErrors" (dict "language" .language "service" .alerts.serviceName "suffix" (.rule.apiServiceSuffix | default "")))
+      "sql" (include "helm.alerts.sql.nonHttpErrors" (dict "excludedServices" .excludedServices "language" .language "service" .alerts.serviceName "suffix" (.rule.apiServiceSuffix | default "")))
       "evaluator" "gt" "reducer" "last" "threshold" .rule.threshold "noDataState" "OK"
       "description" (printf "More than %v non http errors in %s service over the last 5 minutes." .rule.threshold .alerts.displayName)
       "hyperdx" (include "helm.alerts.hyperdx.logs" (dict "language" .language "service" .alerts.serviceName "suffix" (.rule.apiServiceSuffix | default "")))) -}}
 {{- end -}}
 
 {{/* ── ClickHouse queries ─────────────────────────────────────────────────────────────────────────────── */}}
+
+{{/*
+helm.alerts.sql.serviceFilter: one NOT LIKE (ILIKE for nodejs) per alerts.filters.excludedServices prefix, so a
+service whose name starts with serviceName but belongs to another stack stays out of this stack's rules.
+*/}}
+{{- define "helm.alerts.sql.serviceFilter" -}}
+{{- range .services }}
+{{ $.indent }}AND ServiceName NOT {{ $.like }} '{{ replace "'" "''" (toString .) }}%'
+{{- end -}}
+{{- end -}}
 
 {{- define "helm.alerts.sql.pathFilter" -}}
 {{- if . }}
@@ -168,6 +179,7 @@ SELECT
 FROM hyperdx.l5m_traces
 PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
 WHERE ServiceName ILIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "ILIKE" "indent" "  ") }}
   AND SpanAttributes['http.route'] != ''
 {{- include "helm.alerts.sql.routeFilter" .excluded }}
 {{- else -}}
@@ -179,6 +191,7 @@ WITH
     AND SpanAttributes['url.path'] != ''
 {{- include "helm.alerts.sql.pathFilter" .excluded }}
     AND ServiceName LIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "LIKE" "indent" "    ") }}
     AND Timestamp > now() - INTERVAL 5 MINUTE
 ) as http_errors,
 (
@@ -188,6 +201,7 @@ WITH
     AND SpanAttributes['url.path'] != ''
 {{- include "helm.alerts.sql.pathFilter" .excluded }}
     AND ServiceName LIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "LIKE" "indent" "    ") }}
     AND Timestamp > now() - INTERVAL 5 MINUTE
 ) as http_non_errors
 
@@ -202,6 +216,7 @@ FROM hyperdx.l5m_traces
 PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
 WHERE ServerError = 1
   AND ServiceName ILIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "ILIKE" "indent" "  ") }}
   AND SpanAttributes['http.route'] != ''
 {{- include "helm.alerts.sql.routeFilter" .excluded }}
 {{- else -}}
@@ -211,6 +226,7 @@ WHERE ServerError = 1
     AND SpanAttributes['url.path'] != ''
 {{- include "helm.alerts.sql.pathFilter" .excluded }}
     AND ServiceName LIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "LIKE" "indent" "    ") }}
     AND Timestamp > now() - INTERVAL 5 MINUTE
 {{- end -}}
 {{- end -}}
@@ -223,6 +239,7 @@ WHERE HttpStatus = 503
     AND SpanAttributes['url.path'] != ''
 {{- include "helm.alerts.sql.pathFilter" .excluded }}
     AND ServiceName LIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "LIKE" "indent" "    ") }}
     AND Timestamp > now() - INTERVAL 5 MINUTE
 {{- end -}}
 
@@ -235,6 +252,7 @@ WHERE HttpStatus = 503
     AND SpanAttributes['server.address'] NOT IN ({{ include "helm.alerts.sqlList" .excludedHosts }})
 {{- end }}
     AND ServiceName LIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "LIKE" "indent" "    ") }}
     AND Timestamp > now() - INTERVAL 5 MINUTE
 {{- end -}}
 
@@ -245,6 +263,7 @@ FROM hyperdx.prod_otel_logs
 PREWHERE Timestamp > now() - INTERVAL 5 MINUTE
 WHERE SeverityText = 'Error'
   AND ServiceName ILIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "ILIKE" "indent" "  ") }}
 {{- if .suffix }}
   AND ServiceName NOT ILIKE '{{ .service }}%{{ .suffix }}'
 {{- end }}
@@ -253,6 +272,7 @@ SELECT count(*) as value
 FROM hyperdx.prod_otel_logs
 WHERE SeverityText = 'Error'
     AND ServiceName LIKE '{{ .service }}%'
+{{- include "helm.alerts.sql.serviceFilter" (dict "services" .excludedServices "like" "LIKE" "indent" "    ") }}
 {{- if .suffix }}
     AND ServiceName NOT LIKE '{{ .service }}%{{ .suffix }}'
 {{- end }}
