@@ -98,7 +98,8 @@ StatefulSet apps render unchanged, except where the values below fail the whole 
 
 `testtrigger.enableV1` now defaults to `true` for every application, because TestEngine's legacy API is retired. A test
 trigger without it sends one v1 request with every test definition. `enableV1: false` keeps the legacy API, except on a
-canary Rollout in prod (property `canary`), where it fails the render.
+canary Rollout in prod (property `canary`), where it fails the render. Since the release after 4.7.35, `enableV1: false`
+fails the render for every application (see [Upgrading past 4.7.35](#upgrading-past-4735-testtriggerenablev1-false-fails-the-render)).
 
 It also renders the contract the release's rollout-watch reads (DEVOPS-319). Every Rollout that runs canary steps
 carries `mycarrier.tech/bakeMinutes` (`global.strategy.canary.bakeMinutes`, default 30, at most 100) and
@@ -357,6 +358,19 @@ behaviour.
 
 The template reads Vault DevOps `clickhouse/cloud/users/canary-analysis` (`address`, `username`, `password`) through
 the ExternalSecret `<environment>-<fullName>-compare`, a read-only ClickHouse user limited to the histogram tables.
+
+## Upgrading past 4.7.35: `testtrigger.enableV1: false` fails the render
+
+TestEngine no longer has the legacy `POST /trigger` (DEVOPS-623). Since the release after 4.7.35, the chart has no
+legacy test trigger (DEVOPS-629): `testtrigger.enableV1: false` fails the render for every application, with or without
+test definitions, and the error names the application. An explicit `enableV1: null` counts as unset (it failed schema
+validation before). With `enableV1` unset, `null` or `true` the render is the same as with it unset before: one
+request with every test definition to TestEngine's v1 trigger (`vault:DevOps/data/testengine/api/v1#url`, or `#dev_url`
+on `argo-events-test`), or its v2 trigger for test definitions with `testEnvironmentTag`.
+
+| 4.7.35 values | Edit |
+|---|---|
+| `testtrigger.enableV1: false` | Remove the key (`true` is the default), or set it to `true`. The application's test definitions then go to TestEngine's v1 trigger in one request. |
 
 ## Chart Structure
 

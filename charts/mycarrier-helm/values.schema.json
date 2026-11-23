@@ -418,7 +418,7 @@
           },
           "testtrigger": {
             "type": "object",
-            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, with enableV1 (the default) the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request; testEnvironmentTag there fails the render until rollout-watch posts v2 requests, DEVOPS-613) and the release's rollout-watch posts it after promotion (DEVOPS-319); with enableV1: false the render fails, because nothing would start its prod tests.",
+            "description": "Configuration for automated test jobs: an Argo CD PostSync hook Job (<fullName>-trigger) that calls TestEngine after each sync. A Rollout in prod (deploymentType rollout, not migratingToRollouts) gets no hook (Tech Spec D7) only when the repository's deployment-strategy property (global.deploymentStrategy) is canary; with any other value it keeps the hook. Without the hook, the chart renders the ConfigMap <fullName>-prod-tests (key request.json, the hook's v1 request; testEnvironmentTag there fails the render until rollout-watch posts v2 requests, DEVOPS-613) and the release's rollout-watch posts it after promotion (DEVOPS-319).",
             "properties": {
               "ttlSecondsAfterFinished": {
                 "type": "string",
@@ -472,8 +472,8 @@
                 }
               },
               "enableV1": {
-                "type": "boolean",
-                "description": "When true, all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to the v1 endpoint. When false, each test definition generates a separate curl call to the legacy endpoint, which is retired; true is the default. A Rollout in prod whose repository's deployment-strategy property (global.deploymentStrategy) is canary needs true for its prod tests to run: rollout-watch posts only v1 requests, and the chart renders no hook for it; the render fails with false.",
+                "type": ["boolean", "null"],
+                "description": "Optional; unset or null means true, the default and the only value that renders: all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to TestEngine's v1 trigger (or its v2 trigger for test definitions with testEnvironmentTag). false fails the render for every application (DEVOPS-629): it selected one call per test definition to TestEngine's legacy POST /trigger, which is removed (DEVOPS-623). Remove the key or set it to true.",
                 "default": true
               },
               "env": {

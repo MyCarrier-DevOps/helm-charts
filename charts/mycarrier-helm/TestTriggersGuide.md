@@ -19,9 +19,8 @@ How it works:
 In prod, an application with `deploymentType: rollout` (without `migratingToRollouts`) whose repository's `deployment-strategy` property is `canary` (chart-renderer passes it as `global.deploymentStrategy`) gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. The release's rollout-watch (DEVOPS-319) starts the prod tests after the canary is promoted instead:
 
 - rollout-watch runs only on the canary release path, and the chart follows the same property: a prod Rollout in a `rolling` or unset repository runs no canary steps and keeps its PostSync hook.
-- With `enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger. rollout-watch posts only to TestEngine's v1 trigger until it reads the ConfigMap's `version` key (DEVOPS-613), and v1 refuses a v2 request with a `422`, so for now a prod canary Rollout whose test definitions set `testEnvironmentTag` fails the render: keep `filters` in its prod values. Once rollout-watch reads `version`, the chart can render `request.json` with the v2 request and a second key, `version: v2`, so rollout-watch posts it to `/v2/trigger`; without `version` the request is v1.
-- With `enableV1: false`, the render fails, because nothing would start the application's prod tests.
-- With `enableV1: true`, `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.
+- The chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the same TestEngine v1 request the hook sends (one template renders both, with no `SlipStep`), and rollout-watch posts it to TestEngine's v1 trigger. rollout-watch posts only to TestEngine's v1 trigger until it reads the ConfigMap's `version` key (DEVOPS-613), and v1 refuses a v2 request with a `422`, so for now a prod canary Rollout whose test definitions set `testEnvironmentTag` fails the render: keep `filters` in its prod values. Once rollout-watch reads `version`, the chart can render `request.json` with the v2 request and a second key, `version: v2`, so rollout-watch posts it to `/v2/trigger`; without `version` the request is v1.
+- `apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, and `global.testengineWebhookUrl` must not be set: rollout-watch posts with the shared key and its own URL, so the render fails instead of ignoring them.
 
 Other environments, Deployments, StatefulSets, migrating Rollouts and Rollouts whose property is not `canary` keep the PostSync hook.
 
@@ -63,7 +62,7 @@ applications:
         limits:
           memory: "<memory-limit>"
           cpu: "<cpu-limit>"
-      enableV1: <true|false>         # Optional — see enableV1 section below
+      enableV1: true                 # Optional; unset or null means true (false fails the render)
       env:                           # Optional — variables for every test definition's test container
         <NAME>: "<value>"
       testdefinitions:
@@ -114,7 +113,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `enableV1` | When `true`, all test definitions are bundled into a single POST to `api/v1` with a `{"Tests":[...]}` payload. When `false`, each test definition sends a separate POST to the legacy `api` endpoint, which is retired; `true` is the default. The webhook URL is set automatically based on this flag; `global.testengineWebhookUrl` overrides it, except for a canary Rollout in prod (property `canary`), where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
+| `enableV1` | Unset or `null` means `true`, the default and the only value that renders: all test definitions are bundled into a single POST to TestEngine's v1 trigger (`api/v1`) with a `{"Tests":[...]}` payload, or its v2 trigger for test definitions with `testEnvironmentTag`. `false` fails the render for every application, with or without test definitions: it selected one POST per test definition to TestEngine's legacy `POST /trigger`, which is removed (DEVOPS-623). The webhook URL is set automatically (`vault:DevOps/data/testengine/api/v1#url`, or `#dev_url` on `argo-events-test`); `global.testengineWebhookUrl` overrides it, except for a canary Rollout in prod (property `canary`), where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
 | `env` | Environment variables set on the test container of **every** test definition of this application: a map of names to quoted strings. A definition's own `env` wins on a name clash. See [Environment variables for test pods](#environment-variables-for-test-pods-env) | No | None | `{RESULTS_DB: "qa-results"}` |
 
 *Default resource values:
@@ -365,8 +364,6 @@ The render fails, naming the application, the test definition and the field, whe
 - `testTags` or `multiRun: true` is set without `testEnvironmentTag`;
 - the tag or a test tag has a character other than letters, digits, `_`, `.` and `-`, is longer than 100 characters, or
   (the tag) has no letter or digit; or there are more than 10 `testTags`;
-- a definition sets `testEnvironmentTag` and `testtrigger.enableV1` is `false` (the legacy per-definition call has no tag
-  and would run every test);
 - some definitions of an application set `testEnvironmentTag` and others do not. All definitions of an application use the
   same trigger: two triggers are two batches, and two batches of one deployment write its tests step twice;
 - the application's canary `tests` or `tests-dark` template renders (they post to v1 only, see Test definitions in canary
@@ -410,7 +407,7 @@ switched-off `ERROR:` line and runs no tests until `filters` are back.
 
 ## Environment variables for test pods (`env`)
 
-`env` sets environment variables on the test container that TestEngine starts for a test definition. They reach TestEngine as `TestEnvironmentVariables.EnvVars` in every request the chart renders: the PostSync hook (v1 and legacy body), the `<fullName>-prod-tests` ConfigMap and the canary `TESTS_REQUEST`. The field is omitted when there are no variables.
+`env` sets environment variables on the test container that TestEngine starts for a test definition. They reach TestEngine as `TestEnvironmentVariables.EnvVars` in every request the chart renders: the PostSync hook (v1 or v2 body), the `<fullName>-prod-tests` ConfigMap and the canary `TESTS_REQUEST`. The field is omitted when there are no variables.
 
 ```yaml
 applications:
@@ -449,7 +446,7 @@ applications:
 | Bytes per value | 4096 |
 | Bytes per definition (names plus values) | 16384 |
 | Bytes per v1 request (all definitions of one application) | 65536 |
-| Escaped hook body, canary request and legacy script | 100 KiB (a `'` counts 6 bytes, a `$` counts 2) |
+| Escaped hook body and canary request | 100 KiB (a `'` counts 6 bytes, a `$` counts 2) |
 | Control characters in a value | none (any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029) |
 | Two names that differ only in case | refused (`duplicate_name`; the first in sorted order is reported) |
 
@@ -474,8 +471,6 @@ The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <cod
 ### Escaping
 
 The v1 hook body and the canary request are escaped (`'`, `$`, and `{{` on the canary). A stack whose testtrigger fields (filters, `serviceAddress`, `secretId`, `requestHeaders`) hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal instead of being expanded by Kubernetes.
-
-The legacy hook body (`enableV1: false`) escapes only `EnvVars`. Its other fields (`TestFilters`, `serviceAddress`, `secretId`) are printed as before, so a `'` in a filter still breaks the legacy curl.
 
 The canary request also encodes `${` as `$\u007b` (the JSON escape, which decodes back to `${`). The request is an env value (`TESTS_REQUEST`) of a pod that `vault-env` wraps, and `vault-env` resolves an inline `${vault:...}` in any env value, which would put the plaintext secret into the request. The encoded form no longer matches, so an env value such as `${vault:QA/x#y}` reaches TestEngine as written. The hook body is not wrapped by `vault-env` and keeps the plain text.
 

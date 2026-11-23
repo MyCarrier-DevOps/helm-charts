@@ -96,10 +96,9 @@ Values are YAML strings only (as Helm reads the YAML); nothing is converted.
 {{/*
 helm.testtrigger.envVars: the EnvVars of every test definition of one application, as {"byDefinition": [{...}, ...]},
 in testtrigger.testdefinitions order (an empty object where a definition has none).
-Input: dict "application" <application map> "enforceRequestCap" <bool>. With enforceRequestCap (the v1 path: all
-definitions are one HTTP request) the raw bytes of all definitions are added up, and the first definition that takes
-the total past 65536 fails with request_too_large. The legacy path sends one request per definition, so the
-per-definition cap already bounds it and it passes false.
+Input: dict "application" <application map>. All definitions go in one HTTP request (the v1 request, and the v2
+request built from it), so the raw bytes of all definitions are added up, and the first definition that takes the total
+past 65536 fails with request_too_large.
 */}}
 {{- define "helm.testtrigger.envVars" -}}
 {{- $maxRequestBytes := 65536 }}
@@ -111,7 +110,7 @@ per-definition cap already bounds it and it passes false.
   {{- range $name, $value := $env }}
     {{- $total = add $total (len $name) (len $value) }}
   {{- end }}
-  {{- if and $.enforceRequestCap (gt $total $maxRequestBytes) }}
+  {{- if gt $total $maxRequestBytes }}
     {{- fail (printf "EnvVars: test definition \"%s\": request_too_large" $definition.name) }}
   {{- end }}
   {{- $byDefinition = append $byDefinition $env }}
