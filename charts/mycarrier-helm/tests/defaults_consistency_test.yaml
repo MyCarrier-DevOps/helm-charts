@@ -292,7 +292,6 @@ tests:
             http: 8080
           testtrigger:
             apikey: test-api-key
-            webhook_url: https://example.test/hook
             testdefinitions:
               - name: smoke
                 containerImage: registry.example.com/test-engine
