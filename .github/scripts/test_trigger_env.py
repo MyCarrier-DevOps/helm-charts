@@ -219,9 +219,6 @@ class ManifestStructureIsNotRewritten(unittest.TestCase):
     def test_v1_hook(self):
         self.check(values(shared={}))
 
-    def test_legacy_hook(self):
-        self.check(legacy_values(shared={}))
-
     def test_configmap(self):
         self.check(CanaryVault.canary_dict(), show_only="templates/triggertestengine.yaml", app="api")
 
@@ -474,49 +471,11 @@ class LiteralRequestBodies(unittest.TestCase):
         self.assertEqual(request["Tests"][0]["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
 
 
-def legacy_values(shared=None, names=("apitests", "uitests")):
-    vals = hook_values() if shared is None else values(shared=shared)
-    tt = vals["applications"]["app1"]["testtrigger"]
-    tt["enableV1"] = False
-    tt["apikey"] = APIKEY
-    tt["testdefinitions"] = [dict(DEFINITION, name=n) for n in names]
-    return vals
-
-
-class LegacyHookBody(unittest.TestCase):
-    """The legacy hook body (enableV1: false): one request per definition, each with the same literal EnvVars."""
-
-    def test_legacy_hook_body_round_trips(self):
-        r = render(legacy_values())
-        self.assertEqual(r.returncode, 0, r.stderr)
-        c = hook_container(r)
-        env = container_env(c)
-        script = kubelet_expand(c["command"][2], env)
-        self.assertNotIn("vault:DevOps", script)
-        bodies = run_hook(script, env)
-        self.assertEqual(len(bodies), 2)
-        for body in bodies:
-            self.assertEqual(json.loads(body)["TestEnvironmentVariables"]["EnvVars"], {"WEIRD": WEIRD})
-
-    def test_legacy_fixed_text_is_under_512_bytes(self):
-        # The legacy script check keeps 512 bytes of room for the chart's own text around the curl blocks (they hold
-        # no values); this pins that the room is enough.
-        r = render(legacy_values(shared={}, names=("apitests",)))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        script = hook_container(r)["command"][2]
-        head = script[: script.index("curl")]
-        tail = script[script.rindex('if [ "$failed"'):]
-        self.assertLess(len((head + tail).encode("utf-8")), 512, repr(head + tail))
-
-
-def big_env_values(quotes, legacy=False):
+def big_env_values(quotes):
     """Six definitions; t0 has 50 env values of `quotes` single quotes each (6 bytes per quote once escaped)."""
     defs = [dict(DEFINITION, name="t%d" % i) for i in range(6)]
     defs[0]["env"] = {"V%02d" % j: "'" * quotes for j in range(50)}
-    vals = values(definitions=defs)
-    if legacy:
-        vals["applications"]["app1"]["testtrigger"]["enableV1"] = False
-    return vals
+    return values(definitions=defs)
 
 
 class SizeCapsCountRealBytes(unittest.TestCase):
@@ -536,18 +495,6 @@ class SizeCapsCountRealBytes(unittest.TestCase):
 
     def test_v1_body_over_the_cap_fails(self):
         r = render(big_env_values(320))
-        self.assertNotEqual(r.returncode, 0)
-        self.assertTrue(error_text(r).endswith('EnvVars: test definition "t0": request_too_large'), error_text(r))
-
-    def test_legacy_script_just_under_the_cap_renders(self):
-        r = render(big_env_values(310, legacy=True))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        size = len(hook_container(r)["command"][2].encode("utf-8"))
-        self.assertGreater(size, 100500)
-        self.assertLessEqual(size, 102400)
-
-    def test_legacy_script_over_the_cap_fails(self):
-        r = render(big_env_values(318, legacy=True))
         self.assertNotEqual(r.returncode, 0)
         self.assertTrue(error_text(r).endswith('EnvVars: test definition "t0": request_too_large'), error_text(r))
 

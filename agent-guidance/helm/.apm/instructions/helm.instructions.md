@@ -1339,7 +1339,7 @@ applications:
 **Limits**
 - Name: `^[A-Za-z_][A-Za-z0-9_]*$`. No two names that differ only in case (the first in sorted order is reported).
 - 50 entries per definition after the merge; 4096 bytes per value; 16384 bytes of names plus values per definition; 65536 bytes per v1 request (all definitions of one application).
-- The escaped hook body, canary request and legacy script are at most 100 KiB (a `'` counts 6 bytes, a `$` counts 2).
+- The escaped hook body and the canary request are at most 100 KiB (a `'` counts 6 bytes, a `$` counts 2).
 - No control characters in a value (any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029).
 
 **Overriding TestEngine's defaults.** `env` may set a name TestEngine already sets on the test container (`ENVIRONMENT`, `SECRETID`, `SERVICE_ADDRESS`, `HOME`, `TMPDIR`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and others): the `env` value replaces the default on the test container only. Overriding `HOME` or `TMPDIR` with a path that is not writable on the hardened read-only root breaks your own tests. Overriding `ENVIRONMENT`, `RELEASE_ID`, `RELEASE_DEFINITION_NAME` or `BRANCH_NAME` also changes what mc-test-cli files the uploaded results under, which is the service's choice.
@@ -1363,7 +1363,7 @@ applications:
 
 **Secrets.** Only `vault:QA/...` references. Every `vault:` in a value must be followed by `QA/`, with no `..` path segment (up to the next `#`). Never a plain secret in a values file.
 
-**What renders.** `TestEnvironmentVariables.EnvVars` in the PostSync hook (v1 and legacy body), the prod-tests ConfigMap and the canary `TESTS_REQUEST`; omitted when empty. The v1 hook body and the canary request are now escaped (`'` and `$`, and `{{` on the canary), so a stack whose testtrigger fields hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal. The legacy hook body (`enableV1: false`) escapes only `EnvVars`; its other fields (`TestFilters`, `serviceAddress`, `secretId`) are printed as before, so a `'` in a filter still breaks the legacy curl. The canary request also encodes `${` as `$\u007b` (decodes back to `${`), because `vault-env` wraps the canary pod and resolves an inline `${vault:...}` in any env value, `TESTS_REQUEST` included; the hook body is not wrapped and keeps the plain text.
+**What renders.** `TestEnvironmentVariables.EnvVars` in the PostSync hook (v1 or v2 body), the prod-tests ConfigMap and the canary `TESTS_REQUEST`; omitted when empty. The v1 hook body and the canary request are now escaped (`'` and `$`, and `{{` on the canary), so a stack whose testtrigger fields hold those characters renders different bytes for the same request, and a `$(VAR)` there stays literal. The canary request also encodes `${` as `$\u007b` (decodes back to `${`), because `vault-env` wraps the canary pod and resolves an inline `${vault:...}` in any env value, `TESTS_REQUEST` included; the hook body is not wrapped and keeps the plain text.
 
 **Failure**
 - The render fails with `EnvVars: test definition "<name>": variable "<VAR>": <code>`. Codes: `invalid_name`, `protected_name`, `duplicate_name`, `invalid_value`, `control_character`, `value_too_large`, `vault_prefix_not_allowed`, `too_many`, `definition_too_large`, `request_too_large`. The message names the variable, never the value; `too_many`, `definition_too_large`, `request_too_large` and a non-map `env` leave out the `variable` part. `control_character` means any character below U+0020, U+007F, U+0080 to U+009F, U+2028 or U+2029 (YAML reads U+0085, U+2028 and U+2029 as line breaks).
@@ -1395,7 +1395,6 @@ applications:
 - `filters` (not empty) and `testEnvironmentTag` on one definition.
 - `testTags` or `multiRun: true` without `testEnvironmentTag`.
 - A tag or test tag with characters other than letters, digits, `_`, `.` and `-`, over 100 characters, or (the tag) without a letter or digit; more than 10 `testTags`.
-- `testEnvironmentTag` with `testtrigger.enableV1: false`.
 - Some definitions of an application with `testEnvironmentTag` and others without: all of an application's definitions use the same trigger.
 - `testEnvironmentTag` on an application whose canary `tests` or `tests-dark` template renders (they post to v1 only); `tests-dark` is on by default for a prod canary leader.
 - `testEnvironmentTag` on a Rollout in prod whose repository's `deployment-strategy` is `canary` (no PostSync hook): rollout-watch posts its prod-tests request to TestEngine's v1 trigger only until DEVOPS-613, so keep `filters` in that application's prod values.
@@ -1410,8 +1409,7 @@ The schema only checks types (`testEnvironmentTag` a non-empty string, `testTags
 
 A PostSync hook can fire at the start of a canary sync, after the last promote or after an abort, so it can test the wrong version. In prod, the chart therefore renders no hook Job for an application with `deploymentType: rollout` (without `migratingToRollouts`) while `global.deploymentStrategy` is `canary`. The release's rollout-watch starts the prod tests after the canary is promoted:
 
-- With `testtrigger.enableV1: true` (the default), the chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted. `testEnvironmentTag` on its definitions fails the render for now: rollout-watch posts only to `/v1/trigger` until it reads the ConfigMap's `version` key (DEVOPS-613), and `/v1/trigger` refuses a v2 request with a 422. Keep `filters` in the prod values of a prod canary Rollout; other environments can use the tag.
-- With `enableV1: false`, the render fails: rollout-watch posts only v1 requests, so nothing would start the application's prod tests. Leave `enableV1` unset or `true` on every prod canary Rollout that has test definitions.
+- The chart renders the ConfigMap `<fullName>-prod-tests` in the application's namespace, labelled `mycarrier.tech/correlationId`. Its key `request.json` holds the TestEngine v1 request the hook would send (the same template renders both). rollout-watch posts it to TestEngine's v1 trigger once the release is promoted. `testEnvironmentTag` on its definitions fails the render for now: rollout-watch posts only to `/v1/trigger` until it reads the ConfigMap's `version` key (DEVOPS-613), and `/v1/trigger` refuses a v2 request with a 422. Keep `filters` in the prod values of a prod canary Rollout; other environments can use the tag.
 - rollout-watch posts with the shared key and its own TestEngine URL. `testtrigger.apikey` must be `vault:DevOps/data/testengine/api#encoded_header` or unset, or the render fails. `global.testengineWebhookUrl` must not be set in prod, or the render fails. Both rules apply only where the ConfigMap renders.
 - The ConfigMap follows the repository's `deployment-strategy` property, which chart-renderer passes as `global.deploymentStrategy`. Only the canary release path (`deployment-strategy: canary`) runs rollout-watch, and only then does the chart render the ConfigMap in place of the hook.
 - Other environments, Deployments, StatefulSets, applications with `migratingToRollouts` and Rollouts whose property is not `canary` keep the PostSync hook, unchanged.
@@ -1500,7 +1498,7 @@ applications:
 | `activeDeadlineSeconds` | Max trigger job runtime in seconds | `"300"` |
 | `ttlSecondsAfterFinished` | Job cleanup delay in seconds | `"3600"` |
 | `apikey` | TestEngine API key (vault ref) | Required |
-| `enableV1` | `true`: one request with every test definition to TestEngine's v1 API; `false`: one request per test definition to the legacy API, which is retired | `true` |
+| `enableV1` | Leave it unset (unset or `null` means `true`). `true` (the only value that renders): one request with every test definition to TestEngine's v1 trigger, or its v2 trigger with `testEnvironmentTag`. `false` fails the render for every application: TestEngine's legacy API is removed (DEVOPS-623/629) | `true` |
 | `backoffLimit` | Retry count on failure | `0` |
 | `resources` | Resource requests/limits for the trigger job pod | `100m`/`128Mi` requests, `500m`/`256Mi` limits |
 | `env` | Environment variables for every test definition's test container: a map of names to quoted strings. See [Test pod environment variables](#test-pod-environment-variables-env) | Not set |
@@ -1520,7 +1518,7 @@ applications:
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
 | `testdefinitions[].hardenedSecurityContext` | Run the test pod non-root with a read-only root filesystem | `true` |
 
-The chart picks the TestEngine URL itself (from Vault, by `enableV1` and the pipeline's Argo Events instance); there is no URL value to set. A failed call to TestEngine never fails the sync: the trigger pod logs an `ERROR:` line with the HTTP status and still exits 0. The hook Job itself can fail the sync when its pod does not run to the end (the image cannot be pulled, Vault cannot resolve a `vault:` value, or the Job passes `activeDeadlineSeconds`); Argo CD's sync result then names the `<fullName>-trigger` hook and the reason. The Job is deleted when it finishes, so if tests do not appear in TestEngine, check the trigger pod's log during the sync, or the hook's message in the sync result when the pod never started.
+The chart picks the TestEngine URL itself (from Vault, `testengine/api/v1`, by the pipeline's Argo Events instance); there is no URL value to set. A failed call to TestEngine never fails the sync: the trigger pod logs an `ERROR:` line with the HTTP status and still exits 0. The hook Job itself can fail the sync when its pod does not run to the end (the image cannot be pulled, Vault cannot resolve a `vault:` value, or the Job passes `activeDeadlineSeconds`); Argo CD's sync result then names the `<fullName>-trigger` hook and the reason. The Job is deleted when it finishes, so if tests do not appear in TestEngine, check the trigger pod's log during the sync, or the hook's message in the sync result when the pod never started.
 
 The trigger Job's image is fixed by the chart: `harbor.mycarrier.tech/proxy-cache/alpine/curl:8.23.0`, pinned by digest (DEVOPS-632). No value changes it, and a `testtrigger.webhook_url` key has no effect.
 
@@ -1842,9 +1840,10 @@ When reviewing or creating helm value changes:
 14. **Alerts** — `alerts.enabled: true` in exactly one environment's values file (prod), the shared settings in `helm/values.yaml`
 15. **`allowAllEndpoints`** — Only in dev values (dev and feature environments); anywhere else the render fails
 16. **Deployment ⇄ Rollout** — Never change `deploymentType` in one release; switch with `migratingToRollouts` over two releases
-17. **Prod canary Rollout test triggers** — For a prod Rollout whose repository's `deployment-strategy` property is `canary`: `enableV1: true`, `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
+17. **Prod canary Rollout test triggers** — For a prod Rollout whose repository's `deployment-strategy` property is `canary`: `apikey` unset or `vault:DevOps/data/testengine/api#encoded_header`, and no `global.testengineWebhookUrl`
 18. **Canary steps outside prod** — Canary Rollouts (property `canary`) run their steps in prod only; `global.strategy.canary.stepsOutsideProd: true` only in the values of a test drill's environment, never in the shared `helm/values.yaml`
 19. **Canary dark stage and pod floor** — For a stack whose repository property is `canary`: wherever the canary steps render (prod, or `stepsOutsideProd`; with the coordinator off or explicit `steps` too), each canary Rollout's minimum replicas is at least 2 (`autoscaling.minReplicas` with the HPA; with KEDA, `keda.minReplicaCount` and no `keda.idleReplicaCount`; else `replicas`, which counts as 1 with the top-level `scaling` value and no autoscaler). Where the dark stage renders (coordinator on, `dark: true`, a preset; every environment): `global.strategy.canary.leader` set when the release has two or more canary Rollouts; the leader has `testtrigger.testdefinitions` in every environment (or `dark: false` there); `tests` in `analysis.templates` only with `dark: false`; no `progressDeadlineSeconds` at or below 900; and `dark: false` for a multi-frontend release
+20. **Test trigger version** — No `testtrigger.enableV1: false` in any environment: it fails the render (TestEngine's legacy API is removed). Leave the key unset
 
 ---
 
