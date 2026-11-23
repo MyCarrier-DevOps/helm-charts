@@ -363,7 +363,8 @@ the ExternalSecret `<environment>-<fullName>-compare`, a read-only ClickHouse us
 
 TestEngine no longer has the legacy `POST /trigger` (DEVOPS-623). Since the release after 4.7.35, the chart has no
 legacy test trigger (DEVOPS-629): `testtrigger.enableV1: false` fails the render for every application, with or without
-test definitions, and the error names the application. With `enableV1` unset or `true` the render does not change: one
+test definitions, and the error names the application. An explicit `enableV1: null` counts as unset (it failed schema
+validation before). With `enableV1` unset, `null` or `true` the render is the same as with it unset before: one
 request with every test definition to TestEngine's v1 trigger (`vault:DevOps/data/testengine/api/v1#url`, or `#dev_url`
 on `argo-events-test`), or its v2 trigger for test definitions with `testEnvironmentTag`.
 

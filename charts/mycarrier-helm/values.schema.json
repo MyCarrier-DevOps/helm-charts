@@ -472,8 +472,8 @@
                 }
               },
               "enableV1": {
-                "type": "boolean",
-                "description": "Optional; true is the default and the only value that renders: all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to TestEngine's v1 trigger (or its v2 trigger for test definitions with testEnvironmentTag). false fails the render for every application (DEVOPS-629): it selected one call per test definition to TestEngine's legacy POST /trigger, which is removed (DEVOPS-623). Remove the key or set it to true.",
+                "type": ["boolean", "null"],
+                "description": "Optional; unset or null means true, the default and the only value that renders: all test definitions are bundled into a single curl POST with a {\"Tests\":[...]} payload sent to TestEngine's v1 trigger (or its v2 trigger for test definitions with testEnvironmentTag). false fails the render for every application (DEVOPS-629): it selected one call per test definition to TestEngine's legacy POST /trigger, which is removed (DEVOPS-623). Remove the key or set it to true.",
                 "default": true
               },
               "env": {

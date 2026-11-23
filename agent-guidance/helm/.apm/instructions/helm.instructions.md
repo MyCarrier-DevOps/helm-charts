@@ -1498,7 +1498,7 @@ applications:
 | `activeDeadlineSeconds` | Max trigger job runtime in seconds | `"300"` |
 | `ttlSecondsAfterFinished` | Job cleanup delay in seconds | `"3600"` |
 | `apikey` | TestEngine API key (vault ref) | Required |
-| `enableV1` | Leave it unset. `true` (the only value that renders): one request with every test definition to TestEngine's v1 trigger, or its v2 trigger with `testEnvironmentTag`. `false` fails the render for every application: TestEngine's legacy API is removed (DEVOPS-623/629) | `true` |
+| `enableV1` | Leave it unset (unset or `null` means `true`). `true` (the only value that renders): one request with every test definition to TestEngine's v1 trigger, or its v2 trigger with `testEnvironmentTag`. `false` fails the render for every application: TestEngine's legacy API is removed (DEVOPS-623/629) | `true` |
 | `backoffLimit` | Retry count on failure | `0` |
 | `resources` | Resource requests/limits for the trigger job pod | `100m`/`128Mi` requests, `500m`/`256Mi` limits |
 | `env` | Environment variables for every test definition's test container: a map of names to quoted strings. See [Test pod environment variables](#test-pod-environment-variables-env) | Not set |

@@ -299,6 +299,42 @@ tests:
             name: TESTENGINEHOOK_URL
             value: "vault:DevOps/data/testengine/api/v1#url"
 
+  # An explicit null counts as not set: it renders the same v1 hook as an omitted enableV1, not the enableV1: false error.
+  - it: should default to v1 mode when enableV1 is null
+    set:
+      fullnameOverride: app
+      namespace: dev-app
+      metaEnvironment: dev
+      applications:
+        app1:
+          version: 1.0.0
+          enabled: true
+          image:
+            registry: "myregistry.example.com"
+            repository: "mycarrier/app1"
+            tag: "1.0.0"
+          testtrigger:
+            enableV1: null
+            ttlSecondsAfterFinished: "300"
+            testdefinitions:
+              - name: "apitests"
+                containerImage: "alpine/curl"
+                containerTag: "latest"
+                secretId: "vault:Secret/data/secret#SecretId"
+                filters:
+                  - "TestCategory=api"
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"Tests":\s*\['
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TESTENGINEHOOK_URL
+            value: "vault:DevOps/data/testengine/api/v1#url"
+
 
   # Edge case tests for testdefinitions
   - it: should handle multiple test definitions correctly

@@ -8,8 +8,10 @@
 {{- if .testtrigger }}
 {{- /* DEVOPS-629: enableV1: false selected one call per test definition to TestEngine's legacy POST /trigger, which is
        removed (DEVOPS-623). Every trigger now goes to the v1 trigger (or v2, with testEnvironmentTag), so false fails
-       the render for every application, with or without test definitions, before anything else renders for it. */}}
-{{- if not (dig "testtrigger" "enableV1" true $appValues) }}
+       the render for every application, with or without test definitions, before anything else renders for it.
+       Unset or null means true (the default): dig returns null for a key set to null, so only a boolean false fails. */}}
+{{- $enableV1 := dig "testtrigger" "enableV1" true $appValues }}
+{{- if and (kindIs "bool" $enableV1) (not $enableV1) }}
 {{- fail (printf "application '%s': testtrigger.enableV1: false is not supported. TestEngine's legacy POST /trigger is removed (DEVOPS-623), so the chart sends every test trigger to TestEngine's v1 trigger, or to its v2 trigger for test definitions with testEnvironmentTag. Remove applications.%s.testtrigger.enableV1, or set it to true." $appName $appName) }}
 {{- end }}
 {{- /* A prod canary Rollout gets no PostSync hook (Tech Spec D7): the hook can fire at the start of a canary sync, after

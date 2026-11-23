@@ -831,7 +831,7 @@ applications: {}
 #     activeDeadlineSeconds: "600"
 #     backoffLimit: 0
 #     apikey: "vault:Secrets/data/testengine#apikey"
-#     enableV1: true                             # Optional, true is the only value: one bundled POST {"Tests":[...]} to
+#     enableV1: true                             # Optional; unset or null means true: one bundled POST {"Tests":[...]} to
 #                                                # TestEngine's v1 trigger. false fails the render (the legacy API is removed)
 #     env:
 #       RESULTS_DB: "qa-results"  # Optional, quoted strings: every test definition gets these

@@ -326,6 +326,32 @@ tests:
       - equal:
           path: metadata.name
           value: mycarrier-api-prod-tests
+
+  # An explicit null counts as not set, as on the hook.
+  - it: renders the ConfigMap for a canary Rollout in prod when enableV1 is null
+    set:
+      global: *global
+      environment: *prod
+      applications:
+        api:
+          deploymentType: rollout
+          image: *image
+          ports: *ports
+          testtrigger:
+            enableV1: null
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: mycarrier-api-prod-tests
   - it: renders the ConfigMap with no testtrigger.apikey
     set:
       global: *global

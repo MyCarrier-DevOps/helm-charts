@@ -62,7 +62,7 @@ applications:
         limits:
           memory: "<memory-limit>"
           cpu: "<cpu-limit>"
-      enableV1: true                 # Optional; true is the default and the only value (false fails the render)
+      enableV1: true                 # Optional; unset or null means true (false fails the render)
       env:                           # Optional — variables for every test definition's test container
         <NAME>: "<value>"
       testdefinitions:
@@ -113,7 +113,7 @@ applications:
 | `backoffLimit` | Number of retries for the test job in case of failure | No | `0` | `0` |
 | `resources` | Resource requests and limits for the test job pod | No | See below* | See example below |
 | `ttlSecondsAfterFinished` | Time in seconds to keep the job after it finishes | No | `"3600"` | `"3600"` |
-| `enableV1` | `true` is the default and the only value that renders: all test definitions are bundled into a single POST to TestEngine's v1 trigger (`api/v1`) with a `{"Tests":[...]}` payload, or its v2 trigger for test definitions with `testEnvironmentTag`. `false` fails the render for every application, with or without test definitions: it selected one POST per test definition to TestEngine's legacy `POST /trigger`, which is removed (DEVOPS-623). The webhook URL is set automatically (`vault:DevOps/data/testengine/api/v1#url`, or `#dev_url` on `argo-events-test`); `global.testengineWebhookUrl` overrides it, except for a canary Rollout in prod (property `canary`), where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
+| `enableV1` | Unset or `null` means `true`, the default and the only value that renders: all test definitions are bundled into a single POST to TestEngine's v1 trigger (`api/v1`) with a `{"Tests":[...]}` payload, or its v2 trigger for test definitions with `testEnvironmentTag`. `false` fails the render for every application, with or without test definitions: it selected one POST per test definition to TestEngine's legacy `POST /trigger`, which is removed (DEVOPS-623). The webhook URL is set automatically (`vault:DevOps/data/testengine/api/v1#url`, or `#dev_url` on `argo-events-test`); `global.testengineWebhookUrl` overrides it, except for a canary Rollout in prod (property `canary`), where setting it fails the render (see Rollouts in prod). | No | `true` | `true` |
 | `env` | Environment variables set on the test container of **every** test definition of this application: a map of names to quoted strings. A definition's own `env` wins on a name clash. See [Environment variables for test pods](#environment-variables-for-test-pods-env) | No | None | `{RESULTS_DB: "qa-results"}` |
 
 *Default resource values:
