@@ -6,7 +6,7 @@ Test triggers are configured in the Helm values files (e.g., `values.dev.yaml`, 
 
 ### ArgoCD Integration
 
-Test trigger jobs run as post-sync hooks in ArgoCD. This means that after ArgoCD successfully syncs your application to the desired state, it automatically triggers the test jobs as part of the deployment process. The ArgoCD sync operation will be marked as successful only if all the test jobs complete successfully.
+Test trigger jobs run as post-sync hooks in ArgoCD. This means that after ArgoCD successfully syncs your application to the desired state, it automatically triggers the test jobs as part of the deployment process. A failed TestEngine call does not fail the sync: the hook logs an `ERROR:` line for each failed call and exits 0, so Argo CD does not retry the sync. The hook Job itself can still fail the sync when its pod does not run to the end, for example when the image cannot be pulled, Vault cannot resolve a `vault:` value, or the Job passes `activeDeadlineSeconds`: Argo CD marks the sync failed when a PostSync hook fails, and the sync result names the `<fullName>-trigger` hook with the reason. The tests themselves run in the Jobs that TestEngine starts; their results reach the pipeline and the PR checks, not the sync. If tests do not appear in TestEngine, read the trigger pod's log during the sync; if the trigger pod never started (an image pull failure leaves no log), read the hook's message in the sync result.
 
 How it works:
 1. ArgoCD deploys your application resources based on the Helm chart
@@ -184,7 +184,6 @@ testtrigger:
   activeDeadlineSeconds: "300"
   ttlSecondsAfterFinished: "3600"
   apikey: "vault:Secrets/data/path/to/secret#apikey"
-  webhook_url: "vault:Secrets/data/path/to/secret#url"
   backoffLimit: 0
   testdefinitions:
     - containerImage: testing/exampletestapp
@@ -204,7 +203,6 @@ testtrigger:
   activeDeadlineSeconds: "300"
   ttlSecondsAfterFinished: "3600"
   apikey: "vault:Secrets/data/path/to/secret#apikey"
-  webhook_url: "vault:Secrets/data/path/to/secret#url"
   backoffLimit: 0
   testdefinitions:
     - containerImage: testing/exampletestapp
@@ -222,7 +220,6 @@ testtrigger:
   activeDeadlineSeconds: "300"
   ttlSecondsAfterFinished: "3600"
   apikey: "vault:Secrets/data/path/to/secret#apikey"
-  webhook_url: "vault:Secrets/data/path/to/secret#url"
   backoffLimit: 0
   resources:
     requests:
@@ -249,7 +246,6 @@ testtrigger:
   activeDeadlineSeconds: "300"
   ttlSecondsAfterFinished: "3600"
   apikey: "vault:Secrets/data/path/to/secret#apikey"
-  webhook_url: "vault:Secrets/data/path/to/secret#url"
   backoffLimit: 0
   testdefinitions:
     - containerImage: testing/exampletestapp

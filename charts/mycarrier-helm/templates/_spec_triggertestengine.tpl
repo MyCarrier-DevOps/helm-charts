@@ -44,7 +44,11 @@ template:
       - name: {{ dig "testtrigger" "imagePullSecret" $imagePullSecret .application | quote }}
     restartPolicy: {{ dig "testtrigger" "restartPolicy" $restartPolicy .application | quote  }}
     containers:
-      - image: "alpine/curl:8.17.0"
+      {{- /* DEVOPS-632: this pod holds the TestEngine API key. Pull through the Harbor proxy cache and pin the digest, so a
+             moved Docker Hub tag cannot change the image. To update: take the new tag's digest from Docker Hub, check
+             that harbor.mycarrier.tech/proxy-cache serves the same digest, and change it here, in the image test of
+             tests/triggertests_test.yaml and in the agent guidance (helm.instructions.md), which names the tag. */}}
+      - image: "harbor.mycarrier.tech/proxy-cache/alpine/curl:8.23.0@sha256:2a36f3dfe424231c1b03753929e43dda451c29a6193873916924f0b6073bbc5f"
         imagePullPolicy: {{ dig "testtrigger" "imagePullPolicy" "IfNotPresent" .application | quote }}
         name: testtrigger
         env:

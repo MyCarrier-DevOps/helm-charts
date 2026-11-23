@@ -1518,7 +1518,9 @@ applications:
 | `testdefinitions[].podResources` | Resource requests/limits for the test pod | `250m`/`1Gi` requests, `2000m`/`4Gi` limits |
 | `testdefinitions[].hardenedSecurityContext` | Run the test pod non-root with a read-only root filesystem | `true` |
 
-The chart picks the TestEngine URL itself (from Vault, `testengine/api/v1`, by the pipeline's Argo Events instance); there is no URL value to set. The hook never fails the sync: when a call to TestEngine fails, the trigger pod logs an `ERROR:` line with the HTTP status and still exits 0. The Job is deleted when it finishes, so if tests do not appear in TestEngine, check the trigger pod's log during the sync.
+The chart picks the TestEngine URL itself (from Vault, `testengine/api/v1`, by the pipeline's Argo Events instance); there is no URL value to set. A failed call to TestEngine never fails the sync: the trigger pod logs an `ERROR:` line with the HTTP status and still exits 0. The hook Job itself can fail the sync when its pod does not run to the end (the image cannot be pulled, Vault cannot resolve a `vault:` value, or the Job passes `activeDeadlineSeconds`); Argo CD's sync result then names the `<fullName>-trigger` hook and the reason. The Job is deleted when it finishes, so if tests do not appear in TestEngine, check the trigger pod's log during the sync, or the hook's message in the sync result when the pod never started.
+
+The trigger Job's image is fixed by the chart: `harbor.mycarrier.tech/proxy-cache/alpine/curl:8.23.0`, pinned by digest (DEVOPS-632). No value changes it, and a `testtrigger.webhook_url` key has no effect.
 
 ---
 

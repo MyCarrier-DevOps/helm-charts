@@ -60,7 +60,6 @@ environments:
               name: apitests
               secretId: vault:QA/data/app_auth#SecretId
           ttlSecondsAfterFinished: "3600"
-          webhook_url: vault:DevOps/data/testengine/api#url
         updateStrategy:
           rollingUpdate:
             maxSurge: 1
@@ -127,7 +126,6 @@ environments:
               name: apitests
               secretId: vault:QA/data/app_auth#SecretId
           ttlSecondsAfterFinished: "3600"
-          webhook_url: vault:DevOps/data/testengine/api#url
         updateStrategy:
           rollingUpdate:
             maxSurge: 1
@@ -193,7 +191,6 @@ environments:
               name: apitests
               secretId: vault:QA/data/app_auth#SecretId
           ttlSecondsAfterFinished: "3600"
-          webhook_url: vault:DevOps/data/testengine/api#url
         updateStrategy:
           rollingUpdate:
             maxSurge: 1
@@ -263,7 +260,6 @@ environments:
               name: apitests
               secretId: vault:QA/data/app_auth#SecretId
           ttlSecondsAfterFinished: "3600"
-          webhook_url: vault:DevOps/data/testengine/api#url
         updateStrategy:
           rollingUpdate:
             maxSurge: 1
@@ -334,7 +330,6 @@ environments:
               name: apitests
               secretId: vault:QA/data/app_auth#SecretId
           ttlSecondsAfterFinished: "3600"
-          webhook_url: vault:DevOps/data/testengine/api#url
         updateStrategy:
           rollingUpdate:
             maxSurge: 1
