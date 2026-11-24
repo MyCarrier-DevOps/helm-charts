@@ -193,7 +193,7 @@ jobs:
         run: python3 -I .github/scripts/test_alert_rules_check.py
 
       # The tests AnalysisTemplate's Job decides whether a canary's test suite passed (DEVOPS-515); its caller contract
-      # with TestEngine's v1 API is tested against a stub TestEngine.
+      # with TestEngine's v1 and v2 triggers (AQA-109) is tested against a stub TestEngine.
       - name: tests script caller contract
         if: ${{ matrix.chart == 'charts/mycarrier-helm' }}
         run: python3 -I .github/scripts/test_canary_tests_check.py

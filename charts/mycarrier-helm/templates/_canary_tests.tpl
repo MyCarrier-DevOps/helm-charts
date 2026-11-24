@@ -189,6 +189,16 @@ true
        v2 fields and the one-trigger-per-application rule): filters go to v1, testEnvironmentTag to v2. There is no
        fallback from v2 to v1: a v1 request without TestFilters would run every test in the image. */ -}}
 {{- $version := include "helm.testtrigger.version" $ctx -}}
+{{- /* TestEngine's /v2/trigger answers 422 to a request in which more than 4 entries set MultiRun
+       (MaxMultiRunEntriesPerBatch, V2_TRIGGER.md), so such a request would fail every canary analysis. The PostSync
+       hook sends the same request and only logs the 422; the check is here because a failed canary aborts the release. */ -}}
+{{- $multiRuns := 0 -}}
+{{- range (dig "testtrigger" "testdefinitions" list $ctx.application) -}}
+  {{- if eq (toString .multiRun) "true" }}{{ $multiRuns = add1 $multiRuns }}{{ end -}}
+{{- end -}}
+{{- if gt $multiRuns 4 -}}
+  {{- fail (printf "application '%s': %d test definitions set multiRun: true, and TestEngine's /v2/trigger accepts at most 4 per request (it answers 422), so the %s analysis would fail every canary. Set multiRun: true on at most 4 test definitions, or %s." $ctx.appName $multiRuns $template $wayOut) -}}
+{{- end -}}
 {{- $run := dict "serviceAddresses" $addresses "tolerations" (list) "runKind" "canary" "slipStep" "none" "requestHeaders" (.requestHeaders | default dict) "correlationId" (include "helm.canary.correlationIdString" $ctx) -}}
 {{- $environmentName := lower (toString $namespace) -}}
 {{- if and (contains "prod" $environmentName) (not (contains "preprod" $environmentName)) -}}

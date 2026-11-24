@@ -773,6 +773,25 @@ tests:
       - failedTemplate:
           errorPattern: "test definition 'apitests' goes to TestEngine's v1 trigger \\(filters\\) and 'smoketests' to its v2 trigger \\(testEnvironmentTag\\)"
 
+  # AQA-109: more than 4 multiRun definitions fail the tests-dark render too, naming dark: false.
+  - it: "AQA-109: fails more than 4 multiRun definitions on the leader, naming dark false"
+    template: analysistemplate.yaml
+    set:
+      <<: *darkV2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - {name: t1, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t2, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t3, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t4, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t5, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "5 test definitions set multiRun: true, .* so the tests-dark analysis would fail every canary. Set multiRun: true on at most 4 test definitions, or set global.strategy.canary.dark: false."
+
   # AQA-109 R5 for tests-dark: the way out is dark: false.
   - it: "AQA-109: fails a preprod tag in a prod tests-dark run, naming dark false"
     template: analysistemplate.yaml

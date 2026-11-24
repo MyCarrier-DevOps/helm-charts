@@ -207,7 +207,8 @@ for a stack that lists `tests` in `global.strategy.canary.analysis.templates` (o
 `<environment>-<fullName>-tests` in explicit `steps`), so other renders do not change. Like `health` and `alerts`, a
 Rollout whose property is not `canary` renders no `tests` template and runs none of its checks, with or without `tests`
 listed. Each analysis step then runs a Job that sends the application's
-`testtrigger.testdefinitions` to TestEngine's v1 API, with `ServiceAddress` the `-preview` Service, `RunKind: canary`,
+`testtrigger.testdefinitions` to TestEngine's v1 API (or its v2 trigger for test definitions with `testEnvironmentTag`,
+AQA-109; see `TestTriggersGuide.md`), with `ServiceAddress` the `-preview` Service, `RunKind: canary`,
 `SlipStep: none` and `Tolerations: []`, polls the run, and passes only when the run passes. A run that ends `no_results`
 or `infra_failed` is sent once more. A failed suite, a second `no_results`, TestEngine with `RUN_KINDS_ENABLED` off, a 5xx
 or the end of `analysis.tests.timeout` (default `7m`) fails the AnalysisRun and aborts the canary. A Job image (or

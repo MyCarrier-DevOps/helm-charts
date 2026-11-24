@@ -2341,6 +2341,47 @@ tests:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
           pattern: '"TestEnvironmentTag": "PreProdCoreAPI",'
 
+  # AQA-109: TestEngine's /v2/trigger refuses (422) a batch in which more than 4 entries set MultiRun
+  # (MaxMultiRunEntriesPerBatch), so the canary request fails the render then, instead of failing every canary analysis.
+  - it: "AQA-109: fails more than 4 test definitions with multiRun"
+    template: analysistemplate.yaml
+    set:
+      <<: *v2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - {name: t1, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t2, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t3, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t4, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t5, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': 5 test definitions set multiRun: true, and TestEngine's /v2/trigger accepts at most 4 per request \\(it answers 422\\), so the tests analysis would fail every canary. Set multiRun: true on at most 4 test definitions, or leave tests out of global.strategy.canary.analysis.templates."
+
+  - it: "AQA-109: accepts 4 test definitions with multiRun and any number without it"
+    template: analysistemplate.yaml
+    documentSelector: *v2TestsTemplate
+    set:
+      <<: *v2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - {name: t1, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t2, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t3, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t4, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t5, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: false}
+              - {name: t6, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI}
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"TestName": "t6"'
+
   # Not changed by AQA-109: in the prod environment a canary Rollout gets no PostSync hook, and rollout-watch posts its
   # prod-tests request to the v1 trigger only until DEVOPS-613, so triggertestengine.yaml still refuses the tag there.
   - it: "AQA-109: the prod canary Rollout still fails on the tag until DEVOPS-613"

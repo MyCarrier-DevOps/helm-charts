@@ -44,7 +44,9 @@ changes, and the Job gets `TESTS_TRIGGER_VERSION: v2`. Before it posts, the Job 
 `GET /v1/capabilities`. A `404` there, or no `v2`, sends no request and fails the analysis with a message that names
 `TRIGGER_V2_ENABLED` and the way out (leave `tests` out of `analysis.templates`; for `tests-dark`, set `dark: false`).
 With `v2` listed, a `404` from `POST /v2/trigger` fails with a message that the `/v2/trigger` route is missing. With
-`multiRun: true` and `multi_run_enabled` not `true`, the Job logs a `WARN:` line and runs the suite as one Job. There is
+`multiRun: true` and `multi_run_enabled` not `true`, the Job logs a `WARN:` line and runs the suite as one Job.
+TestEngine accepts at most 4 entries with `multiRun: true` in one request (it answers `422`), so more than 4 such test
+definitions on one application fail the render of `tests` and `tests-dark`. There is
 no fallback to v1: switch on v2 in the TestEngine instance the canary calls before the application moves to the tag.
 In a prod-class environment (the namespace contains `prod` and not `preprod`), a tag whose Stage starts with `preprod`
 fails the render, as a filter whose first `TestCategory` starts with `preprod` does. The Stage is the tag after
@@ -339,7 +341,8 @@ Explanation: This configuration creates one test trigger Job per application: on
 
 ## Tag-based runs (`testEnvironmentTag`, v2 trigger)
 
-A test definition can name a **test environment tag** instead of a `filters` list (AQA-38). The hook then posts to
+A test definition can name a **test environment tag** instead of a `filters` list (AQA-38). The hook, and the canary
+`tests` and `tests-dark` runs (AQA-109, see Test definitions in canary analysis), then post to
 TestEngine's v2 trigger (`/v2/trigger`), which runs the tests that carry the tag (a `TestCategory` in the test code) in
 one Job and reports them under Stage = the tag. The service no longer keeps a Vault list of test categories.
 
@@ -369,6 +372,9 @@ The render fails, naming the application, the test definition and the field, whe
 
 - a definition sets both `filters` (not empty) and `testEnvironmentTag`;
 - `testTags` or `multiRun: true` is set without `testEnvironmentTag`;
+- more than 4 definitions of an application set `multiRun: true` and its canary `tests` or `tests-dark` template renders
+  (TestEngine answers `422` to more than 4 per request). The hook does not check this: it gets the `422` and logs an
+  `ERROR:` line, so keep `multiRun: true` on at most 4 definitions there too;
 - the tag or a test tag has a character other than letters, digits, `_`, `.` and `-`, is longer than 100 characters, or
   (the tag) has no letter or digit; or there are more than 10 `testTags`;
 - some definitions of an application set `testEnvironmentTag` and others do not. All definitions of an application use the

@@ -1,8 +1,9 @@
 """Caller contract of the tests Job script in mycarrier-helm's tests AnalysisTemplate (DEVOPS-515).
 
-Renders the chart's tests template with helm, takes the script, the TESTS_REQUEST body and TESTS_REMEDY from the Job,
-and runs the
-script against a local stub of TestEngine's v1 API (TestEngine.Api/docs/V1_TRIGGER.md, Caller contract). Exit 0 lets
+Renders the chart's tests template with helm, takes the script, the TESTS_REQUEST body, TESTS_REMEDY and
+TESTS_TRIGGER_VERSION from the Job, and runs the
+script against a local stub of TestEngine's v1 and v2 triggers (TestEngine.Api/docs/V1_TRIGGER.md, Caller contract;
+V2_TRIGGER.md for a test definition with testEnvironmentTag, AQA-109). Exit 0 lets
 the canary go on; exit 1 fails the AnalysisRun and aborts the canary. The poll interval, the 404 grace and the poll
 budget come from the environment, so every case runs in about a second. No case may show the API key or the TestEngine
 host in the script's output.
@@ -704,11 +705,12 @@ class TestsJobScript(unittest.TestCase):
         untagged = {k: v for k, v in mixed["Tests"][0].items()
                     if k not in ("TestEnvironmentTag", "TestTags", "MultiRun")}
         mixed["Tests"].append(dict(untagged, TestName="untagged"))
+        # The agreement check's own text, not "is not a v2 request", which the request-parse error also holds.
+        not_v2 = "every test needs TestEnvironmentTag and no TestFilters"
         for name, kwargs, message in (
-                ("v1 request on v2", dict(v2=True, request=self.request), "is not a v2 request"),
-                ("v2 request with TestFilters on v2", dict(v2=True, request=json.dumps(with_filters)),
-                 "is not a v2 request"),
-                ("mixed tags on v2", dict(v2=True, request=json.dumps(mixed)), "is not a v2 request"),
+                ("v1 request on v2", dict(v2=True, request=self.request), not_v2),
+                ("v2 request with TestFilters on v2", dict(v2=True, request=json.dumps(with_filters)), not_v2),
+                ("mixed tags on v2", dict(v2=True, request=json.dumps(mixed)), not_v2),
                 ("v2 request on v1", dict(request=self.v2_request), "goes to /v2/trigger only"),
                 ("mixed tags on v1", dict(request=json.dumps(mixed)), "goes to /v2/trigger only"),
                 ("unknown version", dict(v2=True, TESTS_TRIGGER_VERSION="v3"), "TESTS_TRIGGER_VERSION")):
