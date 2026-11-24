@@ -107,7 +107,7 @@ tests:
           value: tests-dark
       - matchRegex:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
-          pattern: '(?s)GET.*/v1/capabilities.*/v1/trigger.*/v1/runs/.*sys\.exit\(main\(\)\)\n$'
+          pattern: '(?s)TRIGGER = "/v1/trigger".*GET.*/v1/capabilities.*base \+ TRIGGER.*/v1/runs/.*sys\.exit\(main\(\)\)\n$'
       - equal:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[0]
           value:
@@ -714,11 +714,13 @@ tests:
     asserts:
       - notFailedTemplate: {}
 
-  # AQA-38: tests-dark posts to TestEngine's v1 trigger only, so a leader whose test definition sets testEnvironmentTag
-  # (v2) fails the render instead of sending no filter, which would run every test in the image.
-  - it: "AQA-38: refuses a leader's test definition with testEnvironmentTag"
+  # AQA-109 R1: a leader whose test definitions set testEnvironmentTag sends tests-dark to TestEngine's v2 trigger, with
+  # the stable ServiceAddress and the canary header, as on v1. This suite renders no triggertestengine.yaml, so prod
+  # shows the AnalysisTemplate alone; a full prod render still stops at the DEVOPS-613 guard there.
+  - it: "AQA-109: sends the leader's tests-dark to the v2 trigger with the stable Service and the canary header"
     template: analysistemplate.yaml
-    set:
+    documentSelector: *testsDarkTemplate
+    set: &darkV2
       <<: *dark
       applications:
         api:
@@ -730,6 +732,62 @@ tests:
                 containerTag: 1.0.0
                 secretId: vault:QA/data/app_auth#SecretId
                 testEnvironmentTag: CoreAPI
+                testTags: [Smoke]
+                multiRun: true
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '(?s)"MultiRun": true,.*"TestEnvironmentTag": "CoreAPI",.*"RequestHeaders": \{\s*"X-MyCarrier-Canary": "6f1c9d2e-4a5b-4c7d-8e9f-0a1b2c3d4e5f"\s*\},.*"RunKind": "canary",.*"ServiceAddress": "http://mycarrier-api\.prod\.svc\.cluster\.local:8080",\s*"SlipStep": "none".*"TestTags": \[\s*"Smoke"\s*\],\s*"Tolerations": \[\],'
+      - notMatchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: 'TestFilters'
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[5]
+          value:
+            name: TESTS_TRIGGER_VERSION
+            value: v2
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: "set global.strategy.canary.dark: false"
+
+  # AQA-109: the AQA-38 rule holds on the canary path too (this suite renders no triggertestengine.yaml, so the
+  # failure comes from the tests-dark request): all definitions of an application use one trigger.
+  - it: "AQA-109: fails a leader that mixes filters and testEnvironmentTag"
+    template: analysistemplate.yaml
+    set:
+      <<: *darkV2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - *definition
+              - name: smoketests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: SmokeAPI
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': test definition 'apitests' sets testEnvironmentTag, testTags or multiRun \\(TestEngine's v2 trigger\\), and the dark stage's tests-dark run posts to TestEngine's v1 trigger only. Keep filters on this application's test definitions, define your own tests-dark entry under applications.api.analysisTemplates, or set global.strategy.canary.dark: false"
+          errorPattern: "test definition 'apitests' goes to TestEngine's v1 trigger \\(filters\\) and 'smoketests' to its v2 trigger \\(testEnvironmentTag\\)"
+
+  # AQA-109 R5 for tests-dark: the way out is dark: false.
+  - it: "AQA-109: fails a preprod tag in a prod tests-dark run, naming dark false"
+    template: analysistemplate.yaml
+    set:
+      <<: *darkV2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: preprod_smoke
+    asserts:
+      - failedTemplate:
+          errorPattern: "has the testEnvironmentTag 'preprod_smoke', whose Stage 'preprod-smoke' starts with preprod. .* so the tests-dark analysis would fail every prod canary. Use a tag that does not start with preprod, or set global.strategy.canary.dark: false in prod."

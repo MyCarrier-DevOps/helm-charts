@@ -38,10 +38,18 @@ Rollout application needs `testdefinitions` where `tests` is listed, and TestEng
 the stack-values guidance (Rollouts, Analysis) for the timeout (`analysis.tests.timeout`, default `7m`, plus
 `analysis.tests.startupSeconds`, default `120`), the canary budget and the barrier window. A Rollout
 whose property is not `canary` ignores `tests`: it renders no tests template and runs none of its checks.
-The `tests` and `tests-dark` runs post to TestEngine's v1 trigger only: an application whose test definitions set
-`testEnvironmentTag` fails the render where the chart's `tests` or `tests-dark` template renders for it (`tests-dark` is on by
-default for a prod canary leader). Keep `filters` on such an application, define your own template under
-`analysisTemplates`, or leave `tests` out of `analysis.templates` (for `tests-dark`, set `dark: false`).
+An application whose test definitions set `testEnvironmentTag` (see [Tag-based runs](#tag-based-runs-testenvironmenttag-v2-trigger))
+sends the `tests` and `tests-dark` runs to TestEngine's v2 trigger (AQA-109): the v2 request with the same four
+changes, and the Job gets `TESTS_TRIGGER_VERSION: v2`. Before it posts, the Job also needs `"v2"` in `trigger_versions` of
+`GET /v1/capabilities`. A `404` there, or no `v2`, sends no request and fails the analysis with a message that names
+`TRIGGER_V2_ENABLED` and the way out (leave `tests` out of `analysis.templates`; for `tests-dark`, set `dark: false`).
+With `v2` listed, a `404` from `POST /v2/trigger` fails with a message that the `/v2/trigger` route is missing. With
+`multiRun: true` and `multi_run_enabled` not `true`, the Job logs a `WARN:` line and runs the suite as one Job. There is
+no fallback to v1: switch on v2 in the TestEngine instance the canary calls before the application moves to the tag.
+In a prod-class environment (the namespace contains `prod` and not `preprod`), a tag whose Stage starts with `preprod`
+fails the render, as a filter whose first `TestCategory` starts with `preprod` does. The Stage is the tag after
+TestEngine's clean-up: characters outside `A-Za-z0-9-` become `-`, runs of `-` collapse to one, and `-` is trimmed at
+both ends, so `_PreProd.x` counts.
 
 ## Configuration Structure
 
@@ -362,8 +370,8 @@ The render fails, naming the application, the test definition and the field, whe
   (the tag) has no letter or digit; or there are more than 10 `testTags`;
 - some definitions of an application set `testEnvironmentTag` and others do not. All definitions of an application use the
   same trigger: two triggers are two batches, and two batches of one deployment write its tests step twice;
-- the application's canary `tests` or `tests-dark` template renders (they post to v1 only, see Test definitions in canary
-  analysis);
+- the application's canary `tests` or `tests-dark` template renders in a prod-class environment and the tag's Stage
+  starts with `preprod` (see Test definitions in canary analysis);
 - the application is a Rollout in prod with no PostSync hook (a `canary` repository, see above): rollout-watch posts
   its prod-tests request to v1 only until DEVOPS-613, so keep `filters` in its prod values.
 
@@ -391,9 +399,9 @@ Because every definition of an application uses the same trigger, such an applic
 
 1. Check that TestEngine has v2 on in the instance the service calls: `GET /v1/capabilities` lists `"v2"` in
    `trigger_versions`. The switch is per TestEngine instance (`testengine-dev`, `testengine`), not per environment.
-2. Check that every caller the service uses knows v2: this chart version, autotriggertests (AQA-54) and, for a prod canary
-   Rollout, rollout-watch (DEVOPS-613) and the canary `tests` template (not yet: keep `filters` there; the render fails
-   for a tag on a prod canary Rollout). An older chart
+2. Check that every caller the service uses knows v2: this chart version (its canary `tests` and `tests-dark` runs too,
+   AQA-109), autotriggertests (AQA-54) and, for a prod canary Rollout, rollout-watch (DEVOPS-613; not yet: keep
+   `filters` in prod values there, because the render fails for a tag on a prod canary Rollout). An older chart
    version does not know `testEnvironmentTag` and would send no filter, which runs every test.
 3. In one change, replace `filters` with `testEnvironmentTag` (and `testTags` if needed) on every test definition of the
    application.

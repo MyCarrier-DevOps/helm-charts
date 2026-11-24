@@ -1396,14 +1396,16 @@ applications:
 - `testTags` or `multiRun: true` without `testEnvironmentTag`.
 - A tag or test tag with characters other than letters, digits, `_`, `.` and `-`, over 100 characters, or (the tag) without a letter or digit; more than 10 `testTags`.
 - Some definitions of an application with `testEnvironmentTag` and others without: all of an application's definitions use the same trigger.
-- `testEnvironmentTag` on an application whose canary `tests` or `tests-dark` template renders (they post to v1 only); `tests-dark` is on by default for a prod canary leader.
+- On an application whose canary `tests` or `tests-dark` template renders in a prod-class environment (the namespace contains `prod` and not `preprod`): a `testEnvironmentTag` whose Stage starts with `preprod`. The Stage is the tag after TestEngine's clean-up (characters outside `A-Za-z0-9-` become `-`, runs of `-` collapse, `-` trimmed at both ends), compared without case.
 - `testEnvironmentTag` on a Rollout in prod whose repository's `deployment-strategy` is `canary` (no PostSync hook): rollout-watch posts its prod-tests request to TestEngine's v1 trigger only until DEVOPS-613, so keep `filters` in that application's prod values.
 
 The schema only checks types (`testEnvironmentTag` a non-empty string, `testTags` a list of strings, `multiRun` a boolean).
 
 **Environment behaviour.** If that TestEngine has v2 switched off (`/v1/capabilities` answers 404 or does not list `v2` in `trigger_versions`), the hook logs `ERROR: TestEngine v2 trigger not sent: v2 is switched off ...` and posts nothing; with `v2` listed, a 404 on `/v2/trigger` logs `... the /v2/trigger route is missing`. There is no fallback to v1, and the hook still exits 0. A v2 run is one Job, which TestEngine watches for 25 minutes: keep a large serial suite on `filters`.
 
-**Where it goes.** Same place as the test definitions (`helm/deployment/values.{env}.yaml`, or the environment's `environments[]` entry). Move an application in one change, replacing `filters` with the tag on all its definitions, only once its TestEngine instance lists `v2` and every caller knows v2 (this chart version, autotriggertests, and for a prod canary Rollout rollout-watch). Rollback is putting `filters` back. See `TestTriggersGuide.md`.
+**Canary `tests` and `tests-dark` (AQA-109).** For a tagged application these runs send the v2 request with the canary overrides (`-preview` or stable `ServiceAddress`, `RunKind: canary`, `SlipStep: none`, `Tolerations: []`, `RequestHeaders`, a string `CorrelationId`), and the Job gets `TESTS_TRIGGER_VERSION: v2`. The Job needs `run_kinds_enabled: true` and `"v2"` in `trigger_versions`; without them it sends nothing and the analysis fails, naming `TRIGGER_V2_ENABLED` and the way out (`tests` out of `analysis.templates`, or `dark: false` for `tests-dark`). With `v2` listed, a 404 from `POST /v2/trigger` fails as "route missing". It polls `/v1/runs/{id}` as on v1. A filters-only application gets the same Job as before; only the shared script text changed.
+
+**Where it goes.** Same place as the test definitions (`helm/deployment/values.{env}.yaml`, or the environment's `environments[]` entry). Move an application in one change, replacing `filters` with the tag on all its definitions, only once its TestEngine instance lists `v2` and every caller knows v2 (this chart version, including its canary `tests` and `tests-dark` runs, autotriggertests, and for a prod canary Rollout rollout-watch). Rollback is putting `filters` back. See `TestTriggersGuide.md`.
 
 ### Test triggers of Rollouts in prod
 

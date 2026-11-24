@@ -370,6 +370,8 @@ renders the default analysis template set:
                           STARTED = time.monotonic()
                           BUDGET = INTERVAL = NOT_FOUND_GRACE = RESUBMIT_FLOOR = 0.0
                           REMEDY = ""
+                          VERSION = "v1"
+                          TRIGGER = "/v1/trigger"
                           WATCHDOG = {"armed": False}
 
 
@@ -488,7 +490,7 @@ renders the default analysis template set:
                               time.sleep(min(INTERVAL, remaining))
 
 
-                          def preflight(base, key, kind, deadline):
+                          def preflight(base, key, kind, deadline, multi_run=False):
                               while True:
                                   try:
                                       status, document, text = call("GET", base + "/v1/capabilities", key, deadline)
@@ -496,6 +498,12 @@ renders the default analysis template set:
                                       log("GET /v1/capabilities: no answer (%s)" % e)
                                       wait(deadline, "GET /v1/capabilities never answered")
                                       continue
+                                  if status == 404 and VERSION == "v2":
+                                      raise Fail("GET /v1/capabilities answered 404: this TestEngine has no run kinds and no v2 trigger (a build"
+                                                 " before MC.TestEngine#95, or the route is missing), so no tests were started. The canary tests"
+                                                 " of test definitions with testEnvironmentTag need TestEngine with RUN_KINDS_ENABLED=true and"
+                                                 " TRIGGER_V2_ENABLED=true. Turn them on in TestEngine, put filters back on the test definitions,"
+                                                 " or %s." % REMEDY)
                                   if status == 404:
                                       raise Fail("GET /v1/capabilities answered 404: this TestEngine has no run kinds (a build before MC.TestEngine#95,"
                                                  " or the route is missing), so no tests were started. The canary tests need TestEngine with"
@@ -511,7 +519,18 @@ renders the default analysis template set:
                                   kinds = document.get("run_kinds")
                                   if isinstance(kinds, list) and kind not in kinds:
                                       raise Fail("TestEngine offers the run kinds %s, not %s; no tests were started" % (json.dumps(kinds), kind))
-                                  log("TestEngine %s: run kinds enabled" % (document.get("api_version") or "(no api_version)"))
+                                  if VERSION == "v2":
+                                      versions = document.get("trigger_versions")
+                                      if not isinstance(versions, list) or "v2" not in versions:
+                                          raise Fail("TestEngine does not list v2 in trigger_versions (%s): TRIGGER_V2_ENABLED is off there, or"
+                                                     " the build is older than v2, so it has no /v2/trigger and no tests were started. Turn"
+                                                     " TRIGGER_V2_ENABLED on in TestEngine, put filters back on the test definitions, or %s."
+                                                     % (json.dumps(versions), REMEDY))
+                                      if multi_run and document.get("multi_run_enabled") is not True:
+                                          log("WARN: multiRun is set, and this TestEngine does not pack Jobs yet (multi_run_enabled: %s): each"
+                                              " test definition runs as one Job" % json.dumps(document.get("multi_run_enabled")))
+                                  log("TestEngine %s: run kinds enabled%s" % (document.get("api_version") or "(no api_version)",
+                                                                              ", v2 trigger listed" if VERSION == "v2" else ""))
                                   return
 
 
@@ -519,35 +538,40 @@ renders the default analysis template set:
                               """POSTs the request and returns (run id, time of the answer)."""
                               while True:
                                   if time.monotonic() >= deadline:
-                                      raise Fail("POST /v1/trigger was not sent: the poll budget of %g s"
-                                                 " (global.strategy.canary.analysis.tests.timeout) is spent" % BUDGET)
+                                      raise Fail("POST %s was not sent: the poll budget of %g s"
+                                                 " (global.strategy.canary.analysis.tests.timeout) is spent" % (TRIGGER, BUDGET))
                                   try:
-                                      status, document, text = call("POST", base + "/v1/trigger", key, deadline, body=body, limit=60)
+                                      status, document, text = call("POST", base + TRIGGER, key, deadline, body=body, limit=60)
                                   except NoAnswer as e:
-                                      raise Fail("POST /v1/trigger: no answer (%s); it may have started a run, so it is not sent again" % e)
+                                      raise Fail("POST %s: no answer (%s); it may have started a run, so it is not sent again" % (TRIGGER, e))
                                   answered = time.monotonic()
                                   if status == 425:
-                                      log("POST /v1/trigger answered 425 (%s): nothing was dispatched; the same request goes again"
-                                          % detail(document, text))
-                                      wait(deadline, "POST /v1/trigger kept answering 425")
+                                      log("POST %s answered 425 (%s): nothing was dispatched; the same request goes again"
+                                          % (TRIGGER, detail(document, text)))
+                                      wait(deadline, "POST %s kept answering 425" % TRIGGER)
                                       continue
                                   if status == 422 and "run kinds disabled" in text.lower():
-                                      raise Fail("POST /v1/trigger answered 422 run kinds disabled: TestEngine has RUN_KINDS_ENABLED off, so the"
+                                      raise Fail("POST %s answered 422 run kinds disabled: TestEngine has RUN_KINDS_ENABLED off, so the"
                                                  " platform paused canary runs; not retried. Turn RUN_KINDS_ENABLED on in TestEngine, or %s."
-                                                 % REMEDY)
+                                                 % (TRIGGER, REMEDY))
                                   if status == 401:
-                                      raise Fail("POST /v1/trigger answered 401: TestEngine refused the key in TESTENGINE_APIKEY")
+                                      raise Fail("POST %s answered 401: TestEngine refused the key in TESTENGINE_APIKEY" % TRIGGER)
+                                  if status == 404 and VERSION == "v2":
+                                      raise Fail("POST /v2/trigger answered 404, and TestEngine lists v2 in /v1/capabilities: the /v2/trigger"
+                                                 " route is missing (the mesh does not route it to the API), so no tests were started; not"
+                                                 " retried")
                                   if not 200 <= status < 300:
-                                      raise Fail("POST /v1/trigger answered HTTP %d: %s" % (status, detail(document, text)))
+                                      raise Fail("POST %s answered HTTP %d: %s" % (TRIGGER, status, detail(document, text)))
                                   run_id = document.get("slip_aggregate_id") if isinstance(document, dict) else None
                                   if not isinstance(run_id, str) or not RUN_ID.match(run_id):
-                                      raise Fail("POST /v1/trigger answered HTTP %d without a slip_aggregate_id to poll" % status)
+                                      raise Fail("POST %s answered HTTP %d without a slip_aggregate_id to poll" % (TRIGGER, status))
                                   members = document.get("test_batches")
                                   if not isinstance(members, list) or not members or any(
                                           not isinstance(m, dict) or m.get("run_kind") != kind or m.get("slip_step") != step for m in members):
                                       raise Fail("run %s: TestEngine did not echo run_kind %s and slip_step %s for every member, so it treats the"
                                                  " request as a default run; the run is not polled" % (run_id, kind, step))
-                                  log("POST /v1/trigger: run %s started (%d members, run_kind %s, slip_step %s)" % (run_id, len(members), kind, step))
+                                  log("POST %s: run %s started (%d members, run_kind %s, slip_step %s)"
+                                      % (TRIGGER, run_id, len(members), kind, step))
                                   return run_id, answered
 
 
@@ -588,7 +612,7 @@ renders the default analysis template set:
 
 
                           def run():
-                              global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR, REMEDY
+                              global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR, REMEDY, VERSION, TRIGGER
                               BUDGET = float(os.environ.get("TESTS_BUDGET_SECONDS") or 420)
                               INTERVAL = float(os.environ.get("TESTS_POLL_INTERVAL_SECONDS") or 10)
                               REMEDY = os.environ.get("TESTS_REMEDY") or ""
@@ -613,14 +637,28 @@ renders the default analysis template set:
                                   valid_url = False
                               if not valid_url:
                                   raise Fail("TESTENGINE_URL is not an http(s) URL with a host")
+                              VERSION = os.environ.get("TESTS_TRIGGER_VERSION") or "v1"
+                              if VERSION not in ("v1", "v2"):
+                                  raise Fail("TESTS_TRIGGER_VERSION is %s; it must be v1 or v2" % json.dumps(VERSION[:20]))
+                              TRIGGER = "/%s/trigger" % VERSION
                               body = os.environ.get("TESTS_REQUEST") or ""
                               try:
-                                  environment = json.loads(body)["Tests"][0]["TestEnvironmentVariables"]
+                                  tests = json.loads(body)["Tests"]
+                                  environment = tests[0]["TestEnvironmentVariables"]
                                   kind, step = environment["RunKind"], environment["SlipStep"]
+                                  tagged = [isinstance(t, dict) and bool(t.get("TestEnvironmentTag")) for t in tests]
                               except (ValueError, LookupError, TypeError):
-                                  raise Fail("TESTS_REQUEST is not a v1 request with RunKind and SlipStep in its first test")
+                                  raise Fail("TESTS_REQUEST is not a %s request with RunKind and SlipStep in its first test" % VERSION)
+                              # Never a tag on v1 (v1 refuses it), and never a v2 request with TestFilters or without a tag (no fallback to v1).
+                              if VERSION == "v2" and not (all(tagged) and all("TestFilters" not in t for t in tests)):
+                                  raise Fail("TESTS_REQUEST is not a v2 request: every test needs TestEnvironmentTag and no TestFilters; no"
+                                             " tests were started")
+                              if VERSION == "v1" and any(tagged):
+                                  raise Fail("TESTS_REQUEST sets TestEnvironmentTag, which goes to /v2/trigger only, and TESTS_TRIGGER_VERSION"
+                                             " is v1; no tests were started")
+                              multi_run = VERSION == "v2" and any(t.get("MultiRun") is True for t in tests)
                               base = api_base(url)
-                              preflight(base, key, kind, deadline)
+                              preflight(base, key, kind, deadline, multi_run)
                               for attempt in (1, 2):
                                   run_id, posted = submit(base, key, body, kind, step, deadline)
                                   state = poll(base, key, run_id, posted, deadline)
