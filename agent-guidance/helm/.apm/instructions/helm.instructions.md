@@ -1372,7 +1372,7 @@ applications:
 
 ### Tag-based test runs (`testEnvironmentTag`)
 
-A test definition can set `testEnvironmentTag` in place of `filters` (mycarrier-helm, AQA-38). The PostSync hook then posts to TestEngine's v2 trigger (`/v2/trigger`), which runs the tests carrying that tag (a `TestCategory`) in one Job, reported under Stage = the tag. Optional `testTags` narrows the run to tests that also carry every listed tag; optional `multiRun` (default `false`) asks for packed Jobs, which TestEngine does only while its `GET /v1/capabilities` reports `multi_run_enabled: true` (the `MULTI_RUN_ENABLED` switch, off by default); otherwise the run is one Job and the hook logs a `WARN:` line.
+A test definition can set `testEnvironmentTag` in place of `filters` (mycarrier-helm, AQA-38). The PostSync hook, and the canary `tests` and `tests-dark` runs (AQA-109, below), then post to TestEngine's v2 trigger (`/v2/trigger`), which runs the tests carrying that tag (a `TestCategory`) in one Job, reported under Stage = the tag. Optional `testTags` narrows the run to tests that also carry every listed tag; optional `multiRun` (default `false`) asks for packed Jobs, which TestEngine does only while its `GET /v1/capabilities` reports `multi_run_enabled: true` (the `MULTI_RUN_ENABLED` switch, off by default); otherwise the run is one Job and the hook logs a `WARN:` line.
 
 ```yaml
 applications:
@@ -1396,7 +1396,7 @@ applications:
 - `testTags` or `multiRun: true` without `testEnvironmentTag`.
 - A tag or test tag with characters other than letters, digits, `_`, `.` and `-`, over 100 characters, or (the tag) without a letter or digit; more than 10 `testTags`.
 - Some definitions of an application with `testEnvironmentTag` and others without: all of an application's definitions use the same trigger.
-- On an application whose canary `tests` or `tests-dark` template renders in a prod-class environment (the namespace contains `prod` and not `preprod`): a `testEnvironmentTag` whose Stage starts with `preprod`. The Stage is the tag after TestEngine's clean-up (characters outside `A-Za-z0-9-` become `-`, runs of `-` collapse, `-` trimmed at both ends), compared without case.
+- On an application whose canary `tests` or `tests-dark` template renders in a prod-class environment (the namespace contains `prod` and not `preprod`): a `testEnvironmentTag` whose Stage starts with `preprod`. The Stage is the tag after TestEngine's clean-up (characters outside `A-Za-z0-9-` become `-`, runs of `-` collapse, `-` trimmed at both ends), compared without case. The chart checks this only in prod-class environments; TestEngine applies the same rule in every class its `CANARY_ENV_CLASSES` lists (`prod` by default), so in another listed class such a tag or filter renders and then fails the analysis with a `422`.
 - `testEnvironmentTag` on a Rollout in prod whose repository's `deployment-strategy` is `canary` (no PostSync hook): rollout-watch posts its prod-tests request to TestEngine's v1 trigger only until DEVOPS-613, so keep `filters` in that application's prod values.
 
 The schema only checks types (`testEnvironmentTag` a non-empty string, `testTags` a list of strings, `multiRun` a boolean).

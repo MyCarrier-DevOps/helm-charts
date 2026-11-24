@@ -696,14 +696,23 @@ class TestsJobScript(unittest.TestCase):
     # AQA-109: never a v1 request without TestFilters and never a tag on v1: the trigger version and the request must
     # agree, or nothing is sent.
     def test_the_trigger_version_and_the_request_must_agree(self):
+        # A tagged v2 request that also carries TestFilters: the tag check passes, so only the TestFilters check stops it.
+        with_filters = json.loads(self.v2_request)
+        with_filters["Tests"][0]["TestFilters"] = ["TestCategory=CoreAPI"]
+        # Two tests, only the first tagged: all() and any() of the tag check give different answers.
+        mixed = json.loads(self.v2_request)
+        untagged = {k: v for k, v in mixed["Tests"][0].items()
+                    if k not in ("TestEnvironmentTag", "TestTags", "MultiRun")}
+        mixed["Tests"].append(dict(untagged, TestName="untagged"))
         for name, kwargs, message in (
-                ("v1 request on v2", dict(v2=True, request=None, TESTS_REQUEST_FROM="v1"), "is not a v2 request"),
-                ("v2 request on v1", dict(request=None, TESTS_REQUEST_FROM="v2"), "TestEnvironmentTag"),
+                ("v1 request on v2", dict(v2=True, request=self.request), "is not a v2 request"),
+                ("v2 request with TestFilters on v2", dict(v2=True, request=json.dumps(with_filters)),
+                 "is not a v2 request"),
+                ("mixed tags on v2", dict(v2=True, request=json.dumps(mixed)), "is not a v2 request"),
+                ("v2 request on v1", dict(request=self.v2_request), "goes to /v2/trigger only"),
+                ("mixed tags on v1", dict(request=json.dumps(mixed)), "goes to /v2/trigger only"),
                 ("unknown version", dict(v2=True, TESTS_TRIGGER_VERSION="v3"), "TESTS_TRIGGER_VERSION")):
             with self.subTest(name=name):
-                source = kwargs.pop("TESTS_REQUEST_FROM", None)
-                if source:
-                    kwargs["request"] = self.request if source == "v1" else self.v2_request
                 Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[accepted(RUN_A)],
                            runs={RUN_A: [run_status("passed")]})
                 rc, out = self.run_script(**kwargs)

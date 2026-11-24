@@ -29,7 +29,7 @@ Other environments, Deployments, StatefulSets, migrating Rollouts and Rollouts w
 A canary Rollout stack (repository `deployment-strategy` property `canary`) can also run its test definitions inside the
 canary (DEVOPS-515): list `tests` in `global.strategy.canary.analysis.templates`. The chart then renders the
 AnalysisTemplate `<environment>-<fullName>-tests`,
-and each analysis step runs a Job that sends the same v1 request as the hook, with four changes: `ServiceAddress` is the
+and each analysis step runs a Job that sends the same request as the hook (v1, or v2 with `testEnvironmentTag`), with four changes: `ServiceAddress` is the
 `-preview` Service (a definition's `serviceAddress` must point at the application's own Service, with no port or the
 `http` Service port, and the run keeps its path; another host or port fails the render), `RunKind: canary` and `SlipStep: none` inside `TestEnvironmentVariables`, and
 `Tolerations: []`. `apikey` must be unset (the shared key) or a `vault:` reference. The Job polls TestEngine's `GET /v1/runs/{id}` and exits 0 only when
@@ -49,7 +49,10 @@ no fallback to v1: switch on v2 in the TestEngine instance the canary calls befo
 In a prod-class environment (the namespace contains `prod` and not `preprod`), a tag whose Stage starts with `preprod`
 fails the render, as a filter whose first `TestCategory` starts with `preprod` does. The Stage is the tag after
 TestEngine's clean-up: characters outside `A-Za-z0-9-` become `-`, runs of `-` collapse to one, and `-` is trimmed at
-both ends, so `_PreProd.x` counts.
+both ends, so `_PreProd.x` counts. The chart checks this only in prod-class environments. TestEngine applies the same
+rule in every environment class where it accepts a canary (its `CANARY_ENV_CLASSES`, `prod` by default), so where that
+list also holds another class, a tag or filter whose Stage starts with `preprod` renders and then fails the analysis
+with a `422`.
 
 ## Configuration Structure
 
