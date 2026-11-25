@@ -1,8 +1,9 @@
 """Caller contract of the tests Job script in mycarrier-helm's tests AnalysisTemplate (DEVOPS-515).
 
-Renders the chart's tests template with helm, takes the script, the TESTS_REQUEST body and TESTS_REMEDY from the Job,
-and runs the
-script against a local stub of TestEngine's v1 API (TestEngine.Api/docs/V1_TRIGGER.md, Caller contract). Exit 0 lets
+Renders the chart's tests template with helm, takes the script, the TESTS_REQUEST body, TESTS_REMEDY and
+TESTS_TRIGGER_VERSION from the Job, and runs the
+script against a local stub of TestEngine's v1 and v2 triggers (TestEngine.Api/docs/V1_TRIGGER.md, Caller contract;
+V2_TRIGGER.md for a test definition with testEnvironmentTag, AQA-109). Exit 0 lets
 the canary go on; exit 1 fails the AnalysisRun and aborts the canary. The poll interval, the 404 grace and the poll
 budget come from the environment, so every case runs in about a second. No case may show the API key or the TestEngine
 host in the script's output.
@@ -57,10 +58,18 @@ applications:
 DARK_VALUES = VALUES.replace("      analysis:\n        templates: [tests]\n", "      dark: true\n")
 VALUES = VALUES.replace("      analysis:\n", "      dark: false\n      analysis:\n")
 assert DARK_VALUES != VALUES and "dark: false" in VALUES
+# AQA-109: the same application with its test definition on TestEngine's v2 trigger (testEnvironmentTag in place of
+# filters); the Job then renders TESTS_TRIGGER_VERSION v2 and the script posts to /v2/trigger.
+FILTERS = "          filters: [TestCategory=CoreAPI]\n"
+TAG = "          testEnvironmentTag: CoreAPI\n          testTags: [Smoke]\n          multiRun: true\n"
+V2_VALUES = VALUES.replace(FILTERS, TAG)
+DARK_V2_VALUES = DARK_VALUES.replace(FILTERS, TAG)
+assert V2_VALUES != VALUES and DARK_V2_VALUES != DARK_VALUES
 KEY = "Bearer dGVzdC1rZXk="
 RUN_A = "a" * 32
 RUN_B = "b" * 32
 CAPABILITIES = {"run_kinds": ["canary", "rehearsal"], "run_kinds_enabled": True, "api_version": "test"}
+CAPABILITIES_V2 = dict(CAPABILITIES, trigger_versions=["v1", "v2"], multi_run_enabled=True)
 
 
 def block_after(lines, start, header):
@@ -77,8 +86,8 @@ def block_after(lines, start, header):
 
 
 def render(values=VALUES, template="preprod-mycarrier-api-tests"):
-    """The Job's script, its TESTS_REQUEST value and its TESTS_REMEDY value (None when the Job has none), from the
-    rendered AnalysisTemplate of that name."""
+    """The Job's script, its TESTS_REQUEST value, its TESTS_REMEDY value and its TESTS_TRIGGER_VERSION value (None when
+    the Job has none), from the rendered AnalysisTemplate of that name."""
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
         f.write(values)
     try:
@@ -95,13 +104,14 @@ def render(values=VALUES, template="preprod-mycarrier-api-tests"):
     request = block_after(lines, r, "value: |-")
     assert "def poll(" in script and script.rstrip().endswith("sys.exit(main())"), "script not found"
     assert json.loads(request)["Tests"][0]["TestEnvironmentVariables"]["RunKind"] == "canary", "request not found"
-    remedy = None
+    found = {"TESTS_REMEDY": None, "TESTS_TRIGGER_VERSION": None}
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("---")), len(lines))
     for i in range(start, end - 1):
-        if lines[i].strip() == "- name: TESTS_REMEDY":
-            value = lines[i + 1].strip()[len("value: "):]
-            remedy = json.loads(value) if value.startswith('"') else value
-    return script, request, remedy
+        for name in found:
+            if lines[i].strip() == "- name: " + name:
+                value = lines[i + 1].strip()[len("value: "):]
+                found[name] = json.loads(value) if value.startswith('"') else value
+    return script, request, found["TESTS_REMEDY"], found["TESTS_TRIGGER_VERSION"]
 
 
 def accepted(run_id, run_kind="canary", slip_step="none"):
@@ -125,24 +135,28 @@ HEADER_DRIP = "header-drip"  # (HEADER_DRIP, None, None): the status line, then 
 
 
 class Stub(http.server.BaseHTTPRequestHandler):
-    """TestEngine's v1 API under /api. Each answer list is consumed in order and its last answer repeats."""
+    """TestEngine's API under /api: the v1 routes, and /v2/trigger while v2_route is on (off, the mesh answers its own
+    404). Both triggers take their answers from posts. Each answer list is consumed in order and its last answer
+    repeats."""
     protocol_version = "HTTP/1.0"
     lock = threading.Lock()
     capabilities = (200, CAPABILITIES)
     posts = []
     runs = {}
     log = []
+    v2_route = True
 
     def log_message(self, *args):
         pass
 
     @classmethod
-    def reset(cls, capabilities=(200, CAPABILITIES), posts=(), runs=None):
+    def reset(cls, capabilities=(200, CAPABILITIES), posts=(), runs=None, v2_route=True):
         with cls.lock:
             cls.capabilities = capabilities
             cls.posts = list(posts)
             cls.runs = {k: list(v) for k, v in (runs or {}).items()}
             cls.log = []
+            cls.v2_route = v2_route
 
     @staticmethod
     def take(answers):
@@ -205,7 +219,8 @@ class Stub(http.server.BaseHTTPRequestHandler):
                 answer = (401, {"title": "Unauthorized", "status": 401})
             elif method == "GET" and self.path == "/api/v1/capabilities":
                 answer = Stub.capabilities
-            elif method == "POST" and self.path == "/api/v1/trigger":
+            elif method == "POST" and (self.path == "/api/v1/trigger" or
+                                       (self.path == "/api/v2/trigger" and Stub.v2_route)):
                 answer = Stub.take(Stub.posts)
             elif method == "GET" and self.path.startswith("/api/v1/runs/") and self.path[13:] in Stub.runs:
                 answer = Stub.take(Stub.runs[self.path[13:]])
@@ -226,8 +241,12 @@ class Stub(http.server.BaseHTTPRequestHandler):
 class TestsJobScript(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.script, cls.request, cls.remedy = render()
-        cls.dark_script, cls.dark_request, cls.dark_remedy = render(DARK_VALUES, "preprod-mycarrier-api-tests-dark")
+        cls.script, cls.request, cls.remedy, cls.version = render()
+        cls.dark_script, cls.dark_request, cls.dark_remedy, cls.dark_version = render(
+            DARK_VALUES, "preprod-mycarrier-api-tests-dark")
+        cls.v2_script, cls.v2_request, cls.v2_remedy, cls.v2_version = render(V2_VALUES)
+        cls.dark_v2_script, cls.dark_v2_request, cls.dark_v2_remedy, cls.dark_v2_version = render(
+            DARK_V2_VALUES, "preprod-mycarrier-api-tests-dark")
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Stub)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.base = "http://127.0.0.1:%d/api" % cls.server.server_address[1]
@@ -237,19 +256,28 @@ class TestsJobScript(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
 
-    def run_script(self, url=None, key=KEY, budget="5", grace="2", request=None, dark=False, **extra):
-        """Runs the tests Job's script with its rendered environment, or the tests-dark Job's with dark."""
+    def run_script(self, url=None, key=KEY, budget="5", grace="2", request=None, dark=False, v2=False, **extra):
+        """Runs the tests Job's script with its rendered environment, or the tests-dark Job's with dark, or the Job of
+        the application on the v2 trigger with v2 (AQA-109)."""
         url = url or self.base + "/v1/trigger"
+        script, rendered, remedy, version = {
+            (False, False): (self.script, self.request, self.remedy, self.version),
+            (True, False): (self.dark_script, self.dark_request, self.dark_remedy, self.dark_version),
+            (False, True): (self.v2_script, self.v2_request, self.v2_remedy, self.v2_version),
+            (True, True): (self.dark_v2_script, self.dark_v2_request, self.dark_v2_remedy, self.dark_v2_version),
+        }[(dark, v2)]
         env = dict(os.environ, TESTENGINE_URL=url, TESTENGINE_APIKEY=key,
-                   TESTS_REQUEST=(self.dark_request if dark else self.request) if request is None else request,
+                   TESTS_REQUEST=rendered if request is None else request,
                    TESTS_BUDGET_SECONDS=budget, TESTS_POLL_INTERVAL_SECONDS="0.02", TESTS_NOT_FOUND_GRACE_SECONDS=grace,
                    TESTS_RESUBMIT_FLOOR_SECONDS="0.1")
-        remedy = self.dark_remedy if dark else self.remedy
+        env.pop("TESTS_TRIGGER_VERSION", None)
         if remedy is not None:
             env["TESTS_REMEDY"] = remedy
+        if version is not None:
+            env["TESTS_TRIGGER_VERSION"] = version
         env.update(extra)
         started = time.monotonic()
-        p = subprocess.run([sys.executable, "-I", "-B", "-c", self.dark_script if dark else self.script], env=env,
+        p = subprocess.run([sys.executable, "-I", "-B", "-c", script], env=env,
                            capture_output=True, text=True, timeout=60)
         self.elapsed = time.monotonic() - started
         self.assertEqual(p.stderr, "", "the script wrote to stderr (a traceback?)")
@@ -560,6 +588,156 @@ class TestsJobScript(unittest.TestCase):
         self.assertEqual(rc, 1, out)
         self.assertIn("TESTS_REQUEST", out)
         self.assertEqual(Stub.log, [])
+
+    # AQA-109: the test definition sets testEnvironmentTag, so the Job renders TESTS_TRIGGER_VERSION v2 and the v2
+    # request; tests and tests-dark still run one script.
+    def test_v2_renders_the_same_script_with_the_v2_request(self):
+        self.assertIsNone(self.version, "a filters-only application renders no TESTS_TRIGGER_VERSION")
+        self.assertEqual((self.v2_version, self.dark_v2_version), ("v2", "v2"))
+        self.assertEqual(self.v2_script, self.script)
+        self.assertEqual(self.dark_v2_script, self.script)
+        test = json.loads(self.v2_request)["Tests"][0]
+        self.assertNotIn("TestFilters", test)
+        self.assertEqual((test["TestEnvironmentTag"], test["TestTags"], test["MultiRun"]), ("CoreAPI", ["Smoke"], True))
+        self.assertEqual(test["Tolerations"], [])
+        self.assertEqual((test["TestEnvironmentVariables"]["RunKind"], test["TestEnvironmentVariables"]["SlipStep"]),
+                         ("canary", "none"))
+
+    # AQA-109 R4: a v2 run posts to /v2/trigger, never to /v1/trigger, and polls /v1/runs/{id}.
+    def test_v2_a_passing_run_posts_only_to_the_v2_trigger(self):
+        for dark in (False, True):
+            with self.subTest(dark=dark):
+                Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[accepted(RUN_A)],
+                           runs={RUN_A: [run_status("running"), run_status("passed")]})
+                rc, out = self.run_script(v2=True, dark=dark)
+                self.assertEqual(rc, 0, out)
+                self.assertIn("PASS: run %s passed" % RUN_A, out)
+                self.assertEqual([r["path"] for r in Stub.log],
+                                 ["/api/v1/capabilities", "/api/v2/trigger"] + ["/api/v1/runs/" + RUN_A] * 2)
+                self.assertEqual(self.posts()[0]["body"], self.dark_v2_request if dark else self.v2_request)
+                self.assertIn("POST /v2/trigger: run %s started" % RUN_A, out)
+                self.assertNotIn("WARN:", out)
+
+    # AQA-109 R3: no POST when TestEngine cannot take a v2 canary run; the v2 messages name TRIGGER_V2_ENABLED and the
+    # template's way out.
+    def test_v2_without_v2_in_the_capabilities_sends_no_post(self):
+        for name, capabilities in (("v1 only", (200, dict(CAPABILITIES_V2, trigger_versions=["v1"]))),
+                                   ("no trigger_versions", (200, CAPABILITIES)),
+                                   ("capabilities 404", (404, "404 page not found"))):
+            for dark, way_out in ((False, "remove tests from global.strategy.canary.analysis.templates"),
+                                  (True, "set global.strategy.canary.dark: false")):
+                with self.subTest(name=name, dark=dark):
+                    Stub.reset(capabilities=capabilities, posts=[accepted(RUN_A)], runs={RUN_A: [run_status("passed")]})
+                    rc, out = self.run_script(v2=True, dark=dark)
+                    self.assertEqual(rc, 1, out)
+                    self.assertIn("FAIL: ", out)
+                    self.assertIn("TRIGGER_V2_ENABLED", out)
+                    self.assertIn(way_out, out)
+                    self.assertEqual(self.posts(), [])
+
+    def test_v2_with_run_kinds_disabled_sends_no_post(self):
+        Stub.reset(capabilities=(200, dict(CAPABILITIES_V2, run_kinds_enabled=False)), posts=[accepted(RUN_A)],
+                   runs={RUN_A: [run_status("passed")]})
+        rc, out = self.run_script(v2=True)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("RUN_KINDS_ENABLED", out)
+        self.assertEqual(self.posts(), [])
+
+    # AQA-109 R4: v2 listed, and the mesh has no route: the POST's 404 fails without a retry.
+    def test_v2_a_404_on_the_post_fails_without_a_retry(self):
+        Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[accepted(RUN_A)], runs={RUN_A: [run_status("passed")]},
+                   v2_route=False)
+        rc, out = self.run_script(v2=True)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("FAIL: POST /v2/trigger answered 404", out)
+        self.assertIn("the /v2/trigger route is missing", out)
+        self.assertEqual([p["path"] for p in self.posts()], ["/api/v2/trigger"])
+
+    # AQA-109 R4: the 425 and resubmit rules are those of v1, on /v2/trigger.
+    def test_v2_a_425_and_a_resubmit_go_to_the_v2_trigger(self):
+        too_early = (425, {"title": "Too Early", "status": 425, "detail": "nothing was dispatched; retry later"})
+        Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[too_early, accepted(RUN_A), accepted(RUN_B)],
+                   runs={RUN_A: [run_status("no_results")], RUN_B: [run_status("passed")]})
+        rc, out = self.run_script(v2=True)
+        self.assertEqual(rc, 0, out)
+        posts = self.posts()
+        self.assertEqual([p["path"] for p in posts], ["/api/v2/trigger"] * 3)
+        self.assertTrue(all(p["body"] == self.v2_request for p in posts))
+        self.assertIn("goes once more as a new run", out)
+
+    # The final no_results failure names what selected the tests: the filters values key on v1, the tag and test tags on
+    # v2, where a definition has no filters (helm.testtrigger.version refuses both together).
+    def test_no_results_twice_names_what_selected_the_tests(self):
+        for v2, wanted, unwanted in (
+                (False, "no_results: the filters matched no test", "testEnvironmentTag"),
+                (True, "no_results: the testEnvironmentTag and testTags matched no test", "the filters matched")):
+            with self.subTest(v2=v2):
+                Stub.reset(capabilities=(200, CAPABILITIES_V2 if v2 else CAPABILITIES),
+                           posts=[accepted(RUN_A), accepted(RUN_B)],
+                           runs={RUN_A: [run_status("no_results")], RUN_B: [run_status("no_results")]})
+                rc, out = self.run_script(v2=v2)
+                self.assertEqual(rc, 1, out)
+                self.assertIn("again after one resubmit. " + wanted, out)
+                self.assertNotIn(unwanted, out)
+                self.assertEqual(len(self.posts()), 2)
+
+    def test_v2_another_answer_on_the_post_fails_with_its_detail(self):
+        detail = "validation errors: [0] TestEnvironmentTag: no test carries the tag"
+        Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[(422, {"status": 422, "detail": detail})])
+        rc, out = self.run_script(v2=True)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("POST /v2/trigger answered HTTP 422: " + detail, out)
+        self.assertEqual(len(self.posts()), 1)
+
+    # AQA-109 R7: multiRun with multi_run_enabled false logs a WARN line, and the run goes on as one Job.
+    def test_v2_multi_run_without_packing_warns_and_runs(self):
+        for capabilities in (dict(CAPABILITIES_V2, multi_run_enabled=False),
+                             {k: v for k, v in CAPABILITIES_V2.items() if k != "multi_run_enabled"}):
+            with self.subTest(multi_run_enabled=capabilities.get("multi_run_enabled")):
+                Stub.reset(capabilities=(200, capabilities), posts=[accepted(RUN_A)],
+                           runs={RUN_A: [run_status("passed")]})
+                rc, out = self.run_script(v2=True)
+                self.assertEqual(rc, 0, out)
+                self.assertIn("WARN: multiRun is set, and this TestEngine does not pack Jobs yet", out)
+                self.assertEqual(len(self.posts()), 1)
+
+    def test_v2_without_multi_run_does_not_warn(self):
+        request = json.loads(self.v2_request)
+        del request["Tests"][0]["MultiRun"]
+        Stub.reset(capabilities=(200, dict(CAPABILITIES_V2, multi_run_enabled=False)), posts=[accepted(RUN_A)],
+                   runs={RUN_A: [run_status("passed")]})
+        rc, out = self.run_script(v2=True, request=json.dumps(request))
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("WARN:", out)
+
+    # AQA-109: never a v1 request without TestFilters and never a tag on v1: the trigger version and the request must
+    # agree, or nothing is sent.
+    def test_the_trigger_version_and_the_request_must_agree(self):
+        # A tagged v2 request that also carries TestFilters: the tag check passes, so only the TestFilters check stops it.
+        with_filters = json.loads(self.v2_request)
+        with_filters["Tests"][0]["TestFilters"] = ["TestCategory=CoreAPI"]
+        # Two tests, only the first tagged: all() and any() of the tag check give different answers.
+        mixed = json.loads(self.v2_request)
+        untagged = {k: v for k, v in mixed["Tests"][0].items()
+                    if k not in ("TestEnvironmentTag", "TestTags", "MultiRun")}
+        mixed["Tests"].append(dict(untagged, TestName="untagged"))
+        # The agreement check's own text, not "is not a v2 request", which the request-parse error also holds.
+        not_v2 = "every test needs TestEnvironmentTag and no TestFilters"
+        for name, kwargs, message in (
+                ("v1 request on v2", dict(v2=True, request=self.request), not_v2),
+                ("v2 request with TestFilters on v2", dict(v2=True, request=json.dumps(with_filters)), not_v2),
+                ("mixed tags on v2", dict(v2=True, request=json.dumps(mixed)), not_v2),
+                ("v2 request on v1", dict(request=self.v2_request), "goes to /v2/trigger only"),
+                ("mixed tags on v1", dict(request=json.dumps(mixed)), "goes to /v2/trigger only"),
+                ("unknown version", dict(v2=True, TESTS_TRIGGER_VERSION="v3"), "TESTS_TRIGGER_VERSION")):
+            with self.subTest(name=name):
+                Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[accepted(RUN_A)],
+                           runs={RUN_A: [run_status("passed")]})
+                rc, out = self.run_script(**kwargs)
+                self.assertEqual(rc, 1, out)
+                self.assertIn("FAIL: ", out)
+                self.assertIn(message, out)
+                self.assertEqual(Stub.log, [])
 
 
 if __name__ == "__main__":

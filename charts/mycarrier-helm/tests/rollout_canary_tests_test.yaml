@@ -1,7 +1,8 @@
 suite: Rollout canary tests AnalysisTemplate (TestEngine v1 caller contract, DEVOPS-515)
 # A canary Rollout that lists tests in global.strategy.canary.analysis.templates (or whose explicit steps reference
 # <environment>-<fullName>-tests) gets the chart's tests AnalysisTemplate: one Job that sends the app's
-# testtrigger.testdefinitions to TestEngine's v1 API, polls the run and exits 0 only when it passes
+# testtrigger.testdefinitions to TestEngine's v1 trigger (or its v2 trigger for testEnvironmentTag, AQA-109), polls the
+# run and exits 0 only when it passes
 # (.github/scripts/test_canary_tests_check.py tests the script itself). Defaults: tests.timeout 8m (480 s), so the
 # Job's activeDeadlineSeconds is 540; barriers 9m (540 s); health 3 x 30s (90 s); standard pauses 5m (300 s).
 # tests runs at the weight steps and refuses the dark stage until Q54 (DEVOPS-326 spec A5), so the dark stage is off in
@@ -154,7 +155,7 @@ tests:
           value: -c
       - matchRegex:
           path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
-          pattern: '(?s)GET.*/v1/capabilities.*/v1/trigger.*/v1/runs/.*sys\.exit\(main\(\)\)\n$'
+          pattern: '(?s)TRIGGER = "/v1/trigger".*GET.*/v1/capabilities.*base \+ TRIGGER.*/v1/runs/.*sys\.exit\(main\(\)\)\n$'
 
   # The URL and the key the PostSync hook uses, as vault: environment values, and the poll budget in seconds.
   - it: passes the hook's TestEngine v1 URL and shared key and the poll budget to the Job
@@ -2098,12 +2099,18 @@ tests:
       - failedTemplate:
           errorPattern: 'EnvVars: test definition "t2": request_too_large$'
 
-  # AQA-38: the tests run posts to TestEngine's v1 trigger only, so a test definition with testEnvironmentTag (v2)
-  # fails the render instead of sending no filter, which would run every test in the image. It runs in preprod: in prod,
-  # triggertestengine.yaml refuses the tag first (rollout-watch posts v1 only until DEVOPS-613).
-  - it: "AQA-38: refuses a test definition with testEnvironmentTag"
+  # AQA-109 R1: an application whose test definitions set testEnvironmentTag goes to TestEngine's v2 trigger
+  # (helm.testtrigger.v2request: the v1 request without TestFilters, plus TestEnvironmentTag, TestTags and MultiRun),
+  # with the same canary overrides as the v1 path: the -preview ServiceAddress, RunKind canary, SlipStep none,
+  # Tolerations [] and a string CorrelationId. TESTS_TRIGGER_VERSION tells the script to check v2 and post to
+  # /v2/trigger. These run in preprod: in prod, triggertestengine.yaml still refuses the tag for a prod canary Rollout
+  # until DEVOPS-613 (see the last test below).
+  - it: "AQA-109: sends the v2 request with the canary overrides for test definitions with testEnvironmentTag"
     template: analysistemplate.yaml
-    set:
+    documentSelector: &v2TestsTemplate
+      path: metadata.name
+      value: preprod-mycarrier-api-tests
+    set: &v2
       <<: *prod
       environment:
         name: preprod
@@ -2117,6 +2124,272 @@ tests:
                 containerTag: 1.0.0
                 secretId: vault:QA/data/app_auth#SecretId
                 testEnvironmentTag: CoreAPI
+                testTags: [Smoke, Documents]
+                multiRun: true
+              - name: smoketests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: SmokeAPI
+                serviceAddress: mycarrier-api.preprod.svc.cluster.local:8080/smoke
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          value: |-
+            {
+              "Tests": [
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "MultiRun": true,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentTag": "CoreAPI",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "62a354da-6833-4bf7-8f6d-689970865996",
+                    "EnvironmentName": "preprod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "RunKind": "canary",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api-preview.preprod.svc.cluster.local:8080",
+                    "SlipStep": "none"
+                  },
+                  "TestName": "apitests",
+                  "TestTags": [
+                    "Smoke",
+                    "Documents"
+                  ],
+                  "Tolerations": [],
+                  "UseDefaultNodeAffinity": "false"
+                },
+                {
+                  "ContainerImage": "testing/mycarrier/api/tests",
+                  "ContainerTag": "1.0.0",
+                  "HardenedSecurityContext": true,
+                  "IsMonolith": false,
+                  "NodeAffinity": [],
+                  "PodResources": {
+                    "limits": {
+                      "cpu": "2000m",
+                      "memory": "4Gi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "1Gi"
+                    }
+                  },
+                  "SpreadAcrossNodes": "true",
+                  "StackName": "mycarrier",
+                  "TestEnvironmentTag": "SmokeAPI",
+                  "TestEnvironmentVariables": {
+                    "AdditionalEnvVars": "",
+                    "BranchName": "main",
+                    "CorrelationId": "62a354da-6833-4bf7-8f6d-689970865996",
+                    "EnvironmentName": "preprod",
+                    "LegacyMode": "false",
+                    "ReleaseDefinitionName": "mycarrier-api",
+                    "ReleaseId": "1.0.0",
+                    "RunKind": "canary",
+                    "SecretId": "vault:QA/data/app_auth#SecretId",
+                    "ServiceAddress": "http://mycarrier-api-preview.preprod.svc.cluster.local:8080/smoke",
+                    "SlipStep": "none"
+                  },
+                  "TestName": "smoketests",
+                  "Tolerations": [],
+                  "UseDefaultNodeAffinity": "false"
+                }
+              ]
+            }
+
+  - it: "AQA-109: tells the script to use the v2 trigger, after TESTS_REMEDY"
+    template: analysistemplate.yaml
+    documentSelector: *v2TestsTemplate
+    set: *v2
+    asserts:
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[4]
+          value:
+            name: TESTS_REMEDY
+            value: remove tests from global.strategy.canary.analysis.templates
+      - equal:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[5]
+          value:
+            name: TESTS_TRIGGER_VERSION
+            value: v2
+      - lengthEqual:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
+          count: 6
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].command[4]
+          pattern: '(?s)/v1/capabilities.*trigger_versions.*/v2/trigger.*/v1/runs/'
+      - notMatchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: 'TestFilters'
+
+  # AQA-109 R2: the v1 path is unchanged: a filters-only application gets no TESTS_TRIGGER_VERSION (the script's
+  # default is v1), and its request is the one asserted above (R6 of DEVOPS-515).
+  - it: "AQA-109: renders no TESTS_TRIGGER_VERSION for a filters-only application"
+    template: analysistemplate.yaml
+    documentSelector: *testsTemplate
+    set: *prod
+    asserts:
+      - notContains:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env
+          content:
+            name: TESTS_TRIGGER_VERSION
+          any: true
+
+  # AQA-109 R5: TestEngine refuses a canary in a prod-class environment (contains prod, not preprod) whose Stage starts
+  # with preprod. The v2 Stage is the tag after TestEngine's clean-up (characters outside A-Za-z0-9- become -, runs of -
+  # collapse, - is trimmed at both ends), compared without case. prod-saia is prod-class and is not the prod
+  # environment that the DEVOPS-613 guard in triggertestengine.yaml covers.
+  - it: "AQA-109: fails a prod-class tag whose Stage starts with preprod"
+    template: analysistemplate.yaml
+    set: &v2ProdClass
+      <<: *v2
+      environment:
+        name: prod-saia
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: PreProdCoreAPI
     asserts:
       - failedTemplate:
-          errorPattern: "application 'api': test definition 'apitests' sets testEnvironmentTag, testTags or multiRun \\(TestEngine's v2 trigger\\), and the canary tests run posts to TestEngine's v1 trigger only. Keep filters on this application's test definitions, define your own tests entry under applications.api.analysisTemplates, or leave tests out of global.strategy.canary.analysis.templates"
+          errorPattern: "application 'api': test definition 'apitests' has the testEnvironmentTag 'PreProdCoreAPI', whose Stage 'PreProdCoreAPI' starts with preprod. TestEngine refuses such a tag in a prod canary run \\(RunKind canary in a prod environment\\), so the tests analysis would fail every prod canary. Use a tag that does not start with preprod, or leave tests out of global.strategy.canary.analysis.templates in prod."
+
+  - it: "AQA-109: cleans the tag as TestEngine does before the preprod check"
+    template: analysistemplate.yaml
+    set:
+      <<: *v2ProdClass
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: _PreProd.x
+    asserts:
+      - failedTemplate:
+          errorPattern: "has the testEnvironmentTag '_PreProd.x', whose Stage 'PreProd-x' starts with preprod"
+
+  - it: "AQA-109: accepts a prod-class tag that does not start with preprod, also with a preprod test tag"
+    template: analysistemplate.yaml
+    documentSelector:
+      path: metadata.name
+      value: prod-saia-mycarrier-api-tests
+    set:
+      <<: *v2ProdClass
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: Core.PreprodAPI
+                testTags: [PreprodSmoke]
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"TestEnvironmentTag": "Core.PreprodAPI",'
+
+  - it: "AQA-109: accepts a preprod tag in preprod"
+    template: analysistemplate.yaml
+    documentSelector: *v2TestsTemplate
+    set:
+      <<: *v2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - name: apitests
+                containerImage: testing/mycarrier/api/tests
+                containerTag: 1.0.0
+                secretId: vault:QA/data/app_auth#SecretId
+                testEnvironmentTag: PreProdCoreAPI
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"TestEnvironmentTag": "PreProdCoreAPI",'
+
+  # AQA-109: TestEngine's /v2/trigger refuses (422) a batch in which more than 4 entries set MultiRun
+  # (MaxMultiRunEntriesPerBatch), so the canary request fails the render then, instead of failing every canary analysis.
+  - it: "AQA-109: fails more than 4 test definitions with multiRun"
+    template: analysistemplate.yaml
+    set:
+      <<: *v2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - {name: t1, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t2, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t3, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t4, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t5, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "application 'api': 5 test definitions set multiRun: true, and TestEngine's /v2/trigger accepts at most 4 per request \\(it answers 422\\), so the tests analysis would fail every canary. Set multiRun: true on at most 4 test definitions, or leave tests out of global.strategy.canary.analysis.templates."
+
+  - it: "AQA-109: accepts 4 test definitions with multiRun and any number without it"
+    template: analysistemplate.yaml
+    documentSelector: *v2TestsTemplate
+    set:
+      <<: *v2
+      applications:
+        api:
+          <<: *api
+          testtrigger:
+            testdefinitions:
+              - {name: t1, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t2, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t3, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t4, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: true}
+              - {name: t5, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI, multiRun: false}
+              - {name: t6, containerImage: testing/mycarrier/api/tests, containerTag: 1.0.0, secretId: "vault:QA/data/app_auth#SecretId", testEnvironmentTag: CoreAPI}
+    asserts:
+      - matchRegex:
+          path: spec.metrics[0].provider.job.spec.template.spec.containers[0].env[3].value
+          pattern: '"TestName": "t6"'
+
+  # Not changed by AQA-109: in the prod environment a canary Rollout gets no PostSync hook, and rollout-watch posts its
+  # prod-tests request to the v1 trigger only until DEVOPS-613, so triggertestengine.yaml still refuses the tag there.
+  - it: "AQA-109: the prod canary Rollout still fails on the tag until DEVOPS-613"
+    template: triggertestengine.yaml
+    set:
+      <<: *v2
+      environment:
+        name: prod
+    asserts:
+      - failedTemplate:
+          errorPattern: "a Rollout in prod cannot use testEnvironmentTag yet"

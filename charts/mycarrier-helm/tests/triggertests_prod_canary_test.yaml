@@ -571,7 +571,7 @@ tests:
   # AQA-38: rollout-watch posts request.json to TestEngine's v1 trigger only until it reads the ConfigMap's version key
   # (DEVOPS-613), and v1 refuses a v2 request with a 422. So a prod canary Rollout whose test definitions set
   # testEnvironmentTag fails the render. A v1 application has no version key, so its ConfigMap is unchanged. The dark
-  # stage is off in the v2 cases: its tests-dark run posts v1 only and refuses a tag.
+  # stage is off in the v2 cases so that only this guard can fail them (tests-dark takes a tag since AQA-109).
   - it: "AQA-38: refuses testEnvironmentTag on a prod canary Rollout until rollout-watch posts v2 (results API)"
     set:
       global: &globalDarkOff

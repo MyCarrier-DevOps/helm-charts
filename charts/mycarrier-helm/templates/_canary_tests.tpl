@@ -114,7 +114,9 @@ true
 {{- $root -}}
 {{- end -}}
 
-{{- /* The tests Job's TestEngine v1 request: helm.testtrigger.v1request, the request the PostSync hook and the prod-tests
+{{- /* The tests Job's TestEngine request: helm.testtrigger.v1request for test definitions with filters, or
+       helm.testtrigger.v2request for test definitions with testEnvironmentTag (AQA-109; helm.testtrigger.version picks
+       it, and all definitions of an application use one), the request the PostSync hook and the prod-tests
        ConfigMap send for the same application, with four differences (V1_TRIGGER: Slip step routing and run kinds,
        Caller contract rule 10): ServiceAddress is the app's -preview Service (the canary pods), or its stable Service
        for tests-dark (its -preview Service with canaryDarkPreview); TestEnvironmentVariables gets RunKind canary and SlipStep none (no slip writes, no check-run, no
@@ -138,7 +140,10 @@ true
        TestEngine refuses a canary in a prod-class environment (the request's EnvironmentName, the namespace,
        contains prod and not preprod) when a filter's first TestCategory starts with preprod (Caller contract rule 7),
        so such a filter fails the render here, with TestEngine's own reading of a filter: the text before the first &,
-       without TestCategory=. A filter TestEngine reads from Vault (a vault: reference) is not known here. */ -}}
+       without TestCategory=. A filter TestEngine reads from Vault (a vault: reference) is not known here. On v2 the
+       Stage is the testEnvironmentTag after TestEngine's clean-up, and the same rule applies to it (V2_TRIGGER.md:
+       Stage); testTags do not change the Stage. Like the filter rule, the check runs only in prod-class
+       environments, although TestEngine applies its rule wherever it accepts a canary (AQA-109 decision 1). */ -}}
 {{- define "helm.canary.tests.request" -}}
 {{- $ctx := .context -}}
 {{- $fullName := include "helm.fullname" $ctx -}}
@@ -180,18 +185,34 @@ true
   {{- end -}}
   {{- $addresses = append $addresses $address -}}
 {{- end -}}
-{{- /* AQA-38: this run posts to TestEngine's v1 trigger only, so a test definition with testEnvironmentTag (v2) would
-       send no filter and run every test in the image. */ -}}
+{{- /* AQA-109: the trigger the application's test definitions go to (helm.testtrigger.version, which also checks their
+       v2 fields and the one-trigger-per-application rule): filters go to v1, testEnvironmentTag to v2. There is no
+       fallback from v2 to v1: a v1 request without TestFilters would run every test in the image. */ -}}
+{{- $version := include "helm.testtrigger.version" $ctx -}}
+{{- /* TestEngine's /v2/trigger answers 422 to a request in which more than 4 entries set MultiRun
+       (MaxMultiRunEntriesPerBatch, V2_TRIGGER.md), so such a request would fail every canary analysis. The PostSync
+       hook sends the same request and only logs the 422; the check is here because a failed canary aborts the release. */ -}}
+{{- $multiRuns := 0 -}}
 {{- range (dig "testtrigger" "testdefinitions" list $ctx.application) -}}
-  {{- if include "helm.testtrigger.hasV2Fields" . -}}
-    {{- fail (printf "application '%s': test definition '%s' sets testEnvironmentTag, testTags or multiRun (TestEngine's v2 trigger), and %s posts to TestEngine's v1 trigger only. Keep filters on this application's test definitions, define your own %s entry under applications.%s.analysisTemplates, or %s." $ctx.appName (toString .name) (untitle $Run) $template $ctx.appName $wayOut) -}}
-  {{- end -}}
+  {{- if eq (toString .multiRun) "true" }}{{ $multiRuns = add1 $multiRuns }}{{ end -}}
+{{- end -}}
+{{- if gt $multiRuns 4 -}}
+  {{- fail (printf "application '%s': %d test definitions set multiRun: true, and TestEngine's /v2/trigger accepts at most 4 per request (it answers 422), so the %s analysis would fail every canary. Set multiRun: true on at most 4 test definitions, or %s." $ctx.appName $multiRuns $template $wayOut) -}}
 {{- end -}}
 {{- $run := dict "serviceAddresses" $addresses "tolerations" (list) "runKind" "canary" "slipStep" "none" "requestHeaders" (.requestHeaders | default dict) "correlationId" (include "helm.canary.correlationIdString" $ctx) -}}
 {{- $environmentName := lower (toString $namespace) -}}
 {{- if and (contains "prod" $environmentName) (not (contains "preprod" $environmentName)) -}}
   {{- range (dig "testtrigger" "testdefinitions" list $ctx.application) -}}
     {{- $definition := . -}}
+    {{- if eq $version "v2" -}}
+      {{- /* The v2 Stage is the tag after TestEngine's clean-up (V2_TRIGGER.md: Stage): characters outside A-Za-z0-9-
+             become -, runs of - collapse, and - is trimmed at both ends. */ -}}
+      {{- $tag := toString .testEnvironmentTag -}}
+      {{- $stage := trimAll "-" (regexReplaceAll "-+" (regexReplaceAll "[^A-Za-z0-9-]" $tag "-") "-") -}}
+      {{- if hasPrefix "preprod" (lower $stage) -}}
+        {{- fail (printf "application '%s': test definition '%s' has the testEnvironmentTag '%s', whose Stage '%s' starts with preprod. TestEngine refuses such a tag in a prod canary run (RunKind canary in a prod environment), so the %s analysis would fail every prod canary. Use a tag that does not start with preprod, or %s in prod." $ctx.appName (toString $definition.name) $tag $stage $template $wayOut) -}}
+      {{- end -}}
+    {{- end -}}
     {{- $filters := .filters | default list -}}
     {{- if kindIs "string" $filters }}{{ $filters = list $filters }}{{ end -}}
     {{- range $filters -}}
@@ -202,7 +223,11 @@ true
     {{- end -}}
   {{- end -}}
 {{- end -}}
+{{- if eq $version "v2" -}}
+{{- include "helm.testtrigger.v2request" (merge (dict "testRun" $run) $ctx) -}}
+{{- else -}}
 {{- include "helm.testtrigger.v1request" (merge (dict "testRun" $run) $ctx) -}}
+{{- end -}}
 {{- end -}}
 
 {{- /* The Job spec of the tests and tests-dark metrics, for an Argo Rollouts job provider: one pod that runs
@@ -217,7 +242,9 @@ true
        environment values, injected when the pod starts, as for the hook. backoffLimit 0 and restartPolicy Never, so a
        failed run is never repeated by Kubernetes (the script resubmits once itself); tolerations [] keeps the pod on
        on-demand nodes (Caller contract rules 10 and 13). No Istio sidecar, as for the alerts Job: a sidecar that
-       outlives the script would keep the Job running until its deadline. */ -}}
+       outlives the script would keep the Job running until its deadline. TESTS_TRIGGER_VERSION v2 comes after
+       TESTS_REMEDY, and only for an application on TestEngine's v2 trigger (AQA-109), so the Job of a filters-only
+       application is the same as before. */ -}}
 {{- define "helm.canary.tests.jobSpec" -}}
 {{- $ctx := .context -}}
 {{- $cfg := include "helm.canary.config" $ctx | fromJson -}}
@@ -266,6 +293,11 @@ template:
           {{- include "helm.testtrigger.commandSafeJson" (dict "json" (include "helm.canary.tests.request" (dict "context" $ctx "name" .name "target" .target "requestHeaders" .requestHeaders)) "application" $ctx.application "argoTemplate" true "encodeVaultInline" true) | nindent 10 }}
       - name: TESTS_REMEDY
         value: {{ ternary "set global.strategy.canary.dark: false" "remove tests from global.strategy.canary.analysis.templates" (eq (toString .name) "tests-dark") | quote }}
+      {{- /* AQA-109: only for v2, so a filters-only application renders as before; the script's default is v1. */}}
+      {{- if eq (include "helm.testtrigger.version" $ctx) "v2" }}
+      - name: TESTS_TRIGGER_VERSION
+        value: v2
+      {{- end }}
       resources:
         requests:
           cpu: 50m
@@ -297,7 +329,14 @@ template:
        (.github/scripts/test_canary_tests_check.py) sets them to run fast. The script logs paths, statuses, error types
        and TestEngine's error details, never the URL's host, the key or the request. Both RUN_KINDS_ENABLED failures (0
        and the 422 in 1) name TESTS_REMEDY, the way out of the template that runs the script, after turning
-       RUN_KINDS_ENABLED on. */ -}}
+       RUN_KINDS_ENABLED on.
+       AQA-109, TESTS_TRIGGER_VERSION v2 (rendered only for test definitions with testEnvironmentTag; unset means v1):
+       the request must be a v2 request (every test with TestEnvironmentTag, none with TestFilters), and a v1 request
+       must carry no TestEnvironmentTag, or nothing is sent. In 0, a 404, or a trigger_versions without "v2", sends no
+       POST and fails, naming TRIGGER_V2_ENABLED and TESTS_REMEDY; a test with MultiRun while multi_run_enabled is not
+       true logs a WARN line (the run is one Job) and goes on. In 1 and 5 the POST goes to /v2/trigger, never to
+       /v1/trigger; with v2 listed, a 404 there means the mesh has no /v2/trigger route and fails without a retry. Every
+       other rule, the polling of /v1/runs/{id} included, is the same as on v1. There is no fallback to v1. */ -}}
 {{- define "helm.canary.tests.script" -}}
 import http.client, json, os, re, signal, ssl, sys, time, urllib.parse
 
@@ -308,6 +347,8 @@ MAX_BODY = 1024 * 1024
 STARTED = time.monotonic()
 BUDGET = INTERVAL = NOT_FOUND_GRACE = RESUBMIT_FLOOR = 0.0
 REMEDY = ""
+VERSION = "v1"
+TRIGGER = "/v1/trigger"
 WATCHDOG = {"armed": False}
 
 
@@ -426,7 +467,7 @@ def wait(deadline, reason):
     time.sleep(min(INTERVAL, remaining))
 
 
-def preflight(base, key, kind, deadline):
+def preflight(base, key, kind, deadline, multi_run=False):
     while True:
         try:
             status, document, text = call("GET", base + "/v1/capabilities", key, deadline)
@@ -434,6 +475,12 @@ def preflight(base, key, kind, deadline):
             log("GET /v1/capabilities: no answer (%s)" % e)
             wait(deadline, "GET /v1/capabilities never answered")
             continue
+        if status == 404 and VERSION == "v2":
+            raise Fail("GET /v1/capabilities answered 404: this TestEngine has no run kinds and no v2 trigger (a build"
+                       " before MC.TestEngine#95, or the route is missing), so no tests were started. The canary tests"
+                       " of test definitions with testEnvironmentTag need TestEngine with RUN_KINDS_ENABLED=true and"
+                       " TRIGGER_V2_ENABLED=true. Turn them on in TestEngine, put filters back on the test definitions,"
+                       " or %s." % REMEDY)
         if status == 404:
             raise Fail("GET /v1/capabilities answered 404: this TestEngine has no run kinds (a build before MC.TestEngine#95,"
                        " or the route is missing), so no tests were started. The canary tests need TestEngine with"
@@ -449,7 +496,18 @@ def preflight(base, key, kind, deadline):
         kinds = document.get("run_kinds")
         if isinstance(kinds, list) and kind not in kinds:
             raise Fail("TestEngine offers the run kinds %s, not %s; no tests were started" % (json.dumps(kinds), kind))
-        log("TestEngine %s: run kinds enabled" % (document.get("api_version") or "(no api_version)"))
+        if VERSION == "v2":
+            versions = document.get("trigger_versions")
+            if not isinstance(versions, list) or "v2" not in versions:
+                raise Fail("TestEngine does not list v2 in trigger_versions (%s): TRIGGER_V2_ENABLED is off there, or"
+                           " the build is older than v2, so it has no /v2/trigger and no tests were started. Turn"
+                           " TRIGGER_V2_ENABLED on in TestEngine, put filters back on the test definitions, or %s."
+                           % (json.dumps(versions), REMEDY))
+            if multi_run and document.get("multi_run_enabled") is not True:
+                log("WARN: multiRun is set, and this TestEngine does not pack Jobs yet (multi_run_enabled: %s): each"
+                    " test definition runs as one Job" % json.dumps(document.get("multi_run_enabled")))
+        log("TestEngine %s: run kinds enabled%s" % (document.get("api_version") or "(no api_version)",
+                                                    ", v2 trigger listed" if VERSION == "v2" else ""))
         return
 
 
@@ -457,35 +515,40 @@ def submit(base, key, body, kind, step, deadline):
     """POSTs the request and returns (run id, time of the answer)."""
     while True:
         if time.monotonic() >= deadline:
-            raise Fail("POST /v1/trigger was not sent: the poll budget of %g s"
-                       " (global.strategy.canary.analysis.tests.timeout) is spent" % BUDGET)
+            raise Fail("POST %s was not sent: the poll budget of %g s"
+                       " (global.strategy.canary.analysis.tests.timeout) is spent" % (TRIGGER, BUDGET))
         try:
-            status, document, text = call("POST", base + "/v1/trigger", key, deadline, body=body, limit=60)
+            status, document, text = call("POST", base + TRIGGER, key, deadline, body=body, limit=60)
         except NoAnswer as e:
-            raise Fail("POST /v1/trigger: no answer (%s); it may have started a run, so it is not sent again" % e)
+            raise Fail("POST %s: no answer (%s); it may have started a run, so it is not sent again" % (TRIGGER, e))
         answered = time.monotonic()
         if status == 425:
-            log("POST /v1/trigger answered 425 (%s): nothing was dispatched; the same request goes again"
-                % detail(document, text))
-            wait(deadline, "POST /v1/trigger kept answering 425")
+            log("POST %s answered 425 (%s): nothing was dispatched; the same request goes again"
+                % (TRIGGER, detail(document, text)))
+            wait(deadline, "POST %s kept answering 425" % TRIGGER)
             continue
         if status == 422 and "run kinds disabled" in text.lower():
-            raise Fail("POST /v1/trigger answered 422 run kinds disabled: TestEngine has RUN_KINDS_ENABLED off, so the"
+            raise Fail("POST %s answered 422 run kinds disabled: TestEngine has RUN_KINDS_ENABLED off, so the"
                        " platform paused canary runs; not retried. Turn RUN_KINDS_ENABLED on in TestEngine, or %s."
-                       % REMEDY)
+                       % (TRIGGER, REMEDY))
         if status == 401:
-            raise Fail("POST /v1/trigger answered 401: TestEngine refused the key in TESTENGINE_APIKEY")
+            raise Fail("POST %s answered 401: TestEngine refused the key in TESTENGINE_APIKEY" % TRIGGER)
+        if status == 404 and VERSION == "v2":
+            raise Fail("POST /v2/trigger answered 404, and TestEngine lists v2 in /v1/capabilities: the /v2/trigger"
+                       " route is missing (the mesh does not route it to the API), so no tests were started; not"
+                       " retried")
         if not 200 <= status < 300:
-            raise Fail("POST /v1/trigger answered HTTP %d: %s" % (status, detail(document, text)))
+            raise Fail("POST %s answered HTTP %d: %s" % (TRIGGER, status, detail(document, text)))
         run_id = document.get("slip_aggregate_id") if isinstance(document, dict) else None
         if not isinstance(run_id, str) or not RUN_ID.match(run_id):
-            raise Fail("POST /v1/trigger answered HTTP %d without a slip_aggregate_id to poll" % status)
+            raise Fail("POST %s answered HTTP %d without a slip_aggregate_id to poll" % (TRIGGER, status))
         members = document.get("test_batches")
         if not isinstance(members, list) or not members or any(
                 not isinstance(m, dict) or m.get("run_kind") != kind or m.get("slip_step") != step for m in members):
             raise Fail("run %s: TestEngine did not echo run_kind %s and slip_step %s for every member, so it treats the"
                        " request as a default run; the run is not polled" % (run_id, kind, step))
-        log("POST /v1/trigger: run %s started (%d members, run_kind %s, slip_step %s)" % (run_id, len(members), kind, step))
+        log("POST %s: run %s started (%d members, run_kind %s, slip_step %s)"
+            % (TRIGGER, run_id, len(members), kind, step))
         return run_id, answered
 
 
@@ -526,7 +589,7 @@ def poll(base, key, run_id, posted, deadline):
 
 
 def run():
-    global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR, REMEDY
+    global BUDGET, INTERVAL, NOT_FOUND_GRACE, RESUBMIT_FLOOR, REMEDY, VERSION, TRIGGER
     BUDGET = float(os.environ.get("TESTS_BUDGET_SECONDS") or 420)
     INTERVAL = float(os.environ.get("TESTS_POLL_INTERVAL_SECONDS") or 10)
     REMEDY = os.environ.get("TESTS_REMEDY") or ""
@@ -551,14 +614,28 @@ def run():
         valid_url = False
     if not valid_url:
         raise Fail("TESTENGINE_URL is not an http(s) URL with a host")
+    VERSION = os.environ.get("TESTS_TRIGGER_VERSION") or "v1"
+    if VERSION not in ("v1", "v2"):
+        raise Fail("TESTS_TRIGGER_VERSION is %s; it must be v1 or v2" % json.dumps(VERSION[:20]))
+    TRIGGER = "/%s/trigger" % VERSION
     body = os.environ.get("TESTS_REQUEST") or ""
     try:
-        environment = json.loads(body)["Tests"][0]["TestEnvironmentVariables"]
+        tests = json.loads(body)["Tests"]
+        environment = tests[0]["TestEnvironmentVariables"]
         kind, step = environment["RunKind"], environment["SlipStep"]
+        tagged = [isinstance(t, dict) and bool(t.get("TestEnvironmentTag")) for t in tests]
     except (ValueError, LookupError, TypeError):
-        raise Fail("TESTS_REQUEST is not a v1 request with RunKind and SlipStep in its first test")
+        raise Fail("TESTS_REQUEST is not a %s request with RunKind and SlipStep in its first test" % VERSION)
+    # Never a tag on v1 (v1 refuses it), and never a v2 request with TestFilters or without a tag (no fallback to v1).
+    if VERSION == "v2" and not (all(tagged) and all("TestFilters" not in t for t in tests)):
+        raise Fail("TESTS_REQUEST is not a v2 request: every test needs TestEnvironmentTag and no TestFilters; no"
+                   " tests were started")
+    if VERSION == "v1" and any(tagged):
+        raise Fail("TESTS_REQUEST sets TestEnvironmentTag, which goes to /v2/trigger only, and TESTS_TRIGGER_VERSION"
+                   " is v1; no tests were started")
+    multi_run = VERSION == "v2" and any(t.get("MultiRun") is True for t in tests)
     base = api_base(url)
-    preflight(base, key, kind, deadline)
+    preflight(base, key, kind, deadline, multi_run)
     for attempt in (1, 2):
         run_id, posted = submit(base, key, body, kind, step, deadline)
         state = poll(base, key, run_id, posted, deadline)
@@ -574,9 +651,11 @@ def run():
                            " the %g s a new run needs at least" % (run_id, state, max(left, 0), RESUBMIT_FLOOR))
             log("run %s ended %s; the request goes once more as a new run" % (run_id, state))
             continue
-        raise Fail("run %s ended %s again after one resubmit. no_results: the filters matched no test, or the test"
+        # On v2 TestEngine builds the filter from the tag, and a definition has no filters key, so name the tag.
+        selector = "testEnvironmentTag and testTags" if VERSION == "v2" else "filters"
+        raise Fail("run %s ended %s again after one resubmit. no_results: the %s matched no test, or the test"
                    " container could not write its results (check its log); infra_failed: TestEngine could not run"
-                   " the tests" % (run_id, state))
+                   " the tests" % (run_id, state, selector))
 
 
 def main():
