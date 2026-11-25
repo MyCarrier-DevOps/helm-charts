@@ -665,6 +665,22 @@ class TestsJobScript(unittest.TestCase):
         self.assertTrue(all(p["body"] == self.v2_request for p in posts))
         self.assertIn("goes once more as a new run", out)
 
+    # The final no_results failure names what selected the tests: the filters values key on v1, the tag and test tags on
+    # v2, where a definition has no filters (helm.testtrigger.version refuses both together).
+    def test_no_results_twice_names_what_selected_the_tests(self):
+        for v2, wanted, unwanted in (
+                (False, "no_results: the filters matched no test", "testEnvironmentTag"),
+                (True, "no_results: the testEnvironmentTag and testTags matched no test", "the filters matched")):
+            with self.subTest(v2=v2):
+                Stub.reset(capabilities=(200, CAPABILITIES_V2 if v2 else CAPABILITIES),
+                           posts=[accepted(RUN_A), accepted(RUN_B)],
+                           runs={RUN_A: [run_status("no_results")], RUN_B: [run_status("no_results")]})
+                rc, out = self.run_script(v2=v2)
+                self.assertEqual(rc, 1, out)
+                self.assertIn("again after one resubmit. " + wanted, out)
+                self.assertNotIn(unwanted, out)
+                self.assertEqual(len(self.posts()), 2)
+
     def test_v2_another_answer_on_the_post_fails_with_its_detail(self):
         detail = "validation errors: [0] TestEnvironmentTag: no test carries the tag"
         Stub.reset(capabilities=(200, CAPABILITIES_V2), posts=[(422, {"status": 422, "detail": detail})])

@@ -674,9 +674,11 @@ renders the default analysis template set:
                                                      " the %g s a new run needs at least" % (run_id, state, max(left, 0), RESUBMIT_FLOOR))
                                       log("run %s ended %s; the request goes once more as a new run" % (run_id, state))
                                       continue
-                                  raise Fail("run %s ended %s again after one resubmit. no_results: the filters matched no test, or the test"
+                                  # On v2 TestEngine builds the filter from the tag, and a definition has no filters key, so name the tag.
+                                  selector = "testEnvironmentTag and testTags" if VERSION == "v2" else "filters"
+                                  raise Fail("run %s ended %s again after one resubmit. no_results: the %s matched no test, or the test"
                                              " container could not write its results (check its log); infra_failed: TestEngine could not run"
-                                             " the tests" % (run_id, state))
+                                             " the tests" % (run_id, state, selector))
 
 
                           def main():
