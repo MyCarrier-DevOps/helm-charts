@@ -1757,7 +1757,7 @@ applications:
 ## ArgoCD Integration
 
 The chart uses ArgoCD sync waves and options for GitOps workflows:
-- Sync waves order creation: VirtualServices `0`, Services `5`, workloads (Deployment, StatefulSet, Rollout) `10`, autoscalers (HPA, ScaledObject) `11`; mounted-secret `ExternalSecret`s run as `PreSync` hooks
+- Sync waves order creation: VirtualServices `0`, Services `5`, workloads (Deployment, StatefulSet, Rollout) `10`, autoscalers (HPA, ScaledObject) `11`, `infrastructure.azure.servicebus` resources after them (ServiceBusNamespace `20`, Topic `21`, Subscription `22`, SubscriptionRule `23`; set no `sync-wave` annotation on them, the chart sets it), so a Service Bus resource that Crossplane has not reconciled yet never holds the workloads back, though the sync still waits for its health and so holds back `PostSync` hooks such as the test triggers; mounted-secret `ExternalSecret`s run as `PreSync` hooks
 - `SkipDryRunOnMissingResource=true` handles CRDs
 - Test triggers run as `PostSync` hooks, except for Rollouts in prod that run canary steps, whose prod tests the release starts after promotion (see [Test triggers of Rollouts in prod](#test-triggers-of-rollouts-in-prod))
 - Offloads use `ApplicationSet` generators for feature environments

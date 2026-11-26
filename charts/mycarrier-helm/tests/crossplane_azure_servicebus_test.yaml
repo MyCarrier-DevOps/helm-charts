@@ -568,6 +568,55 @@ tests:
           value: "sub-value"
         documentIndex: 2
 
+  # Sync waves: the Service Bus resources sync after the workloads (10) and autoscalers (11), parents before children
+  - it: should sync service bus resources after the workloads, parents before children
+    set:
+      global.appStack: wavetest
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wave-sb"
+              location: "Canada Central"
+              topics:
+                - name: "wave-topic"
+                  subscriptions:
+                    - name: "wave-sub"
+                      rules:
+                        - name: "wave-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "20"
+        documentSelector:
+          path: kind
+          value: ServiceBusNamespace
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "21"
+        documentSelector:
+          path: kind
+          value: Topic
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "22"
+        documentSelector:
+          path: kind
+          value: Subscription
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "23"
+        documentSelector:
+          path: kind
+          value: SubscriptionRule
+
   # Test 12: No service bus configured (should not render)
   - it: should not create any resources when service bus is not configured
     set:

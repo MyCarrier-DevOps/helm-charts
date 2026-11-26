@@ -1,3 +1,9 @@
+{{- /* Argo CD sync waves (DEVOPS-652). These resources sync after the workloads (10) and the autoscalers (11), so a
+       Managed Resource that Crossplane cannot reconcile yet (its parent does not exist, or its reference does not resolve
+       on a fresh cluster) never holds the Deployments, Services and HPAs back: Argo CD's health check marks a Managed
+       Resource with Synced=False as Degraded. Parents come before children, because the children resolve their parent
+       through a label selector: ServiceBusNamespace 20, Topic 21, Subscription 22, SubscriptionRule 23. The
+       chart owns these waves: do not set a sync-wave annotation on these resources. */ -}}
 {{- if and .Values.infrastructure.azure.servicebus (not (hasPrefix "feature" .Values.environment.name)) }}
 {{- $root := . -}}
 {{- $cachedLabels := include "helm.labels.standard" $root | fromYaml -}}
@@ -23,6 +29,7 @@ metadata:
     {{- toYaml $cachedLabels | nindent 4 }}
     servicebus.mycarrier.io/namespace: {{ $sbName }}
   annotations:
+    argocd.argoproj.io/sync-wave: "20"
     crossplane.io/external-name: {{ $sbName }}
   {{- if $sbInstance.annotations }}
     {{- toYaml (omit $sbInstance.annotations "crossplane.io/external-name") | nindent 4 }}
@@ -74,6 +81,7 @@ metadata:
     servicebus.mycarrier.io/namespace: {{ $sbName }}
     servicebus.mycarrier.io/topic: {{ $topicFullname }}
   annotations:
+    argocd.argoproj.io/sync-wave: "21"
     crossplane.io/external-name: {{ $topic.name }}
   {{- if $topic.annotations }}
     {{- toYaml (omit $topic.annotations "crossplane.io/external-name") | nindent 4 }}
@@ -141,6 +149,7 @@ metadata:
     servicebus.mycarrier.io/topic: {{ $topicFullname }}
     servicebus.mycarrier.io/subscription: {{ $subFullname }}
   annotations:
+    argocd.argoproj.io/sync-wave: "22"
     crossplane.io/external-name: {{ $subscription.name }}
   {{- if $subscription.annotations }}
     {{- toYaml (omit $subscription.annotations "crossplane.io/external-name") | nindent 4 }}
@@ -210,6 +219,7 @@ metadata:
     servicebus.mycarrier.io/topic: {{ $topicFullname }}
     servicebus.mycarrier.io/subscription: {{ $subFullname }}
   annotations:
+    argocd.argoproj.io/sync-wave: "23"
     crossplane.io/external-name: {{ $rule.name }}
   {{- if $rule.annotations }}
     {{- toYaml (omit $rule.annotations "crossplane.io/external-name") | nindent 4 }}
