@@ -568,6 +568,295 @@ tests:
           value: "sub-value"
         documentIndex: 2
 
+  # Sync waves: the Service Bus resources sync after the workloads (10) and autoscalers (11), parents before children
+  - it: should sync service bus resources after the workloads, parents before children
+    set:
+      global.appStack: wavetest
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wave-sb"
+              location: "Canada Central"
+              topics:
+                - name: "wave-topic"
+                  subscriptions:
+                    - name: "wave-sub"
+                      rules:
+                        - name: "wave-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "20"
+        documentSelector:
+          path: kind
+          value: ServiceBusNamespace
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "21"
+        documentSelector:
+          path: kind
+          value: Topic
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "22"
+        documentSelector:
+          path: kind
+          value: Subscription
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "23"
+        documentSelector:
+          path: kind
+          value: SubscriptionRule
+
+  - it: should keep the chart's sync waves when a stack sets its own sync-wave annotation
+    set:
+      global.appStack: wavetest
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wave-sb"
+              location: "Canada Central"
+              # only the reserved key: nothing is left to merge
+              annotations:
+                argocd.argoproj.io/sync-wave: "0"
+              topics:
+                - name: "wave-topic"
+                  annotations:
+                    argocd.argoproj.io/sync-wave: "0"
+                    custom: "topic-value"
+                  subscriptions:
+                    - name: "wave-sub"
+                      annotations:
+                        argocd.argoproj.io/sync-wave: "0"
+                        custom: "sub-value"
+                      rules:
+                        - name: "wave-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+                          annotations:
+                            argocd.argoproj.io/sync-wave: "0"
+                            custom: "rule-value"
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "20"
+        documentSelector:
+          path: kind
+          value: ServiceBusNamespace
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "21"
+        documentSelector:
+          path: kind
+          value: Topic
+      - equal:
+          path: metadata.annotations.custom
+          value: "topic-value"
+        documentSelector:
+          path: kind
+          value: Topic
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "22"
+        documentSelector:
+          path: kind
+          value: Subscription
+      - equal:
+          path: metadata.annotations.custom
+          value: "sub-value"
+        documentSelector:
+          path: kind
+          value: Subscription
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "23"
+        documentSelector:
+          path: kind
+          value: SubscriptionRule
+      - equal:
+          path: metadata.annotations.custom
+          value: "rule-value"
+        documentSelector:
+          path: kind
+          value: SubscriptionRule
+
+  # Test 11b: a stack that sets only the reserved sync-wave key on a topic, a subscription or a rule
+  # leaves nothing to merge: the chart's wave stays and no empty `{}` renders at any level
+  - it: should render the chart's wave and no empty annotations when a child sets only the reserved sync-wave key
+    set:
+      global.appStack: wavetest
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wave-sb"
+              location: "Canada Central"
+              topics:
+                - name: "wave-topic"
+                  annotations:
+                    argocd.argoproj.io/sync-wave: "0"
+                  subscriptions:
+                    - name: "wave-sub"
+                      annotations:
+                        argocd.argoproj.io/sync-wave: "0"
+                      rules:
+                        - name: "wave-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+                          annotations:
+                            argocd.argoproj.io/sync-wave: "0"
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "20"
+            crossplane.io/external-name: wave-sb
+        documentSelector:
+          path: kind
+          value: ServiceBusNamespace
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "21"
+            crossplane.io/external-name: wave-topic
+        documentSelector:
+          path: kind
+          value: Topic
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "22"
+            crossplane.io/external-name: wave-sub
+        documentSelector:
+          path: kind
+          value: Subscription
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "23"
+            crossplane.io/external-name: wave-rule
+        documentSelector:
+          path: kind
+          value: SubscriptionRule
+
+  # Test 11c: a non-reserved namespace annotation survives next to the dropped sync-wave key
+  - it: should keep a non-reserved namespace annotation next to the dropped sync-wave key
+    set:
+      global.appStack: wavetest
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wave-sb"
+              location: "Canada Central"
+              annotations:
+                argocd.argoproj.io/sync-wave: "0"
+                team: "platform"
+              topics:
+                - name: "wave-topic"
+                  subscriptions:
+                    - name: "wave-sub"
+                      rules:
+                        - name: "wave-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "20"
+            crossplane.io/external-name: wave-sb
+            team: platform
+        documentSelector:
+          path: kind
+          value: ServiceBusNamespace
+
+  # Test 11d: an empty annotations map renders no `{}` at any level
+  - it: should render the chart's annotations only when annotations is an empty map at every level
+    set:
+      global.appStack: wavetest
+      global.language: csharp
+      environment.name: prod
+      applications.test-app-api.deploymentType: deployment
+      applications.test-app-api.image.registry: "myregistry.example.com"
+      applications.test-app-api.image.repository: "mycarrier/test-app-api"
+      applications.test-app-api.image.tag: "1.0.0"
+      infrastructure:
+        azure:
+          servicebus:
+            - name: "wave-sb"
+              location: "Canada Central"
+              annotations: {}
+              topics:
+                - name: "wave-topic"
+                  annotations: {}
+                  subscriptions:
+                    - name: "wave-sub"
+                      annotations: {}
+                      rules:
+                        - name: "wave-rule"
+                          filterType: "SqlFilter"
+                          sqlFilter: "1=1"
+                          annotations: {}
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "20"
+            crossplane.io/external-name: wave-sb
+        documentSelector:
+          path: kind
+          value: ServiceBusNamespace
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "21"
+            crossplane.io/external-name: wave-topic
+        documentSelector:
+          path: kind
+          value: Topic
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "22"
+            crossplane.io/external-name: wave-sub
+        documentSelector:
+          path: kind
+          value: Subscription
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "23"
+            crossplane.io/external-name: wave-rule
+        documentSelector:
+          path: kind
+          value: SubscriptionRule
+
   # Test 12: No service bus configured (should not render)
   - it: should not create any resources when service bus is not configured
     set:
